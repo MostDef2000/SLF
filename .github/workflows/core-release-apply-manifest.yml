@@ -47,42 +47,42 @@ jobs:
       - name: Apply manifest with reusable release tool
         run: node tools/core-release-apply-manifest.mjs "$RELEASE_MANIFEST"
 
-      - name: Validate release outputs
+      - name: Validate latest-only release outputs
         shell: bash
         run: |
           set -euo pipefail
           VERSION=$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync(process.env.RELEASE_MANIFEST,'utf8')); console.log(m.toVersion)")
-          ARCHIVE="releases/SLF_${VERSION//./_}.user.js"
           grep -q "@version      $VERSION" releases/latest.user.js
           grep -q "@version      $VERSION" releases/latest.meta.js
           grep -q "@updateURL    https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js" releases/latest.user.js
           grep -q "@downloadURL  https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js" releases/latest.user.js
-          grep -q "slf_team4_real_minutes_cache_v1" releases/latest.user.js
-          grep -q "hydrateTeam4Minutes" releases/latest.user.js
-          grep -q "findCachedEntryForData" releases/latest.user.js
           grep -q "scriptVersion: '$VERSION'" releases/latest.user.js
-          grep -q "scriptVersion: '$VERSION'" "$ARCHIVE"
+          grep -q "BEGIN SLF FINAL RUNTIME VERSION EXPORT" releases/latest.user.js
+          grep -q "Team4AlterMinutesStrictLinkHotfix" releases/latest.user.js
+          grep -q "team4-alter-minutes-strict-link-hotfix.js" releases/latest.user.js
+          grep -q '"archiveCreated": false' data/version.json
           node --check releases/latest.user.js
-          node --check "$ARCHIVE"
-          node --check src/modules/team-management/team4-alter-current-season-minutes-fix.js
+          node --check src/modules/team-management/team4-alter-minutes-strict-link-hotfix.js
+          if [ -e "releases/SLF_${VERSION//./_}.user.js" ]; then
+            echo "Forbidden new archive file exists: releases/SLF_${VERSION//./_}.user.js"
+            exit 1
+          fi
           if git diff --name-only | grep -E '^(src/modules/(transfer-analyzer|strategy-data-recommendations|live-parser)/|src/modules/live-parser/)'; then
             echo 'Forbidden module files changed.'
             exit 1
           fi
 
-      - name: Commit release outputs directly to main
+      - name: Commit latest-only release outputs directly to main
         shell: bash
         run: |
           set -euo pipefail
           VERSION=$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync(process.env.RELEASE_MANIFEST,'utf8')); console.log(m.toVersion)")
-          ARCHIVE="releases/SLF_${VERSION//./_}.user.js"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add \
-            src/modules/team-management/team4-alter-current-season-minutes-fix.js \
+            src/modules/team-management/team4-alter-minutes-strict-link-hotfix.js \
             releases/latest.user.js \
             releases/latest.meta.js \
-            "$ARCHIVE" \
             data/version.json \
             CHANGELOG.md
           if git diff --cached --quiet; then
@@ -90,5 +90,5 @@ jobs:
             exit 0
           fi
           git diff --cached --name-only
-          git commit -m "release: publish SLF $VERSION team-management alter minutes linking"
+          git commit -m "release: publish SLF $VERSION team-management strict alter minutes hotfix"
           git push origin HEAD:main
