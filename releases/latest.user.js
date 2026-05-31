@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.79
+// @version      4.4.80
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -32,15 +32,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.79',
-        scriptVersion: '4.4.79',
+        version: '4.4.80',
+        scriptVersion: '4.4.80',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.79',
+        scriptVersion: '4.4.80',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -15107,481 +15107,354 @@ const PlayerStatusPanel = {
 
 
 // >>> src/modules/team-management/team4-alter-current-season-minutes-fix.js
-// Team Management: alter.php current-season minutes bridge
-// Single source file for the chain: alter.php minutes -> storage -> strict Team4 tooltip match.
+// Team Management: Team4 real-minutes refresh
+// Stable storage key. Do not rename without explicit migration approval.
 
 const Team4AlterCurrentSeasonMinutesBridge = (() => {
     const STORAGE_KEY = 'slf_team4_real_minutes_cache_v1';
-    const TEAM4_STORAGE_KEYS = [
+    const TEAM4_STATUS_CACHE_KEYS = [
         'slf_team4_player_status_cache_v3',
         'slf_team4_player_status_cache_v2',
         'slf_team4_player_status_cache_v1'
     ];
-    const PATCH_FLAG = '__slfAlterMinutesStrictBridgePatched';
-    const MATCH_LOGGED = new Set();
-    const NO_MATCH_LOGGED = new Set();
-    const CLEAN_LOGGED = new Set();
+    const PATCH_FLAG = '__slfTeam4AlterMinutesRefreshPatched';
+    const LOG_ONCE = new Set();
+    let refreshRunning = false;
 
-    function norm(text) {
-        return String(text || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+    function norm(value) {
+        return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
-    function parseMinutesCell(text) {
-        const clean = norm(text)
-            .replace(/\d+\s*%/g, ' ')
-            .replace(/[^\d\s]/g, ' ');
-        const nums = clean.split(/\s+/).map(Number).filter(n => Number.isFinite(n));
-        return nums.length ? nums[nums.length - 1] : 0;
+    function logOnce(level, key, message, payload) {
+        if (LOG_ONCE.has(key)) return;
+        LOG_ONCE.add(key);
+        console[level](message, payload || '');
     }
 
-    function getAlterIdFromUrl(urlText) {
+    function readJson(key, fallback) {
         try {
-            const url = new URL(String(urlText || location.href), location.origin);
-            return String(url.searchParams.get('id') || '').trim();
+            return JSON.parse(localStorage.getItem(key) || '') || fallback;
+        } catch (_) {
+            return fallback;
+        }
+    }
+
+    function writeJson(key, value) {
+        localStorage.setItem(key, JSON.stringify(value || {}));
+    }
+
+    function readMinutesCache() {
+        return readJson(STORAGE_KEY, {});
+    }
+
+    function writeMinutesCache(cache) {
+        writeJson(STORAGE_KEY, cache || {});
+    }
+
+    function parseIdFromUrl(urlText) {
+        try {
+            const url = new URL(String(urlText || ''), location.origin);
+            const value = url.searchParams.get('id');
+            return /^\d+$/.test(String(value || '')) ? String(value) : '';
         } catch (_) {
             const match = String(urlText || '').match(/[?&]id=(\d+)/i);
             return match ? match[1] : '';
         }
     }
 
-    function parseSeasonHeaderText(text) {
-        const clean = norm(text);
-        const match = clean.match(/^Сезон\s+(\d{4})\s*[\/\\]\s*(\d{4})(?:\s+Текущий)?$/i);
-        if (!match) return null;
-        return {
-            label: clean,
-            startYear: Number(match[1]),
-            endYear: Number(match[2]),
-            hasCurrentMarker: /текущий/i.test(clean)
-        };
+    function parsePlayerIdFromRow(row) {
+        const rowId = String(row?.id || '').match(/^pltr-(\d+)$/)?.[1] || '';
+        if (rowId) return rowId;
+        const link = row?.querySelector?.('a[href*="/player.php?action=view&id="]');
+        return parseIdFromUrl(link?.getAttribute?.('href') || link?.href || '');
     }
 
-    function scoreSeasonHeader(season) {
+    function parseTeam4Rows(doc = document) {
+        return [...doc.querySelectorAll('tr[id^="pltr-"]')]
+            .map(row => {
+                const playerId = parsePlayerIdFromRow(row);
+                const playerLink = row.querySelector('a[href*="/player.php?action=view&id="]');
+                const name = norm(playerLink?.textContent || '');
+                const visible = !/display\s*:\s*none/i.test(String(row.getAttribute('style') || ''));
+                const teamReal = norm(row.querySelector('.player-team-real')?.textContent || '');
+                return playerId ? { playerId, rowId: row.id || `pltr-${playerId}`, name, visible, teamReal, row } : null;
+            })
+            .filter(Boolean);
+    }
+
+    function parseSeasonTitle(text) {
+        const clean = norm(text).toLowerCase();
+        const marker = /текущий/i.test(clean);
+        let match = clean.match(/^сезон\s+(\d{4})\s*[\/\\]\s*(\d{4})(?:\s+текущий)?$/i);
+        if (match) {
+            return {
+                label: norm(text),
+                startYear: Number(match[1]),
+                endYear: Number(match[2]),
+                hasCurrentMarker: marker,
+                type: 'range'
+            };
+        }
+        match = clean.match(/^сезон\s+(\d{4})(?:\s+текущий)?$/i);
+        if (match) {
+            const year = Number(match[1]);
+            return {
+                label: norm(text),
+                startYear: year,
+                endYear: year,
+                hasCurrentMarker: marker,
+                type: 'year'
+            };
+        }
+        return null;
+    }
+
+    function seasonScore(season) {
         const nowYear = new Date().getFullYear();
         let score = season.startYear;
-        if (season.hasCurrentMarker) score += 100000;
+        if (season.hasCurrentMarker) score += 1000000;
         if (season.startYear === nowYear || season.endYear === nowYear) score += 10000;
         if (season.startYear === nowYear - 1 && season.endYear === nowYear) score += 5000;
         return score;
     }
 
-    function isAlterPage() {
-        return /\/alter\.php(?:$|\?)/i.test(location.pathname + location.search);
+    function parseMinutesCell(text) {
+        const clean = norm(text)
+            .replace(/\d+(?:[.,]\d+)?\s*%/g, ' ')
+            .replace(/[^\d\s]/g, ' ');
+        const numbers = clean.split(/\s+/).map(Number).filter(Number.isFinite);
+        return numbers.length ? numbers[numbers.length - 1] : 0;
     }
 
-    function isTeam4Page() {
-        return /\/team4\.php(?:$|\?)/i.test(location.pathname + location.search);
+    function getCellText(tr) {
+        return [...tr.children].map(cell => norm(cell.textContent));
     }
 
-    function readMinutesCache() {
-        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; }
-        catch (_) { return {}; }
-    }
+    function parseSeasonBlock(block) {
+        const title = block.querySelector('.h2') || block.querySelector('h1,h2,h3');
+        const season = parseSeasonTitle(title?.textContent || '');
+        if (!season) return null;
 
-    function writeMinutesCache(cache) {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cache || {})); }
-        catch (error) { console.warn('[SLF Team4 MIN] cache write failed', error); }
-    }
+        const rows = [];
+        const table = block.querySelector('table.ai_stat') || block.querySelector('table');
+        if (!table) return { season, rows, total: 0 };
 
-    function getCachedEntries() {
-        return Object.entries(readMinutesCache())
-            .map(([id, entry]) => {
-                const minutes = Number(entry?.currentSeasonMinutes || entry?.seasonMinutes || 0);
-                return minutes > 0 ? { id: String(id), ...entry, currentSeasonMinutes: minutes } : null;
-            })
-            .filter(Boolean);
-    }
+        const trs = [...table.querySelectorAll('tr')];
+        const header = trs.find(tr => /Минут/i.test(norm(tr.textContent)));
+        if (!header) return { season, rows, total: 0 };
 
-    function getCachedEntry(playerId) {
-        const id = String(playerId || '').trim();
-        if (!id) return null;
-        const entry = readMinutesCache()[id] || null;
-        const minutes = Number(entry?.currentSeasonMinutes || entry?.seasonMinutes || 0);
-        return minutes > 0 ? { id, ...entry, currentSeasonMinutes: minutes } : null;
-    }
+        const headers = getCellText(header);
+        const minuteIndex = headers.findIndex(text => /Минут/i.test(text));
+        if (minuteIndex < 0) return { season, rows, total: 0 };
 
-    function addId(ids, value) {
-        const id = String(value || '').trim();
-        if (/^\d{3,}$/.test(id)) ids.add(id);
-    }
-
-    function collectIdsFromText(ids, text) {
-        const raw = String(text || '');
-        const patterns = [
-            /[?&](?:id|player_id|playerId|pid|plid)=(\d{3,})/ig,
-            /\bpltr-(\d{3,})\b/ig,
-            /\b(?:alter|player|footballer|pid|playerId)[^\d]{0,16}(\d{3,})\b/ig
-        ];
-        patterns.forEach(pattern => {
-            let match;
-            while ((match = pattern.exec(raw))) addId(ids, match[1]);
-        });
-    }
-
-    function rowLinks(row) {
-        if (!row?.querySelectorAll) return [];
-        return [...row.querySelectorAll('a[href], [data-href], [onclick], [data-player-id], [data-id], [data-pid]')]
-            .flatMap(el => [
-                el.getAttribute?.('href'),
-                el.getAttribute?.('data-href'),
-                el.getAttribute?.('onclick'),
-                el.getAttribute?.('data-player-id'),
-                el.getAttribute?.('data-id'),
-                el.getAttribute?.('data-pid')
-            ])
-            .filter(Boolean);
-    }
-
-    function trustedIds(data, row) {
-        const ids = new Set();
-        // Do not trust data.alterId: older builds could inject one cached alterId into unrelated rows.
-        [
-            data?.slfPlayerId,
-            data?.playerId,
-            data?.id,
-            ...(Array.isArray(data?.__slfAlterMinuteTrustedIds) ? data.__slfAlterMinuteTrustedIds : []),
-            String(row?.id || '').replace(/^pltr-/, '')
-        ].forEach(value => addId(ids, value));
-        [data?.playerUrl, data?.profileUrl, ...(rowLinks(row) || [])].forEach(value => collectIdsFromText(ids, value));
-        if (row?.dataset) Object.values(row.dataset).forEach(value => collectIdsFromText(ids, value));
-        collectIdsFromText(ids, row?.id || '');
-        return [...ids];
-    }
-
-    function getDataMinutes(data) {
-        const candidates = [
-            data?.currentSeasonMinutes,
-            data?.realCareerMinutes?.currentSeasonMinutes,
-            data?.tmProfile?.currentSeasonMinutes,
-            data?.tmProfile?.activity?.currentSeasonMinutes,
-            data?.tmProfile?.activity?.seasonMinutes
-        ];
-        for (const value of candidates) {
-            const minutes = Number(value || 0);
-            if (Number.isFinite(minutes) && minutes > 0) return minutes;
-        }
-        return 0;
-    }
-
-    function strictEntryFor(data, row) {
-        const ids = trustedIds(data, row);
-        for (const entry of getCachedEntries()) {
-            const entryIds = [entry.id, entry.alterId, entry.playerId].map(String).filter(Boolean);
-            if (entryIds.some(id => ids.includes(id))) return { entry, ids };
-        }
-        return { entry: null, ids };
-    }
-
-    function logStrictMatch(data, row, entry, ids) {
-        const key = `${data?.slfPlayerId || data?.name || row?.id || ''}|${entry?.alterId || entry?.playerId || entry?.id || ''}`;
-        if (MATCH_LOGGED.has(key)) return;
-        MATCH_LOGGED.add(key);
-        console.log('[SLF Team4 MIN] strict alter minutes match', {
-            name: data?.name || '',
-            slfPlayerId: data?.slfPlayerId || '',
-            trustedIds: ids,
-            alterId: entry?.alterId || entry?.playerId || entry?.id || '',
-            currentSeasonMinutes: entry?.currentSeasonMinutes || 0
-        });
-    }
-
-    function logNoStrictMatch(data, row, ids) {
-        const key = `${data?.slfPlayerId || data?.name || row?.id || ''}|${ids.join(',')}`;
-        if (NO_MATCH_LOGGED.has(key)) return;
-        NO_MATCH_LOGGED.add(key);
-        console.warn('[SLF Team4 MIN] no strict alterId match found for Team4 player', {
-            name: data?.name || '',
-            slfPlayerId: data?.slfPlayerId || '',
-            rowId: row?.id || '',
-            trustedIds: ids,
-            cacheIds: getCachedEntries().map(entry => ({
-                alterId: entry.alterId || entry.playerId || entry.id || '',
-                currentSeasonMinutes: entry.currentSeasonMinutes || 0
-            })),
-            rowLinks: rowLinks(row)
-        });
-    }
-
-    function removeFalseMinutes(data, row, ids) {
-        if (!data) return data;
-        const removedMinutes = getDataMinutes(data);
-        if (!removedMinutes) return data;
-
-        delete data.currentSeasonMinutes;
-        delete data.__slfAlterMinuteTrustedIds;
-        if (data.realCareerMinutes) {
-            delete data.realCareerMinutes.currentSeasonMinutes;
-            delete data.realCareerMinutes.seasonMinutes;
-        }
-        if (data.tmProfile) {
-            delete data.tmProfile.currentSeasonMinutes;
-            delete data.tmProfile.seasonMinutes;
-            if (data.tmProfile.activity) {
-                delete data.tmProfile.activity.currentSeasonMinutes;
-                delete data.tmProfile.activity.seasonMinutes;
-            }
-        }
-        if (data.alterId && data.slfPlayerId && String(data.alterId) !== String(data.slfPlayerId)) delete data.alterId;
-
-        if (Array.isArray(data.markers)) {
-            data.markers = data.markers.filter(marker => {
-                const label = norm(marker?.label || '');
-                const text = norm(marker?.text || '');
-                if (!/^MIN\s+\d+$/i.test(label)) return true;
-                if (/Минуты текущего сезона/i.test(text)) return false;
-                return !String(label).includes(String(removedMinutes));
+        trs.slice(trs.indexOf(header) + 1).forEach(tr => {
+            const cells = getCellText(tr);
+            if (cells.length <= minuteIndex) return;
+            const rowText = norm(tr.textContent);
+            if (!rowText || /Лига|Команда|Игр|Старт|Минут/i.test(rowText)) return;
+            const minutes = parseMinutesCell(cells[minuteIndex]);
+            if (!Number.isFinite(minutes) || minutes <= 0) return;
+            rows.push({
+                competition: cells[1] || cells[0] || '',
+                team: cells[2] || '',
+                minuteCell: cells[minuteIndex] || '',
+                minutes,
+                raw: rowText
             });
-        }
+        });
 
-        const key = `${data?.slfPlayerId || data?.name || row?.id || ''}|${removedMinutes}`;
-        if (!CLEAN_LOGGED.has(key)) {
-            CLEAN_LOGGED.add(key);
-            console.warn('[SLF Team4 MIN] removed non-matching alter minutes from Team4 player', {
-                name: data?.name || '',
-                slfPlayerId: data?.slfPlayerId || '',
-                trustedIds: ids || trustedIds(data, row),
-                removedMinutes
-            });
-        }
-        return data;
+        return { season, rows, total: rows.reduce((sum, row) => sum + row.minutes, 0) };
     }
 
-    function applyStrictMinutes(data, row) {
-        if (!data) return data;
-        const { entry, ids } = strictEntryFor(data, row);
-        if (!entry) {
-            if (getDataMinutes(data)) removeFalseMinutes(data, row, ids);
-            else if (ids.length) logNoStrictMatch(data, row, ids);
-            return data;
-        }
+    function parseAlterDocument(doc) {
+        const playerId = parseIdFromUrl(doc.querySelector('a[href*="/player.php?action=view&id="]')?.getAttribute('href') || '') || parseIdFromUrl(doc.location?.href || '');
+        const profileName = norm(doc.querySelector('#alter .h2.ai_dark')?.textContent || doc.querySelector('.ai_dark')?.textContent || doc.title || '');
+        const blocks = [...doc.querySelectorAll('.season_stat')]
+            .map(parseSeasonBlock)
+            .filter(Boolean)
+            .map(block => ({ ...block, score: seasonScore(block.season) }))
+            .sort((a, b) => b.score - a.score || b.season.startYear - a.season.startYear);
+        const selected = blocks[0] || null;
 
-        const minutes = Number(entry.currentSeasonMinutes || 0);
-        data.__slfAlterMinuteTrustedIds = ids;
-        data.alterId = entry.alterId || entry.playerId || entry.id || '';
-        data.currentSeasonMinutes = minutes;
-        data.realCareerMinutes = {
-            ...(data.realCareerMinutes || {}),
-            currentSeasonMinutes: minutes,
-            seasonLabel: entry.seasonLabel || '',
-            source: entry.source || 'alter.php',
-            updatedAt: entry.updatedAt || ''
+        return {
+            playerId,
+            playerName: profileName,
+            selectedSeason: selected?.season || null,
+            currentSeasonMinutes: selected?.total || 0,
+            rows: selected?.rows || [],
+            candidates: blocks.map(block => ({
+                label: block.season.label,
+                startYear: block.season.startYear,
+                endYear: block.season.endYear,
+                hasCurrentMarker: block.season.hasCurrentMarker,
+                total: block.total,
+                score: block.score
+            }))
         };
-        if (data.tmProfile) {
-            data.tmProfile.currentSeasonMinutes = minutes;
-            data.tmProfile.activity = {
-                ...(data.tmProfile.activity || {}),
-                currentSeasonMinutes: minutes,
-                seasonMinutes: minutes,
-                seasonLabel: entry.seasonLabel || data.tmProfile.activity?.seasonLabel || ''
-            };
-        }
-        logStrictMatch(data, row, entry, ids);
-        return data;
     }
 
-    function getProfileMinutes(profile) {
-        const candidates = [
-            profile?.activity?.currentSeasonMinutes,
-            profile?.activity?.seasonMinutes,
-            profile?.currentSeasonMinutes,
-            profile?.seasonMinutes
-        ];
-        for (const value of candidates) {
-            const minutes = Number(value || 0);
-            if (Number.isFinite(minutes) && minutes > 0) return minutes;
-        }
-        return 0;
-    }
+    function saveMinutesRecord(playerId, parsed) {
+        const id = String(playerId || parsed?.playerId || '').trim();
+        const minutes = Number(parsed?.currentSeasonMinutes || 0);
+        if (!/^\d+$/.test(id) || !Number.isFinite(minutes) || minutes <= 0) return null;
 
-    function replaceMinutesMarker(panel, data) {
-        const minutes = getDataMinutes(data);
-        if (!minutes || !panel?.getMinutesMarker) return data;
-        const profile = data.tmProfile || { activity: { currentSeasonMinutes: minutes, seasonMinutes: minutes } };
-        const marker = panel.getMinutesMarker(profile);
-        const markers = Array.isArray(data.markers) ? data.markers : [];
-        data.markers = [
-            ...markers.filter(item => {
-                const label = String(item?.label || '').trim();
-                const category = String(item?.category || '').trim();
-                return category !== 'activity' && !/^MIN\b/i.test(label);
-            }),
-            marker
-        ].filter(Boolean);
-        return data;
-    }
-
-    function stripUnknownMinutesReasons(data) {
-        const minutes = getDataMinutes(data);
-        if (!minutes || !data?.status) return data;
-        const cleaned = (data.status.reasons || [])
-            .filter(reason => !/минуты текущего сезона не найдены|минуты.*не найден/i.test(String(reason || '')));
-        if (!cleaned.some(reason => /реальные минуты|минуты текущего сезона/i.test(String(reason || '')))) cleaned.push(`есть реальные минуты: ${minutes}`);
-        data.status = { ...data.status, reasons: cleaned.slice(0, 7) };
-        data.reasons = data.status.reasons;
-        return data;
-    }
-
-    function applyPanelData(panel, data, row) {
-        applyStrictMinutes(data, row);
-        replaceMinutesMarker(panel, data);
-        stripUnknownMinutesReasons(data);
-        return data;
-    }
-
-    function sanitizeTooltipHtml(html, data, row) {
-        const { entry } = strictEntryFor(data, row);
-        const minutes = Number(entry?.currentSeasonMinutes || 0);
-        if (minutes > 0) {
-            const minRow = `<div class="row"><b>MIN:</b> ${minutes} мин</div>`;
-            return String(html || '').replace(/<div class="row"><b>MIN:<\/b>[\s\S]*?<\/div>/, minRow);
-        }
-        return String(html || '')
-            .replace(/<div class="row"><b>MIN:<\/b>\s*\d+\s*мин<\/div>/g, '<div class="row"><b>MIN:</b> ?</div>')
-            .replace(/<span class="slf-status-badge [^"]*">MIN\s+\d+<\/span><div class="muted">Минуты текущего сезона:\s*\d+\.<\/div>/g, '<span class="slf-status-badge neutral">MIN ?</span><div class="muted">Минуты текущего сезона не найдены.</div>')
-            .replace(/\s*·\s*MIN\s+\d+/g, '');
-    }
-
-    function sanitizeStatusHtml(html, data, row) {
-        const { entry } = strictEntryFor(data, row);
-        if (entry) return html;
-        return String(html || '').replace(/\s*·\s*MIN\s+\d+/g, '');
-    }
-
-    function extractAlterPlayerNames(doc = document) {
-        const candidates = [doc.title, ...[...doc.querySelectorAll('h1, h2, .player-name, .name, .title, .profile-title')].map(el => el.textContent)]
-            .map(text => norm(text).replace(/\s*[-–|].*$/g, '').replace(/^Профиль\s*/i, '').replace(/^Игрок\s*/i, ''))
-            .filter(text => text && !/^Сезон\b/i.test(text) && text.length >= 3 && text.length <= 80);
-        return [...new Set(candidates)];
-    }
-
-    function updateTeam4Storage(entry) {
-        const minutes = Number(entry?.currentSeasonMinutes || 0);
-        const id = String(entry?.alterId || entry?.playerId || '').trim();
-        if (!id || !minutes) return;
-        TEAM4_STORAGE_KEYS.forEach(key => {
-            try {
-                const raw = localStorage.getItem(key);
-                if (!raw) return;
-                const parsed = JSON.parse(raw);
-                const rows = Array.isArray(parsed) ? parsed : Object.values(parsed || {});
-                let changed = false;
-                rows.forEach(row => {
-                    const ids = trustedIds(row, null);
-                    if (!ids.includes(id)) return;
-                    row.__slfAlterMinuteTrustedIds = ids;
-                    row.alterId = id;
-                    row.currentSeasonMinutes = minutes;
-                    row.realCareerMinutes = { ...(row.realCareerMinutes || {}), currentSeasonMinutes: minutes, seasonLabel: entry.seasonLabel || '', source: 'alter.php', updatedAt: entry.updatedAt || '' };
-                    if (row.tmProfile) row.tmProfile.activity = { ...(row.tmProfile.activity || {}), currentSeasonMinutes: minutes, seasonMinutes: minutes, seasonLabel: entry.seasonLabel || '' };
-                    changed = true;
-                });
-                if (changed) localStorage.setItem(key, JSON.stringify(parsed));
-            } catch (error) {
-                console.warn('[SLF Team4 MIN] team cache merge failed', key, error);
-            }
-        });
-    }
-
-    function saveAlterMinutes(alterId, result) {
-        const id = String(alterId || '').trim();
-        const minutes = Number(result?.currentSeasonMinutes || 0);
-        if (!id || !Number.isFinite(minutes) || minutes <= 0) return null;
         const cache = readMinutesCache();
-        const playerNames = extractAlterPlayerNames(document);
+        const previous = cache[id] || {};
         const entry = {
-            ...(cache[id] || {}),
-            schema: 'slf_team4_current_season_minutes_v4',
-            alterId: id,
+            ...previous,
+            schema: previous.schema || 'slf_team4_current_season_minutes',
             playerId: id,
-            playerName: playerNames[0] || cache[id]?.playerName || '',
-            playerNames: [...new Set([...(cache[id]?.playerNames || []), ...playerNames])],
+            alterId: id,
+            playerName: parsed.playerName || previous.playerName || '',
             currentSeasonMinutes: minutes,
-            seasonLabel: result.seasonLabel || '',
-            rows: Array.isArray(result.rows) ? result.rows : [],
-            source: 'alter.php',
+            seasonLabel: parsed.selectedSeason?.label || previous.seasonLabel || '',
+            rows: parsed.rows || [],
+            source: 'team4-auto-alter-fetch',
             updatedAt: new Date().toISOString()
         };
         cache[id] = entry;
         writeMinutesCache(cache);
-        updateTeam4Storage(entry);
         return entry;
     }
 
-    function findCurrentSeasonHeader(doc) {
-        const seen = new Set();
-        const candidates = [...doc.querySelectorAll('body *')]
-            .map(el => ({ el, season: parseSeasonHeaderText(el.textContent) }))
-            .filter(item => item.season)
-            .filter(item => {
-                const key = item.season.label;
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            })
-            .map(item => ({ ...item, score: scoreSeasonHeader(item.season) }))
-            .sort((a, b) => b.score - a.score || b.season.startYear - a.season.startYear);
-
-        return candidates[0]?.el || null;
-    }
-
-    function collectSeasonTables(seasonEl) {
-        const tables = [];
-        let node = seasonEl?.nextElementSibling || null;
-        while (node) {
-            if (parseSeasonHeaderText(node.textContent)) break;
-            if (node.tagName === 'TABLE') tables.push(node);
-            else tables.push(...(node.querySelectorAll?.('table') || []));
-            node = node.nextElementSibling;
-        }
-        return [...new Set(tables)];
-    }
-
-    function parseCurrentSeasonMinutesFromDocument(doc = document) {
-        const seasonEl = findCurrentSeasonHeader(doc);
-        if (!seasonEl) return { currentSeasonMinutes: 0, seasonLabel: '', rows: [] };
-        const season = parseSeasonHeaderText(seasonEl.textContent);
-        const seasonLabel = season?.label || norm(seasonEl.textContent).toLowerCase();
-        const rows = [];
-        collectSeasonTables(seasonEl).forEach(table => {
-            const trList = [...table.querySelectorAll('tr')];
-            const headerRow = trList.find(tr => /Минут/i.test(norm(tr.textContent)));
-            if (!headerRow) return;
-            const headerIndex = trList.indexOf(headerRow);
-            const headers = [...headerRow.children].map(cell => norm(cell.textContent));
-            const minuteIndex = headers.findIndex(text => /Минут/i.test(text));
-            if (minuteIndex < 0) return;
-            trList.slice(headerIndex + 1).forEach(tr => {
-                const rowText = norm(tr.textContent);
-                if (!rowText || /Лига|Команда|Игр|Старт|Минут/i.test(rowText)) return;
-                const cells = [...tr.children].map(cell => norm(cell.textContent));
-                const minutes = parseMinutesCell(cells[minuteIndex]);
-                if (!Number.isFinite(minutes) || minutes <= 0) return;
-                rows.push({ competition: cells[0] || '', team: cells[1] || '', raw: rowText, minuteCell: cells[minuteIndex] || '', minutes });
+    function resetMinutesOnly() {
+        writeMinutesCache({});
+        TEAM4_STATUS_CACHE_KEYS.forEach(key => {
+            const parsed = readJson(key, null);
+            if (!parsed) return;
+            const records = Array.isArray(parsed) ? parsed : Object.values(parsed || {});
+            let changed = false;
+            records.forEach(record => {
+                if (!record || typeof record !== 'object') return;
+                if (record.currentSeasonMinutes || record.realCareerMinutes?.currentSeasonMinutes || record.tmProfile?.activity?.currentSeasonMinutes) changed = true;
+                delete record.currentSeasonMinutes;
+                delete record.alterId;
+                delete record.__slfAlterMinuteTrustedIds;
+                if (record.realCareerMinutes) {
+                    delete record.realCareerMinutes.currentSeasonMinutes;
+                    delete record.realCareerMinutes.seasonMinutes;
+                }
+                if (record.tmProfile) {
+                    delete record.tmProfile.currentSeasonMinutes;
+                    if (record.tmProfile.activity) {
+                        delete record.tmProfile.activity.currentSeasonMinutes;
+                        delete record.tmProfile.activity.seasonMinutes;
+                    }
+                }
+                if (Array.isArray(record.markers)) {
+                    const before = record.markers.length;
+                    record.markers = record.markers.filter(marker => !/^MIN\b/i.test(norm(marker?.label || '')));
+                    if (record.markers.length !== before) changed = true;
+                }
             });
+            if (changed) writeJson(key, parsed);
         });
-        return { currentSeasonMinutes: rows.reduce((sum, row) => sum + Number(row.minutes || 0), 0), seasonLabel, rows };
+        console.log('[SLF Team4 MIN] reset complete', { storageKey: STORAGE_KEY });
     }
 
-    function syncAlterPage() {
-        if (!isAlterPage()) return;
-        const entry = saveAlterMinutes(getAlterIdFromUrl(location.href), parseCurrentSeasonMinutesFromDocument(document));
-        if (entry) console.log('[SLF Team4 MIN] alter minutes saved', {
-            alterId: entry.alterId,
-            currentSeasonMinutes: entry.currentSeasonMinutes,
-            seasonLabel: entry.seasonLabel,
-            playerNames: entry.playerNames,
-            rows: entry.rows
-        });
+    async function fetchAlter(playerId) {
+        const response = await fetch(`/alter.php?id=${encodeURIComponent(playerId)}`, { credentials: 'include', cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const html = await response.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const parsed = parseAlterDocument(doc);
+        const entry = saveMinutesRecord(playerId, parsed);
+        return { playerId, ok: !!entry, entry, parsed };
     }
 
-    function hydrateTeam4Minutes(panel) {
-        let changed = false;
+    async function refreshFromTeam4(options = {}) {
+        if (refreshRunning) return { ok: false, reason: 'refresh already running' };
+        refreshRunning = true;
+        const startedAt = Date.now();
+        const rows = parseTeam4Rows(document);
+        const ids = [...new Set(rows.map(row => row.playerId))];
+        const limit = Number(options.limit || ids.length);
+        const selectedIds = ids.slice(0, limit);
+        const results = [];
+
+        if (options.reset !== false) resetMinutesOnly();
+        console.log('[SLF Team4 MIN] refresh started', { players: selectedIds.length, totalRows: rows.length, ids: selectedIds });
+
+        try {
+            for (const playerId of selectedIds) {
+                try {
+                    const result = await fetchAlter(playerId);
+                    results.push(result);
+                    console.log('[SLF Team4 MIN] fetched', {
+                        playerId,
+                        name: result.entry?.playerName || '',
+                        minutes: result.entry?.currentSeasonMinutes || 0,
+                        season: result.entry?.seasonLabel || '',
+                        ok: result.ok
+                    });
+                } catch (error) {
+                    results.push({ playerId, ok: false, error: String(error?.message || error) });
+                    console.warn('[SLF Team4 MIN] fetch failed', { playerId, error });
+                }
+            }
+            hydrateTeam4Tooltips();
+            const cache = readMinutesCache();
+            const summary = Object.entries(cache).map(([id, entry]) => ({
+                id,
+                name: entry.playerName || '',
+                minutes: entry.currentSeasonMinutes || 0,
+                season: entry.seasonLabel || ''
+            }));
+            console.table(summary);
+            console.log('[SLF Team4 MIN] refresh completed', { saved: summary.length, ms: Date.now() - startedAt });
+            return { ok: true, rows, ids: selectedIds, results, cache };
+        } finally {
+            refreshRunning = false;
+        }
+    }
+
+    function entryForData(data, row) {
+        const ids = new Set();
+        [data?.slfPlayerId, data?.playerId, data?.id, parsePlayerIdFromRow(row)].forEach(value => {
+            if (/^\d+$/.test(String(value || ''))) ids.add(String(value));
+        });
+        const cache = readMinutesCache();
+        for (const id of ids) {
+            const entry = cache[id];
+            if (entry && Number(entry.currentSeasonMinutes || 0) > 0) return { id, entry };
+        }
+        return { id: [...ids][0] || '', entry: null };
+    }
+
+    function applyMinutesToData(panel, data, row) {
+        if (!data) return data;
+        const { id, entry } = entryForData(data, row);
+        if (!entry) {
+            delete data.currentSeasonMinutes;
+            if (data.realCareerMinutes) delete data.realCareerMinutes.currentSeasonMinutes;
+            if (data.tmProfile?.activity) delete data.tmProfile.activity.currentSeasonMinutes;
+            if (Array.isArray(data.markers)) data.markers = data.markers.filter(marker => !/^MIN\b/i.test(norm(marker?.label || '')));
+            return data;
+        }
+
+        const minutes = Number(entry.currentSeasonMinutes || 0);
+        data.playerId = data.playerId || id;
+        data.alterId = id;
+        data.currentSeasonMinutes = minutes;
+        data.realCareerMinutes = { ...(data.realCareerMinutes || {}), currentSeasonMinutes: minutes, seasonLabel: entry.seasonLabel || '', source: entry.source || 'team4-auto-alter-fetch' };
+        data.tmProfile = data.tmProfile || {};
+        data.tmProfile.activity = { ...(data.tmProfile.activity || {}), currentSeasonMinutes: minutes, seasonMinutes: minutes, seasonLabel: entry.seasonLabel || '' };
+        if (panel?.getMinutesMarker) {
+            const marker = panel.getMinutesMarker(data.tmProfile);
+            const markers = Array.isArray(data.markers) ? data.markers : [];
+            data.markers = [...markers.filter(item => !/^MIN\b/i.test(norm(item?.label || ''))), marker].filter(Boolean);
+        }
+        logOnce('log', `match:${id}`, '[SLF Team4 MIN] applied minutes to Team4 player', { id, name: data.name || entry.playerName || '', minutes });
+        return data;
+    }
+
+    function hydrateTeam4Tooltips() {
+        const panel = typeof PlayerStatusPanel !== 'undefined' ? PlayerStatusPanel : null;
+        if (!panel) return;
         try {
             if (panel.sessionCache?.values) {
                 [...panel.sessionCache.values()].forEach(record => {
-                    const before = getDataMinutes(record);
-                    applyPanelData(panel, record, null);
-                    if (getDataMinutes(record) !== before) changed = true;
+                    applyMinutesToData(panel, record, null);
                     if (record?.slfPlayerId && panel.cacheTooltipHtml) panel.cacheTooltipHtml(record);
                 });
             }
@@ -15589,19 +15462,14 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
                 panel.getRows().forEach(row => {
                     const record = panel.getSessionCached?.(row);
                     if (!record) return;
-                    const before = getDataMinutes(record);
-                    applyPanelData(panel, record, row);
-                    if (getDataMinutes(record) !== before) changed = true;
+                    applyMinutesToData(panel, record, row);
                     if (record?.slfPlayerId && panel.cacheTooltipHtml) panel.cacheTooltipHtml(record);
                 });
             }
-            if (changed) {
-                panel.saveToLocalStorage?.();
-                panel.render?.(false);
-                console.log('[SLF Team4 MIN] strict hydration cleaned Team4 minutes cache');
-            }
+            panel.saveToLocalStorage?.();
+            panel.render?.(false);
         } catch (error) {
-            console.warn('[SLF Team4 MIN] Team4 hydration failed', error);
+            console.warn('[SLF Team4 MIN] hydrate failed', error);
         }
     }
 
@@ -15610,70 +15478,74 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         if (!panel || panel[PATCH_FLAG]) return false;
         panel[PATCH_FLAG] = true;
 
-        const originalNormalizeRecord = panel.normalizeRecord;
-        panel.normalizeRecord = function patchedNormalizeRecord(record) {
-            return applyPanelData(this, originalNormalizeRecord.call(this, record), null);
-        };
-
         const originalReadPlayerFromDom = panel.readPlayerFromDom;
         panel.readPlayerFromDom = function patchedReadPlayerFromDom(row, indexMap) {
-            return applyPanelData(this, originalReadPlayerFromDom.call(this, row, indexMap), row);
+            return applyMinutesToData(this, originalReadPlayerFromDom.call(this, row, indexMap), row);
+        };
+
+        const originalNormalizeRecord = panel.normalizeRecord;
+        panel.normalizeRecord = function patchedNormalizeRecord(record) {
+            return applyMinutesToData(this, originalNormalizeRecord.call(this, record), null);
         };
 
         const originalEnrichWithTmProfile = panel.enrichWithTmProfile;
         panel.enrichWithTmProfile = async function patchedEnrichWithTmProfile(data) {
-            return applyPanelData(this, await originalEnrichWithTmProfile.call(this, data), null);
+            return applyMinutesToData(this, await originalEnrichWithTmProfile.call(this, data), null);
         };
 
         const originalGetMinutesMarker = panel.getMinutesMarker;
         panel.getMinutesMarker = function patchedGetMinutesMarker(profile) {
-            const minutes = getProfileMinutes(profile);
-            if (minutes > 0) return this.serializeMarker({
-                label: `MIN ${minutes}`,
-                level: minutes >= 900 ? 'good' : 'normal',
-                score: minutes >= 900 ? 4 : 2,
-                text: `Минуты текущего сезона: ${minutes}.`
-            }, 'activity');
+            const minutes = Number(profile?.activity?.currentSeasonMinutes || profile?.activity?.seasonMinutes || profile?.currentSeasonMinutes || 0);
+            if (minutes > 0) {
+                return this.serializeMarker({
+                    label: `MIN ${minutes}`,
+                    level: minutes >= 900 ? 'good' : 'normal',
+                    score: minutes >= 900 ? 4 : 2,
+                    text: `Минуты текущего сезона: ${minutes}.`
+                }, 'activity');
+            }
             return originalGetMinutesMarker.call(this, profile);
         };
 
         const originalBuildTipHtml = panel.buildTipHtml;
         panel.buildTipHtml = function patchedBuildTipHtml(data) {
-            applyPanelData(this, data, null);
-            const html = originalBuildTipHtml.call(this, data);
-            applyPanelData(this, data, null);
-            return sanitizeTooltipHtml(html, data, null);
-        };
-
-        const originalStatusMarker = panel.statusMarker;
-        panel.statusMarker = function patchedStatusMarker(data) {
-            applyPanelData(this, data, null);
-            const html = originalStatusMarker.call(this, data);
-            applyPanelData(this, data, null);
-            return sanitizeStatusHtml(html, data, null);
+            applyMinutesToData(this, data, null);
+            return originalBuildTipHtml.call(this, data);
         };
 
         const originalShowPreparedTip = panel.showPreparedTip;
         panel.showPreparedTip = function patchedShowPreparedTip(button, playerId) {
             const row = button?.closest?.('tr') || null;
-            const record = [...(this.sessionCache?.values?.() || [])].find(item => item?.slfPlayerId === playerId);
+            const record = [...(this.sessionCache?.values?.() || [])].find(item => String(item?.slfPlayerId || item?.playerId || '') === String(playerId || ''));
             if (record) {
-                applyPanelData(this, record, row);
+                applyMinutesToData(this, record, row);
                 this.cacheTooltipHtml?.(record);
             }
             return originalShowPreparedTip.call(this, button, playerId);
         };
 
-        hydrateTeam4Minutes(panel);
-        setTimeout(() => hydrateTeam4Minutes(panel), 1000);
+        document.addEventListener('click', event => {
+            const target = event.target?.closest?.('a,button,input,span,td,th');
+            const text = norm(target?.value || target?.textContent || target?.getAttribute?.('title') || '');
+            if (/^обновить$/i.test(text)) setTimeout(() => refreshFromTeam4({ reset: true }), 0);
+        }, true);
+
+        hydrateTeam4Tooltips();
         return true;
     }
 
     function boot() {
-        syncAlterPage();
         if (isTeam4Page()) {
-            const tryPatch = () => { if (!patchPlayerStatusPanel()) setTimeout(tryPatch, 250); };
-            tryPatch();
+            const timer = setInterval(() => {
+                if (patchPlayerStatusPanel()) clearInterval(timer);
+            }, 250);
+            setTimeout(() => clearInterval(timer), 10000);
+        }
+        if (/\/alter\.php(?:$|\?)/i.test(location.pathname + location.search)) {
+            const parsed = parseAlterDocument(document);
+            const id = parseIdFromUrl(location.href) || parsed.playerId;
+            const entry = saveMinutesRecord(id, parsed);
+            if (entry) console.log('[SLF Team4 MIN] alter page saved', entry);
         }
     }
 
@@ -15682,7 +15554,9 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         else boot();
     }
 
-    return { STORAGE_KEY, parseMinutesCell, parseCurrentSeasonMinutesFromDocument, getCachedEntry, trustedIds, strictEntryFor, applyStrictMinutes, start };
+    const api = { STORAGE_KEY, parseTeam4Rows, parseAlterDocument, parseMinutesCell, refreshFromTeam4, resetMinutesOnly, hydrateTeam4Tooltips, readMinutesCache, start };
+    window.SLFTeam4AlterMinutes = api;
+    return api;
 })();
 
 Team4AlterCurrentSeasonMinutesBridge.start();
@@ -15874,15 +15748,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.79',
-        scriptVersion: '4.4.79',
+        version: '4.4.80',
+        scriptVersion: '4.4.80',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.79',
+        scriptVersion: '4.4.80',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
