@@ -1,0 +1,11 @@
+{
+  "module": "team-management",
+  "sourceBranch": "team-management",
+  "commit": "ddb02d3b587abd0c4e56ece214a8717a58ceaede",
+  "changedFiles": [
+    "src/modules/team-management/team4-alter-current-season-minutes-fix.js"
+  ],
+  "fromVersion": "4.4.73",
+  "toVersion": "4.4.74",
+  "summary": "Team4 tooltip alter current-season minutes linking and hydration fix"
+}
