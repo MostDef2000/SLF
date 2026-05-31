@@ -33,11 +33,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p src/modules/team-management releases
+          mkdir -p src/modules/team-management releases data
           git show "$MODULE_COMMIT:$MODULE_PATH" > "$MODULE_PATH"
           python3 <<'PY'
           from pathlib import Path
-          import json, re
+          import json
+          import re
+
           base = '4.4.72'
           new = '4.4.73'
           latest = Path('releases/latest.user.js')
@@ -46,12 +48,14 @@ jobs:
           mod = module.read_text(encoding='utf-8').rstrip() + '\n'
           marker_start = '// BEGIN SLF CORE RELEASE 4.4.73: team-management current-season minutes bridge'
           marker_end = '// END SLF CORE RELEASE 4.4.73: team-management current-season minutes bridge'
+
           if marker_start not in text:
               close = text.rfind('\n})();')
               if close < 0:
                   raise SystemExit('Could not find final userscript IIFE close')
               block = '\n\n' + marker_start + '\n' + mod + marker_end + '\n'
               text = text[:close] + block + text[close:]
+
           text = re.sub(r'(@version\s+)4\.4\.72\b', r'\g<1>4.4.73', text, count=1)
           if '@version      4.4.73' not in text and '@version 4.4.73' not in text:
               raise SystemExit('Version bump to 4.4.73 failed')
@@ -59,10 +63,12 @@ jobs:
               raise SystemExit('Missing expected updateURL')
           if '@downloadURL  https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js' not in text:
               raise SystemExit('Missing expected downloadURL')
+
           latest.write_text(text, encoding='utf-8')
           Path('releases/SLF_4_4_73.user.js').write_text(text, encoding='utf-8')
           meta_end = text.index('// ==/UserScript==') + len('// ==/UserScript==')
           Path('releases/latest.meta.js').write_text(text[:meta_end] + '\n', encoding='utf-8')
+
           version = {
               'scriptVersion': new,
               'releaseChannel': 'github-tampermonkey',
@@ -79,23 +85,27 @@ jobs:
               }
           }
           Path('data/version.json').write_text(json.dumps(version, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-          changelog = Path('CHANGELOG.md').read_text(encoding='utf-8') if Path('CHANGELOG.md').exists() else '# Changelog\n'
-          entry = '''# Changelog
 
-## 4.4.73
-
-- Integrated approved Team Management module release from `a50700c8ea13a309ef935292f7f3d40f60234b1e`.
-- Added alter.php current-season minutes bridge for Team4 tooltip data.
-- Preserved approved module business logic without reinterpretation.
-- Expected acceptance: alterId/playerId `5024317` shows `MIN 1813` in Team4 tooltip after alter.php cache sync.
-
-'''
+          changelog_path = Path('CHANGELOG.md')
+          changelog = changelog_path.read_text(encoding='utf-8') if changelog_path.exists() else '# Changelog\n'
+          entry_lines = [
+              '# Changelog',
+              '',
+              '## 4.4.73',
+              '',
+              '- Integrated approved Team Management module release from `a50700c8ea13a309ef935292f7f3d40f60234b1e`.',
+              '- Added alter.php current-season minutes bridge for Team4 tooltip data.',
+              '- Preserved approved module business logic without reinterpretation.',
+              '- Expected acceptance: alterId/playerId `5024317` shows `MIN 1813` in Team4 tooltip after alter.php cache sync.',
+              ''
+          ]
+          entry = '\n'.join(entry_lines) + '\n'
           if '## 4.4.73' not in changelog:
               if changelog.startswith('# Changelog\n'):
                   changelog = entry + changelog[len('# Changelog\n'):].lstrip('\n')
               else:
                   changelog = entry + '\n' + changelog
-              Path('CHANGELOG.md').write_text(changelog, encoding='utf-8')
+              changelog_path.write_text(changelog, encoding='utf-8')
           PY
 
       - name: Validate generated release files
@@ -106,9 +116,9 @@ jobs:
           grep -q '@version      4.4.73' releases/latest.meta.js
           grep -q '@updateURL    https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js' releases/latest.user.js
           grep -q '@downloadURL  https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js' releases/latest.user.js
-          grep -q 'slf_team4_real_minutes_cache_v1' src/modules/team-management/team4-alter-current-season-minutes-fix.js
-          grep -q 'slf_team4_real_minutes_cache_v1' releases/latest.user.js
-          grep -q 'replace(/\\d+\\s*%/g' releases/latest.user.js
+          grep -Fq 'slf_team4_real_minutes_cache_v1' src/modules/team-management/team4-alter-current-season-minutes-fix.js
+          grep -Fq 'slf_team4_real_minutes_cache_v1' releases/latest.user.js
+          grep -Fq 'replace(/\d+\s*%/g' releases/latest.user.js
           node --check releases/latest.user.js
           node --check releases/SLF_4_4_73.user.js
           node --check src/modules/team-management/team4-alter-current-season-minutes-fix.js
