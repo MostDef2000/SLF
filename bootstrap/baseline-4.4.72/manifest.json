@@ -1,0 +1,14 @@
+{
+  "schema": "slf_chunked_baseline_manifest_v1",
+  "version": "4.4.72",
+  "targetLatest": "releases/latest.user.js",
+  "targetArchive": "releases/SLF_4_4_72.user.js",
+  "targetMeta": "releases/latest.meta.js",
+  "encoding": "gzip+base64",
+  "sha256": "018d49a3e71d7e0ce3d154ff01ce9ced8eaa737cd475046ed5ba6152b7feb2f3",
+  "parts": [
+    "bootstrap/baseline-4.4.72/parts/part-000.txt",
+    "bootstrap/baseline-4.4.72/parts/part-001.txt",
+    "bootstrap/baseline-4.4.72/parts/part-002.txt"
+  ]
+}
