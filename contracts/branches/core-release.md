@@ -43,7 +43,7 @@ Core Release must:
 
 1. Integrate only approved files from the provided commit.
 2. Do not invent, reinterpret, or alter module business logic.
-3. Update the bundled userscript directly.
+3. Update the bundled userscript through the stable latest-only builder.
 4. Bump patch version.
 5. Update only:
    - `releases/latest.user.js`
@@ -86,6 +86,31 @@ Ask for confirmation only if:
 - requested change is out of contract;
 - validation fails;
 - destructive action is required.
+
+## Full release gate
+
+Before publishing any `releases/latest.user.js` release, Core Release must run the full release gate:
+
+1. Verify the approved source commit changed only the files declared in the copy-ready handoff.
+2. Verify every changed JavaScript source file passes:
+   - `node --check <file>`
+3. Build `releases/latest.user.js` using the stable latest-only builder.
+4. Run:
+   - `node --check releases/latest.user.js`
+5. Validate:
+   - `releases/latest.user.js` `@version`;
+   - `releases/latest.meta.js` `@version`;
+   - `data/version.json` `scriptVersion`;
+   - runtime `SLF.scriptVersion`;
+   - `@updateURL` is preserved;
+   - `@downloadURL` is preserved;
+   - no archive file is created;
+   - no unapproved module files changed.
+6. If build fails:
+   - do not publish a partial release;
+   - report the exact failing file and line when available;
+   - distinguish source bug from builder bug.
+7. Never advance schema/cache validators ahead of approved source. Validator must derive schema markers from source or from an explicit module handoff.
 
 ## Release validation mandatory checks
 
