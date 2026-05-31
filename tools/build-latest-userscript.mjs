@@ -96,7 +96,8 @@ if (!changelog.includes(`## ${version}`)) {
 if (userscript.includes('Team4AlterMinutesStrictLinkHotfix')) throw new Error('obsolete strict hotfix module still bundled');
 if (userscript.includes('team4-alter-minutes-strict-link-hotfix.js')) throw new Error('obsolete strict hotfix bundle reference remains');
 if (!userscript.includes('Team4AlterCurrentSeasonMinutesBridge')) throw new Error('Team4 alter minutes bridge missing');
-if (!userscript.includes('slf_team4_current_season_minutes_v4')) throw new Error('Team4 schema v4 missing');
+if (!userscript.includes('slf_team4_current_season_minutes_v5')) throw new Error('Team4 schema v5 missing');
+if (!userscript.includes('refreshTeam4AlterMinutes')) throw new Error('Team4 refresh workflow missing');
 if (!userscript.includes(`scriptVersion: '${version}'`)) throw new Error('runtime version missing');
 if (!userscript.includes('BEGIN SLF FINAL RUNTIME VERSION EXPORT')) throw new Error('final runtime export missing');
 if (!userscript.includes(`@version      ${version}`)) throw new Error('version mismatch');
