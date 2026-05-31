@@ -1,23 +1,9 @@
 {
-  "schema": "slf_version_manifest_v1",
-  "name": "SLF Tactics Helper (+VPS Sync + Live Parser)",
-  "version": "4.4.72",
-  "canonicalBaseline": true,
-  "functionalChanges": false,
-  "sourceFile": "SLF_Tactics_Helper_4_4_72_tactics_release.txt",
-  "releaseFiles": {
-    "latestUserJs": "releases/latest.user.js",
-    "latestMetaJs": "releases/latest.meta.js",
-    "archiveUserJs": "releases/SLF_4_4_72.user.js"
-  },
-  "sha256": "018d49a3e71d7e0ce3d154ff01ce9ced8eaa737cd475046ed5ba6152b7feb2f3",
-  "generatedAt": "2026-05-31T05:40:26.020701Z",
-  "tampermonkey": {
-    "updateURL": "https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js",
-    "downloadURL": "https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js"
-  },
-  "validation": {
-    "nodeCheck": "passed",
-    "nodeCheckCommand": "node --check releases/latest.user.js && node --check releases/SLF_4_4_72.user.js && node --check src/**/*.js"
-  }
+    "scriptVersion":  "4.4.72",
+    "releaseChannel":  "github-tampermonkey",
+    "archive":  "releases/SLF_4_4_72.user.js",
+    "latestMetaJs":  "releases/latest.meta.js",
+    "latestUserJs":  "releases/latest.user.js",
+    "status":  "baseline_4_4_72_published",
+    "updatedAt":  "2026-05-31T07:51:16.8867516Z"
 }
