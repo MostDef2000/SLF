@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "branches": {
+    "strategy-data-recommendations": {
+      "type": "module",
+      "owns": ["src/modules/strategy-data-recommendations/**", "src/modules/live-parser/**", "src/modules/tactics-presets/**"],
+      "forbidden": ["src/modules/transfer-analyzer/**", "src/modules/team-management/**", "releases/**", "CHANGELOG.md"]
+    },
+    "transfer-analyzer": {
+      "type": "module",
+      "owns": ["src/modules/transfer-analyzer/**"],
+      "forbidden": ["src/modules/strategy-data-recommendations/**", "src/modules/team-management/**", "releases/**", "CHANGELOG.md"]
+    },
+    "team-management": {
+      "type": "module",
+      "owns": ["src/modules/team-management/**", "src/modules/team4-status-monitor/**", "src/modules/team4-loans/**", "src/modules/training-helper/**", "src/modules/youth-monitor/**"],
+      "forbidden": ["src/modules/strategy-data-recommendations/**", "src/modules/transfer-analyzer/**", "releases/**", "CHANGELOG.md"]
+    },
+    "core-release": {
+      "type": "integration",
+      "owns": ["src/core/**", "src/app/**", "contracts/**", "module-releases/**", "releases/**", "data/version.json", "CHANGELOG.md", "tools/**"],
+      "integrationOnly": true,
+      "forbidden": []
+    }
+  }
+}
