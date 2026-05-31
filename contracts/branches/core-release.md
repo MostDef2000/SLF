@@ -53,6 +53,19 @@ Core Release must:
 6. Preserve Tampermonkey update/download URLs.
 7. Commit release outputs directly to `main` when validation passes.
 
+## Consolidation rule
+
+Do not preserve temporary hotfix layering.
+
+If a module release explicitly consolidates multiple files into a single file, Core Release must:
+
+- integrate the consolidated file;
+- remove obsolete files listed in the release handoff;
+- bundle only the consolidated implementation;
+- remove obsolete bundle references;
+- not keep legacy hotfix files in `src/**`;
+- not preserve temporary compatibility layers unless explicitly requested.
+
 ## Forbidden release mechanisms
 
 Do not use:
@@ -92,7 +105,8 @@ Validation must also confirm:
 - `data/version.json` has the new version and approved handoff reference;
 - `CHANGELOG.md` has the new version entry;
 - runtime `SLF.scriptVersion` and `SLF.versionInfo` expose the current release version;
-- no unapproved module files changed.
+- no unapproved module files changed;
+- consolidated releases do not leave obsolete hotfix files or obsolete bundle references behind.
 
 ## Completion gate
 
