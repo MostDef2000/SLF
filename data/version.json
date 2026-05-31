@@ -1,9 +1,17 @@
 {
-    "scriptVersion":  "4.4.72",
-    "releaseChannel":  "github-tampermonkey",
-    "archive":  "releases/SLF_4_4_72.user.js",
-    "latestMetaJs":  "releases/latest.meta.js",
-    "latestUserJs":  "releases/latest.user.js",
-    "status":  "baseline_4_4_72_published",
-    "updatedAt":  "2026-05-31T07:51:16.8867516Z"
+  "scriptVersion": "4.4.73",
+  "releaseChannel": "github-tampermonkey",
+  "archive": "releases/SLF_4_4_73.user.js",
+  "latestMetaJs": "releases/latest.meta.js",
+  "latestUserJs": "releases/latest.user.js",
+  "status": "release_4_4_73_published",
+  "moduleRelease": {
+    "module": "team-management",
+    "sourceBranch": "team-management",
+    "commit": "a50700c8ea13a309ef935292f7f3d40f60234b1e",
+    "base": "bb6357f456fc7aed1683e51ca3bc1ae3dc0143d6",
+    "changedFiles": [
+      "src/modules/team-management/team4-alter-current-season-minutes-fix.js"
+    ]
+  }
 }

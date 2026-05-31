@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.4.73
+
+- Integrated approved Team Management module release from `a50700c8ea13a309ef935292f7f3d40f60234b1e`.
+- Added alter.php current-season minutes bridge for Team4 tooltip data.
+- Preserved approved module business logic without reinterpretation.
+- Expected acceptance: alterId/playerId `5024317` shows `MIN 1813` in Team4 tooltip after alter.php cache sync.
+
 ## 4.4.72
 
 - Bootstrap GitHub/Tampermonkey release channel.
