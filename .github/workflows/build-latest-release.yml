@@ -37,6 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync('data/version.json','utf8')).scriptVersion)")
+          TEAM4_SCHEMA=$(node -e "const fs=require('fs'); const v=JSON.parse(fs.readFileSync('data/version.json','utf8')); const s=v.build && v.build.team4AlterMinutesSchema; if (!s) process.exit(1); console.log(s)")
           grep -q "@version      $VERSION" releases/latest.user.js
           grep -q "@version      $VERSION" releases/latest.meta.js
           grep -q "@updateURL    https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js" releases/latest.user.js
@@ -44,7 +45,7 @@ jobs:
           grep -q "scriptVersion: '$VERSION'" releases/latest.user.js
           grep -q "BEGIN SLF FINAL RUNTIME VERSION EXPORT" releases/latest.user.js
           grep -q "Team4AlterCurrentSeasonMinutesBridge" releases/latest.user.js
-          grep -q "slf_team4_current_season_minutes_v4" releases/latest.user.js
+          grep -q "$TEAM4_SCHEMA" releases/latest.user.js
           ! grep -q "Team4AlterMinutesStrictLinkHotfix" releases/latest.user.js
           ! grep -q "team4-alter-minutes-strict-link-hotfix.js" releases/latest.user.js
           grep -q '"archiveCreated": false' data/version.json
