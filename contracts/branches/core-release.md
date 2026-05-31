@@ -2,11 +2,13 @@
 
 ## Role
 
-Integration-only branch for shared core and final bundled userscript releases.
+Integration-only agent/workflow role for shared core and final bundled userscript releases.
+
+`core-release` is an agent/workflow role, not necessarily a Git branch. Final Tampermonkey release files are published to the repository default branch unless the user explicitly requests another Git branch.
 
 ## Scope
 
-This branch owns shared core helpers, app bootstrap, module registry, contracts, validation tooling, GitHub release files, and the final bundled userscript.
+This role owns shared core helpers, app bootstrap, module registry, contracts, validation tooling, GitHub release files, and the final bundled userscript.
 
 ## Allowed areas
 
@@ -37,6 +39,16 @@ Every final userscript release must update:
 
 Every final release must increment userscript `@version`.
 
+Baseline imports may preserve the source baseline version when the user explicitly requests a no-functional-change canonical baseline import.
+
+## GitHub write rule
+
+When writing GitHub files:
+
+- create missing files with `create_file`;
+- update existing files with `fetch_file` + `update_file` using `sha`;
+- never stop and ask the user to manually upload a generated zip unless GitHub write access is unavailable.
+
 ## Tampermonkey channel
 
-Use raw GitHub URLs for latest.meta.js and latest.user.js. Keep `@name` and `@namespace` stable unless the user explicitly requests migration.
+Use raw GitHub URLs for latest.meta.js and latest.user.js on the repository default branch unless the user explicitly requests another Git branch. Keep `@name` and `@namespace` stable unless the user explicitly requests migration.
