@@ -1,19 +1,21 @@
 {
-  "scriptVersion": "4.4.74",
+  "schema": "slf_version_manifest_v2_latest_only",
+  "scriptVersion": "4.4.75",
   "releaseChannel": "github-tampermonkey",
-  "archive": "releases/SLF_4_4_74.user.js",
+  "latestOnly": true,
+  "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_74_published",
+  "status": "release_4_4_75_published",
   "moduleRelease": {
     "module": "team-management",
     "sourceBranch": "team-management",
-    "commit": "ddb02d3b587abd0c4e56ece214a8717a58ceaede",
+    "commit": "c93da71006691ab93b96b3297f26c04ee35a7d4e",
     "changedFiles": [
-      "src/modules/team-management/team4-alter-current-season-minutes-fix.js"
+      "src/modules/team-management/team4-alter-minutes-strict-link-hotfix.js"
     ],
-    "fromVersion": "4.4.73",
-    "toVersion": "4.4.74",
-    "summary": "Team4 tooltip alter current-season minutes linking and hydration fix"
+    "fromVersion": "4.4.74",
+    "toVersion": "4.4.75",
+    "summary": "Strict Team4 alter-minutes linking hotfix to prevent cached minutes leakage"
   }
 }

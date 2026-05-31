@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.4.75
+
+- Integrated approved team-management module release from `c93da71006691ab93b96b3297f26c04ee35a7d4e`.
+- Updated latest-only Tampermonkey release artifacts.
+- No per-version archive userscript file created.
+- Preserved Tampermonkey update/download URLs.
+
 ## 4.4.74
 
 - Integrated approved Team Management module release from `ddb02d3b587abd0c4e56ece214a8717a58ceaede`.
