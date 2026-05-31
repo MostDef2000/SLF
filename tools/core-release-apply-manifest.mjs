@@ -56,15 +56,28 @@ function insertBeforeFinalExportOrClose(userscript, block) {
   return userscript.slice(0, closeIndex) + block + userscript.slice(closeIndex);
 }
 
+function findTeam4BridgeEnd(userscript) {
+  const explicitModuleEnd = '    // END SLF MODULE: src/modules/team-management/team4-alter-current-season-minutes-fix.js\n';
+  const explicitIndex = userscript.indexOf(explicitModuleEnd);
+  if (explicitIndex >= 0) return explicitIndex + explicitModuleEnd.length;
+
+  const legacyEndPattern = /\n\s*\/\/ END SLF CORE RELEASE [^\n]*team-management current-season minutes bridge\n/;
+  const legacyMatch = userscript.match(legacyEndPattern);
+  if (legacyMatch && typeof legacyMatch.index === 'number') return legacyMatch.index + legacyMatch[0].length;
+
+  const symbolIndex = userscript.indexOf('const Team4AlterCurrentSeasonMinutesBridge = (() => {');
+  if (symbolIndex < 0) return -1;
+  const startCall = userscript.indexOf('Team4AlterCurrentSeasonMinutesBridge.start();', symbolIndex);
+  if (startCall < 0) return -1;
+  const lineEnd = userscript.indexOf('\n', startCall);
+  return lineEnd >= 0 ? lineEnd + 1 : startCall + 'Team4AlterCurrentSeasonMinutesBridge.start();'.length;
+}
+
 function insertModule(userscript, filePath, code) {
   const block = moduleBlock(filePath, code);
   if (filePath.endsWith('team4-alter-minutes-strict-link-hotfix.js')) {
-    const bridgeEndPattern = /\n\s*\/\/ END SLF (?:CORE RELEASE [^\n]*|MODULE: src\/modules\/team-management\/team4-alter-current-season-minutes-fix\.js)[^\n]*current-season minutes bridge[^\n]*\n/;
-    const match = userscript.match(bridgeEndPattern);
-    if (match && typeof match.index === 'number') {
-      const insertAt = match.index + match[0].length;
-      return userscript.slice(0, insertAt) + block + userscript.slice(insertAt);
-    }
+    const bridgeEnd = findTeam4BridgeEnd(userscript);
+    if (bridgeEnd >= 0) return userscript.slice(0, bridgeEnd) + block + userscript.slice(bridgeEnd);
   }
   return insertBeforeFinalExportOrClose(userscript, block);
 }
@@ -105,8 +118,8 @@ for (const filePath of changedFiles) {
 }
 
 if (changedFiles.some(filePath => filePath.includes('team4-alter-minutes-strict-link-hotfix.js'))) {
-  const bridgeIndex = userscript.indexOf('team4-alter-current-season-minutes-fix.js');
-  const hotfixIndex = userscript.indexOf('team4-alter-minutes-strict-link-hotfix.js');
+  const bridgeIndex = userscript.indexOf('Team4AlterCurrentSeasonMinutesBridge');
+  const hotfixIndex = userscript.indexOf('Team4AlterMinutesStrictLinkHotfix');
   if (bridgeIndex < 0 || hotfixIndex < 0 || hotfixIndex < bridgeIndex) throw new Error('strict hotfix must be bundled after current-season minutes bridge');
   if (!userscript.includes('Team4AlterMinutesStrictLinkHotfix')) throw new Error('strict hotfix runtime code missing from bundle');
 }
