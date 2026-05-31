@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 const ROOT = process.cwd();
 const UPDATE_URL = 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js';
 const DOWNLOAD_URL = 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js';
+const TEAM4_ALTER_MINUTES_SOURCE = 'src/modules/team-management/team4-alter-current-season-minutes-fix.js';
 
 function p(rel) { return path.join(ROOT, rel); }
 function read(rel) { return fs.readFileSync(p(rel), 'utf8'); }
@@ -44,9 +45,16 @@ function sourceForBundle(rel) {
   }
   return text;
 }
+function detectTeam4AlterMinutesSchema() {
+  const source = read(TEAM4_ALTER_MINUTES_SOURCE);
+  const match = source.match(/schema:\s*['"](slf_team4_current_season_minutes_v\d+)['"]/);
+  if (!match) throw new Error('Team4 alter minutes source schema marker missing');
+  return match[1];
+}
 
 const latestExisting = fs.existsSync(p('releases/latest.user.js')) ? read('releases/latest.user.js') : '';
 const version = process.env.TARGET_VERSION || bumpPatch(parseVersion(latestExisting || read('src/app/userscript-header.js')));
+const team4AlterMinutesSchema = detectTeam4AlterMinutesSchema();
 let header = read('src/app/userscript-header.js').replace(/(@version\s+)[0-9]+\.[0-9]+\.[0-9]+/, `$1${version}`);
 if (!header.includes(`@updateURL    ${UPDATE_URL}`)) throw new Error('updateURL mismatch');
 if (!header.includes(`@downloadURL  ${DOWNLOAD_URL}`)) throw new Error('downloadURL mismatch');
@@ -81,7 +89,8 @@ write('data/version.json', JSON.stringify({
     source: 'src/**',
     bundleOrder: 'src/app/bundle-order.json',
     approvedCommit: process.env.APPROVED_COMMIT || '',
-    approvedFiles: (process.env.APPROVED_FILES || '').split(',').map(s => s.trim()).filter(Boolean)
+    approvedFiles: (process.env.APPROVED_FILES || '').split(',').map(s => s.trim()).filter(Boolean),
+    team4AlterMinutesSchema
   }
 }, null, 2));
 
@@ -96,11 +105,11 @@ if (!changelog.includes(`## ${version}`)) {
 if (userscript.includes('Team4AlterMinutesStrictLinkHotfix')) throw new Error('obsolete strict hotfix module still bundled');
 if (userscript.includes('team4-alter-minutes-strict-link-hotfix.js')) throw new Error('obsolete strict hotfix bundle reference remains');
 if (!userscript.includes('Team4AlterCurrentSeasonMinutesBridge')) throw new Error('Team4 alter minutes bridge missing');
-if (!userscript.includes('slf_team4_current_season_minutes_v5')) throw new Error('Team4 schema v5 missing');
-if (!userscript.includes('refreshTeam4AlterMinutes')) throw new Error('Team4 refresh workflow missing');
+if (!userscript.includes(team4AlterMinutesSchema)) throw new Error(`Team4 schema ${team4AlterMinutesSchema} missing`);
+if (read(TEAM4_ALTER_MINUTES_SOURCE).includes('refreshTeam4AlterMinutes') && !userscript.includes('refreshTeam4AlterMinutes')) throw new Error('Team4 refresh workflow missing');
 if (!userscript.includes(`scriptVersion: '${version}'`)) throw new Error('runtime version missing');
 if (!userscript.includes('BEGIN SLF FINAL RUNTIME VERSION EXPORT')) throw new Error('final runtime export missing');
 if (!userscript.includes(`@version      ${version}`)) throw new Error('version mismatch');
 if (fs.existsSync(p(`releases/SLF_${version.replace(/\./g, '_')}.user.js`))) throw new Error('forbidden archive exists');
 execFileSync('node', ['--check', 'releases/latest.user.js'], { stdio: 'inherit' });
-console.log(`Built SLF ${version} latest-only from ${files.length} source files.`);
+console.log(`Built SLF ${version} latest-only from ${files.length} source files; Team4 schema ${team4AlterMinutesSchema}.`);
