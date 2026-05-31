@@ -37,6 +37,13 @@ function runtimeBlock(version, final = false) {
   const end = final ? 'END SLF FINAL RUNTIME VERSION EXPORT' : 'END SLF RUNTIME VERSION EXPORT';
   return `\n    // ${begin}\n    var SLF_VERSION_INFO = {\n        version: '${version}',\n        scriptVersion: '${version}',\n        releaseChannel: 'github-tampermonkey',\n        updateURL: '${UPDATE_URL}',\n        downloadURL: '${DOWNLOAD_URL}'\n    };\n    var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;\n    SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {\n        scriptVersion: '${version}',\n        versionInfo: SLF_VERSION_INFO\n    });\n    // ${end}\n`;
 }
+function sourceForBundle(rel) {
+  let text = read(rel).trimEnd();
+  if (rel === 'src/app/bootstrap.js') {
+    text = text.replace(/\n\s*\}\)\(\);\s*$/u, '');
+  }
+  return text;
+}
 
 const latestExisting = fs.existsSync(p('releases/latest.user.js')) ? read('releases/latest.user.js') : '';
 const version = process.env.TARGET_VERSION || bumpPatch(parseVersion(latestExisting || read('src/app/userscript-header.js')));
@@ -55,7 +62,7 @@ teamExtras.forEach(rel => seen.add(rel));
 for (const rel of jsFiles(p('src/modules'))) if (!seen.has(rel) && !rel.includes('team4-alter-minutes-strict-link-hotfix.js')) files.push(rel);
 
 let body = "\n(function () {\n    'use strict';\n" + runtimeBlock(version, false);
-for (const rel of files) body += `\n\n// >>> ${rel}\n${read(rel).trimEnd()}\n// <<< ${rel}\n`;
+for (const rel of files) body += `\n\n// >>> ${rel}\n${sourceForBundle(rel)}\n// <<< ${rel}\n`;
 body += runtimeBlock(version, true) + '\n})();\n';
 const userscript = `${header.trimEnd()}\n${body}`;
 
