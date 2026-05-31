@@ -9,6 +9,13 @@
   "parts": [
     "bootstrap/baseline-4.4.72/parts/part-000.txt",
     "bootstrap/baseline-4.4.72/parts/part-001.txt",
-    "bootstrap/baseline-4.4.72/parts/part-002.txt"
+    "bootstrap/baseline-4.4.72/parts/part-002.txt",
+    "bootstrap/baseline-4.4.72/parts/part-003.txt",
+    "bootstrap/baseline-4.4.72/parts/part-004.txt",
+    "bootstrap/baseline-4.4.72/parts/part-005.txt",
+    "bootstrap/baseline-4.4.72/parts/part-006.txt",
+    "bootstrap/baseline-4.4.72/parts/part-007.txt",
+    "bootstrap/baseline-4.4.72/parts/part-008.txt",
+    "bootstrap/baseline-4.4.72/parts/part-009.txt"
   ]
 }
