@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.4.72
+
+- Bootstrap GitHub/Tampermonkey release channel.
+
 ## 4.4.72 - canonical baseline import
 
 - Imported `SLF_Tactics_Helper_4_4_72_tactics_release.txt` as the canonical baseline.
