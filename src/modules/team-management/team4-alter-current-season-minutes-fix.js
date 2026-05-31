@@ -22,6 +22,14 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         console[level](message, payload || '');
     }
 
+    function isTeam4Page() {
+        return /\/team4\.php(?:$|\?)/i.test(location.pathname + location.search);
+    }
+
+    function isAlterPage() {
+        return /\/alter\.php(?:$|\?)/i.test(location.pathname + location.search);
+    }
+
     function readJson(key, fallback) {
         try {
             return JSON.parse(localStorage.getItem(key) || '') || fallback;
@@ -432,7 +440,7 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
             }, 250);
             setTimeout(() => clearInterval(timer), 10000);
         }
-        if (/\/alter\.php(?:$|\?)/i.test(location.pathname + location.search)) {
+        if (isAlterPage()) {
             const parsed = parseAlterDocument(document);
             const id = parseIdFromUrl(location.href) || parsed.playerId;
             const entry = saveMinutesRecord(id, parsed);
@@ -441,8 +449,16 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
     }
 
     function start() {
-        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
-        else boot();
+        const run = () => {
+            try {
+                boot();
+            } catch (error) {
+                console.error('[SLF Team4 MIN] boot failed', error);
+            }
+        };
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true });
+        else run();
     }
 
     const api = { STORAGE_KEY, parseTeam4Rows, parseAlterDocument, parseMinutesCell, refreshFromTeam4, resetMinutesOnly, hydrateTeam4Tooltips, readMinutesCache, start };
