@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.4.78
+
+- Integrated approved Team Management alter-minutes season/player matching fix.
+- Updated latest-only Tampermonkey artifacts from src/**.
+- No archive userscript file created.
+- Preserved Tampermonkey update/download URLs.
+
 ## 4.4.77
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
