@@ -23,4 +23,6 @@
 // @connect      www.slf.fm
 // @connect      soccerlife.ru
 // @connect      www.soccerlife.ru
+// @updateURL    https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js
+// @downloadURL  https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js
 // ==/UserScript==
