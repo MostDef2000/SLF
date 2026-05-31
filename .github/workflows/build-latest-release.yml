@@ -1,0 +1,71 @@
+name: Build latest SLF release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - src/**
+      - tools/build-latest-userscript.mjs
+      - .github/workflows/build-latest-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-latest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Build latest-only userscript
+        shell: bash
+        env:
+          TARGET_VERSION: ""
+          APPROVED_COMMIT: ${{ github.sha }}
+          APPROVED_FILES: src/modules/team-management/team4-alter-current-season-minutes-fix.js
+          RELEASE_SUMMARY: Integrated approved Team Management alter-minutes season/player matching fix.
+        run: node tools/build-latest-userscript.mjs
+
+      - name: Validate latest-only release
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync('data/version.json','utf8')).scriptVersion)")
+          grep -q "@version      $VERSION" releases/latest.user.js
+          grep -q "@version      $VERSION" releases/latest.meta.js
+          grep -q "@updateURL    https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js" releases/latest.user.js
+          grep -q "@downloadURL  https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js" releases/latest.user.js
+          grep -q "scriptVersion: '$VERSION'" releases/latest.user.js
+          grep -q "BEGIN SLF FINAL RUNTIME VERSION EXPORT" releases/latest.user.js
+          grep -q "Team4AlterCurrentSeasonMinutesBridge" releases/latest.user.js
+          grep -q "slf_team4_current_season_minutes_v4" releases/latest.user.js
+          ! grep -q "Team4AlterMinutesStrictLinkHotfix" releases/latest.user.js
+          ! grep -q "team4-alter-minutes-strict-link-hotfix.js" releases/latest.user.js
+          grep -q '"archiveCreated": false' data/version.json
+          if [ -e "releases/SLF_${VERSION//./_}.user.js" ]; then
+            echo "Forbidden archive file exists: releases/SLF_${VERSION//./_}.user.js"
+            exit 1
+          fi
+          node --check releases/latest.user.js
+
+      - name: Commit latest-only release outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync('data/version.json','utf8')).scriptVersion)")
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo 'No release output changes to commit.'
+            exit 0
+          fi
+          git diff --cached --name-only
+          git commit -m "release: publish SLF $VERSION latest-only"
+          git push origin HEAD:main
