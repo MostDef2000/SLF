@@ -6,67 +6,73 @@ Integration-only agent/workflow role for shared core and final bundled userscrip
 
 `core-release` is an agent/workflow role, not necessarily a Git branch. Final Tampermonkey release files are published to the repository default branch unless the user explicitly requests another Git branch.
 
-## Scope
+## Current SLF workflow
 
-This role owns shared core helpers, app bootstrap, module registry, contracts, validation tooling, GitHub release files, and the final bundled userscript.
+Discussion -> module branch commit -> COPY-READY MESSAGE FOR CORE RELEASE AGENT -> Core Release updates latest release files directly.
 
-## Allowed areas
+## Module agent rule
 
-- `src/core/**`
-- `src/app/**`
-- `contracts/**`
-- `module-releases/**`
+Module agents must:
+
+- commit only inside their own branch/scope;
+- not touch release files;
+- not bump version;
+- not publish common userscript;
+- return a COPY-READY MESSAGE FOR CORE RELEASE AGENT.
+
+## Core Release scope
+
+Core Release owns final GitHub/Tampermonkey release-channel updates only.
+
+Allowed release outputs:
+
 - `releases/latest.user.js`
 - `releases/latest.meta.js`
-- existing historical `releases/SLF_<version>.user.js` files only
 - `data/version.json`
 - `CHANGELOG.md`
-- `tools/**`
-- stable reusable `.github/workflows/**` only
+
+Existing historical archive userscripts may remain, but Core Release must not create new per-version archive userscript files.
 
 ## Default release mode
 
-A valid module release manifest or copy-ready release handoff from Project Coordinator is explicit authorization to publish.
+A valid copy-ready release handoff is explicit authorization to publish.
 
-Do not ask for additional confirmation before GitHub writes, commits, release artifact updates, or workflow execution when the release handoff is valid and in scope.
+Do not ask for additional confirmation before GitHub writes, commits, or release artifact updates when the handoff is valid and in scope.
 
-Core release must:
+Core Release must:
 
 1. Integrate only approved files from the provided commit.
 2. Do not invent, reinterpret, or alter module business logic.
-3. Use reusable release tooling/workflow only.
-4. Do not create version-specific one-off workflows.
-5. Bump patch version.
-6. Update only:
+3. Update the bundled userscript directly.
+4. Bump patch version.
+5. Update only:
    - `releases/latest.user.js`
    - `releases/latest.meta.js`
    - `data/version.json`
    - `CHANGELOG.md`
-7. Do not create new per-version archive userscript files such as `releases/SLF_<version>.user.js`.
-8. Preserve Tampermonkey update/download URLs.
-9. Commit release outputs directly to `main` when validation passes.
+6. Preserve Tampermonkey update/download URLs.
+7. Commit release outputs directly to `main` when validation passes.
 
-Existing archive files may remain for history, including:
+## Forbidden release mechanisms
 
-- `releases/SLF_4_4_72.user.js`
-- `releases/SLF_4_4_73.user.js`
-- `releases/SLF_4_4_74.user.js`
+Do not use:
 
-From now on, do not create additional archive userscript files.
+- `module-releases/`;
+- manifest release flow;
+- reusable manifest workflow;
+- `tools/core-release-apply-manifest.mjs`;
+- version-specific one-off workflows;
+- per-version archive files like `releases/SLF_<version>.user.js`.
 
 ## Confirmation exceptions
 
 Ask for confirmation only if:
 
-- manifest is incomplete;
+- copy-ready handoff is incomplete;
 - branch or commit cannot be verified;
 - requested change is out of contract;
 - validation fails;
 - destructive action is required.
-
-## Integration rule
-
-`core-release` may integrate only an explicitly requested module release manifest or copy-ready release handoff.
 
 ## Release validation mandatory checks
 
@@ -83,15 +89,10 @@ Validation must also confirm:
 - `releases/latest.user.js` has the new `@version`;
 - `releases/latest.meta.js` has the new `@version`;
 - no new `releases/SLF_<version>.user.js` archive file is created;
-- `data/version.json` has the new version and manifest reference;
+- `data/version.json` has the new version and approved handoff reference;
 - `CHANGELOG.md` has the new version entry;
 - runtime `SLF.scriptVersion` and `SLF.versionInfo` expose the current release version;
 - no unapproved module files changed.
-
-## Workflow policy
-
-Do not create one-off GitHub workflows for individual releases.
-Use only stable reusable workflows/tools.
 
 ## Completion gate
 
