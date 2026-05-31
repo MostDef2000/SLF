@@ -30,14 +30,37 @@ This branch owns:
 
 ## Output
 
-This branch produces a module release manifest under:
+This branch does not create module release manifests.
 
-```text
-module-releases/strategy-data-recommendations/<release-id>.json
-```
+After every completed in-scope task, return exactly two sections:
 
-It does not publish the final userscript.
+1. Technical report
+- commit hash
+- changed files
+- summary
+- checks
+- files/scopes not changed
+
+2. COPY-READY MESSAGE FOR CORE RELEASE AGENT
+- module name
+- source branch
+- approved commit
+- changed files
+- summary
+- integration notes
+- acceptance checks
+- safety checks
+- target next patch version if known
+- instruction to integrate only approved files
+- instruction not to invent business logic
 
 ## Integration
 
-`core-release` may integrate this branch only when the user explicitly requests a specific module release manifest.
+Core Release integrates approved commits from the copy-ready handoff.
+
+Do not use:
+- module-releases/
+- manifest release flow
+- release files
+- version bump
+- common userscript publication
