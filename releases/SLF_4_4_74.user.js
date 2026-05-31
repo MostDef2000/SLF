@@ -31,20 +31,21 @@
     'use strict';
 
     // BEGIN SLF RUNTIME VERSION EXPORT
-    const SLF_VERSION_INFO = {
+    var SLF_VERSION_INFO = {
         version: '4.4.74',
         scriptVersion: '4.4.74',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
-    const SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+    var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
         scriptVersion: '4.4.74',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
 
+    
     // ============================================================
     // 0. SLF domain helpers
     // ============================================================
@@ -15174,6 +15175,8 @@ App.start();
 
 
 
+    
+
     // BEGIN SLF CORE RELEASE 4.4.74: team-management current-season minutes bridge
 // Team Management: alter.php current-season minutes bridge
 // Fixes the chain: alter.php minutes -> team4 storage -> Team4 tooltip.
@@ -15871,5 +15874,20 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
 Team4AlterCurrentSeasonMinutesBridge.start();
 
     // END SLF CORE RELEASE 4.4.74: team-management current-season minutes bridge
+
+    // BEGIN SLF FINAL RUNTIME VERSION EXPORT
+    var SLF_VERSION_INFO = {
+        version: '4.4.74',
+        scriptVersion: '4.4.74',
+        releaseChannel: 'github-tampermonkey',
+        updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
+        downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
+    };
+    var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+    SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
+        scriptVersion: '4.4.74',
+        versionInfo: SLF_VERSION_INFO
+    });
+    // END SLF FINAL RUNTIME VERSION EXPORT
 
 })();
