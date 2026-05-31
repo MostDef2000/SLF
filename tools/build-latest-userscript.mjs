@@ -47,7 +47,7 @@ function sourceForBundle(rel) {
 }
 function detectTeam4AlterMinutesSchema() {
   const source = read(TEAM4_ALTER_MINUTES_SOURCE);
-  const match = source.match(/schema:\s*['"](slf_team4_current_season_minutes_v\d+)['"]/);
+  const match = source.match(/schema:\s*[^\n]*['"](slf_team4_current_season_minutes(?:_v\d+)?)['"]/);
   if (!match) throw new Error('Team4 alter minutes source schema marker missing');
   return match[1];
 }
