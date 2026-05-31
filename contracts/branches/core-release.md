@@ -16,7 +16,9 @@ This role owns shared core helpers, app bootstrap, module registry, contracts, v
 - `src/app/**`
 - `contracts/**`
 - `module-releases/**`
-- `releases/**`
+- `releases/latest.user.js`
+- `releases/latest.meta.js`
+- existing historical `releases/SLF_<version>.user.js` files only
 - `data/version.json`
 - `CHANGELOG.md`
 - `tools/**`
@@ -35,14 +37,22 @@ Core release must:
 3. Use reusable release tooling/workflow only.
 4. Do not create version-specific one-off workflows.
 5. Bump patch version.
-6. Update:
+6. Update only:
    - `releases/latest.user.js`
    - `releases/latest.meta.js`
-   - `releases/SLF_<version>.user.js`
    - `data/version.json`
    - `CHANGELOG.md`
-7. Preserve Tampermonkey update/download URLs.
-8. Commit release outputs directly to `main` when validation passes.
+7. Do not create new per-version archive userscript files such as `releases/SLF_<version>.user.js`.
+8. Preserve Tampermonkey update/download URLs.
+9. Commit release outputs directly to `main` when validation passes.
+
+Existing archive files may remain for history, including:
+
+- `releases/SLF_4_4_72.user.js`
+- `releases/SLF_4_4_73.user.js`
+- `releases/SLF_4_4_74.user.js`
+
+From now on, do not create additional archive userscript files.
 
 ## Confirmation exceptions
 
@@ -72,7 +82,7 @@ Validation must also confirm:
 
 - `releases/latest.user.js` has the new `@version`;
 - `releases/latest.meta.js` has the new `@version`;
-- `releases/SLF_<version>.user.js` exists;
+- no new `releases/SLF_<version>.user.js` archive file is created;
 - `data/version.json` has the new version and manifest reference;
 - `CHANGELOG.md` has the new version entry;
 - runtime `SLF.scriptVersion` and `SLF.versionInfo` expose the current release version;
@@ -95,7 +105,11 @@ Final release output must include:
 - new version;
 - changed files;
 - validation result;
-- Tampermonkey channel status.
+- `latest.user.js` updated;
+- `latest.meta.js` updated;
+- version bumped;
+- no archive file created;
+- Tampermonkey update channel preserved.
 
 ## Tampermonkey channel
 
