@@ -1,17 +1,19 @@
 {
-  "scriptVersion": "4.4.73",
+  "scriptVersion": "4.4.74",
   "releaseChannel": "github-tampermonkey",
-  "archive": "releases/SLF_4_4_73.user.js",
+  "archive": "releases/SLF_4_4_74.user.js",
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_73_published",
+  "status": "release_4_4_74_published",
   "moduleRelease": {
     "module": "team-management",
     "sourceBranch": "team-management",
-    "commit": "a50700c8ea13a309ef935292f7f3d40f60234b1e",
-    "base": "bb6357f456fc7aed1683e51ca3bc1ae3dc0143d6",
+    "commit": "ddb02d3b587abd0c4e56ece214a8717a58ceaede",
     "changedFiles": [
       "src/modules/team-management/team4-alter-current-season-minutes-fix.js"
-    ]
+    ],
+    "fromVersion": "4.4.73",
+    "toVersion": "4.4.74",
+    "summary": "Team4 tooltip alter current-season minutes linking and hydration fix"
   }
 }

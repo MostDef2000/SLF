@@ -9,9 +9,49 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         'slf_team4_player_status_cache_v2',
         'slf_team4_player_status_cache_v1'
     ];
+    const NO_MATCH_LOGGED = new Set();
+    const MATCH_LOGGED = new Set();
 
     function norm(text) {
         return String(text || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function low(text) {
+        return norm(text).toLowerCase();
+    }
+
+    function compactName(text) {
+        return low(text)
+            .normalize('NFKD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/ё/g, 'е')
+            .replace(/[ьъ]/g, '')
+            .replace(/[^a-zа-я0-9]+/g, '');
+    }
+
+    function nameTokens(text) {
+        return low(text)
+            .normalize('NFKD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/ё/g, 'е')
+            .replace(/[ьъ]/g, '')
+            .split(/[^a-zа-я0-9]+/i)
+            .map(token => token.trim())
+            .filter(token => token.length >= 3);
+    }
+
+    function namesMatch(left, right) {
+        const a = compactName(left);
+        const b = compactName(right);
+        if (!a || !b) return false;
+        if (a === b || a.includes(b) || b.includes(a)) return true;
+
+        const leftTokens = new Set(nameTokens(left));
+        const rightTokens = nameTokens(right);
+        if (!leftTokens.size || !rightTokens.length) return false;
+
+        const overlap = rightTokens.filter(token => leftTokens.has(token)).length;
+        return overlap >= 2 || (overlap >= 1 && Math.min(leftTokens.size, rightTokens.length) === 1);
     }
 
     function parseMinutesCell(text) {
@@ -70,36 +110,155 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         return minutes > 0 ? { ...entry, currentSeasonMinutes: minutes } : null;
     }
 
-    function getDataIds(data, row) {
-        const ids = new Set();
-        const add = value => {
-            const id = String(value || '').trim();
-            if (/^\d+$/.test(id)) ids.add(id);
-        };
+    function getCachedEntries() {
+        return Object.entries(readMinutesCache())
+            .map(([id, entry]) => {
+                const minutes = Number(entry?.currentSeasonMinutes || entry?.seasonMinutes || 0);
+                return minutes > 0 ? { id, ...entry, currentSeasonMinutes: minutes } : null;
+            })
+            .filter(Boolean);
+    }
 
-        add(data?.alterId);
-        add(data?.playerId);
-        add(data?.slfPlayerId);
-        add(data?.id);
-        add(String(row?.id || '').replace(/^pltr-/, ''));
+    function addId(ids, value) {
+        const id = String(value || '').trim();
+        if (/^\d+$/.test(id)) ids.add(id);
+    }
 
-        const urls = [
-            data?.alterUrl,
-            data?.playerUrl,
-            row?.querySelector?.('a[href*="alter.php?id="]')?.href,
-            row?.querySelector?.('a[href*="player.php?id="]')?.href
+    function collectIdsFromText(ids, text) {
+        const raw = String(text || '');
+        const patterns = [
+            /[?&](?:id|player_id|playerId|pid|plid)=(\d{3,})/ig,
+            /\b(?:alter|player|footballer|pltr|pid|playerId)[^\d]{0,12}(\d{3,})\b/ig,
+            /\bpltr-(\d{3,})\b/ig
         ];
 
-        urls.forEach(url => add(getAlterIdFromUrl(url)));
+        patterns.forEach(pattern => {
+            let match;
+            while ((match = pattern.exec(raw))) addId(ids, match[1]);
+        });
+    }
+
+    function collectRowLinks(row) {
+        if (!row?.querySelectorAll) return [];
+        return [...row.querySelectorAll('a[href], [data-href], [onclick], [data-player-id], [data-id], [data-pid]')]
+            .flatMap(el => [
+                el.getAttribute?.('href'),
+                el.getAttribute?.('data-href'),
+                el.getAttribute?.('onclick'),
+                el.getAttribute?.('data-player-id'),
+                el.getAttribute?.('data-id'),
+                el.getAttribute?.('data-pid')
+            ])
+            .filter(Boolean);
+    }
+
+    function getDataIds(data, row) {
+        const ids = new Set();
+
+        [
+            data?.alterId,
+            data?.playerId,
+            data?.slfPlayerId,
+            data?.tmPlayerId,
+            data?.id,
+            String(row?.id || '').replace(/^pltr-/, '')
+        ].forEach(value => addId(ids, value));
+
+        [
+            data?.alterUrl,
+            data?.playerUrl,
+            data?.tmUrl,
+            data?.tmLink,
+            data?.profileUrl,
+            ...(collectRowLinks(row) || [])
+        ].forEach(value => {
+            addId(ids, getAlterIdFromUrl(value));
+            collectIdsFromText(ids, value);
+        });
+
+        if (row?.dataset) Object.values(row.dataset).forEach(value => collectIdsFromText(ids, value));
+        collectIdsFromText(ids, row?.id || '');
+
         return [...ids];
     }
 
+    function getDataName(data, row) {
+        return norm(data?.name || row?.querySelector?.('a[href*="player"]')?.textContent || row?.textContent || '');
+    }
+
+    function entryNames(entry) {
+        return [
+            entry?.playerName,
+            entry?.name,
+            ...(Array.isArray(entry?.playerNames) ? entry.playerNames : [])
+        ].map(norm).filter(Boolean);
+    }
+
     function findCachedEntryForData(data, row) {
-        for (const id of getDataIds(data, row)) {
+        const ids = getDataIds(data, row);
+        for (const id of ids) {
             const entry = getCachedEntry(id);
-            if (entry) return entry;
+            if (entry) {
+                logMatch(data, row, entry, 'id', ids);
+                return entry;
+            }
         }
+
+        const entries = getCachedEntries();
+        const rowHtml = String(row?.outerHTML || '');
+        for (const entry of entries) {
+            const id = String(entry.alterId || entry.playerId || entry.id || '').trim();
+            if (id && rowHtml.includes(id)) {
+                logMatch(data, row, entry, 'row-html-id', ids);
+                return entry;
+            }
+        }
+
+        const dataName = getDataName(data, row);
+        if (dataName) {
+            for (const entry of entries) {
+                if (entryNames(entry).some(name => namesMatch(name, dataName))) {
+                    logMatch(data, row, entry, 'name', ids);
+                    return entry;
+                }
+            }
+        }
+
+        logNoMatch(data, row, ids, entries);
         return null;
+    }
+
+    function logMatch(data, row, entry, mode, ids) {
+        const key = `${data?.key || data?.slfPlayerId || getDataName(data, row)}|${entry?.alterId || entry?.playerId}|${mode}`;
+        if (MATCH_LOGGED.has(key)) return;
+        MATCH_LOGGED.add(key);
+        console.log('[SLF Team4 MIN] matched alter minutes', {
+            mode,
+            name: getDataName(data, row),
+            ids,
+            alterId: entry?.alterId || entry?.playerId || '',
+            currentSeasonMinutes: entry?.currentSeasonMinutes || 0
+        });
+    }
+
+    function logNoMatch(data, row, ids, entries) {
+        const name = getDataName(data, row);
+        const key = `${data?.key || data?.slfPlayerId || name}|${ids.join(',')}|${entries.length}`;
+        if (NO_MATCH_LOGGED.has(key)) return;
+        NO_MATCH_LOGGED.add(key);
+
+        console.warn('[SLF Team4 MIN] no alterId match found for Team4 player', {
+            name,
+            slfPlayerId: data?.slfPlayerId || '',
+            rowId: row?.id || '',
+            candidateIds: ids,
+            cacheIds: entries.map(entry => ({
+                alterId: entry.alterId || entry.playerId || entry.id || '',
+                currentSeasonMinutes: entry.currentSeasonMinutes || 0,
+                names: entryNames(entry)
+            })),
+            rowLinks: collectRowLinks(row)
+        });
     }
 
     function mergeMinutesIntoData(data, row) {
@@ -212,7 +371,12 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
 
                 rows.forEach(row => {
                     const ids = getDataIds(row, null);
-                    if (!ids.includes(id)) return;
+                    const names = entryNames(entry);
+                    const rowName = getDataName(row, null);
+                    const matched = ids.includes(id) || names.some(name => namesMatch(name, rowName));
+                    if (!matched) return;
+
+                    row.alterId = row.alterId || id;
                     row.currentSeasonMinutes = minutes;
                     row.realCareerMinutes = {
                         ...(row.realCareerMinutes || {}),
@@ -241,17 +405,36 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         });
     }
 
+    function extractAlterPlayerNames(doc = document) {
+        const candidates = [
+            doc.title,
+            ...[...doc.querySelectorAll('h1, h2, .player-name, .name, .title, .profile-title')]
+                .map(el => el.textContent)
+        ]
+            .map(text => norm(text)
+                .replace(/\s*[-–|].*$/g, '')
+                .replace(/^Профиль\s*/i, '')
+                .replace(/^Игрок\s*/i, '')
+            )
+            .filter(text => text && !/^Сезон\b/i.test(text) && text.length >= 3 && text.length <= 80);
+
+        return [...new Set(candidates)];
+    }
+
     function saveAlterMinutes(alterId, result) {
         const id = String(alterId || '').trim();
         const minutes = Number(result?.currentSeasonMinutes || 0);
         if (!id || !Number.isFinite(minutes) || minutes <= 0) return null;
 
+        const playerNames = extractAlterPlayerNames(document);
         const cache = readMinutesCache();
         const entry = {
             ...(cache[id] || {}),
-            schema: 'slf_team4_current_season_minutes_v1',
+            schema: 'slf_team4_current_season_minutes_v2',
             alterId: id,
             playerId: id,
+            playerName: playerNames[0] || cache[id]?.playerName || '',
+            playerNames: [...new Set([...(cache[id]?.playerNames || []), ...playerNames])],
             currentSeasonMinutes: minutes,
             seasonLabel: result.seasonLabel || '',
             rows: Array.isArray(result.rows) ? result.rows : [],
@@ -346,8 +529,50 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
                 alterId: entry.alterId,
                 currentSeasonMinutes: entry.currentSeasonMinutes,
                 seasonLabel: entry.seasonLabel,
+                playerNames: entry.playerNames,
                 rows: entry.rows
             });
+        }
+    }
+
+    function hydrateTeam4Minutes(panel) {
+        if (!panel) return;
+
+        let changed = false;
+
+        try {
+            if (panel.sessionCache?.values) {
+                [...panel.sessionCache.values()].forEach(record => {
+                    const before = getDataMinutes(record);
+                    mergeMinutesIntoData(record, null);
+                    replaceMinutesMarker(panel, record);
+                    stripUnknownMinutesReasons(record);
+                    if (getDataMinutes(record) !== before) changed = true;
+                    if (record?.slfPlayerId && panel.cacheTooltipHtml) panel.cacheTooltipHtml(record);
+                });
+            }
+
+            if (panel.getRows) {
+                panel.getRows().forEach(row => {
+                    const cached = panel.getSessionCached?.(row);
+                    if (!cached) return;
+
+                    const before = getDataMinutes(cached);
+                    mergeMinutesIntoData(cached, row);
+                    replaceMinutesMarker(panel, cached);
+                    stripUnknownMinutesReasons(cached);
+                    if (getDataMinutes(cached) !== before) changed = true;
+                    if (cached?.slfPlayerId && panel.cacheTooltipHtml) panel.cacheTooltipHtml(cached);
+                });
+            }
+
+            if (changed) {
+                panel.saveToLocalStorage?.();
+                panel.render?.(false);
+                console.log('[SLF Team4 MIN] hydrated Team4 records from alter minutes cache');
+            }
+        } catch (error) {
+            console.warn('[SLF Team4 MIN] Team4 hydration failed', error);
         }
     }
 
@@ -435,6 +660,7 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
             });
         };
 
+        hydrateTeam4Minutes(panel);
         return true;
     }
 
@@ -459,6 +685,8 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         parseMinutesCell,
         parseCurrentSeasonMinutesFromDocument,
         getCachedEntry,
+        getDataIds,
+        findCachedEntryForData,
         start
     };
 })();

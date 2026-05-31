@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.4.74
+
+- Integrated approved Team Management module release from `ddb02d3b587abd0c4e56ece214a8717a58ceaede`.
+- Fixed Team4 tooltip linking for alter current-season minutes.
+- Added runtime version export so `SLF.scriptVersion` and `SLF.versionInfo` report `4.4.74`.
+- Preserved Tampermonkey update/download URLs.
+
 ## 4.4.73
 
 - Integrated approved Team Management module release from `a50700c8ea13a309ef935292f7f3d40f60234b1e`.
