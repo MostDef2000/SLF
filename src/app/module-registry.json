@@ -1,0 +1,127 @@
+{
+  "schema": "slf_module_registry_v1",
+  "baseline": "4.4.72",
+  "source": "releases/latest.user.js",
+  "modules": {
+    "src/core/domain.js": {
+      "bucket": "core",
+      "sourceSection": "0 SLF domain helpers"
+    },
+    "src/core/config.js": {
+      "bucket": "core",
+      "sourceSection": "1 Config / Constants"
+    },
+    "src/modules/transfer-analyzer/config.js": {
+      "bucket": "transfer-analyzer",
+      "sourceSection": "1.x Transfer Analyzer Config"
+    },
+    "src/core/dom-utils.js": {
+      "bucket": "core",
+      "sourceSection": "1.5 DOM / UI Mount Helpers"
+    },
+    "src/core/api.js": {
+      "bucket": "core",
+      "sourceSection": "2 VPS API Layer"
+    },
+    "src/modules/tactics-presets/preset-storage.js": {
+      "bucket": "strategy-data-recommendations/tactics-presets",
+      "sourceSection": "3 Preset Storage"
+    },
+    "src/modules/tactics-presets/tactic-control-engine.js": {
+      "bucket": "strategy-data-recommendations/tactics-presets",
+      "sourceSection": "4 Tactic Control Engine"
+    },
+    "src/modules/live-parser/match-state-parser.js": {
+      "bucket": "strategy-data-recommendations/live-parser",
+      "sourceSection": "5 Match State Parser"
+    },
+    "src/modules/live-parser/match-stats-parser.js": {
+      "bucket": "strategy-data-recommendations/live-parser",
+      "sourceSection": "6 Match Stats Parser"
+    },
+    "src/modules/live-parser/squad-parser.js": {
+      "bucket": "strategy-data-recommendations/live-parser",
+      "sourceSection": "7 Lineup / Squad Parser"
+    },
+    "src/modules/live-parser/snapshot-engine.js": {
+      "bucket": "strategy-data-recommendations/live-parser",
+      "sourceSection": "8 Snapshot Engine"
+    },
+    "src/modules/live-parser/event-tracker.js": {
+      "bucket": "strategy-data-recommendations/live-parser",
+      "sourceSection": "9 Event / Effect Tracking"
+    },
+    "src/modules/strategy-data-recommendations/developer-hint-parser.js": {
+      "bucket": "strategy-data-recommendations",
+      "sourceSection": "9.5 Developer Hint Parser"
+    },
+    "src/modules/strategy-data-recommendations/generator-advice-details-parser.js": {
+      "bucket": "strategy-data-recommendations",
+      "sourceSection": "9.6 Hidden generator advice detail parser"
+    },
+    "src/modules/strategy-data-recommendations/generator-expected-performance-and-strength-context.js": {
+      "bucket": "strategy-data-recommendations",
+      "sourceSection": "9.6 Generator expected-performance and strength context"
+    },
+    "src/modules/strategy-data-recommendations/dave-engine-knowledge.js": {
+      "bucket": "strategy-data-recommendations",
+      "sourceSection": "9.7 Dave forum knowledge source"
+    },
+    "src/modules/tactics-presets/tactic-preset-library.js": {
+      "bucket": "strategy-data-recommendations/tactics-presets",
+      "sourceSection": "9.8 Tactic Preset Library"
+    },
+    "src/modules/strategy-data-recommendations/tactical-urgency-model.js": {
+      "bucket": "strategy-data-recommendations",
+      "sourceSection": "9.8 Tactical urgency / radicality model"
+    },
+    "src/modules/strategy-data-recommendations/recommendation-engine.js": {
+      "bucket": "strategy-data-recommendations",
+      "sourceSection": "10 Recommendation Engine"
+    },
+    "src/app/ui-layer.js": {
+      "bucket": "app",
+      "sourceSection": "11 UI Layer"
+    },
+    "src/modules/team-management/youth-external-monitor.js": {
+      "bucket": "team-management",
+      "sourceSection": "11.4 Youth External Monitor"
+    },
+    "src/modules/uncategorized/021-data-inspector-page.js": {
+      "bucket": "uncategorized",
+      "sourceSection": "11.5 Data Inspector Page"
+    },
+    "src/modules/team-management/youth-application-autofill.js": {
+      "bucket": "team-management",
+      "sourceSection": "11.6 Youth Application Autofill"
+    },
+    "src/modules/transfer-analyzer/tm-enrichment-layer.js": {
+      "bucket": "transfer-analyzer",
+      "sourceSection": "12 TM Enrichment Layer"
+    },
+    "src/modules/transfer-analyzer/slf-alter-layer.js": {
+      "bucket": "transfer-analyzer",
+      "sourceSection": "13 SLF Alter Layer"
+    },
+    "src/modules/transfer-analyzer/transfer-market-analyzer.js": {
+      "bucket": "transfer-analyzer",
+      "sourceSection": "14 Transfer Market Analyzer"
+    },
+    "src/modules/team-management/training-reference-guide.js": {
+      "bucket": "team-management",
+      "sourceSection": "14.5 Training Reference Guide"
+    },
+    "src/modules/team-management/team-loan-limit-helper.js": {
+      "bucket": "team-management",
+      "sourceSection": "14.8 Team loan limit helper"
+    },
+    "src/modules/team-management/team4-player-status-helper.js": {
+      "bucket": "team-management",
+      "sourceSection": "14.9 Team4 player status helper"
+    },
+    "src/app/bootstrap.js": {
+      "bucket": "app",
+      "sourceSection": "15 App Bootstrap"
+    }
+  }
+}
