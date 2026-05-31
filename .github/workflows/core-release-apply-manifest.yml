@@ -1,0 +1,94 @@
+name: Core release apply manifest
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: Release manifest path
+        required: true
+        default: module-releases/core-release/latest.json
+  push:
+    branches:
+      - main
+    paths:
+      - module-releases/core-release/latest.json
+      - tools/core-release-apply-manifest.mjs
+      - .github/workflows/core-release-apply-manifest.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Select manifest
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.manifest || '' }}" ]; then
+            echo "RELEASE_MANIFEST=${{ github.event.inputs.manifest }}" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_MANIFEST=module-releases/core-release/latest.json" >> "$GITHUB_ENV"
+          fi
+
+      - name: Fetch approved module commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          MODULE_COMMIT=$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync(process.env.RELEASE_MANIFEST,'utf8')); console.log(m.commit)")
+          git fetch origin "$MODULE_COMMIT"
+
+      - name: Apply manifest with reusable release tool
+        run: node tools/core-release-apply-manifest.mjs "$RELEASE_MANIFEST"
+
+      - name: Validate release outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync(process.env.RELEASE_MANIFEST,'utf8')); console.log(m.toVersion)")
+          ARCHIVE="releases/SLF_${VERSION//./_}.user.js"
+          grep -q "@version      $VERSION" releases/latest.user.js
+          grep -q "@version      $VERSION" releases/latest.meta.js
+          grep -q "@updateURL    https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js" releases/latest.user.js
+          grep -q "@downloadURL  https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js" releases/latest.user.js
+          grep -q "slf_team4_real_minutes_cache_v1" releases/latest.user.js
+          grep -q "hydrateTeam4Minutes" releases/latest.user.js
+          grep -q "findCachedEntryForData" releases/latest.user.js
+          grep -q "scriptVersion: '$VERSION'" releases/latest.user.js
+          grep -q "scriptVersion: '$VERSION'" "$ARCHIVE"
+          node --check releases/latest.user.js
+          node --check "$ARCHIVE"
+          node --check src/modules/team-management/team4-alter-current-season-minutes-fix.js
+          if git diff --name-only | grep -E '^(src/modules/(transfer-analyzer|strategy-data-recommendations|live-parser)/|src/modules/live-parser/)'; then
+            echo 'Forbidden module files changed.'
+            exit 1
+          fi
+
+      - name: Commit release outputs directly to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync(process.env.RELEASE_MANIFEST,'utf8')); console.log(m.toVersion)")
+          ARCHIVE="releases/SLF_${VERSION//./_}.user.js"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src/modules/team-management/team4-alter-current-season-minutes-fix.js \
+            releases/latest.user.js \
+            releases/latest.meta.js \
+            "$ARCHIVE" \
+            data/version.json \
+            CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo 'No release output changes to commit.'
+            exit 0
+          fi
+          git diff --cached --name-only
+          git commit -m "release: publish SLF $VERSION team-management alter minutes linking"
+          git push origin HEAD:main
