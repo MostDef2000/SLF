@@ -137,6 +137,56 @@ Validation must also confirm:
 
 Do not call a release complete until required release outputs exist and validation passes.
 
+## Manual Build Action field
+
+After every task, Core Release must explicitly report whether the user should manually run:
+
+`Actions -> Build latest SLF release -> Run workflow -> main`
+
+Every final response must include:
+
+Manual Build Action:
+- RUN ACTIONS: YES/NO
+- Reason:
+- Safe to run now: YES/NO
+- Required branch: main
+- Required workflow: Build latest SLF release
+
+Decision rules:
+
+1. Say `RUN ACTIONS: YES` only if:
+   - a commit was created on `main`; and
+   - that commit changed runtime source or release tooling, such as:
+     - `src/**`
+     - `tools/build-latest-userscript.mjs`
+     - `tools/smoke-latest-userscript.mjs`
+     - `.github/workflows/build-latest-release.yml`
+     - `src/app/bundle-order.json`
+     - `src/app/module-registry.json`
+
+2. Say `RUN ACTIONS: NO` if:
+   - no commit was created;
+   - only read-only audit was performed;
+   - only contracts/docs were changed;
+   - only operating rules were updated;
+   - only release artifacts were inspected;
+   - source integration failed or was not verified;
+   - repository write was interrupted;
+   - the changed files are unrelated to userscript runtime/build output.
+
+3. If `RUN ACTIONS: YES`, also report:
+   - exact commit hash to build from;
+   - changed files;
+   - expected next version;
+   - what validation should pass.
+
+4. If `RUN ACTIONS: NO`, also report:
+   - what is still missing before Actions should be run.
+
+Never tell the user to run Actions unless the source/tooling commit is already present on `main` and verified.
+
+Never claim a release is published until GitHub Actions has produced and committed the release artifacts.
+
 ## Final output requirements
 
 Final release output must include:
@@ -149,7 +199,8 @@ Final release output must include:
 - `latest.meta.js` updated;
 - version bumped;
 - no archive file created;
-- Tampermonkey update channel preserved.
+- Tampermonkey update channel preserved;
+- Manual Build Action field.
 
 ## Tampermonkey channel
 
