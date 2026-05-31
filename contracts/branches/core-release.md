@@ -20,7 +20,7 @@ This role owns shared core helpers, app bootstrap, module registry, contracts, v
 - `data/version.json`
 - `CHANGELOG.md`
 - `tools/**`
-- `.github/workflows/**`
+- stable reusable `.github/workflows/**` only
 
 ## Integration rule
 
@@ -38,98 +38,50 @@ Every final userscript release must update:
 - `releases/latest.meta.js`
 - `releases/SLF_<version>.user.js`
 - `CHANGELOG.md`
-- optionally `data/version.json`
+- `data/version.json`
 
-Every final release must increment userscript `@version`.
+Every non-baseline final release must increment userscript `@version`.
 
 Baseline imports may preserve the source baseline version when the user explicitly requests a no-functional-change canonical baseline import.
 
 A baseline/release run is complete only when the repository default branch contains all required final release outputs for the target version.
 
-For baseline `4.4.72`, completion requires all of these files in `main`:
+## Preferred release process
 
-- `releases/latest.user.js`
-- `releases/latest.meta.js`
-- `releases/SLF_4_4_72.user.js`
-- `data/version.json`
-- `CHANGELOG.md`
+1. Take only an approved module release manifest.
+2. Integrate only approved files into `src/**` and the bundled userscript.
+3. Bump patch version.
+4. Update:
+   - `releases/latest.user.js`
+   - `releases/latest.meta.js`
+   - `releases/SLF_<version>.user.js`
+   - `data/version.json`
+   - `CHANGELOG.md`
+5. Commit the release directly to `main` unless the user explicitly requests another target branch.
+6. Report release commit hash and validation result.
 
-If any required file is missing, the baseline/release is incomplete.
+## Workflow policy
 
-## Release runbook
+Do not create one-off GitHub workflows for individual releases.
 
-### 1. Determine target branch
+Allowed workflow use:
 
-- Treat `core-release` as the agent/workflow role.
-- Publish final Tampermonkey release files to the repository default branch, currently `main`, unless the user explicitly requests another Git branch.
-- Do not assume a Git branch named `core-release` exists.
+- stable reusable workflows/tools only;
+- no version-specific release workflows such as `core-release-4.4.73-team-management.yml`;
+- workflows may support validation, builds, source splitting, or generic release automation, but must not encode a single module release/version as a bespoke workflow.
 
-### 2. Validate input
+If the GitHub connector cannot directly upload large release files, prefer stable reusable tooling or a one-time documented bootstrap fallback. Do not keep obsolete one-off release workflows in the repository.
 
-For ordinary module releases:
-
-- require an explicitly named module release manifest under `module-releases/<branch>/<release-id>.json`;
-- integrate only the requested manifest;
-- do not pull changes from unnamed branches.
-
-For canonical baseline imports:
-
-- require the user-supplied baseline userscript file;
-- preserve the baseline version if the user requested no functional changes;
-- split the monolith into `src/**` structurally only;
-- keep the generated `releases/latest.user.js` functionally identical to the supplied baseline except for explicitly requested release-channel metadata.
-
-### 3. Preferred direct write flow
+## GitHub write rule
 
 When writing GitHub files:
 
 - create missing files with `create_file`;
 - update existing files with `fetch_file` + `update_file` using `sha`;
+- delete obsolete files with `fetch_file` + `delete_file` using `sha`;
 - never stop and ask the user to manually upload a generated zip unless GitHub write access is unavailable.
 
-Directly write all required outputs when possible:
-
-- `releases/latest.user.js`
-- `releases/latest.meta.js`
-- `releases/SLF_<version>.user.js`
-- `data/version.json`
-- `CHANGELOG.md`
-- `src/**`
-- `tools/**` when needed
-- `.github/workflows/**` when needed
-
-### 4. Build-based fallback flow
-
-If a large `releases/latest.user.js` or archive userscript cannot be written through the GitHub connector directly, do not stop at a local zip.
-
-Switch to build-based flow and write the smaller source/build files instead:
-
-- `src/**`
-- `tools/build-userscript.mjs`
-- `.github/workflows/build-release.yml`
-- `data/version.json`
-- `CHANGELOG.md`
-- `releases/latest.meta.js`
-
-The build script must:
-
-- read module/source files from `src/**` in deterministic bundle order;
-- generate `releases/latest.user.js`;
-- generate `releases/SLF_<version>.user.js`;
-- generate or verify `releases/latest.meta.js`;
-- preserve the Tampermonkey metadata block;
-- preserve business logic exactly unless the user explicitly requested changes;
-- run `node --check` on generated userscripts.
-
-The GitHub Actions workflow must:
-
-- run on `workflow_dispatch` and on pushes that change `src/**`, `tools/build-userscript.mjs`, `.github/workflows/build-release.yml`, or `data/version.json`;
-- execute `node tools/build-userscript.mjs`;
-- run `node --check releases/latest.user.js`;
-- run `node --check releases/SLF_<version>.user.js` when the versioned archive exists;
-- commit generated `releases/latest.user.js`, `releases/latest.meta.js`, and `releases/SLF_<version>.user.js` back to the repository default branch using GitHub Actions permissions.
-
-### 5. Completion gate
+## Completion gate
 
 Do not call a baseline or release complete until the default branch contains all required final release outputs.
 
@@ -141,13 +93,19 @@ For baseline `4.4.72`, verify that `main` contains:
 - `data/version.json`
 - `CHANGELOG.md`
 
-If direct upload failed but build-based flow was configured, report the release as pending GitHub Actions generation until those generated release files exist in `main`.
+For non-baseline releases, verify that `main` contains:
 
-### 6. Failure handling
+- `releases/latest.user.js` with the new `@version`;
+- `releases/latest.meta.js` with the new `@version`;
+- `releases/SLF_<version>.user.js`;
+- `data/version.json` with the new version and manifest reference;
+- `CHANGELOG.md` entry for the new version.
+
+## Failure handling
 
 - If GitHub write access is unavailable, report the exact write failure and provide the prepared artifact as a fallback.
-- If only large-file upload fails, do not ask for manual zip upload; configure build-based flow.
-- If GitHub Actions cannot be configured, report that the release is blocked and list the missing files.
+- If large-file upload fails, do not create a one-off release workflow; use stable reusable tooling or a documented one-time bootstrap fallback.
+- If validation fails, report the failed check and do not label the release complete.
 - Never label a partial GitHub state as a completed final release.
 
 ## Tampermonkey channel
