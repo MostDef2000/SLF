@@ -90,6 +90,7 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
                 label: norm(text),
                 startYear: Number(match[1]),
                 endYear: Number(match[2]),
+                actualYear: Number(match[2]),
                 hasCurrentMarker: marker,
                 type: 'range'
             };
@@ -101,6 +102,7 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
                 label: norm(text),
                 startYear: year,
                 endYear: year,
+                actualYear: year,
                 hasCurrentMarker: marker,
                 type: 'year'
             };
@@ -109,12 +111,15 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
     }
 
     function seasonScore(season) {
-        const nowYear = new Date().getFullYear();
-        let score = season.startYear;
+        const currentYear = new Date().getFullYear();
+        let score = Number(season.actualYear || season.endYear || season.startYear || 0);
         if (season.hasCurrentMarker) score += 1000000;
-        if (season.startYear === nowYear || season.endYear === nowYear) score += 10000;
-        if (season.startYear === nowYear - 1 && season.endYear === nowYear) score += 5000;
+        if (Number(season.actualYear || 0) === currentYear) score += 10000;
         return score;
+    }
+
+    function isCurrentActualSeason(season) {
+        return Number(season?.actualYear || 0) === new Date().getFullYear();
     }
 
     function parseMinutesCell(text) {
@@ -172,19 +177,27 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
             .map(parseSeasonBlock)
             .filter(Boolean)
             .map(block => ({ ...block, score: seasonScore(block.season) }))
-            .sort((a, b) => b.score - a.score || b.season.startYear - a.season.startYear);
-        const selected = blocks[0] || null;
+            .sort((a, b) => b.score - a.score || b.season.actualYear - a.season.actualYear);
+        const currentBlock = blocks.find(block => block.season.hasCurrentMarker) || blocks.find(block => isCurrentActualSeason(block.season)) || null;
+        const lastActiveBlock = blocks.find(block => Number(block.total || 0) > 0) || null;
+        const currentSeasonMinutes = currentBlock ? Number(currentBlock.total || 0) : 0;
 
         return {
             playerId,
             playerName: profileName,
-            selectedSeason: selected?.season || null,
-            currentSeasonMinutes: selected?.total || 0,
-            rows: selected?.rows || [],
+            selectedSeason: currentBlock?.season || null,
+            currentSeasonMinutes,
+            hasCurrentSeasonPractice: !!currentBlock && currentSeasonMinutes > 0,
+            lastActiveSeason: lastActiveBlock?.season || null,
+            lastActiveSeasonLabel: lastActiveBlock?.season?.label || '',
+            lastActiveSeasonActualYear: lastActiveBlock?.season?.actualYear || 0,
+            lastActiveSeasonMinutes: Number(lastActiveBlock?.total || 0),
+            rows: currentBlock?.rows || [],
             candidates: blocks.map(block => ({
                 label: block.season.label,
                 startYear: block.season.startYear,
                 endYear: block.season.endYear,
+                actualYear: block.season.actualYear,
                 hasCurrentMarker: block.season.hasCurrentMarker,
                 total: block.total,
                 score: block.score
@@ -195,7 +208,7 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
     function saveMinutesRecord(playerId, parsed) {
         const id = String(playerId || parsed?.playerId || '').trim();
         const minutes = Number(parsed?.currentSeasonMinutes || 0);
-        if (!/^\d+$/.test(id) || !Number.isFinite(minutes) || minutes <= 0) return null;
+        if (!/^\d+$/.test(id) || !Number.isFinite(minutes)) return null;
 
         const cache = readMinutesCache();
         const previous = cache[id] || {};
@@ -206,7 +219,11 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
             alterId: id,
             playerName: parsed.playerName || previous.playerName || '',
             currentSeasonMinutes: minutes,
-            seasonLabel: parsed.selectedSeason?.label || previous.seasonLabel || '',
+            hasCurrentSeasonPractice: !!parsed.hasCurrentSeasonPractice,
+            seasonLabel: parsed.selectedSeason?.label || '',
+            lastActiveSeasonLabel: parsed.lastActiveSeasonLabel || previous.lastActiveSeasonLabel || '',
+            lastActiveSeasonActualYear: parsed.lastActiveSeasonActualYear || previous.lastActiveSeasonActualYear || 0,
+            lastActiveSeasonMinutes: Number(parsed.lastActiveSeasonMinutes || 0),
             rows: parsed.rows || [],
             source: 'team4-auto-alter-fetch',
             updatedAt: new Date().toISOString()
@@ -232,12 +249,18 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
                 if (record.realCareerMinutes) {
                     delete record.realCareerMinutes.currentSeasonMinutes;
                     delete record.realCareerMinutes.seasonMinutes;
+                    delete record.realCareerMinutes.lastActiveSeasonLabel;
+                    delete record.realCareerMinutes.lastActiveSeasonActualYear;
+                    delete record.realCareerMinutes.lastActiveSeasonMinutes;
                 }
                 if (record.tmProfile) {
                     delete record.tmProfile.currentSeasonMinutes;
                     if (record.tmProfile.activity) {
                         delete record.tmProfile.activity.currentSeasonMinutes;
                         delete record.tmProfile.activity.seasonMinutes;
+                        delete record.tmProfile.activity.lastActiveSeasonLabel;
+                        delete record.tmProfile.activity.lastActiveSeasonActualYear;
+                        delete record.tmProfile.activity.lastActiveSeasonMinutes;
                     }
                 }
                 if (Array.isArray(record.markers)) {
@@ -284,6 +307,7 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
                         name: result.entry?.playerName || '',
                         minutes: result.entry?.currentSeasonMinutes || 0,
                         season: result.entry?.seasonLabel || '',
+                        lastActiveSeason: result.entry?.lastActiveSeasonLabel || '',
                         ok: result.ok
                     });
                 } catch (error) {
@@ -297,7 +321,8 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
                 id,
                 name: entry.playerName || '',
                 minutes: entry.currentSeasonMinutes || 0,
-                season: entry.seasonLabel || ''
+                season: entry.seasonLabel || '',
+                lastActiveSeason: entry.lastActiveSeasonLabel || ''
             }));
             console.table(summary);
             console.log('[SLF Team4 MIN] refresh completed', { saved: summary.length, ms: Date.now() - startedAt });
@@ -315,9 +340,59 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         const cache = readMinutesCache();
         for (const id of ids) {
             const entry = cache[id];
-            if (entry && Number(entry.currentSeasonMinutes || 0) > 0) return { id, entry };
+            if (entry && (Number(entry.currentSeasonMinutes || 0) > 0 || entry.lastActiveSeasonLabel)) return { id, entry };
         }
         return { id: [...ids][0] || '', entry: null };
+    }
+
+    function getPracticeGrade(minutes, age, lastActiveSeasonLabel) {
+        const m = Number(minutes || 0);
+        const a = Number(age || 0);
+        if (m <= 0) {
+            const season = norm(lastActiveSeasonLabel).replace(/^сезон\s+/i, '');
+            return {
+                label: season ? `нет практики с ${season}` : 'не играет',
+                level: 'risk',
+                score: -2,
+                redFlag: true,
+                text: season ? `В актуальном сезоне минут нет. Последние игровые минуты были в сезоне ${season}.` : 'В актуальном сезоне нет игровых минут.'
+            };
+        }
+        if (a > 0 && a <= 18) {
+            if (m >= 500) return { label: 'Практика', level: 'good', score: 3, redFlag: false, text: 'Для игрока 17-18 лет это хорошая игровая практика.' };
+            if (m >= 300) return { label: 'Эпизодически', level: 'watch', score: 0, redFlag: false, text: 'Для игрока 17-18 лет это эпизодическая практика.' };
+        } else if (a > 18 && a <= 20) {
+            if (m >= 1200) return { label: 'Практика', level: 'good', score: 3, redFlag: false, text: 'Для игрока 19-20 лет это хорошая игровая практика.' };
+            if (m >= 500) return { label: 'Эпизодически', level: 'normal', score: 1, redFlag: false, text: 'Для игрока 19-20 лет это заметная практика.' };
+        } else if (a > 20 && a <= 22) {
+            if (m >= 1800) return { label: 'Практика', level: 'good', score: 3, redFlag: false, text: 'Для игрока 21-22 лет это хорошая игровая практика.' };
+            if (m >= 900) return { label: 'Ротация', level: 'normal', score: 1, redFlag: false, text: 'Для игрока 21-22 лет это ротационная практика.' };
+            if (m >= 300) return { label: 'Эпизодически', level: 'watch', score: 0, redFlag: false, text: 'Для игрока 21-22 лет это эпизодическая практика.' };
+        } else {
+            if (m >= 2500) return { label: 'Основа', level: 'good', score: 4, redFlag: false, text: 'Игрок основы по минутам текущего сезона.' };
+            if (m >= 1800) return { label: 'Ротация', level: 'good', score: 3, redFlag: false, text: 'Игрок основы/ротации по минутам текущего сезона.' };
+            if (m >= 900) return { label: 'Ротация', level: 'normal', score: 1, redFlag: false, text: 'Ротационная игровая практика в текущем сезоне.' };
+            if (m >= 300) return { label: 'Эпизодически', level: 'watch', score: 0, redFlag: false, text: 'Эпизодическая игровая практика в текущем сезоне.' };
+        }
+        return { label: 'Не играет', level: 'risk', score: -2, redFlag: true, text: 'Мало минут в актуальном сезоне.' };
+    }
+
+    function estimateMinutesPct(minutes, age) {
+        const grade = getPracticeGrade(minutes, age, '');
+        if (grade.score >= 4) return 75;
+        if (grade.score >= 3) return 60;
+        if (grade.score >= 1) return 40;
+        if (grade.score === 0) return 20;
+        return 0;
+    }
+
+    function minutesTextForData(data) {
+        const minutes = Number(data?.currentSeasonMinutes || data?.realCareerMinutes?.currentSeasonMinutes || data?.tmProfile?.activity?.currentSeasonMinutes || data?.tmProfile?.activity?.seasonMinutes || 0);
+        if (minutes > 0) return `${minutes} мин`;
+        const last = data?.lastActiveSeasonLabel || data?.realCareerMinutes?.lastActiveSeasonLabel || data?.tmProfile?.activity?.lastActiveSeasonLabel || '';
+        if (last) return `нет практики с ${norm(last).replace(/^сезон\s+/i, '')}`;
+        const pct = data?.tmProfile?.activity?.minutesPct;
+        return pct != null ? `${pct}%` : '?';
     }
 
     function applyMinutesToData(panel, data, row) {
@@ -325,25 +400,60 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         const { id, entry } = entryForData(data, row);
         if (!entry) {
             delete data.currentSeasonMinutes;
-            if (data.realCareerMinutes) delete data.realCareerMinutes.currentSeasonMinutes;
-            if (data.tmProfile?.activity) delete data.tmProfile.activity.currentSeasonMinutes;
+            delete data.lastActiveSeasonLabel;
+            if (data.realCareerMinutes) {
+                delete data.realCareerMinutes.currentSeasonMinutes;
+                delete data.realCareerMinutes.lastActiveSeasonLabel;
+            }
+            if (data.tmProfile?.activity) {
+                delete data.tmProfile.activity.currentSeasonMinutes;
+                delete data.tmProfile.activity.lastActiveSeasonLabel;
+            }
             if (Array.isArray(data.markers)) data.markers = data.markers.filter(marker => !/^MIN\b/i.test(norm(marker?.label || '')));
             return data;
         }
 
         const minutes = Number(entry.currentSeasonMinutes || 0);
+        const age = Number(data.age || 0);
+        const lastActiveSeasonLabel = entry.lastActiveSeasonLabel || '';
         data.playerId = data.playerId || id;
         data.alterId = id;
         data.currentSeasonMinutes = minutes;
-        data.realCareerMinutes = { ...(data.realCareerMinutes || {}), currentSeasonMinutes: minutes, seasonLabel: entry.seasonLabel || '', source: entry.source || 'team4-auto-alter-fetch' };
+        data.hasCurrentSeasonPractice = !!entry.hasCurrentSeasonPractice;
+        data.lastActiveSeasonLabel = lastActiveSeasonLabel;
+        data.realCareerMinutes = {
+            ...(data.realCareerMinutes || {}),
+            currentSeasonMinutes: minutes,
+            hasCurrentSeasonPractice: !!entry.hasCurrentSeasonPractice,
+            seasonLabel: entry.seasonLabel || '',
+            lastActiveSeasonLabel,
+            lastActiveSeasonActualYear: entry.lastActiveSeasonActualYear || 0,
+            lastActiveSeasonMinutes: entry.lastActiveSeasonMinutes || 0,
+            source: entry.source || 'team4-auto-alter-fetch'
+        };
         data.tmProfile = data.tmProfile || {};
-        data.tmProfile.activity = { ...(data.tmProfile.activity || {}), currentSeasonMinutes: minutes, seasonMinutes: minutes, seasonLabel: entry.seasonLabel || '' };
+        data.tmProfile.activity = {
+            ...(data.tmProfile.activity || {}),
+            currentSeasonMinutes: minutes,
+            seasonMinutes: minutes,
+            minutesPct: estimateMinutesPct(minutes, age),
+            seasonLabel: entry.seasonLabel || '',
+            age,
+            hasCurrentSeasonPractice: !!entry.hasCurrentSeasonPractice,
+            lastActiveSeasonLabel,
+            lastActiveSeasonActualYear: entry.lastActiveSeasonActualYear || 0,
+            lastActiveSeasonMinutes: entry.lastActiveSeasonMinutes || 0
+        };
         if (panel?.getMinutesMarker) {
             const marker = panel.getMinutesMarker(data.tmProfile);
             const markers = Array.isArray(data.markers) ? data.markers : [];
             data.markers = [...markers.filter(item => !/^MIN\b/i.test(norm(item?.label || ''))), marker].filter(Boolean);
         }
-        logOnce('log', `match:${id}`, '[SLF Team4 MIN] applied minutes to Team4 player', { id, name: data.name || entry.playerName || '', minutes });
+        if (panel?.classifyStatus) {
+            data.status = panel.classifyStatus(data);
+            data.reasons = data.status?.reasons || [];
+        }
+        logOnce('log', `match:${id}`, '[SLF Team4 MIN] applied minutes to Team4 player', { id, name: data.name || entry.playerName || '', minutes, lastActiveSeasonLabel });
         return data;
     }
 
@@ -395,12 +505,16 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         const originalGetMinutesMarker = panel.getMinutesMarker;
         panel.getMinutesMarker = function patchedGetMinutesMarker(profile) {
             const minutes = Number(profile?.activity?.currentSeasonMinutes || profile?.activity?.seasonMinutes || profile?.currentSeasonMinutes || 0);
-            if (minutes > 0) {
+            const age = Number(profile?.activity?.age || profile?.age || 0);
+            const lastActiveSeasonLabel = profile?.activity?.lastActiveSeasonLabel || profile?.lastActiveSeasonLabel || '';
+            if (minutes > 0 || lastActiveSeasonLabel) {
+                const grade = getPracticeGrade(minutes, age, lastActiveSeasonLabel);
                 return this.serializeMarker({
-                    label: `MIN ${minutes}`,
-                    level: minutes >= 900 ? 'good' : 'normal',
-                    score: minutes >= 900 ? 4 : 2,
-                    text: `Минуты текущего сезона: ${minutes}.`
+                    label: minutes > 0 ? `MIN ${minutes}` : 'MIN ✗',
+                    level: grade.level,
+                    score: grade.score,
+                    redFlag: grade.redFlag,
+                    text: minutes > 0 ? `Минуты текущего сезона: ${minutes}. ${grade.label}.` : grade.text
                 }, 'activity');
             }
             return originalGetMinutesMarker.call(this, profile);
@@ -409,7 +523,9 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         const originalBuildTipHtml = panel.buildTipHtml;
         panel.buildTipHtml = function patchedBuildTipHtml(data) {
             applyMinutesToData(this, data, null);
-            return originalBuildTipHtml.call(this, data);
+            const html = originalBuildTipHtml.call(this, data);
+            const minText = this.escapeHtml(minutesTextForData(data));
+            return String(html || '').replace(/<div class="row"><b>MIN:<\/b>[\s\S]*?<\/div>/, `<div class="row"><b>MIN:</b> ${minText}</div>`);
         };
 
         const originalShowPreparedTip = panel.showPreparedTip;
