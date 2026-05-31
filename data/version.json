@@ -1,21 +1,18 @@
 {
-  "schema": "slf_version_manifest_v2_latest_only",
-  "scriptVersion": "4.4.75",
+  "schema": "slf_version_manifest_v3_latest_only_build_from_src",
+  "scriptVersion": "4.4.76",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_75_published",
-  "moduleRelease": {
-    "module": "team-management",
-    "sourceBranch": "team-management",
-    "commit": "c93da71006691ab93b96b3297f26c04ee35a7d4e",
-    "changedFiles": [
-      "src/modules/team-management/team4-alter-minutes-strict-link-hotfix.js"
-    ],
-    "fromVersion": "4.4.74",
-    "toVersion": "4.4.75",
-    "summary": "Strict Team4 alter-minutes linking hotfix to prevent cached minutes leakage"
+  "status": "release_4_4_76_published",
+  "build": {
+    "source": "src/**",
+    "bundleOrder": "src/app/bundle-order.json",
+    "approvedCommit": "664b7098d2c316b40dbe7a4ebd8de4c5ba6cc6d7",
+    "approvedFiles": [
+      "src/modules/team-management/team4-alter-current-season-minutes-fix.js"
+    ]
   }
 }
