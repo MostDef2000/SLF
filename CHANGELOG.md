@@ -3,135 +3,80 @@
 ## 4.4.92
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.91
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.90
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.89
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.88
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.87
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.86
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.85
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.84
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.83
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.82
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.81
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.80
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.79
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.78
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.77
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.76
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
-- Updated latest-only Tampermonkey artifacts from src/**.
-- No archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.75
 
 - Integrated approved team-management module release from `c93da71006691ab93b96b3297f26c04ee35a7d4e`.
-- Updated latest-only Tampermonkey release artifacts.
-- No per-version archive userscript file created.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.74
 
 - Integrated approved Team Management module release from `ddb02d3b587abd0c4e56ece214a8717a58ceaede`.
 - Fixed Team4 tooltip linking for alter current-season minutes.
 - Added runtime version export so `SLF.scriptVersion` and `SLF.versionInfo` report `4.4.74`.
-- Preserved Tampermonkey update/download URLs.
 
 ## 4.4.73
 
