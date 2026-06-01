@@ -51,10 +51,85 @@ function detectTeam4AlterMinutesSchema() {
   if (!match) throw new Error('Team4 alter minutes source schema marker missing');
   return match[1];
 }
+function cleanText(value) {
+  return String(value == null ? '' : value).replace(/\r/g, '').trim();
+}
+function asArray(value) {
+  if (Array.isArray(value)) return value.map(cleanText).filter(Boolean);
+  const text = cleanText(value);
+  if (!text) return [];
+  return text.split(/\n+/).map(line => line.replace(/^[-*]\s*/, '').trim()).filter(Boolean);
+}
+function parseReleaseNotes() {
+  const raw = cleanText(process.env.RELEASE_NOTES_JSON || '');
+  if (!raw) {
+    console.warn('[SLF Release] No module release notes provided.');
+    return {
+      provided: false,
+      moduleName: 'Release notes',
+      sourceBranch: '',
+      approvedCommit: process.env.APPROVED_COMMIT || '',
+      changedFiles: (process.env.APPROVED_FILES || '').split(',').map(s => s.trim()).filter(Boolean),
+      behaviorChanges: ['No module release notes provided.'],
+      cacheSchemaStorageKeysChanged: 'UNKNOWN',
+      existingKeysPreserved: [],
+      bundleOrderModuleRegistryChangesNeeded: 'UNKNOWN',
+      safetyNotes: []
+    };
+  }
+  let notes;
+  try {
+    notes = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`RELEASE_NOTES_JSON is not valid JSON: ${error.message}`);
+  }
+  const behaviorChanges = [
+    ...asArray(notes.userVisibleChanges),
+    ...asArray(notes.runtimeBehaviorChanges),
+    ...asArray(notes.behaviorChanges),
+    ...asArray(notes.summary)
+  ];
+  return {
+    provided: true,
+    moduleName: cleanText(notes.moduleName || notes.module || 'Module change'),
+    sourceBranch: cleanText(notes.sourceBranch || ''),
+    approvedCommit: cleanText(notes.approvedCommit || process.env.APPROVED_COMMIT || ''),
+    changedFiles: asArray(notes.changedFiles).length ? asArray(notes.changedFiles) : (process.env.APPROVED_FILES || '').split(',').map(s => s.trim()).filter(Boolean),
+    behaviorChanges: behaviorChanges.length ? behaviorChanges : ['No module release notes provided.'],
+    cacheSchemaStorageKeysChanged: cleanText(notes.cacheSchemaStorageKeysChanged || notes.cacheSchemaStorageChanged || 'NO'),
+    existingKeysPreserved: asArray(notes.existingKeysPreserved || notes.existingKeys || notes.storageKeysPreserved),
+    bundleOrderModuleRegistryChangesNeeded: cleanText(notes.bundleOrderModuleRegistryChangesNeeded || notes.bundleOrderChangesNeeded || 'NO'),
+    safetyNotes: asArray(notes.safetyNotes)
+  };
+}
+function formatChangelogEntry(version, notes) {
+  const lines = [`# Changelog`, '', `## ${version}`, '', `### ${notes.moduleName || 'Module change'}`];
+  notes.behaviorChanges.forEach(item => lines.push(`- ${item}`));
+  lines.push('', 'Changed files:');
+  if (notes.changedFiles.length) notes.changedFiles.forEach(file => lines.push(`- ${file}`));
+  else lines.push('- No changed files provided.');
+  lines.push('', 'Approved commit:');
+  lines.push(`- ${notes.approvedCommit || 'Not provided.'}`);
+  if (notes.sourceBranch) {
+    lines.push('', 'Source branch:');
+    lines.push(`- ${notes.sourceBranch}`);
+  }
+  lines.push('', 'Compatibility / storage:');
+  lines.push(`- Cache/schema/storage keys changed: ${notes.cacheSchemaStorageKeysChanged || 'UNKNOWN'}`);
+  if (notes.existingKeysPreserved.length) lines.push(`- Existing keys preserved: ${notes.existingKeysPreserved.join(', ')}`);
+  lines.push(`- Bundle-order/module-registry changes needed: ${notes.bundleOrderModuleRegistryChangesNeeded || 'UNKNOWN'}`);
+  if (notes.safetyNotes.length) {
+    lines.push('', 'Safety notes:');
+    notes.safetyNotes.forEach(note => lines.push(`- ${note}`));
+  }
+  lines.push('', '');
+  return lines.join('\n');
+}
 
 const latestExisting = fs.existsSync(p('releases/latest.user.js')) ? read('releases/latest.user.js') : '';
 const version = process.env.TARGET_VERSION || bumpPatch(parseVersion(latestExisting || read('src/app/userscript-header.js')));
 const team4AlterMinutesSchema = detectTeam4AlterMinutesSchema();
+const releaseNotes = parseReleaseNotes();
 let header = read('src/app/userscript-header.js').replace(/(@version\s+)[0-9]+\.[0-9]+\.[0-9]+/, `$1${version}`);
 if (!header.includes(`@updateURL    ${UPDATE_URL}`)) throw new Error('updateURL mismatch');
 if (!header.includes(`@downloadURL  ${DOWNLOAD_URL}`)) throw new Error('downloadURL mismatch');
@@ -88,16 +163,17 @@ write('data/version.json', JSON.stringify({
   build: {
     source: 'src/**',
     bundleOrder: 'src/app/bundle-order.json',
-    approvedCommit: process.env.APPROVED_COMMIT || '',
-    approvedFiles: (process.env.APPROVED_FILES || '').split(',').map(s => s.trim()).filter(Boolean),
+    approvedCommit: releaseNotes.approvedCommit || process.env.APPROVED_COMMIT || '',
+    approvedFiles: releaseNotes.changedFiles,
+    releaseNotesProvided: releaseNotes.provided,
+    releaseNotesModule: releaseNotes.moduleName,
     team4AlterMinutesSchema
   }
 }, null, 2));
 
 let changelog = fs.existsSync(p('CHANGELOG.md')) ? read('CHANGELOG.md') : '# Changelog\n';
 if (!changelog.includes(`## ${version}`)) {
-  const summary = process.env.RELEASE_SUMMARY || 'Latest-only userscript build from src/**.';
-  const entry = `# Changelog\n\n## ${version}\n\n- ${summary}\n- Updated latest-only Tampermonkey artifacts from src/**.\n- No archive userscript file created.\n- Preserved Tampermonkey update/download URLs.\n\n`;
+  const entry = formatChangelogEntry(version, releaseNotes);
   changelog = changelog.startsWith('# Changelog\n') ? entry + changelog.slice('# Changelog\n'.length).replace(/^\n+/, '') : entry + '\n' + changelog;
   write('CHANGELOG.md', changelog);
 }
@@ -112,4 +188,4 @@ if (!userscript.includes('BEGIN SLF FINAL RUNTIME VERSION EXPORT')) throw new Er
 if (!userscript.includes(`@version      ${version}`)) throw new Error('version mismatch');
 if (fs.existsSync(p(`releases/SLF_${version.replace(/\./g, '_')}.user.js`))) throw new Error('forbidden archive exists');
 execFileSync('node', ['--check', 'releases/latest.user.js'], { stdio: 'inherit' });
-console.log(`Built SLF ${version} latest-only from ${files.length} source files; Team4 schema ${team4AlterMinutesSchema}.`);
+console.log(`Built SLF ${version} latest-only from ${files.length} source files; Team4 schema ${team4AlterMinutesSchema}; release notes ${releaseNotes.provided ? 'provided' : 'fallback'}.`);

@@ -93,6 +93,42 @@ Stop before writing only if:
 - the operation would delete or overwrite unrelated files;
 - a GitHub write operation fails.
 
+## Changelog policy
+
+`CHANGELOG.md` must record the actual approved module/runtime logic, not generic build mechanics.
+
+For every release produced by `Build latest SLF release`, the changelog entry must include:
+
+- version;
+- module name;
+- source branch;
+- approved commit;
+- changed files;
+- user-visible/runtime behavior changes;
+- cache/schema/storage key impact;
+- bundle-order/module-registry impact when relevant;
+- safety notes only when relevant.
+
+The changelog entry must be derived from the approved Core Release handoff / COPY-READY MESSAGE, especially:
+
+- Summary;
+- Integration notes;
+- Acceptance checks;
+- Cache/schema/storage keys changed;
+- Bundle-order/module-registry changes needed.
+
+Do not fill changelog entries with generic release-policy boilerplate such as:
+
+- `Updated latest-only Tampermonkey artifacts from src/**`;
+- `No archive userscript file created`;
+- `Preserved Tampermonkey update/download URLs`.
+
+Those are release validation checks, not changelog content.
+
+Core Release must provide structured release notes to the manual workflow through `release_notes_json` when running `Actions -> Build latest SLF release`.
+
+If no release notes are provided, the builder must use the explicit fallback text `No module release notes provided.` and must not invent business logic or reuse stale previous notes.
+
 ## Consolidation rule
 
 Do not preserve temporary hotfix layering.

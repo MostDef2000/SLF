@@ -2,13 +2,23 @@ name: Build latest SLF release
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - src/**
-      - tools/build-latest-userscript.mjs
-      - .github/workflows/build-latest-release.yml
+    inputs:
+      approved_commit:
+        description: Approved source/tool integration commit to record in data/version.json
+        required: false
+        type: string
+      approved_files:
+        description: Comma-separated approved files included in this release
+        required: false
+        type: string
+      release_notes_json:
+        description: Structured release notes JSON from the Core Release handoff
+        required: false
+        type: string
+      target_version:
+        description: Optional explicit target version; normally leave empty to bump patch
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -26,11 +36,16 @@ jobs:
       - name: Build latest-only userscript
         shell: bash
         env:
-          TARGET_VERSION: ""
-          APPROVED_COMMIT: ${{ github.sha }}
-          APPROVED_FILES: src/modules/team-management/team4-alter-current-season-minutes-fix.js
-          RELEASE_SUMMARY: Integrated approved Team Management alter-minutes season/player matching fix.
-        run: node tools/build-latest-userscript.mjs
+          TARGET_VERSION: ${{ inputs.target_version }}
+          APPROVED_COMMIT: ${{ inputs.approved_commit || github.sha }}
+          APPROVED_FILES: ${{ inputs.approved_files }}
+          RELEASE_NOTES_JSON: ${{ inputs.release_notes_json }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_NOTES_JSON:-}" ]; then
+            echo "::warning::No structured release notes were provided. CHANGELOG.md will use the explicit fallback text."
+          fi
+          node tools/build-latest-userscript.mjs
 
       - name: Validate latest-only release
         shell: bash
@@ -51,6 +66,14 @@ jobs:
           grep -q '"archiveCreated": false' data/version.json
           if [ -e "releases/SLF_${VERSION//./_}.user.js" ]; then
             echo "Forbidden archive file exists: releases/SLF_${VERSION//./_}.user.js"
+            exit 1
+          fi
+          if grep -q "Updated latest-only Tampermonkey artifacts from src/\*\*" CHANGELOG.md; then
+            echo "CHANGELOG contains obsolete generic build boilerplate"
+            exit 1
+          fi
+          if grep -q "Preserved Tampermonkey update/download URLs" CHANGELOG.md; then
+            echo "CHANGELOG contains obsolete release-policy boilerplate"
             exit 1
           fi
           node --check releases/latest.user.js
