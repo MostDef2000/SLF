@@ -93,6 +93,105 @@ Stop before writing only if:
 - the operation would delete or overwrite unrelated files;
 - a GitHub write operation fails.
 
+## Mandatory source/tool integration completion gate
+
+Every source/tool integration task may end only in one of three final states:
+
+1. COMPLETE
+2. BLOCKED
+3. FAILED
+
+### COMPLETE
+
+COMPLETE means:
+
+- approved source/tool files were integrated into `main`;
+- source integration commit exists;
+- `main` points to that commit;
+- changed files were verified on `main`;
+- Manual Build Action block was returned.
+
+### BLOCKED
+
+BLOCKED means:
+
+- Core Release attempted the required write operation;
+- GitHub/API/tooling blocked the operation;
+- no further safe write can be attempted in the current turn;
+- exact next action is provided.
+
+If `update_ref` fails due to a transient GitHub/tool issue, retry once in the same turn. If retry fails, final state must be BLOCKED, not NOT COMPLETE.
+
+### FAILED
+
+FAILED means:
+
+- verification failed;
+- approved commit/range does not match handoff;
+- changed files are out of scope;
+- operation would modify unapproved files;
+- operation would violate release policy.
+
+### Forbidden final states
+
+Never end a task in any of these states unless the final state is explicitly BLOCKED with the required blocked-task details:
+
+- tree prepared;
+- commit created but `main` not advanced;
+- waiting for user confirmation after tree creation;
+- waiting for user confirmation after commit creation;
+- source integration not complete but no blocker;
+- RUN ACTIONS: NO only because the agent stopped early.
+
+### Mandatory completion loop
+
+After approved commit/range is verified, Core Release must execute the full sequence in the same turn:
+
+1. Build integration tree.
+2. Create integration commit.
+3. Fast-forward `main` to the integration commit.
+4. Re-read `main`.
+5. Verify changed files on `main`.
+6. Return final Source Integration + Manual Build Action block.
+
+If a tree is created successfully, immediately create the commit.
+If a commit is created successfully, immediately update `main`.
+If `update_ref` fails due to transient GitHub/tool issue, retry once in the same turn.
+If retry fails, final state must be BLOCKED, not NOT COMPLETE.
+
+### Prepared tree rule
+
+A prepared tree is internal state only.
+
+Never report a prepared tree as the main result unless final state is BLOCKED.
+Never ask the user to approve creating a commit from a prepared tree.
+
+### Created commit rule
+
+A created commit that is not on `main` is not source integration.
+
+If this happens, Core Release must immediately attempt to fast-forward `main`.
+Never stop after commit creation unless `update_ref` is blocked.
+
+### Stop-before-writing rule
+
+Only stop before writing if:
+
+- approved commit/range cannot be verified;
+- changed files differ from handoff;
+- requested paths are out of scope;
+- operation would modify release artifacts manually;
+- operation would modify unapproved files;
+- operation would delete/overwrite unrelated files;
+- GitHub/tooling returns a hard blocker.
+
+### Continuation command for BLOCKED state
+
+If BLOCKED, include a ready-to-send continuation command in this exact style:
+
+Continuation command:
+Core Release Agent, continue blocked task. Fast-forward main to <commit>. Do not create a new tree. Do not create a new commit. Do not modify files. Verify main and return Manual Build Action block.
+
 ## Changelog policy
 
 `CHANGELOG.md` must record the actual approved module/runtime logic, not generic build mechanics.
@@ -209,9 +308,11 @@ Validation must also confirm:
 - no unapproved module files changed;
 - consolidated releases do not leave obsolete hotfix files or obsolete bundle references behind.
 
-## Completion gate
+## Release completion gate
 
-Do not call a release complete until required release outputs exist and validation passes.
+Do not call a userscript release complete until required release outputs exist and validation passes.
+
+Never claim release published until GitHub Actions has produced and committed release artifacts.
 
 ## Manual Build Action field
 
@@ -227,33 +328,34 @@ Manual Build Action:
 - Safe to run now: YES/NO
 - Required branch: main
 - Required workflow: Build latest SLF release
+- Build from commit:
 
 Decision rules:
 
 1. Say `RUN ACTIONS: YES` only if:
-   - a commit was created on `main`; and
-   - that commit changed runtime source or release tooling, such as:
+   - final state is COMPLETE;
+   - `main` points to the source/tool integration commit;
+   - changed files on `main` are verified;
+   - changed files affect runtime source or release tooling, such as:
      - `src/**`
      - `tools/build-latest-userscript.mjs`
      - `tools/smoke-latest-userscript.mjs`
      - `.github/workflows/build-latest-release.yml`
      - `src/app/bundle-order.json`
-     - `src/app/module-registry.json`
+     - `src/app/module-registry.json`.
 
 2. Say `RUN ACTIONS: NO` if:
-   - no commit was created;
+   - final state is BLOCKED;
+   - final state is FAILED;
+   - no source/tooling commit was created;
+   - only docs/contracts were changed and no runtime/build release is pending;
    - only read-only audit was performed;
-   - only contracts/docs were changed;
-   - only operating rules were updated;
-   - only release artifacts were inspected;
-   - source integration failed or was not verified;
-   - repository write was interrupted;
-   - the changed files are unrelated to userscript runtime/build output.
+   - only release artifacts were inspected.
 
 3. If `RUN ACTIONS: YES`, also report:
    - exact commit hash to build from;
    - changed files;
-   - expected next version;
+   - expected next version when known;
    - what validation should pass.
 
 4. If `RUN ACTIONS: NO`, also report:
@@ -265,13 +367,27 @@ Never claim a release is published until GitHub Actions has produced and committ
 
 ## Final output requirements
 
-Final source/tool integration output must include:
+Every task must end with this final response shape:
+
+Final State:
+- COMPLETE / BLOCKED / FAILED
+- Reason:
 
 Source Integration:
 - status: COMPLETE / NOT COMPLETE
 - commit hash:
+- main advanced: YES/NO
+- main commit after operation:
 - changed files:
 - verification:
+
+If BLOCKED:
+- completed steps:
+- blocked step:
+- exact error:
+- retry attempted: YES/NO
+- exact next instruction for user:
+- Continuation command:
 
 Manual Build Action:
 - RUN ACTIONS: YES/NO
@@ -281,7 +397,7 @@ Manual Build Action:
 - Required workflow: Build latest SLF release
 - Build from commit:
 
-Final release output must include:
+Final release output must additionally include:
 
 - release commit hash;
 - new version;
@@ -291,8 +407,7 @@ Final release output must include:
 - `latest.meta.js` updated;
 - version bumped;
 - no archive file created;
-- Tampermonkey update channel preserved;
-- Manual Build Action field.
+- Tampermonkey update channel preserved.
 
 ## Tampermonkey channel
 
