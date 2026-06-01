@@ -24,7 +24,6 @@
     "src/modules/strategy-data-recommendations/tactical-urgency-model.js",
     "src/modules/strategy-data-recommendations/recommendation-engine.js",
     "src/app/ui-layer.js",
-    "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
     "src/modules/team-management/youth-external-monitor.js",
     "src/modules/uncategorized/021-data-inspector-page.js",
     "src/modules/team-management/youth-application-autofill.js",
@@ -34,6 +33,9 @@
     "src/modules/team-management/training-reference-guide.js",
     "src/modules/team-management/team-loan-limit-helper.js",
     "src/modules/team-management/team4-player-status-helper.js",
+    "src/modules/team-management/team4-contract-date-classification-fix.js",
+    "src/modules/team-management/team4-market-value-trend-scoring-fix.js",
+    "src/modules/team-management/team4-marker-cache-persistence-fix.js",
     "src/app/bootstrap.js"
   ]
 }
