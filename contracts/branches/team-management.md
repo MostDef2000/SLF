@@ -38,7 +38,7 @@ No separate `youth-scouting` branch is used. Youth work belongs here.
 
 This branch does not create module release manifests.
 
-After every completed in-scope task, return exactly two sections:
+After every completed in-scope implementation task, return exactly two sections:
 
 1. Technical report
 - commit hash
@@ -48,17 +48,32 @@ After every completed in-scope task, return exactly two sections:
 - files/scopes not changed
 
 2. COPY-READY MESSAGE FOR CORE RELEASE AGENT
-- module name
-- source branch
-- approved commit
-- changed files
-- summary
-- integration notes
-- acceptance checks
-- safety checks
-- target next patch version if known
-- instruction to integrate only approved files
-- instruction not to invent business logic
+- Module name
+- Source branch
+- Approved commit
+- Changed files
+- Summary
+- Integration notes
+- Acceptance checks
+- Safety checks
+- Cache/schema/storage keys changed: YES/NO
+- Bundle-order/module-registry changes needed: YES/NO
+- Core Release Authorization
+
+## COPY-READY MESSAGE requirements
+
+Every implementation handoff must include a Core Release Authorization section stating:
+
+- whether Core Release may integrate the approved files into main;
+- that the approved commit and changed files must match the handoff;
+- that release files and out-of-scope files must not be touched;
+- that Core Release should create the source integration commit, not stop at a prepared tree;
+- that Core Release must not publish release artifacts manually;
+- that the user manually runs GitHub Actions only after Core Release reports RUN ACTIONS: YES.
+
+The copy-ready handoff must explicitly state whether cache/schema/storage keys changed. Do not introduce new cache/schema/storage key versions unless explicitly required and approved.
+
+The copy-ready handoff must explicitly state whether bundle-order or module-registry changes are needed.
 
 ## Integration
 
