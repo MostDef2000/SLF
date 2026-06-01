@@ -32,6 +32,74 @@
         SnapshotEngine.__taskAPatchedBuild = true;
     }
 
+    function patchHasEnoughLiveData() {
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__taskAPatchedLiveGate) return;
+        const originalHasEnoughLiveData = RecommendationEngine.hasEnoughLiveData;
+        RecommendationEngine.hasEnoughLiveData = function patchedTaskAHasEnoughLiveData(snapshot) {
+            const gate = originalHasEnoughLiveData.apply(this, arguments);
+            const minute = this.getEffectiveMinute(snapshot);
+
+            if (gate?.phase === 'collect' && Number.isFinite(minute) && minute >= 10) {
+                return { ok: true, phase: 'pre_window' };
+            }
+
+            if (gate?.phase === 'collect') {
+                return Object.assign({}, gate, {
+                    reason: 'Сбор данных до первого pre-window. Первая предварительная рекомендация появится с 10-й минуты, чтобы подготовить смену до 15-й.'
+                });
+            }
+
+            return gate;
+        };
+        RecommendationEngine.__taskAPatchedLiveGate = true;
+    }
+
+    function getPresetOptionPair(name) {
+        if (!name || typeof RecommendationEngine === 'undefined') return { cautious: '', aggressive: '' };
+
+        const group = RecommendationEngine.getPresetGroup(name);
+        const ladder = RecommendationEngine.getPresetLadder(group);
+        const index = ladder.indexOf(name);
+        if (index < 0) return { cautious: '', aggressive: '' };
+
+        if (group === 'defensive') {
+            return {
+                cautious: ladder[index + 1] || '',
+                aggressive: ladder[index - 1] || ''
+            };
+        }
+
+        return {
+            cautious: ladder[index - 1] || '',
+            aggressive: ladder[index + 1] || ''
+        };
+    }
+
+    function appendPresetOptions(plan, name) {
+        if (!plan || !Array.isArray(plan.preset) || !name || typeof RecommendationEngine === 'undefined') return;
+
+        const options = getPresetOptionPair(name);
+        const rows = [];
+
+        if (options.cautious) rows.push(`Осторожнее: ${RecommendationEngine.getPresetTitle(options.cautious)}.`);
+        if (options.aggressive) rows.push(`Агрессивнее: ${RecommendationEngine.getPresetTitle(options.aggressive)}.`);
+
+        rows.forEach(row => {
+            if (!plan.preset.includes(row)) plan.preset.push(row);
+        });
+    }
+
+    function patchPresetOptions() {
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__taskBPatchedPresetOptions) return;
+        const originalSelectPreset = RecommendationEngine.selectPreset;
+        RecommendationEngine.selectPreset = function patchedTaskBSelectPreset(snapshot, my, opp, playerSignals, plan, state) {
+            const selectedName = originalSelectPreset.apply(this, arguments);
+            appendPresetOptions(plan, selectedName);
+            return selectedName;
+        };
+        RecommendationEngine.__taskBPatchedPresetOptions = true;
+    }
+
     function renderManualRecommendation() {
         const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
         if (!snapshot) return;
@@ -97,6 +165,8 @@
 
     function mount() {
         patchSnapshotBuild();
+        patchHasEnoughLiveData();
+        patchPresetOptions();
         mountManualButton();
         mountForeignSelector();
     }
