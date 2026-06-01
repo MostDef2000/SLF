@@ -249,7 +249,12 @@ const SLFAlterLayer = {
         if (!leagueText && games.played == null && minutes.minutesPct == null) return null;
 
         return {
-            season,
+            season: season?.actualYear ?? null,
+            seasonLabel: season?.label || '',
+            seasonActualYear: season?.actualYear ?? null,
+            seasonStartYear: season?.startYear ?? null,
+            seasonEndYear: season?.endYear ?? null,
+            isCurrentSeason: season?.isCurrent === true,
             rawCells: cells,
             rowText,
 
@@ -281,9 +286,10 @@ const SLFAlterLayer = {
 
         if (range) {
             return {
-                label: `${range[1]}/${range[2]}`,
+                label: `Сезон ${range[1]}/${range[2]}`,
                 startYear: Number(range[1]),
                 endYear: Number(range[2]),
+                actualYear: Number(range[2]),
                 seasonYear: Number(range[2]),
                 isCurrent
             };
@@ -293,9 +299,10 @@ const SLFAlterLayer = {
 
         if (single) {
             return {
-                label: single[1],
+                label: `Сезон ${single[1]}`,
                 startYear: Number(single[1]),
                 endYear: Number(single[1]),
+                actualYear: Number(single[1]),
                 seasonYear: Number(single[1]),
                 isCurrent
             };
@@ -308,8 +315,6 @@ const SLFAlterLayer = {
         const result = [];
 
         let currentSeason = null;
-        let currentSeasonLabel = '';
-        let currentIsCurrent = false;
 
         [...doc.body.querySelectorAll('*')].forEach(el => {
             const text = this.normalizeText(el.innerText || el.textContent || '');
@@ -319,9 +324,7 @@ const SLFAlterLayer = {
                 : null;
 
             if (seasonHeader) {
-                currentSeason = seasonHeader.seasonYear;
-                currentSeasonLabel = seasonHeader.label;
-                currentIsCurrent = seasonHeader.isCurrent;
+                currentSeason = seasonHeader;
                 return;
             }
 
@@ -330,8 +333,6 @@ const SLFAlterLayer = {
                     .map(tr => this.parseAiStatRow(tr, currentSeason))
                     .filter(Boolean)
                     .forEach(row => {
-                        row.seasonLabel = currentSeasonLabel;
-                        row.isCurrentSeason = currentIsCurrent;
                         result.push(row);
                     });
             }
@@ -340,9 +341,57 @@ const SLFAlterLayer = {
         return result;
     },
 
+    getPracticeStatus(age, minutes) {
+        const ageNumber = Number(age || 0);
+        const minuteNumber = Number(minutes || 0);
+
+        if (minuteNumber <= 0) {
+            return {
+                label: 'Не играет',
+                level: 'risk',
+                score: -3
+            };
+        }
+
+        if (ageNumber <= 18) {
+            if (minuteNumber >= 500) return { label: 'Практика', level: 'good', score: 4 };
+            if (minuteNumber >= 300) return { label: 'Эпизодически', level: 'watch', score: 1 };
+            return { label: 'Не играет', level: 'risk', score: -2 };
+        }
+
+        if (ageNumber <= 20) {
+            if (minuteNumber >= 1200) return { label: 'Практика', level: 'good', score: 4 };
+            if (minuteNumber >= 500) return { label: 'Эпизодически', level: 'watch', score: 1 };
+            return { label: 'Не играет', level: 'risk', score: -2 };
+        }
+
+        if (ageNumber <= 22) {
+            if (minuteNumber >= 1800) return { label: 'Практика', level: 'good', score: 4 };
+            if (minuteNumber >= 900) return { label: 'Ротация', level: 'normal', score: 2 };
+            if (minuteNumber >= 300) return { label: 'Эпизодически', level: 'watch', score: 1 };
+            return { label: 'Не играет', level: 'risk', score: -2 };
+        }
+
+        if (minuteNumber >= 2500) return { label: 'Основа', level: 'good', score: 4 };
+        if (minuteNumber >= 900) return { label: 'Ротация', level: 'normal', score: 2 };
+        if (minuteNumber >= 300) return { label: 'Эпизодически', level: 'watch', score: 1 };
+        return { label: 'Не играет', level: 'risk', score: -2 };
+    },
+
+    sumMinutes(rows) {
+        return (rows || []).reduce((sum, row) => sum + Number(row?.minutes || 0), 0);
+    },
+
     buildAnalysis(data) {
         const eligiblePct = CONFIG.TRANSFER_ANALYZER?.slfAlter?.eligibleMinutesPct || 40;
         const rows = Array.isArray(data.rows) ? data.rows : [];
+        const calendarYear = new Date().getFullYear();
+
+        const statRows = rows.filter(row =>
+            row &&
+            row.seasonActualYear &&
+            row.minutes != null
+        );
 
         const validRows = rows.filter(row =>
             row &&
@@ -356,20 +405,33 @@ const SLFAlterLayer = {
             row.leagueSkill != null
         );
 
-        const markedCurrentAllRows = validRows.filter(row => row.isCurrentSeason === true);
-        const markedCurrentLeagueRows = leagueRows.filter(row => row.isCurrentSeason === true);
+        const markedCurrentAllRows = statRows.filter(row => row.isCurrentSeason === true);
+        const fallbackCurrentAllRows = markedCurrentAllRows.length
+            ? []
+            : statRows.filter(row => Number(row.seasonActualYear || row.season || 0) === calendarYear);
+        const currentSeasonRows = markedCurrentAllRows.length ? markedCurrentAllRows : fallbackCurrentAllRows;
 
-        const currentSeasonYear = markedCurrentAllRows.length
-            ? Math.max(...markedCurrentAllRows.map(row => Number(row.season || 0)))
+        const currentSeasonYear = currentSeasonRows.length
+            ? Number(currentSeasonRows[0].seasonActualYear || currentSeasonRows[0].season || 0)
             : null;
 
-        const currentSeasonLabel = markedCurrentAllRows[0]?.seasonLabel || '';
+        const currentSeasonLabel = currentSeasonRows[0]?.seasonLabel || '';
+
+        const markedCurrentLeagueRows = leagueRows.filter(row =>
+            currentSeasonYear && Number(row.seasonActualYear || row.season || 0) === currentSeasonYear
+        );
 
         const currentRow = this.pickBestRow(markedCurrentLeagueRows);
+        const currentSeasonMinutes = currentSeasonRows.length ? this.sumMinutes(currentSeasonRows) : 0;
+        const practiceStatus = this.getPracticeStatus(data.age, currentSeasonMinutes);
 
         const eligibleRows = leagueRows.filter(row => Number(row.minutesPct || 0) >= eligiblePct);
-        const currentEligibleRows = eligibleRows.filter(row => row.isCurrentSeason === true);
-        const pastEligibleRows = eligibleRows.filter(row => row.isCurrentSeason !== true);
+        const currentEligibleRows = eligibleRows.filter(row =>
+            currentSeasonYear && Number(row.seasonActualYear || row.season || 0) === currentSeasonYear
+        );
+        const pastEligibleRows = eligibleRows.filter(row =>
+            !currentSeasonYear || Number(row.seasonActualYear || row.season || 0) !== currentSeasonYear
+        );
 
         const bestEligibleRow = this.pickBestRow(eligibleRows);
         const currentEligibleRow = this.pickBestRow(currentEligibleRows);
@@ -386,24 +448,35 @@ const SLFAlterLayer = {
         );
 
         const currentTalentUpgradeRow = this.pickBestRow(
-            talentUpgradeRows.filter(row => row.isCurrentSeason === true)
+            talentUpgradeRows.filter(row =>
+                currentSeasonYear && Number(row.seasonActualYear || row.season || 0) === currentSeasonYear
+            )
         );
 
         const pastTalentUpgradeRow = this.pickBestRow(
-            talentUpgradeRows.filter(row => row.isCurrentSeason !== true)
+            talentUpgradeRows.filter(row =>
+                !currentSeasonYear || Number(row.seasonActualYear || row.season || 0) !== currentSeasonYear
+            )
         );
 
         const talentUpgradeRow = currentTalentUpgradeRow || pastTalentUpgradeRow || null;
 
-        const lastSeasonYear = validRows.length
-            ? Math.max(...validRows.map(row => Number(row.season || 0)))
+        const lastSeasonYear = statRows.length
+            ? Math.max(...statRows.map(row => Number(row.seasonActualYear || row.season || 0)))
             : null;
 
-        const hasCurrentSeason = markedCurrentAllRows.length > 0;
-        const isCurrentSeasonActive = !!currentRow && (
-            Number(currentRow.minutesPct || 0) > 0 ||
-            Number(currentRow.gamesPlayed || 0) > 0
-        );
+        const activeRows = statRows.filter(row => Number(row.minutes || 0) > 0);
+        const lastActiveSeasonActualYear = activeRows.length
+            ? Math.max(...activeRows.map(row => Number(row.seasonActualYear || row.season || 0)))
+            : null;
+        const lastActiveSeasonRows = lastActiveSeasonActualYear
+            ? activeRows.filter(row => Number(row.seasonActualYear || row.season || 0) === lastActiveSeasonActualYear)
+            : [];
+        const lastActiveSeasonLabel = lastActiveSeasonRows[0]?.seasonLabel || '';
+        const lastActiveSeasonMinutes = this.sumMinutes(lastActiveSeasonRows);
+
+        const hasCurrentSeason = currentSeasonRows.length > 0;
+        const isCurrentSeasonActive = currentSeasonMinutes > 0;
 
         const skillDelta = finalSkill != null && currentSkill
             ? finalSkill - currentSkill
@@ -415,10 +488,15 @@ const SLFAlterLayer = {
 
             currentSeasonYear,
             currentSeasonLabel,
+            currentSeasonMinutes,
+            practiceStatus,
             lastSeasonYear,
+            lastActiveSeasonLabel,
+            lastActiveSeasonActualYear,
+            lastActiveSeasonMinutes,
             hasCurrentSeason,
             isCurrentSeasonActive,
-            staleActivity: !hasCurrentSeason,
+            staleActivity: !hasCurrentSeason || currentSeasonMinutes <= 0,
 
             age: data.age,
             talent: data.talent,
@@ -457,7 +535,7 @@ const SLFAlterLayer = {
         if (!list.length) return null;
 
         return list.slice().sort((a, b) => {
-            return Number(b.season || 0) - Number(a.season || 0) ||
+            return Number(b.seasonActualYear || b.season || 0) - Number(a.seasonActualYear || a.season || 0) ||
                 Number(b.minutesPct || 0) - Number(a.minutesPct || 0) ||
                 Number(b.leagueSkill || 0) - Number(a.leagueSkill || 0) ||
                 Number(b.gamesPlayed || 0) - Number(a.gamesPlayed || 0);
