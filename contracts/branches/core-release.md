@@ -53,6 +53,46 @@ Core Release must:
 6. Preserve Tampermonkey update/download URLs.
 7. Commit release outputs directly to `main` when validation passes.
 
+## Same-turn source integration rule
+
+A prepared Git tree is an internal implementation detail. A prepared tree is not a completed task.
+
+When a valid module handoff is approved and a tree is prepared successfully, Core Release must continue in the same turn:
+
+1. Create the commit from the prepared tree.
+2. Advance `main` to that commit.
+3. Verify the changed files on `main`.
+4. Report the source integration commit hash.
+5. Return the Manual Build Action block.
+
+Do not stop at:
+
+- tree prepared;
+- commit still missing;
+- `main` not advanced yet.
+
+Do not ask for additional user confirmation between:
+
+- approved commit verification;
+- tree preparation;
+- source integration commit creation;
+- `main` ref update.
+
+User approval is already provided by:
+
+- the module COPY-READY MESSAGE;
+- this Core Release contract.
+
+Stop before writing only if:
+
+- the approved commit cannot be verified;
+- changed files differ from the handoff;
+- requested paths are out of scope;
+- the operation would modify release artifacts manually;
+- the operation would modify unapproved files;
+- the operation would delete or overwrite unrelated files;
+- a GitHub write operation fails.
+
 ## Consolidation rule
 
 Do not preserve temporary hotfix layering.
@@ -188,6 +228,22 @@ Never tell the user to run Actions unless the source/tooling commit is already p
 Never claim a release is published until GitHub Actions has produced and committed the release artifacts.
 
 ## Final output requirements
+
+Final source/tool integration output must include:
+
+Source Integration:
+- status: COMPLETE / NOT COMPLETE
+- commit hash:
+- changed files:
+- verification:
+
+Manual Build Action:
+- RUN ACTIONS: YES/NO
+- Reason:
+- Safe to run now: YES/NO
+- Required branch: main
+- Required workflow: Build latest SLF release
+- Build from commit:
 
 Final release output must include:
 
