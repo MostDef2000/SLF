@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.92
+// @version      4.4.93
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.92',
-        scriptVersion: '4.4.92',
+        version: '4.4.93',
+        scriptVersion: '4.4.93',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.92',
+        scriptVersion: '4.4.93',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -587,92 +587,6 @@ function aliasMatchesTeamName(name, aliases) {
 }
 // ============================================================
 // <<< src/core/config.js
-
-
-// >>> src/core/token-storage.js
-// API token storage via Tampermonkey local storage.
-// Do not log or expose the token value.
-
-const SLF_API_TOKEN_STORAGE_KEY = 'slf_api_token';
-let SLF_API_TOKEN_MISSING_WARNED = false;
-let SLF_API_TOKEN_MENU_INSTALLED = false;
-
-function getApiToken() {
-    try {
-        if (typeof GM_getValue === 'function') {
-            return String(GM_getValue(SLF_API_TOKEN_STORAGE_KEY, '') || '').trim();
-        }
-    } catch (error) {
-        console.warn('[SLF] API token read failed', error);
-    }
-
-    return '';
-}
-
-function warnMissingApiTokenOnce() {
-    if (SLF_API_TOKEN_MISSING_WARNED) return;
-    SLF_API_TOKEN_MISSING_WARNED = true;
-    console.warn('[SLF] API token is not configured');
-}
-
-function hasApiToken() {
-    return getApiToken().length > 0;
-}
-
-function installApiTokenMenuCommands() {
-    if (SLF_API_TOKEN_MENU_INSTALLED) return;
-    if (typeof GM_registerMenuCommand !== 'function') return;
-
-    SLF_API_TOKEN_MENU_INSTALLED = true;
-
-    GM_registerMenuCommand('SLF: Set API token', () => {
-        try {
-            if (typeof GM_setValue !== 'function') {
-                console.warn('[SLF] GM_setValue is unavailable');
-                return;
-            }
-
-            const current = hasApiToken() ? 'configured' : 'not configured';
-            const value = prompt(`SLF API token (${current}). Enter new token:`, '');
-            if (value == null) return;
-
-            const token = String(value || '').trim();
-            if (!token) {
-                console.warn('[SLF] Empty API token was not saved');
-                return;
-            }
-
-            GM_setValue(SLF_API_TOKEN_STORAGE_KEY, token);
-            SLF_API_TOKEN_MISSING_WARNED = false;
-            console.info('[SLF] API token saved');
-        } catch (error) {
-            console.warn('[SLF] API token save failed', error);
-        }
-    });
-
-    GM_registerMenuCommand('SLF: Clear API token', () => {
-        try {
-            if (typeof GM_deleteValue !== 'function') {
-                console.warn('[SLF] GM_deleteValue is unavailable');
-                return;
-            }
-
-            GM_deleteValue(SLF_API_TOKEN_STORAGE_KEY);
-            SLF_API_TOKEN_MISSING_WARNED = false;
-            console.info('[SLF] API token cleared');
-        } catch (error) {
-            console.warn('[SLF] API token clear failed', error);
-        }
-    });
-
-    GM_registerMenuCommand('SLF: Show API token status', () => {
-        const status = hasApiToken() ? 'configured' : 'not configured';
-        alert(`SLF API token: ${status}`);
-    });
-}
-
-installApiTokenMenuCommands();
-// <<< src/core/token-storage.js
 
 
 // >>> src/modules/transfer-analyzer/config.js
@@ -1348,8 +1262,8 @@ const DomUtils = {
             { index: 3, from: 31, to: 45, label: '31-45', generationMinutes: 15, realMinutes: 6, phase: 'first_half' },
             { index: 4, from: 46, to: 60, label: '46-60', generationMinutes: 15, realMinutes: 6, phase: 'second_half' },
             { index: 5, from: 61, to: 75, label: '61-75', generationMinutes: 15, realMinutes: 6, phase: 'second_half' },
-            { index: 6, from: 76, to: 85, label: '76-85', generationMinutes: 10, realMinutes: 4, phase: 'late' },
-            { index: 7, from: 86, to: 90, label: '86-90', generationMinutes: 5, realMinutes: 2, phase: 'final_5', isFinal: true }
+            { index: 6, from: 76, to: 84, label: '76-84', generationMinutes: 9, realMinutes: 3.6, phase: 'late' },
+            { index: 7, from: 85, to: 90, label: '85-90', generationMinutes: 6, realMinutes: 2.4, phase: 'final_5', isFinal: true }
         ],
 
         clampMinute(minute) {
@@ -2769,14 +2683,9 @@ const DeveloperHintParser = {
                 line.includes('диагональные передачи') ||
                 line.includes('атаку по центру') ||
                 line.includes('дальних ударов') ||
-                t.includes('лучше проводим') ||
-                t.includes('лучше проводит') ||
-                t.includes('проводим матч лучше') ||
-                t.includes('выше ожидан') ||
+                this.isExplicitBetterThanExpectedText(line) ||
                 t.includes('ниже ожидан') ||
                 t.includes('хуже ожидан') ||
-                t.includes('качество игры') ||
-                t.includes('генератор доволен') ||
                 t.includes('генератор ожидает')
             );
         });
@@ -2812,10 +2721,7 @@ const DeveloperHintParser = {
             return 'control';
         }
 
-        if (
-            t.includes('генератор доволен') ||
-            t.includes('генератор ожидает')
-        ) {
+        if (t.includes('генератор ожидает')) {
             return 'generator_feedback';
         }
 
@@ -2887,19 +2793,20 @@ const DeveloperHintParser = {
         return null;
     },
 
+    isExplicitBetterThanExpectedText(text) {
+        const t = String(text || '').toLowerCase().replace(',', '.');
+        return /(?:\+\s*\d+(?:\.\d+)?\s*%\s*)?(?:вы\s+)?(?:играете|играем|проводим(?:\s+матч)?|проводит(?:\s+матч)?)\s+лучше/.test(t) ||
+            /(?:вы\s+)?(?:играете|играем|проводим(?:\s+матч)?)\s+лучше\s+(?:ожид|генератор)/.test(t) ||
+            /лучше\s+ожидан[^\d+]*(?:\+\s*\d+(?:\.\d+)?\s*%)/.test(t);
+    },
+
     isGeneratorQualityText(text) {
         const t = String(text || '').toLowerCase();
 
         return (
-            t.includes('лучше проводим') ||
-            t.includes('лучше проводит') ||
-            t.includes('проводим матч лучше') ||
-            t.includes('проводит матч лучше') ||
-            t.includes('выше ожидан') ||
+            this.isExplicitBetterThanExpectedText(t) ||
             t.includes('ниже ожидан') ||
-            t.includes('хуже ожидан') ||
-            t.includes('качество игры') ||
-            (t.includes('генератор') && (t.includes('доволен') || t.includes('ожидает')))
+            t.includes('хуже ожидан')
         );
     },
 
@@ -2921,28 +2828,25 @@ const DeveloperHintParser = {
                 direction: 'neutral',
                 confidenceBoost: 0,
                 percent: null,
-                text: ''
+                text: '',
+                explicitBetterThanExpected: false
             };
         }
 
         const text = candidates.map(h => h.text || String(h || '')).join(' | ');
         const lower = text.toLowerCase();
         const percent = this.parsePercent(text);
+        const explicitBetterThanExpected = this.isExplicitBetterThanExpectedText(text);
         let direction = 'neutral';
 
-        if (
-            lower.includes('лучше') ||
-            lower.includes('выше ожид') ||
-            lower.includes('доволен') ||
-            (percent != null && percent > 0)
-        ) {
+        if (explicitBetterThanExpected) {
             direction = 'positive';
         }
 
         if (
             lower.includes('хуже') ||
             lower.includes('ниже ожид') ||
-            (percent != null && percent < 0)
+            (percent != null && percent < 0 && !explicitBetterThanExpected)
         ) {
             direction = 'negative';
         }
@@ -2955,12 +2859,13 @@ const DeveloperHintParser = {
 
         return {
             schema: 'slf_generator_quality_signal_v1',
-            detected: true,
+            detected: direction !== 'neutral',
             direction,
             confidenceBoost: Number(confidenceBoost.toFixed(2)),
             percent,
             text,
-            source: 'pep_generator_hint'
+            explicitBetterThanExpected,
+            source: explicitBetterThanExpected ? 'explicit_generator_better_text' : 'pep_generator_hint'
         };
     },
 
@@ -3842,20 +3747,20 @@ const TacticPresetLibrary = {
 const TacticalUrgencyModel = {
     getMinuteUrgency(minute) {
         const m = Number(minute || 0);
-        if (!Number.isFinite(m) || m < 15) return 0;
-        if (m < 30) return 1;
-        if (m < 45) return 2;
-        if (m < 60) return 3;
-        if (m < 75) return 4;
+        if (!Number.isFinite(m) || m < 10) return 0;
+        if (m < 25) return 1;
+        if (m < 40) return 2;
+        if (m < 55) return 3;
+        if (m < 70) return 4;
         if (m < 80) return 5;
         if (m < 85) return 6;
-        return 2;
+        return 7;
     },
 
     getDecisionWindow(minute) {
         const m = Number(minute || 0);
 
-        if (!Number.isFinite(m) || m < 15) {
+        if (!Number.isFinite(m) || m < 10) {
             return {
                 phase: 'collect',
                 label: 'Сбор данных',
@@ -3865,13 +3770,18 @@ const TacticalUrgencyModel = {
             };
         }
 
-        if (m < 30) return { phase: 'decision', label: 'Окно решения', sourceSegment: '01-15', targetSegment: '16-30', applyByMinute: 15 };
-        if (m < 45) return { phase: 'decision', label: 'Окно решения', sourceSegment: '16-30', targetSegment: '31-45', applyByMinute: 30 };
-        if (m < 60) return { phase: 'decision', label: 'Окно решения', sourceSegment: '31-45', targetSegment: '46-60', applyByMinute: 45 };
-        if (m < 75) return { phase: 'decision', label: 'Окно решения', sourceSegment: '46-60', targetSegment: '61-75', applyByMinute: 60 };
-        if (m < 80) return { phase: 'late', label: 'Позднее окно решения', sourceSegment: '61-75', targetSegment: '76-85', applyByMinute: 75 };
-        if (m < 85) return { phase: 'final_decision', label: 'Финальное окно решения', sourceSegment: '76-80', targetSegment: '86-90', applyByMinute: 84 };
-        return { phase: 'too_late_big_change', label: 'Поздний статус', sourceSegment: '86-90', targetSegment: '86-90', applyByMinute: 84 };
+        if (m < 15) return { phase: 'pre_decision', label: 'Предварительное окно решения', sourceSegment: '01-15', targetSegment: '16-30', applyByMinute: 15 };
+        if (m < 25) return { phase: 'monitor', label: 'Мониторинг отрезка', sourceSegment: '16-30', targetSegment: '31-45', applyByMinute: 30 };
+        if (m < 30) return { phase: 'decision', label: 'Окно решения', sourceSegment: '16-30', targetSegment: '31-45', applyByMinute: 30 };
+        if (m < 40) return { phase: 'monitor', label: 'Мониторинг отрезка', sourceSegment: '31-45', targetSegment: '46-60', applyByMinute: 45 };
+        if (m < 45) return { phase: 'decision', label: 'Окно решения', sourceSegment: '31-45', targetSegment: '46-60', applyByMinute: 45 };
+        if (m < 55) return { phase: 'monitor', label: 'Мониторинг отрезка', sourceSegment: '46-60', targetSegment: '61-75', applyByMinute: 60 };
+        if (m < 60) return { phase: 'decision', label: 'Окно решения', sourceSegment: '46-60', targetSegment: '61-75', applyByMinute: 60 };
+        if (m < 70) return { phase: 'monitor', label: 'Мониторинг отрезка', sourceSegment: '61-75', targetSegment: '76-84', applyByMinute: 75 };
+        if (m < 75) return { phase: 'decision', label: 'Окно решения', sourceSegment: '61-75', targetSegment: '76-84', applyByMinute: 75 };
+        if (m < 80) return { phase: 'late', label: 'Позднее окно решения', sourceSegment: '76-84', targetSegment: '85-90', applyByMinute: 85 };
+        if (m < 85) return { phase: 'final_decision', label: 'Финальное окно решения', sourceSegment: '76-84', targetSegment: '85-90', applyByMinute: 85 };
+        return { phase: 'final_segment', label: 'Финальный отрезок', sourceSegment: '85-90', targetSegment: '85-90', applyByMinute: 90 };
     },
 
     classify(snapshot, state) {
@@ -3888,7 +3798,7 @@ const TacticalUrgencyModel = {
         const hintText = hints.map(h => h.text || '').join(' ').toLowerCase();
         const criticalCondition = /устали|травм|замен|красн|удален|удалён/.test(hintText);
 
-        if (!Number.isFinite(minute) || minute < 15) {
+        if (!Number.isFinite(minute) || minute < 10) {
             return {
                 level: 'collect',
                 label: 'Сбор данных',
@@ -3897,26 +3807,14 @@ const TacticalUrgencyModel = {
                 allowFamilyChange: false,
                 overrideProgressionGuard: false,
                 decisionWindow,
-                reason: 'до первого generation-среза пресет не предлагается'
-            };
-        }
-
-        if (minute >= 85) {
-            return {
-                level: 'late_status',
-                label: 'Поздний статус: большие изменения уже поздно',
-                uiLabel: 'Поздний статус',
-                allowPreset: false,
-                allowFamilyChange: false,
-                overrideProgressionGuard: false,
-                decisionWindow,
-                reason: 'финальную смену нужно было применять до 84-й минуты'
+                reason: 'до 10-й минуты собираем базу для первого предрешения'
             };
         }
 
         const emergency =
             losingBy >= 3 ||
             (minute <= 30 && losingBy >= 2) ||
+            (minute >= 85 && score.state === 'losing') ||
             xgGap >= 1.2 ||
             xtGap >= 1.5 ||
             myBad >= 28 ||
@@ -3928,6 +3826,7 @@ const TacticalUrgencyModel = {
             const reasons = [];
             if (losingBy >= 3) reasons.push(`проигрываем ${losingBy} мяча`);
             if (minute <= 30 && losingBy >= 2) reasons.push(`ранний провал по счёту: -${losingBy} к ${minute}-й`);
+            if (minute >= 85 && score.state === 'losing') reasons.push('финальный отрезок 85-90: нужен риск ради гола');
             if (xgGap >= 1.2) reasons.push(`провал по xG: ${xgGap.toFixed(2)}`);
             if (xtGap >= 1.5) reasons.push(`провал по xT: ${xtGap.toFixed(2)}`);
             if (myBad >= 28) reasons.push(`критический брак: ${myBad.toFixed(0)}%`);
@@ -3959,16 +3858,29 @@ const TacticalUrgencyModel = {
             };
         }
 
+        if (minuteUrgency >= 7) {
+            return {
+                level: 'final_segment',
+                label: 'Финальный отрезок 85-90',
+                uiLabel: 'Финальный отрезок',
+                allowPreset: true,
+                allowFamilyChange: true,
+                overrideProgressionGuard: score.state === 'losing',
+                decisionWindow,
+                reason: 'последний отрезок: держим заранее выбранный план, но разрешаем срочную коррекцию по счёту/давлению'
+            };
+        }
+
         if (minuteUrgency >= 6) {
             return {
                 level: 'radical',
-                label: 'Финальное окно решения: применить до 84-й',
+                label: 'Финальное окно решения: подготовить 85-90',
                 uiLabel: 'Кардинальная смена',
                 allowPreset: true,
                 allowFamilyChange: true,
                 overrideProgressionGuard: false,
                 decisionWindow,
-                reason: 'последнее окно для изменения картины игры на 86-90'
+                reason: 'последнее окно до 85-й минуты для решения на 85-90'
             };
         }
 
@@ -5462,6 +5374,124 @@ if (!isTacticPage) return;
 
     // ============================================================
 // <<< src/app/ui-layer.js
+
+
+// >>> src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+// 10.1 Strategy Data Task A UI extension
+// ============================================================
+
+(function strategyDataTaskAExtension() {
+    'use strict';
+
+    function getFallbackTargetTeam(snapshot) {
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+        if (!teams.length) return null;
+        const selector = document.getElementById('slf-foreign-match-target');
+        const side = selector?.value || 'home';
+        return side === 'away' ? teams[1] : teams[0];
+    }
+
+    function normalizeForeignSnapshot(snapshot) {
+        if (!snapshot || snapshot.myTeam || !Array.isArray(snapshot.teams) || snapshot.teams.length < 2) return snapshot;
+        const targetTeam = getFallbackTargetTeam(snapshot);
+        if (!targetTeam) return snapshot;
+
+        snapshot.matchOwnership = 'foreign';
+        snapshot.targetSide = Number(snapshot.teams[1]) === Number(targetTeam) ? 'away' : 'home';
+        snapshot.myTeam = targetTeam;
+        return snapshot;
+    }
+
+    function patchSnapshotBuild() {
+        if (typeof SnapshotEngine === 'undefined' || SnapshotEngine.__taskAPatchedBuild) return;
+        const originalBuild = SnapshotEngine.build;
+        SnapshotEngine.build = function patchedTaskABuild() {
+            return normalizeForeignSnapshot(originalBuild.apply(this, arguments));
+        };
+        SnapshotEngine.__taskAPatchedBuild = true;
+    }
+
+    function renderManualRecommendation() {
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) return;
+
+        snapshot.recommendationSource = 'manual';
+        snapshot.manualRecommendationRefresh = true;
+        SnapshotEngine.rememberLiveSnapshot(snapshot);
+
+        const el = document.getElementById('slf-parser-recommendation');
+        const html = RecommendationEngine.make(snapshot);
+        if (el) el.innerHTML = html;
+        RecommendationEngine.persistRenderedRecommendation(html, snapshot, { source: 'manual_snapshot' });
+        SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer, manualSnapshotAt: Date.now() });
+        UI.addParserLog('Ручной snapshot: подсказка обновлена');
+        UI.updateParserStatus('Ручной snapshot выполнен');
+    }
+
+    function mountManualButton() {
+        if (!location.pathname.includes('/game.php')) return;
+        const panel = document.getElementById('slf-match-parser-panel');
+        if (!panel || document.getElementById('slf-manual-recommendation-btn')) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'slf-manual-recommendation-btn';
+        btn.type = 'button';
+        btn.textContent = '↻ Подсказка';
+        btn.title = 'Сделать ручной snapshot и обновить подсказку без остановки auto-логики';
+        btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
+        btn.onclick = () => {
+            btn.disabled = true;
+            try {
+                renderManualRecommendation();
+            } catch (error) {
+                console.error('[SLF] Manual recommendation refresh failed', error);
+                UI.addParserLog('Ручной snapshot: ошибка, см. console');
+            } finally {
+                btn.disabled = false;
+            }
+        };
+
+        const status = document.getElementById('slf-parser-status');
+        panel.insertBefore(btn, status || null);
+    }
+
+    function mountForeignSelector() {
+        if (!location.pathname.includes('/game.php')) return;
+        const panel = document.getElementById('slf-match-parser-panel');
+        if (!panel || document.getElementById('slf-foreign-match-target')) return;
+
+        const snapshot = SnapshotEngine.build();
+        if (!snapshot || snapshot.matchOwnership !== 'foreign') return;
+
+        const select = document.createElement('select');
+        select.id = 'slf-foreign-match-target';
+        select.title = 'Тестовый режим чужого матча: выбрать сторону для подсказок';
+        select.style.cssText = 'padding:4px 6px;background:#333;color:#fff;border:1px solid #777;border-radius:3px;';
+        select.innerHTML = '<option value="home">Анализ: хозяева</option><option value="away">Анализ: гости</option>';
+        select.onchange = () => renderManualRecommendation();
+
+        const status = document.getElementById('slf-parser-status');
+        panel.insertBefore(select, status || null);
+    }
+
+    function mount() {
+        patchSnapshotBuild();
+        mountManualButton();
+        mountForeignSelector();
+    }
+
+    const originalAddMatchParserPanel = UI.addMatchParserPanel;
+    UI.addMatchParserPanel = function patchedTaskAAddMatchParserPanel() {
+        const result = originalAddMatchParserPanel.apply(this, arguments);
+        mount();
+        return result;
+    };
+
+    mount();
+})();
+
+// ============================================================
+// <<< src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
 
 
 // >>> src/modules/team-management/youth-external-monitor.js
@@ -13828,134 +13858,6 @@ const TransferMarketAnalyzer = {
 // <<< src/modules/transfer-analyzer/transfer-market-analyzer.js
 
 
-// >>> src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
-// Transfer history VPS skip-synced guard
-// Prevents Analyze visible from reprocessing rows already marked as synced in VPS.
-
-if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
-    TransferMarketAnalyzer.isHistoryRowSyncedInVps = function isHistoryRowSyncedInVps(row, alreadySubmitted) {
-        if (!row) return false;
-
-        const badgeText = this.normalizeText(row.rowEl?.querySelector('.slf-transfer-analysis-badge')?.innerText || '');
-        if (/✓\s*VPS/i.test(badgeText)) return true;
-
-        const eventKeySource = this.buildHistoryEventKeySource(row);
-        const eventKey = row.historyEventKey || '';
-
-        return !!(
-            (eventKey && alreadySubmitted?.[eventKey]) ||
-            Object.values(alreadySubmitted || {}).some(item =>
-                item &&
-                String(item.playerId || '') === String(row.playerId || '') &&
-                this.normalizeText(item.dateText || '') === this.normalizeText(row.transferDateText || '') &&
-                Number(item.price || 0) === Number(row.salePrice || 0)
-            ) ||
-            (eventKeySource && row.dataset?.slfHistoryEventKeySource === eventKeySource)
-        );
-    };
-
-    TransferMarketAnalyzer.analyzeHistoryVisibleRows = async function analyzeHistoryVisibleRows() {
-        const rows = this.parseHistoryVisibleRows();
-
-        if (!rows.length) {
-            this.setStatus('История трансферов: строки не найдены.');
-            return;
-        }
-
-        const alreadySubmitted = this.loadHistorySyncedKeys();
-        const eventsToSend = [];
-        let skipped = 0;
-        let failed = 0;
-
-        const pendingRows = [];
-
-        for (const row of rows) {
-            const eventKeySource = this.buildHistoryEventKeySource(row);
-            const eventKey = await this.hashText(eventKeySource);
-            row.historyEventKey = eventKey;
-
-            if (alreadySubmitted[eventKey] || this.isHistoryRowSyncedInVps(row, alreadySubmitted)) {
-                skipped++;
-                this.renderHistoryVpsBadge(row, { confidence: 'local', key: eventKey, record: {} });
-                continue;
-            }
-
-            pendingRows.push(row);
-        }
-
-        if (!pendingRows.length) {
-            this.setStatus(`История готова: видимых строк ${rows.length}, уже в VPS ${skipped}, новых к анализу 0.`);
-            return;
-        }
-
-        this.setStatus(`История: видимых строк ${rows.length}, уже в VPS ${skipped}, к анализу ${pendingRows.length}.`);
-
-        for (let i = 0; i < pendingRows.length; i++) {
-            const row = pendingRows[i];
-            const tmCached = TMEnrichmentLayer.peekBySlfPlayerId(row.playerId);
-            const alterCached = SLFAlterLayer.peekByPlayerId(row.playerId);
-            const fromCache = !!tmCached && !!alterCached;
-
-            this.setStatus(`История ${i + 1}/${pendingRows.length}: ${fromCache ? 'cache' : 'анализ'} ${row.name || row.playerId}`);
-
-            this.renderHistorySyncStatus(row, '… VPS', 'pending');
-
-            try {
-                const tmResult = tmCached || await TMEnrichmentLayer.getBySlfPlayerId(row.playerId);
-
-                let slfAlter = alterCached || null;
-
-                if (!slfAlter) {
-                    try {
-                        slfAlter = await SLFAlterLayer.getByPlayerId(row.playerId);
-                    } catch (alterError) {
-                        console.warn('[SLF Transfer History] alter.php failed', row.playerId, alterError);
-                    }
-                }
-
-                row.tmUrl = tmResult.tmUrl || '';
-                row.tmProfile = tmResult.tmProfile || null;
-                row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
-                row.slfAlter = slfAlter;
-
-                const event = await this.buildTransferHistoryEvent(row, tmResult, slfAlter);
-                eventsToSend.push(event);
-                this.renderHistoryVpsBadge(row, { confidence: 'queued', key: event.eventKey, record: event });
-            } catch (e) {
-                failed++;
-                console.error('[SLF Transfer History] row failed', row, e);
-                this.renderHistorySyncStatus(row, 'ERR', 'error');
-
-                try {
-                    const fallbackEvent = await this.buildTransferHistoryEvent(row, {
-                        playerId: row.playerId,
-                        slfUrl: row.playerUrl,
-                        tmUrl: '',
-                        tmProfile: null,
-                        error: String(e?.message || e || 'history_analysis_failed')
-                    }, null);
-                    fallbackEvent.analysisFailed = true;
-                    fallbackEvent.analysisError = String(e?.message || e || 'unknown');
-                    eventsToSend.push(fallbackEvent);
-                    this.renderHistoryVpsBadge(row, { confidence: 'fallback', key: fallbackEvent.eventKey, record: fallbackEvent });
-                } catch (eventError) {
-                    console.warn('[SLF Transfer History] fallback event build failed', row.playerId, eventError);
-                }
-            }
-        }
-
-        if (eventsToSend.length) {
-            this.sendTransferHistoryEvents(eventsToSend);
-        }
-
-        this.setStatus(
-            `История готова: подготовлено к отправке ${eventsToSend.length}, уже в VPS ${skipped}, ошибок ${failed}.`
-        );
-    };
-}
-// <<< src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
-
-
 // >>> src/modules/team-management/training-reference-guide.js
 // 14.5 Training Reference Guide
 // ============================================================
@@ -16180,17 +16082,145 @@ const App = {
 App.start();
 // <<< src/app/bootstrap.js
 
+
+// >>> src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
+// Transfer history VPS skip-synced guard
+// Prevents Analyze visible from reprocessing rows already marked as synced in VPS.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.isHistoryRowSyncedInVps = function isHistoryRowSyncedInVps(row, alreadySubmitted) {
+        if (!row) return false;
+
+        const badgeText = this.normalizeText(row.rowEl?.querySelector('.slf-transfer-analysis-badge')?.innerText || '');
+        if (/✓\s*VPS/i.test(badgeText)) return true;
+
+        const eventKeySource = this.buildHistoryEventKeySource(row);
+        const eventKey = row.historyEventKey || '';
+
+        return !!(
+            (eventKey && alreadySubmitted?.[eventKey]) ||
+            Object.values(alreadySubmitted || {}).some(item =>
+                item &&
+                String(item.playerId || '') === String(row.playerId || '') &&
+                this.normalizeText(item.dateText || '') === this.normalizeText(row.transferDateText || '') &&
+                Number(item.price || 0) === Number(row.salePrice || 0)
+            ) ||
+            (eventKeySource && row.dataset?.slfHistoryEventKeySource === eventKeySource)
+        );
+    };
+
+    TransferMarketAnalyzer.analyzeHistoryVisibleRows = async function analyzeHistoryVisibleRows() {
+        const rows = this.parseHistoryVisibleRows();
+
+        if (!rows.length) {
+            this.setStatus('История трансферов: строки не найдены.');
+            return;
+        }
+
+        const alreadySubmitted = this.loadHistorySyncedKeys();
+        const eventsToSend = [];
+        let skipped = 0;
+        let failed = 0;
+
+        const pendingRows = [];
+
+        for (const row of rows) {
+            const eventKeySource = this.buildHistoryEventKeySource(row);
+            const eventKey = await this.hashText(eventKeySource);
+            row.historyEventKey = eventKey;
+
+            if (alreadySubmitted[eventKey] || this.isHistoryRowSyncedInVps(row, alreadySubmitted)) {
+                skipped++;
+                this.renderHistoryVpsBadge(row, { confidence: 'local', key: eventKey, record: {} });
+                continue;
+            }
+
+            pendingRows.push(row);
+        }
+
+        if (!pendingRows.length) {
+            this.setStatus(`История готова: видимых строк ${rows.length}, уже в VPS ${skipped}, новых к анализу 0.`);
+            return;
+        }
+
+        this.setStatus(`История: видимых строк ${rows.length}, уже в VPS ${skipped}, к анализу ${pendingRows.length}.`);
+
+        for (let i = 0; i < pendingRows.length; i++) {
+            const row = pendingRows[i];
+            const tmCached = TMEnrichmentLayer.peekBySlfPlayerId(row.playerId);
+            const alterCached = SLFAlterLayer.peekByPlayerId(row.playerId);
+            const fromCache = !!tmCached && !!alterCached;
+
+            this.setStatus(`История ${i + 1}/${pendingRows.length}: ${fromCache ? 'cache' : 'анализ'} ${row.name || row.playerId}`);
+
+            this.renderHistorySyncStatus(row, '… VPS', 'pending');
+
+            try {
+                const tmResult = tmCached || await TMEnrichmentLayer.getBySlfPlayerId(row.playerId);
+
+                let slfAlter = alterCached || null;
+
+                if (!slfAlter) {
+                    try {
+                        slfAlter = await SLFAlterLayer.getByPlayerId(row.playerId);
+                    } catch (alterError) {
+                        console.warn('[SLF Transfer History] alter.php failed', row.playerId, alterError);
+                    }
+                }
+
+                row.tmUrl = tmResult.tmUrl || '';
+                row.tmProfile = tmResult.tmProfile || null;
+                row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
+                row.slfAlter = slfAlter;
+
+                const event = await this.buildTransferHistoryEvent(row, tmResult, slfAlter);
+                eventsToSend.push(event);
+                this.renderHistoryVpsBadge(row, { confidence: 'queued', key: event.eventKey, record: event });
+            } catch (e) {
+                failed++;
+                console.error('[SLF Transfer History] row failed', row, e);
+                this.renderHistorySyncStatus(row, 'ERR', 'error');
+
+                try {
+                    const fallbackEvent = await this.buildTransferHistoryEvent(row, {
+                        playerId: row.playerId,
+                        slfUrl: row.playerUrl,
+                        tmUrl: '',
+                        tmProfile: null,
+                        error: String(e?.message || e || 'history_analysis_failed')
+                    }, null);
+                    fallbackEvent.analysisFailed = true;
+                    fallbackEvent.analysisError = String(e?.message || e || 'unknown');
+                    eventsToSend.push(fallbackEvent);
+                    this.renderHistoryVpsBadge(row, { confidence: 'fallback', key: fallbackEvent.eventKey, record: fallbackEvent });
+                } catch (eventError) {
+                    console.warn('[SLF Transfer History] fallback event build failed', row.playerId, eventError);
+                }
+            }
+        }
+
+        if (eventsToSend.length) {
+            this.sendTransferHistoryEvents(eventsToSend);
+        }
+
+        this.setStatus(
+            `История готова: подготовлено к отправке ${eventsToSend.length}, уже в VPS ${skipped}, ошибок ${failed}.`
+        );
+    };
+}
+// <<< src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
+
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.92',
-        scriptVersion: '4.4.92',
+        version: '4.4.93',
+        scriptVersion: '4.4.93',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.92',
+        scriptVersion: '4.4.93',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

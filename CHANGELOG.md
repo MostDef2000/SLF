@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.4.93
+
+### Release notes
+- No module release notes provided.
+
+Changed files:
+- No changed files provided.
+
+Approved commit:
+- 7c7ef21d96aaf30f67751788c63d002b39a53c95
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: UNKNOWN
+- Bundle-order/module-registry changes needed: UNKNOWN
+
 ## 4.4.92
 
 - Integrated approved Team Management alter-minutes season/player matching fix.
