@@ -92,7 +92,7 @@
 const CONFIG = {
     DEBUG: false,
     SERVER_URL: "http://77.105.142.206:5000",
-    TOKEN: "oaAbGtmEKf7qGdH8cXVILmfCJ7zoWvqSv4pY30o4pXSGHsX1HXFReJYU6LkZk3Bg",
+    TOKEN: "",
 
     COLLECTIONS: {
         TACTICS: "tactics",
