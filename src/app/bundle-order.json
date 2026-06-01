@@ -36,6 +36,7 @@
     "src/modules/team-management/team4-contract-date-classification-fix.js",
     "src/modules/team-management/team4-market-value-trend-scoring-fix.js",
     "src/modules/team-management/team4-marker-cache-persistence-fix.js",
+    "src/modules/team-management/team4-update-button-performance-fix.js",
     "src/app/bootstrap.js"
   ]
 }
