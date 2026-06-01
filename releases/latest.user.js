@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.94
+// @version      4.4.95
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.94',
-        scriptVersion: '4.4.94',
+        version: '4.4.95',
+        scriptVersion: '4.4.95',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.94',
+        scriptVersion: '4.4.95',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -16338,6 +16338,121 @@ SLFTeam4MarkerCachePersistenceFix.start();
 // <<< src/modules/team-management/team4-marker-cache-persistence-fix.js
 
 
+// >>> src/modules/team-management/team4-update-button-performance-fix.js
+// Team Management: Team4 update button performance/locking fix
+// Stable cache keys: this patch does not introduce storage/schema versions.
+
+const SLFTeam4UpdateButtonPerformanceFix = (() => {
+    const PATCH_FLAG = '__slfTeam4UpdateButtonPerformanceFixPatched';
+    const DEBOUNCE_MS = 900;
+
+    function getHeader(panel) {
+        return document.querySelector(`th.${panel?.HEAD_CLASS || 'slf-player-status-head'}`);
+    }
+
+    function setHeaderLabel(panel, label) {
+        const head = getHeader(panel);
+        const title = head?.querySelector?.('.slf-status-title');
+        if (title) title.textContent = label;
+    }
+
+    function restoreHeaderLabel(panel, delayMs) {
+        window.setTimeout(() => {
+            if (!panel?.__slfTeam4RefreshRunning) setHeaderLabel(panel, 'обновить');
+        }, delayMs);
+    }
+
+    async function runGuardedRefresh(panel) {
+        if (!panel || panel.__slfTeam4RefreshRunning) return;
+
+        const now = Date.now();
+        if (now - Number(panel.__slfTeam4RefreshClickAt || 0) < DEBOUNCE_MS) return;
+        panel.__slfTeam4RefreshClickAt = now;
+        panel.__slfTeam4RefreshRunning = true;
+
+        try {
+            setHeaderLabel(panel, 'обновление...');
+            panel.hideTip?.();
+            panel.render?.(true);
+            const promise = panel.__slfTeam4RefreshPromise || Promise.resolve();
+            await promise;
+            setHeaderLabel(panel, 'готово');
+            restoreHeaderLabel(panel, 1400);
+        } catch (error) {
+            console.warn('[SLF Team4 Update] refresh failed', error);
+            setHeaderLabel(panel, 'ошибка');
+            restoreHeaderLabel(panel, 2500);
+        } finally {
+            panel.__slfTeam4RefreshRunning = false;
+        }
+    }
+
+    function patchPanel() {
+        const panel = typeof PlayerStatusPanel !== 'undefined' ? PlayerStatusPanel : null;
+        if (!panel || panel[PATCH_FLAG]) return false;
+        panel[PATCH_FLAG] = true;
+        panel.__slfTeam4RefreshRunning = false;
+        panel.__slfTeam4RefreshClickAt = 0;
+        panel.__slfTeam4RefreshPromise = null;
+
+        const originalRunLimited = panel.runLimited;
+        if (typeof originalRunLimited === 'function') {
+            panel.runLimited = async function patchedRunLimited(items, limit, worker) {
+                const promise = originalRunLimited.call(this, items, limit, worker);
+                this.__slfTeam4RefreshPromise = promise;
+                try {
+                    return await promise;
+                } finally {
+                    if (this.__slfTeam4RefreshPromise === promise) this.__slfTeam4RefreshPromise = null;
+                }
+            };
+        }
+
+        const originalEnsureHeader = panel.ensureHeader;
+        if (typeof originalEnsureHeader === 'function') {
+            panel.ensureHeader = function patchedEnsureHeader() {
+                originalEnsureHeader.call(this);
+                const head = getHeader(this);
+                if (!head) return;
+                head.onclick = event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+                    runGuardedRefresh(this);
+                };
+            };
+        }
+
+        panel.ensureHeader?.();
+        return true;
+    }
+
+    function start() {
+        const run = () => {
+            try {
+                if (patchPanel()) return;
+                const timer = setInterval(() => {
+                    if (patchPanel()) clearInterval(timer);
+                }, 250);
+                setTimeout(() => clearInterval(timer), 10000);
+            } catch (error) {
+                console.error('[SLF Team4 Update] boot failed', error);
+            }
+        };
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true });
+        else run();
+    }
+
+    const api = { runGuardedRefresh, start };
+    window.SLFTeam4UpdateButtonPerformanceFix = api;
+    return api;
+})();
+
+SLFTeam4UpdateButtonPerformanceFix.start();
+// <<< src/modules/team-management/team4-update-button-performance-fix.js
+
+
 // >>> src/app/bootstrap.js
 // 15. App Bootstrap
 // ============================================================
@@ -16839,15 +16954,15 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.94',
-        scriptVersion: '4.4.94',
+        version: '4.4.95',
+        scriptVersion: '4.4.95',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.94',
+        scriptVersion: '4.4.95',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
