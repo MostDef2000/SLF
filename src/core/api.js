@@ -1,6 +1,12 @@
     // 2. VPS API Layer
     // ============================================================
 
+    function buildApiAuthorizationHeader() {
+        const token = getApiToken();
+        if (!token) warnMissingApiTokenOnce();
+        return "Bearer " + token;
+    }
+
     const Api = {
         postPromise(collection, data, label) {
             return new Promise((resolve, reject) => {
@@ -8,7 +14,7 @@
                     method: "POST",
                     url: `${CONFIG.SERVER_URL}/api/${collection}`,
                     headers: {
-                        "Authorization": "Bearer " + CONFIG.TOKEN,
+                        "Authorization": buildApiAuthorizationHeader(),
                         "Content-Type": "application/json"
                     },
                     data: JSON.stringify(data),
@@ -45,7 +51,7 @@
                     method: "GET",
                     url: `${CONFIG.SERVER_URL}/api/${collection}`,
                     headers: {
-                        "Authorization": "Bearer " + CONFIG.TOKEN
+                        "Authorization": buildApiAuthorizationHeader()
                     },
                     onload: r => {
                         try {

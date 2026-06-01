@@ -16,6 +16,10 @@
 // @require      https://code.jquery.com/jquery-3.6.0.min.js
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_deleteValue
+// @grant        GM_registerMenuCommand
 // @connect      77.105.142.206
 // @connect      www.transfermarkt.com
 // @connect      transfermarkt.com

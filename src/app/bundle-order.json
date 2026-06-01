@@ -6,6 +6,7 @@
   "files": [
     "src/core/domain.js",
     "src/core/config.js",
+    "src/core/token-storage.js",
     "src/modules/transfer-analyzer/config.js",
     "src/core/dom-utils.js",
     "src/core/api.js",
