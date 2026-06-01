@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.93
+// @version      4.4.94
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.93',
-        scriptVersion: '4.4.93',
+        version: '4.4.94',
+        scriptVersion: '4.4.94',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.93',
+        scriptVersion: '4.4.94',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -5374,124 +5374,6 @@ if (!isTacticPage) return;
 
     // ============================================================
 // <<< src/app/ui-layer.js
-
-
-// >>> src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
-// 10.1 Strategy Data Task A UI extension
-// ============================================================
-
-(function strategyDataTaskAExtension() {
-    'use strict';
-
-    function getFallbackTargetTeam(snapshot) {
-        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
-        if (!teams.length) return null;
-        const selector = document.getElementById('slf-foreign-match-target');
-        const side = selector?.value || 'home';
-        return side === 'away' ? teams[1] : teams[0];
-    }
-
-    function normalizeForeignSnapshot(snapshot) {
-        if (!snapshot || snapshot.myTeam || !Array.isArray(snapshot.teams) || snapshot.teams.length < 2) return snapshot;
-        const targetTeam = getFallbackTargetTeam(snapshot);
-        if (!targetTeam) return snapshot;
-
-        snapshot.matchOwnership = 'foreign';
-        snapshot.targetSide = Number(snapshot.teams[1]) === Number(targetTeam) ? 'away' : 'home';
-        snapshot.myTeam = targetTeam;
-        return snapshot;
-    }
-
-    function patchSnapshotBuild() {
-        if (typeof SnapshotEngine === 'undefined' || SnapshotEngine.__taskAPatchedBuild) return;
-        const originalBuild = SnapshotEngine.build;
-        SnapshotEngine.build = function patchedTaskABuild() {
-            return normalizeForeignSnapshot(originalBuild.apply(this, arguments));
-        };
-        SnapshotEngine.__taskAPatchedBuild = true;
-    }
-
-    function renderManualRecommendation() {
-        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
-        if (!snapshot) return;
-
-        snapshot.recommendationSource = 'manual';
-        snapshot.manualRecommendationRefresh = true;
-        SnapshotEngine.rememberLiveSnapshot(snapshot);
-
-        const el = document.getElementById('slf-parser-recommendation');
-        const html = RecommendationEngine.make(snapshot);
-        if (el) el.innerHTML = html;
-        RecommendationEngine.persistRenderedRecommendation(html, snapshot, { source: 'manual_snapshot' });
-        SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer, manualSnapshotAt: Date.now() });
-        UI.addParserLog('Ручной snapshot: подсказка обновлена');
-        UI.updateParserStatus('Ручной snapshot выполнен');
-    }
-
-    function mountManualButton() {
-        if (!location.pathname.includes('/game.php')) return;
-        const panel = document.getElementById('slf-match-parser-panel');
-        if (!panel || document.getElementById('slf-manual-recommendation-btn')) return;
-
-        const btn = document.createElement('button');
-        btn.id = 'slf-manual-recommendation-btn';
-        btn.type = 'button';
-        btn.textContent = '↻ Подсказка';
-        btn.title = 'Сделать ручной snapshot и обновить подсказку без остановки auto-логики';
-        btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
-        btn.onclick = () => {
-            btn.disabled = true;
-            try {
-                renderManualRecommendation();
-            } catch (error) {
-                console.error('[SLF] Manual recommendation refresh failed', error);
-                UI.addParserLog('Ручной snapshot: ошибка, см. console');
-            } finally {
-                btn.disabled = false;
-            }
-        };
-
-        const status = document.getElementById('slf-parser-status');
-        panel.insertBefore(btn, status || null);
-    }
-
-    function mountForeignSelector() {
-        if (!location.pathname.includes('/game.php')) return;
-        const panel = document.getElementById('slf-match-parser-panel');
-        if (!panel || document.getElementById('slf-foreign-match-target')) return;
-
-        const snapshot = SnapshotEngine.build();
-        if (!snapshot || snapshot.matchOwnership !== 'foreign') return;
-
-        const select = document.createElement('select');
-        select.id = 'slf-foreign-match-target';
-        select.title = 'Тестовый режим чужого матча: выбрать сторону для подсказок';
-        select.style.cssText = 'padding:4px 6px;background:#333;color:#fff;border:1px solid #777;border-radius:3px;';
-        select.innerHTML = '<option value="home">Анализ: хозяева</option><option value="away">Анализ: гости</option>';
-        select.onchange = () => renderManualRecommendation();
-
-        const status = document.getElementById('slf-parser-status');
-        panel.insertBefore(select, status || null);
-    }
-
-    function mount() {
-        patchSnapshotBuild();
-        mountManualButton();
-        mountForeignSelector();
-    }
-
-    const originalAddMatchParserPanel = UI.addMatchParserPanel;
-    UI.addMatchParserPanel = function patchedTaskAAddMatchParserPanel() {
-        const result = originalAddMatchParserPanel.apply(this, arguments);
-        mount();
-        return result;
-    };
-
-    mount();
-})();
-
-// ============================================================
-// <<< src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
 
 
 // >>> src/modules/team-management/youth-external-monitor.js
@@ -15899,6 +15781,563 @@ Team4AlterCurrentSeasonMinutesBridge.start();
 // <<< src/modules/team-management/team4-alter-current-season-minutes-fix.js
 
 
+// >>> src/modules/team-management/team4-contract-date-classification-fix.js
+// Team Management: Team4 contract-date classification fix
+// Stable cache keys: this patch does not introduce storage/schema versions.
+
+const SLFTeam4ContractDateFix = (() => {
+    const PATCH_FLAG = '__slfTeam4ContractDateFixPatched';
+
+    function norm(value) {
+        return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function dateOnly(date) {
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    }
+
+    function parseContractDate(text) {
+        const raw = norm(text);
+        if (!raw || (!/\d{4}/.test(raw) && /^(?:-|—|\?|unknown|n\/a)$/i.test(raw))) return null;
+
+        let match = raw.match(/\b(\d{1,2})[./-](\d{1,2})[./-](\d{4})\b/);
+        if (match) {
+            const day = Number(match[1]);
+            const month = Number(match[2]);
+            const year = Number(match[3]);
+            const date = new Date(year, month - 1, day);
+            return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
+        }
+
+        match = raw.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+        if (match) {
+            const year = Number(match[1]);
+            const month = Number(match[2]);
+            const day = Number(match[3]);
+            const date = new Date(year, month - 1, day);
+            return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
+        }
+
+        const months = {
+            jan: 0, january: 0,
+            feb: 1, february: 1,
+            mar: 2, march: 2,
+            apr: 3, april: 3,
+            may: 4,
+            jun: 5, june: 5,
+            jul: 6, july: 6,
+            aug: 7, august: 7,
+            sep: 8, sept: 8, september: 8,
+            oct: 9, october: 9,
+            nov: 10, november: 10,
+            dec: 11, december: 11
+        };
+        match = raw.match(/\b([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})\b/);
+        if (match) {
+            const month = months[String(match[1] || '').toLowerCase()];
+            const day = Number(match[2]);
+            const year = Number(match[3]);
+            if (Number.isInteger(month)) {
+                const date = new Date(year, month, day);
+                return date.getFullYear() === year && date.getMonth() === month && date.getDate() === day ? date : null;
+            }
+        }
+
+        return null;
+    }
+
+    function formatDate(date) {
+        if (!(date instanceof Date) || !Number.isFinite(date.getTime())) return '';
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        return `${day}/${month}/${date.getFullYear()}`;
+    }
+
+    function getContractState(text) {
+        const raw = norm(text);
+        const date = parseContractDate(raw);
+        if (!date) return { key: 'unknown', raw, date: null, label: 'contract not found' };
+
+        const today = dateOnly(new Date());
+        const expiry = dateOnly(date);
+        if (expiry.getTime() >= today.getTime()) {
+            return { key: 'active', raw, date, label: 'active contract' };
+        }
+        if (expiry.getFullYear() === today.getFullYear()) {
+            return { key: 'expired_current_year', raw, date, label: 'expired this year' };
+        }
+        return { key: 'expired_old', raw, date, label: 'expired contract' };
+    }
+
+    function getContractMarker(state) {
+        const dateText = formatDate(state?.date);
+        if (state?.key === 'active') {
+            return { label: 'CTR ✓', level: 'good', score: 2, text: `Contract active until ${dateText}.` };
+        }
+        if (state?.key === 'expired_current_year') {
+            return { label: 'CTR !', level: 'watch', score: -1, text: `Contract expired in the current year (${dateText}). Check manually.` };
+        }
+        if (state?.key === 'expired_old') {
+            return { label: 'CTR ✗', level: 'risk', score: -2, redFlag: true, text: `Contract expired on ${dateText}. Check manually.` };
+        }
+        return { label: 'CTR none', level: 'risk', score: -2, redFlag: true, text: 'Контракт не найден, проверь вручную.' };
+    }
+
+    function getContractText(state) {
+        const dateText = formatDate(state?.date);
+        if (state?.key === 'active') return `${dateText} · действующий`;
+        if (state?.key === 'expired_current_year') return `${dateText} · истек в текущем году, проверить`;
+        if (state?.key === 'expired_old') return `${dateText} · истек, проверить`;
+        return 'контракт не найден · проверь вручную';
+    }
+
+    function patchPanel() {
+        const panel = typeof PlayerStatusPanel !== 'undefined' ? PlayerStatusPanel : null;
+        if (!panel || panel[PATCH_FLAG]) return false;
+        panel[PATCH_FLAG] = true;
+
+        panel.parseContractDate = parseContractDate;
+        panel.getContractState = getContractState;
+
+        const originalGetTransferMarkers = panel.getTransferMarkers;
+        if (typeof originalGetTransferMarkers === 'function') {
+            panel.getTransferMarkers = function patchedGetTransferMarkers(profile, data) {
+                const markers = originalGetTransferMarkers.call(this, profile, data) || [];
+                const rawContract = profile?.contractExpires || data?.tmContractRow || '';
+                const state = getContractState(rawContract);
+                const contractMarker = this.serializeMarker(getContractMarker(state), 'contract');
+                if (data) data.contractState = state;
+                if (data?.tmProfile) data.tmProfile.contractState = state;
+                return this.filterRealMarkers([
+                    ...markers.filter(marker => String(marker?.category || '') !== 'contract'),
+                    contractMarker
+                ]);
+            };
+        }
+
+        const originalBuildTipHtml = panel.buildTipHtml;
+        if (typeof originalBuildTipHtml === 'function') {
+            panel.buildTipHtml = function patchedBuildTipHtml(data) {
+                const html = originalBuildTipHtml.call(this, data);
+                const rawContract = data?.tmProfile?.contractExpires || data?.tmContractRow || '';
+                const state = data?.contractState || data?.tmProfile?.contractState || getContractState(rawContract);
+                const contractText = this.escapeHtml(getContractText(state));
+                return String(html || '').replace(
+                    /<div class="row"><b>Контракт:<\/b>[\s\S]*?<\/div>/,
+                    `<div class="row"><b>Контракт:</b> ${contractText}</div>`
+                );
+            };
+        }
+
+        try {
+            if (panel.sessionCache?.values) {
+                [...panel.sessionCache.values()].forEach(record => {
+                    const rawContract = record?.tmProfile?.contractExpires || record?.tmContractRow || '';
+                    const state = getContractState(rawContract);
+                    record.contractState = state;
+                    if (record.tmProfile) record.tmProfile.contractState = state;
+                    if (record.slfPlayerId && panel.cacheTooltipHtml) panel.cacheTooltipHtml(record);
+                });
+                panel.saveToLocalStorage?.();
+                panel.render?.(false);
+            }
+        } catch (error) {
+            console.warn('[SLF Team4 CTR] hydrate failed', error);
+        }
+        return true;
+    }
+
+    function start() {
+        const run = () => {
+            try {
+                if (patchPanel()) return;
+                const timer = setInterval(() => {
+                    if (patchPanel()) clearInterval(timer);
+                }, 250);
+                setTimeout(() => clearInterval(timer), 10000);
+            } catch (error) {
+                console.error('[SLF Team4 CTR] boot failed', error);
+            }
+        };
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true });
+        else run();
+    }
+
+    const api = { parseContractDate, getContractState, getContractMarker, getContractText, start };
+    window.SLFTeam4ContractDateFix = api;
+    return api;
+})();
+
+SLFTeam4ContractDateFix.start();
+// <<< src/modules/team-management/team4-contract-date-classification-fix.js
+
+
+// >>> src/modules/team-management/team4-market-value-trend-scoring-fix.js
+// Team Management: Team4 market-value trend scoring fix
+// Stable cache keys: this patch does not introduce storage/schema versions.
+
+const SLFTeam4MarketValueTrendFix = (() => {
+    const PATCH_FLAG = '__slfTeam4MarketValueTrendFixPatched';
+
+    function norm(value) {
+        return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function parseMoney(value) {
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+        const raw = norm(value);
+        if (!raw) return 0;
+        const match = raw.replace(/'/g, '').replace(/,/g, '.').match(/([0-9]+(?:\.[0-9]+)?)/);
+        if (!match) return 0;
+        let amount = Number(match[1] || 0);
+        if (!Number.isFinite(amount)) return 0;
+        if (/\bM\b|mio\.?|млн/i.test(raw)) amount *= 1000000;
+        else if (/\bk\b|тыс/i.test(raw)) amount *= 1000;
+        return amount;
+    }
+
+    function normalizeDirection(value) {
+        const raw = norm(value).toLowerCase();
+        if (!raw) return 'unknown';
+        if (/^(up|rise|rising|increase|increasing|growth|grow|positive|plus|\+|вверх|растет|растёт|рост|вырос)/i.test(raw)) return 'up';
+        if (/^(down|fall|falling|decrease|decreasing|drop|negative|minus|-|вниз|падает|спад|упал|снижение)/i.test(raw)) return 'down';
+        if (/^(flat|stable|unchanged|same|neutral|ровно|стабил|без изменений)/i.test(raw)) return 'flat';
+        return 'unknown';
+    }
+
+    function directionFromDelta(value) {
+        const delta = Number(value);
+        if (!Number.isFinite(delta) || delta === 0) return 'unknown';
+        return delta > 0 ? 'up' : 'down';
+    }
+
+    function extractValue(point) {
+        if (point == null) return 0;
+        if (typeof point === 'number' || typeof point === 'string') return parseMoney(point);
+        return parseMoney(
+            point.value ??
+            point.marketValueEur ??
+            point.marketValue ??
+            point.y ??
+            point.amount ??
+            point.moneyText ??
+            point.valueText ??
+            point.label ??
+            0
+        );
+    }
+
+    function flattenHistory(value) {
+        if (!value) return [];
+        if (Array.isArray(value)) return value;
+        if (Array.isArray(value.points)) return value.points;
+        if (Array.isArray(value.data)) return value.data;
+        if (Array.isArray(value.history)) return value.history;
+        if (Array.isArray(value.values)) return value.values;
+        return [];
+    }
+
+    function directionFromHistory(history) {
+        const points = flattenHistory(history)
+            .map(extractValue)
+            .filter(value => Number.isFinite(value) && value > 0);
+        if (points.length < 2) return 'unknown';
+        const previous = points[points.length - 2];
+        const current = points[points.length - 1];
+        if (current > previous) return 'up';
+        if (current < previous) return 'down';
+        return 'flat';
+    }
+
+    function getMarketValueDirection(profile) {
+        if (!profile) return 'unknown';
+
+        const direct = [
+            profile.marketValueTrendDirection,
+            profile.valueTrendDirection,
+            profile.trendDirection,
+            profile.marketValueTrend,
+            profile.valueTrend
+        ].map(normalizeDirection).find(direction => direction !== 'unknown');
+        if (direct) return direct;
+
+        const delta = [
+            profile.marketValueTrendDeltaEur,
+            profile.valueTrendDeltaEur,
+            profile.marketValueDeltaEur,
+            profile.marketValueTrendDeltaPct,
+            profile.valueTrendDeltaPct,
+            profile.marketValueDeltaPct
+        ].map(directionFromDelta).find(direction => direction !== 'unknown');
+        if (delta) return delta;
+
+        return [
+            profile.marketValueHistory,
+            profile.marketValueDevelopment,
+            profile.marketValuePoints,
+            profile.marketValueChart,
+            profile.valueHistory,
+            profile.valueDevelopment
+        ].map(directionFromHistory).find(direction => direction !== 'unknown') || 'unknown';
+    }
+
+    function directionLabel(direction) {
+        if (direction === 'up') return 'растет';
+        if (direction === 'down') return 'падает';
+        if (direction === 'flat') return 'стабилен';
+        return '';
+    }
+
+    function applyDirection(original, direction) {
+        const trend = { ...(original || {}) };
+        const ratio = Number(trend.ratio || 0);
+        const pct = trend.pct != null ? trend.pct : (ratio ? Math.round(ratio * 100) : null);
+        trend.direction = direction;
+        trend.directionLabel = directionLabel(direction);
+
+        if (direction === 'unknown') return trend;
+
+        if (direction === 'up') {
+            if (ratio >= 0.70) {
+                return {
+                    ...trend,
+                    key: 'recovery',
+                    label: `восстановление ${pct}%`,
+                    className: 'good',
+                    text: 'TM-цена ниже исторического пика, но текущий тренд растет.'
+                };
+            }
+            if (ratio >= 0.20) {
+                return {
+                    ...trend,
+                    key: 'recoveringRisk',
+                    label: `восстановление ${pct}%`,
+                    className: 'warn',
+                    text: 'TM-цена восстанавливается, но всё ещё заметно ниже пика.'
+                };
+            }
+            return {
+                ...trend,
+                key: 'earlyRecovery',
+                label: pct != null ? `раннее восстановление ${pct}%` : 'раннее восстановление',
+                className: 'warn',
+                text: 'Есть признак роста цены, но уровень всё ещё сильно ниже пика.'
+            };
+        }
+
+        if (direction === 'down') {
+            if (ratio >= 0.70) {
+                return {
+                    ...trend,
+                    key: 'fallingFromPeak',
+                    label: `падение ${pct}%`,
+                    className: 'warn',
+                    text: 'TM-цена близка к пику, но текущий тренд падает.'
+                };
+            }
+            if (ratio >= 0.40) {
+                return {
+                    ...trend,
+                    key: 'decliningBelowPeak',
+                    label: `падение ${pct}%`,
+                    className: 'warn',
+                    text: 'TM-цена ниже пика и текущий тренд падает.'
+                };
+            }
+            return {
+                ...trend,
+                key: 'decliningFall',
+                label: pct != null ? `спад ${pct}%` : 'спад',
+                className: 'bad',
+                text: 'TM-цена заметно ниже пика и продолжает снижаться.'
+            };
+        }
+
+        if (direction === 'flat') {
+            return {
+                ...trend,
+                label: trend.label ? `${trend.label} · стабильно` : 'TM стабильно',
+                text: `${trend.text || 'TM-цена без выраженного направления.'} Текущий тренд стабилен.`
+            };
+        }
+
+        return trend;
+    }
+
+    function patchPanel() {
+        const panel = typeof PlayerStatusPanel !== 'undefined' ? PlayerStatusPanel : null;
+        if (!panel || panel[PATCH_FLAG]) return false;
+        panel[PATCH_FLAG] = true;
+
+        panel.getMarketValueDirection = getMarketValueDirection;
+
+        const originalGetTrendInfo = panel.getTrendInfo;
+        if (typeof originalGetTrendInfo === 'function') {
+            panel.getTrendInfo = function patchedGetTrendInfo(profile, rowValueEur) {
+                const original = originalGetTrendInfo.call(this, profile, rowValueEur);
+                const direction = getMarketValueDirection(profile);
+                return applyDirection(original, direction);
+            };
+        }
+
+        try {
+            if (panel.sessionCache?.values) {
+                [...panel.sessionCache.values()].forEach(record => {
+                    record.trendInfo = panel.getTrendInfo(record.tmProfile, record.tmValueRowEur);
+                    record.status = panel.classifyStatus?.(record) || record.status;
+                    record.reasons = record.status?.reasons || record.reasons || [];
+                    if (record.slfPlayerId && panel.cacheTooltipHtml) panel.cacheTooltipHtml(record);
+                });
+                panel.saveToLocalStorage?.();
+                panel.render?.(false);
+            }
+        } catch (error) {
+            console.warn('[SLF Team4 TM Trend] hydrate failed', error);
+        }
+        return true;
+    }
+
+    function start() {
+        const run = () => {
+            try {
+                if (patchPanel()) return;
+                const timer = setInterval(() => {
+                    if (patchPanel()) clearInterval(timer);
+                }, 250);
+                setTimeout(() => clearInterval(timer), 10000);
+            } catch (error) {
+                console.error('[SLF Team4 TM Trend] boot failed', error);
+            }
+        };
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true });
+        else run();
+    }
+
+    const api = { getMarketValueDirection, applyDirection, start };
+    window.SLFTeam4MarketValueTrendFix = api;
+    return api;
+})();
+
+SLFTeam4MarketValueTrendFix.start();
+// <<< src/modules/team-management/team4-market-value-trend-scoring-fix.js
+
+
+// >>> src/modules/team-management/team4-marker-cache-persistence-fix.js
+// Team Management: Team4 marker cache persistence fix
+// Stable cache keys: this patch does not introduce storage/schema versions.
+
+const SLFTeam4MarkerCachePersistenceFix = (() => {
+    const PATCH_FLAG = '__slfTeam4MarkerCachePersistenceFixPatched';
+
+    function parseTime(value) {
+        const timestamp = Date.parse(value || '');
+        return Number.isFinite(timestamp) ? timestamp : 0;
+    }
+
+    function markerScore(record) {
+        return (Array.isArray(record?.markers) ? record.markers : [])
+            .filter(marker => marker && String(marker.label || '').trim())
+            .length;
+    }
+
+    function getRecordRichness(record) {
+        if (!record || typeof record !== 'object') return 0;
+        let score = 0;
+        if (record.tmProfile) score += 20;
+        if (record.tmProfile?.marketValueEur || record.tmProfile?.highestMarketValueEur) score += 8;
+        if (record.tmProfile?.contractExpires || record.contractState || record.tmProfile?.contractState) score += 5;
+        if (record.tmProfile?.activity) score += 5;
+        if (record.trendInfo?.current || record.trendInfo?.peak) score += 5;
+        if (record.tmError) score += 2;
+        score += Math.min(markerScore(record), 8);
+        return score;
+    }
+
+    function shouldKeepExisting(existing, incoming) {
+        if (!existing || !incoming) return false;
+        const existingRichness = getRecordRichness(existing);
+        const incomingRichness = getRecordRichness(incoming);
+        if (existingRichness >= 20 && incomingRichness < existingRichness) return true;
+        if (existingRichness > incomingRichness && parseTime(existing.updatedAt) >= parseTime(incoming.updatedAt)) return true;
+        return false;
+    }
+
+    function patchPanel() {
+        const panel = typeof PlayerStatusPanel !== 'undefined' ? PlayerStatusPanel : null;
+        if (!panel || panel[PATCH_FLAG]) return false;
+        panel[PATCH_FLAG] = true;
+        panel.getRecordRichness = getRecordRichness;
+
+        const originalSetSessionCached = panel.setSessionCached;
+        if (typeof originalSetSessionCached === 'function') {
+            panel.setSessionCached = function patchedSetSessionCached(row, data) {
+                const key = this.playerKey?.(row) || data?.key || '';
+                const existing = key ? this.sessionCache?.get(key) : null;
+                if (shouldKeepExisting(existing, data)) {
+                    if (row && existing) this.sessionCache.set(key, existing);
+                    if (existing?.key) this.sessionCache.set(existing.key, existing);
+                    return existing;
+                }
+                return originalSetSessionCached.call(this, row, data);
+            };
+        }
+
+        const originalPutSessionRecord = panel.putSessionRecord;
+        if (typeof originalPutSessionRecord === 'function') {
+            panel.putSessionRecord = function patchedPutSessionRecord(record) {
+                const normalized = this.normalizeRecord?.(record);
+                if (!normalized) return false;
+                const existing = this.sessionCache?.get(normalized.key);
+                if (shouldKeepExisting(existing, normalized)) return false;
+                return originalPutSessionRecord.call(this, record);
+            };
+        }
+
+        const originalRefreshRow = panel.refreshRow;
+        if (typeof originalRefreshRow === 'function') {
+            panel.refreshRow = async function patchedRefreshRow(row, indexMap, seq) {
+                await originalRefreshRow.call(this, row, indexMap, seq);
+                const cached = this.getSessionCached?.(row);
+                if (getRecordRichness(cached) >= 20) this.saveToLocalStorage?.();
+            };
+        }
+
+        try {
+            panel.saveToLocalStorage?.();
+        } catch (error) {
+            console.warn('[SLF Team4 Cache] initial save failed', error);
+        }
+        return true;
+    }
+
+    function start() {
+        const run = () => {
+            try {
+                if (patchPanel()) return;
+                const timer = setInterval(() => {
+                    if (patchPanel()) clearInterval(timer);
+                }, 250);
+                setTimeout(() => clearInterval(timer), 10000);
+            } catch (error) {
+                console.error('[SLF Team4 Cache] boot failed', error);
+            }
+        };
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true });
+        else run();
+    }
+
+    const api = { getRecordRichness, shouldKeepExisting, start };
+    window.SLFTeam4MarkerCachePersistenceFix = api;
+    return api;
+})();
+
+SLFTeam4MarkerCachePersistenceFix.start();
+// <<< src/modules/team-management/team4-marker-cache-persistence-fix.js
+
+
 // >>> src/app/bootstrap.js
 // 15. App Bootstrap
 // ============================================================
@@ -16083,6 +16522,194 @@ App.start();
 // <<< src/app/bootstrap.js
 
 
+// >>> src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+// 10.1 Strategy Data Task A UI extension
+// ============================================================
+
+(function strategyDataTaskAExtension() {
+    'use strict';
+
+    function getFallbackTargetTeam(snapshot) {
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+        if (!teams.length) return null;
+        const selector = document.getElementById('slf-foreign-match-target');
+        const side = selector?.value || 'home';
+        return side === 'away' ? teams[1] : teams[0];
+    }
+
+    function normalizeForeignSnapshot(snapshot) {
+        if (!snapshot || snapshot.myTeam || !Array.isArray(snapshot.teams) || snapshot.teams.length < 2) return snapshot;
+        const targetTeam = getFallbackTargetTeam(snapshot);
+        if (!targetTeam) return snapshot;
+
+        snapshot.matchOwnership = 'foreign';
+        snapshot.targetSide = Number(snapshot.teams[1]) === Number(targetTeam) ? 'away' : 'home';
+        snapshot.myTeam = targetTeam;
+        return snapshot;
+    }
+
+    function patchSnapshotBuild() {
+        if (typeof SnapshotEngine === 'undefined' || SnapshotEngine.__taskAPatchedBuild) return;
+        const originalBuild = SnapshotEngine.build;
+        SnapshotEngine.build = function patchedTaskABuild() {
+            return normalizeForeignSnapshot(originalBuild.apply(this, arguments));
+        };
+        SnapshotEngine.__taskAPatchedBuild = true;
+    }
+
+    function patchHasEnoughLiveData() {
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__taskAPatchedLiveGate) return;
+        const originalHasEnoughLiveData = RecommendationEngine.hasEnoughLiveData;
+        RecommendationEngine.hasEnoughLiveData = function patchedTaskAHasEnoughLiveData(snapshot) {
+            const gate = originalHasEnoughLiveData.apply(this, arguments);
+            const minute = this.getEffectiveMinute(snapshot);
+
+            if (gate?.phase === 'collect' && Number.isFinite(minute) && minute >= 10) {
+                return { ok: true, phase: 'pre_window' };
+            }
+
+            if (gate?.phase === 'collect') {
+                return Object.assign({}, gate, {
+                    reason: 'Сбор данных до первого pre-window. Первая предварительная рекомендация появится с 10-й минуты, чтобы подготовить смену до 15-й.'
+                });
+            }
+
+            return gate;
+        };
+        RecommendationEngine.__taskAPatchedLiveGate = true;
+    }
+
+    function getPresetOptionPair(name) {
+        if (!name || typeof RecommendationEngine === 'undefined') return { cautious: '', aggressive: '' };
+
+        const group = RecommendationEngine.getPresetGroup(name);
+        const ladder = RecommendationEngine.getPresetLadder(group);
+        const index = ladder.indexOf(name);
+        if (index < 0) return { cautious: '', aggressive: '' };
+
+        if (group === 'defensive') {
+            return {
+                cautious: ladder[index + 1] || '',
+                aggressive: ladder[index - 1] || ''
+            };
+        }
+
+        return {
+            cautious: ladder[index - 1] || '',
+            aggressive: ladder[index + 1] || ''
+        };
+    }
+
+    function appendPresetOptions(plan, name) {
+        if (!plan || !Array.isArray(plan.preset) || !name || typeof RecommendationEngine === 'undefined') return;
+
+        const options = getPresetOptionPair(name);
+        const rows = [];
+
+        if (options.cautious) rows.push(`Осторожнее: ${RecommendationEngine.getPresetTitle(options.cautious)}.`);
+        if (options.aggressive) rows.push(`Агрессивнее: ${RecommendationEngine.getPresetTitle(options.aggressive)}.`);
+
+        rows.forEach(row => {
+            if (!plan.preset.includes(row)) plan.preset.push(row);
+        });
+    }
+
+    function patchPresetOptions() {
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__taskBPatchedPresetOptions) return;
+        const originalSelectPreset = RecommendationEngine.selectPreset;
+        RecommendationEngine.selectPreset = function patchedTaskBSelectPreset(snapshot, my, opp, playerSignals, plan, state) {
+            const selectedName = originalSelectPreset.apply(this, arguments);
+            appendPresetOptions(plan, selectedName);
+            return selectedName;
+        };
+        RecommendationEngine.__taskBPatchedPresetOptions = true;
+    }
+
+    function renderManualRecommendation() {
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) return;
+
+        snapshot.recommendationSource = 'manual';
+        snapshot.manualRecommendationRefresh = true;
+        SnapshotEngine.rememberLiveSnapshot(snapshot);
+
+        const el = document.getElementById('slf-parser-recommendation');
+        const html = RecommendationEngine.make(snapshot);
+        if (el) el.innerHTML = html;
+        RecommendationEngine.persistRenderedRecommendation(html, snapshot, { source: 'manual_snapshot' });
+        SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer, manualSnapshotAt: Date.now() });
+        UI.addParserLog('Ручной snapshot: подсказка обновлена');
+        UI.updateParserStatus('Ручной snapshot выполнен');
+    }
+
+    function mountManualButton() {
+        if (!location.pathname.includes('/game.php')) return;
+        const panel = document.getElementById('slf-match-parser-panel');
+        if (!panel || document.getElementById('slf-manual-recommendation-btn')) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'slf-manual-recommendation-btn';
+        btn.type = 'button';
+        btn.textContent = '↻ Подсказка';
+        btn.title = 'Сделать ручной snapshot и обновить подсказку без остановки auto-логики';
+        btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
+        btn.onclick = () => {
+            btn.disabled = true;
+            try {
+                renderManualRecommendation();
+            } catch (error) {
+                console.error('[SLF] Manual recommendation refresh failed', error);
+                UI.addParserLog('Ручной snapshot: ошибка, см. console');
+            } finally {
+                btn.disabled = false;
+            }
+        };
+
+        const status = document.getElementById('slf-parser-status');
+        panel.insertBefore(btn, status || null);
+    }
+
+    function mountForeignSelector() {
+        if (!location.pathname.includes('/game.php')) return;
+        const panel = document.getElementById('slf-match-parser-panel');
+        if (!panel || document.getElementById('slf-foreign-match-target')) return;
+
+        const snapshot = SnapshotEngine.build();
+        if (!snapshot || snapshot.matchOwnership !== 'foreign') return;
+
+        const select = document.createElement('select');
+        select.id = 'slf-foreign-match-target';
+        select.title = 'Тестовый режим чужого матча: выбрать сторону для подсказок';
+        select.style.cssText = 'padding:4px 6px;background:#333;color:#fff;border:1px solid #777;border-radius:3px;';
+        select.innerHTML = '<option value="home">Анализ: хозяева</option><option value="away">Анализ: гости</option>';
+        select.onchange = () => renderManualRecommendation();
+
+        const status = document.getElementById('slf-parser-status');
+        panel.insertBefore(select, status || null);
+    }
+
+    function mount() {
+        patchSnapshotBuild();
+        patchHasEnoughLiveData();
+        patchPresetOptions();
+        mountManualButton();
+        mountForeignSelector();
+    }
+
+    const originalAddMatchParserPanel = UI.addMatchParserPanel;
+    UI.addMatchParserPanel = function patchedTaskAAddMatchParserPanel() {
+        const result = originalAddMatchParserPanel.apply(this, arguments);
+        mount();
+        return result;
+    };
+
+    mount();
+})();
+
+// ============================================================
+// <<< src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+
+
 // >>> src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
 // Transfer history VPS skip-synced guard
 // Prevents Analyze visible from reprocessing rows already marked as synced in VPS.
@@ -16212,15 +16839,15 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.93',
-        scriptVersion: '4.4.93',
+        version: '4.4.94',
+        scriptVersion: '4.4.94',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.93',
+        scriptVersion: '4.4.94',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
