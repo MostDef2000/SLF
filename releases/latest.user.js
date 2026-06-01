@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.87
+// @version      4.4.88
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -16,6 +16,10 @@
 // @require      https://code.jquery.com/jquery-3.6.0.min.js
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_deleteValue
+// @grant        GM_registerMenuCommand
 // @connect      77.105.142.206
 // @connect      www.transfermarkt.com
 // @connect      transfermarkt.com
@@ -32,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.87',
-        scriptVersion: '4.4.87',
+        version: '4.4.88',
+        scriptVersion: '4.4.88',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.87',
+        scriptVersion: '4.4.88',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -585,6 +589,92 @@ function aliasMatchesTeamName(name, aliases) {
 // <<< src/core/config.js
 
 
+// >>> src/core/token-storage.js
+// API token storage via Tampermonkey local storage.
+// Do not log or expose the token value.
+
+const SLF_API_TOKEN_STORAGE_KEY = 'slf_api_token';
+let SLF_API_TOKEN_MISSING_WARNED = false;
+let SLF_API_TOKEN_MENU_INSTALLED = false;
+
+function getApiToken() {
+    try {
+        if (typeof GM_getValue === 'function') {
+            return String(GM_getValue(SLF_API_TOKEN_STORAGE_KEY, '') || '').trim();
+        }
+    } catch (error) {
+        console.warn('[SLF] API token read failed', error);
+    }
+
+    return '';
+}
+
+function warnMissingApiTokenOnce() {
+    if (SLF_API_TOKEN_MISSING_WARNED) return;
+    SLF_API_TOKEN_MISSING_WARNED = true;
+    console.warn('[SLF] API token is not configured');
+}
+
+function hasApiToken() {
+    return getApiToken().length > 0;
+}
+
+function installApiTokenMenuCommands() {
+    if (SLF_API_TOKEN_MENU_INSTALLED) return;
+    if (typeof GM_registerMenuCommand !== 'function') return;
+
+    SLF_API_TOKEN_MENU_INSTALLED = true;
+
+    GM_registerMenuCommand('SLF: Set API token', () => {
+        try {
+            if (typeof GM_setValue !== 'function') {
+                console.warn('[SLF] GM_setValue is unavailable');
+                return;
+            }
+
+            const current = hasApiToken() ? 'configured' : 'not configured';
+            const value = prompt(`SLF API token (${current}). Enter new token:`, '');
+            if (value == null) return;
+
+            const token = String(value || '').trim();
+            if (!token) {
+                console.warn('[SLF] Empty API token was not saved');
+                return;
+            }
+
+            GM_setValue(SLF_API_TOKEN_STORAGE_KEY, token);
+            SLF_API_TOKEN_MISSING_WARNED = false;
+            console.info('[SLF] API token saved');
+        } catch (error) {
+            console.warn('[SLF] API token save failed', error);
+        }
+    });
+
+    GM_registerMenuCommand('SLF: Clear API token', () => {
+        try {
+            if (typeof GM_deleteValue !== 'function') {
+                console.warn('[SLF] GM_deleteValue is unavailable');
+                return;
+            }
+
+            GM_deleteValue(SLF_API_TOKEN_STORAGE_KEY);
+            SLF_API_TOKEN_MISSING_WARNED = false;
+            console.info('[SLF] API token cleared');
+        } catch (error) {
+            console.warn('[SLF] API token clear failed', error);
+        }
+    });
+
+    GM_registerMenuCommand('SLF: Show API token status', () => {
+        const status = hasApiToken() ? 'configured' : 'not configured';
+        alert(`SLF API token: ${status}`);
+    });
+}
+
+installApiTokenMenuCommands();
+// <<< src/core/token-storage.js
+
+
 // >>> src/modules/transfer-analyzer/config.js
 // 1.x Transfer Analyzer Config
 // ============================================================
@@ -798,6 +888,12 @@ const DomUtils = {
     // 2. VPS API Layer
     // ============================================================
 
+    function buildApiAuthorizationHeader() {
+        const token = getApiToken();
+        if (!token) warnMissingApiTokenOnce();
+        return "Bearer " + token;
+    }
+
     const Api = {
         postPromise(collection, data, label) {
             return new Promise((resolve, reject) => {
@@ -805,7 +901,7 @@ const DomUtils = {
                     method: "POST",
                     url: `${CONFIG.SERVER_URL}/api/${collection}`,
                     headers: {
-                        "Authorization": "Bearer " + CONFIG.TOKEN,
+                        "Authorization": buildApiAuthorizationHeader(),
                         "Content-Type": "application/json"
                     },
                     data: JSON.stringify(data),
@@ -842,7 +938,7 @@ const DomUtils = {
                     method: "GET",
                     url: `${CONFIG.SERVER_URL}/api/${collection}`,
                     headers: {
-                        "Authorization": "Bearer " + CONFIG.TOKEN
+                        "Authorization": buildApiAuthorizationHeader()
                     },
                     onload: r => {
                         try {
@@ -15880,15 +15976,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.87',
-        scriptVersion: '4.4.87',
+        version: '4.4.88',
+        scriptVersion: '4.4.88',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.87',
+        scriptVersion: '4.4.88',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
