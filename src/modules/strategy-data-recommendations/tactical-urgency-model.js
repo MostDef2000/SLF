@@ -4,20 +4,20 @@
 const TacticalUrgencyModel = {
     getMinuteUrgency(minute) {
         const m = Number(minute || 0);
-        if (!Number.isFinite(m) || m < 15) return 0;
-        if (m < 30) return 1;
-        if (m < 45) return 2;
-        if (m < 60) return 3;
-        if (m < 75) return 4;
+        if (!Number.isFinite(m) || m < 10) return 0;
+        if (m < 25) return 1;
+        if (m < 40) return 2;
+        if (m < 55) return 3;
+        if (m < 70) return 4;
         if (m < 80) return 5;
         if (m < 85) return 6;
-        return 2;
+        return 7;
     },
 
     getDecisionWindow(minute) {
         const m = Number(minute || 0);
 
-        if (!Number.isFinite(m) || m < 15) {
+        if (!Number.isFinite(m) || m < 10) {
             return {
                 phase: 'collect',
                 label: 'Сбор данных',
@@ -27,13 +27,18 @@ const TacticalUrgencyModel = {
             };
         }
 
-        if (m < 30) return { phase: 'decision', label: 'Окно решения', sourceSegment: '01-15', targetSegment: '16-30', applyByMinute: 15 };
-        if (m < 45) return { phase: 'decision', label: 'Окно решения', sourceSegment: '16-30', targetSegment: '31-45', applyByMinute: 30 };
-        if (m < 60) return { phase: 'decision', label: 'Окно решения', sourceSegment: '31-45', targetSegment: '46-60', applyByMinute: 45 };
-        if (m < 75) return { phase: 'decision', label: 'Окно решения', sourceSegment: '46-60', targetSegment: '61-75', applyByMinute: 60 };
-        if (m < 80) return { phase: 'late', label: 'Позднее окно решения', sourceSegment: '61-75', targetSegment: '76-85', applyByMinute: 75 };
-        if (m < 85) return { phase: 'final_decision', label: 'Финальное окно решения', sourceSegment: '76-80', targetSegment: '86-90', applyByMinute: 84 };
-        return { phase: 'too_late_big_change', label: 'Поздний статус', sourceSegment: '86-90', targetSegment: '86-90', applyByMinute: 84 };
+        if (m < 15) return { phase: 'pre_decision', label: 'Предварительное окно решения', sourceSegment: '01-15', targetSegment: '16-30', applyByMinute: 15 };
+        if (m < 25) return { phase: 'monitor', label: 'Мониторинг отрезка', sourceSegment: '16-30', targetSegment: '31-45', applyByMinute: 30 };
+        if (m < 30) return { phase: 'decision', label: 'Окно решения', sourceSegment: '16-30', targetSegment: '31-45', applyByMinute: 30 };
+        if (m < 40) return { phase: 'monitor', label: 'Мониторинг отрезка', sourceSegment: '31-45', targetSegment: '46-60', applyByMinute: 45 };
+        if (m < 45) return { phase: 'decision', label: 'Окно решения', sourceSegment: '31-45', targetSegment: '46-60', applyByMinute: 45 };
+        if (m < 55) return { phase: 'monitor', label: 'Мониторинг отрезка', sourceSegment: '46-60', targetSegment: '61-75', applyByMinute: 60 };
+        if (m < 60) return { phase: 'decision', label: 'Окно решения', sourceSegment: '46-60', targetSegment: '61-75', applyByMinute: 60 };
+        if (m < 70) return { phase: 'monitor', label: 'Мониторинг отрезка', sourceSegment: '61-75', targetSegment: '76-84', applyByMinute: 75 };
+        if (m < 75) return { phase: 'decision', label: 'Окно решения', sourceSegment: '61-75', targetSegment: '76-84', applyByMinute: 75 };
+        if (m < 80) return { phase: 'late', label: 'Позднее окно решения', sourceSegment: '76-84', targetSegment: '85-90', applyByMinute: 85 };
+        if (m < 85) return { phase: 'final_decision', label: 'Финальное окно решения', sourceSegment: '76-84', targetSegment: '85-90', applyByMinute: 85 };
+        return { phase: 'final_segment', label: 'Финальный отрезок', sourceSegment: '85-90', targetSegment: '85-90', applyByMinute: 90 };
     },
 
     classify(snapshot, state) {
@@ -50,7 +55,7 @@ const TacticalUrgencyModel = {
         const hintText = hints.map(h => h.text || '').join(' ').toLowerCase();
         const criticalCondition = /устали|травм|замен|красн|удален|удалён/.test(hintText);
 
-        if (!Number.isFinite(minute) || minute < 15) {
+        if (!Number.isFinite(minute) || minute < 10) {
             return {
                 level: 'collect',
                 label: 'Сбор данных',
@@ -59,26 +64,14 @@ const TacticalUrgencyModel = {
                 allowFamilyChange: false,
                 overrideProgressionGuard: false,
                 decisionWindow,
-                reason: 'до первого generation-среза пресет не предлагается'
-            };
-        }
-
-        if (minute >= 85) {
-            return {
-                level: 'late_status',
-                label: 'Поздний статус: большие изменения уже поздно',
-                uiLabel: 'Поздний статус',
-                allowPreset: false,
-                allowFamilyChange: false,
-                overrideProgressionGuard: false,
-                decisionWindow,
-                reason: 'финальную смену нужно было применять до 84-й минуты'
+                reason: 'до 10-й минуты собираем базу для первого предрешения'
             };
         }
 
         const emergency =
             losingBy >= 3 ||
             (minute <= 30 && losingBy >= 2) ||
+            (minute >= 85 && score.state === 'losing') ||
             xgGap >= 1.2 ||
             xtGap >= 1.5 ||
             myBad >= 28 ||
@@ -90,6 +83,7 @@ const TacticalUrgencyModel = {
             const reasons = [];
             if (losingBy >= 3) reasons.push(`проигрываем ${losingBy} мяча`);
             if (minute <= 30 && losingBy >= 2) reasons.push(`ранний провал по счёту: -${losingBy} к ${minute}-й`);
+            if (minute >= 85 && score.state === 'losing') reasons.push('финальный отрезок 85-90: нужен риск ради гола');
             if (xgGap >= 1.2) reasons.push(`провал по xG: ${xgGap.toFixed(2)}`);
             if (xtGap >= 1.5) reasons.push(`провал по xT: ${xtGap.toFixed(2)}`);
             if (myBad >= 28) reasons.push(`критический брак: ${myBad.toFixed(0)}%`);
@@ -121,16 +115,29 @@ const TacticalUrgencyModel = {
             };
         }
 
+        if (minuteUrgency >= 7) {
+            return {
+                level: 'final_segment',
+                label: 'Финальный отрезок 85-90',
+                uiLabel: 'Финальный отрезок',
+                allowPreset: true,
+                allowFamilyChange: true,
+                overrideProgressionGuard: score.state === 'losing',
+                decisionWindow,
+                reason: 'последний отрезок: держим заранее выбранный план, но разрешаем срочную коррекцию по счёту/давлению'
+            };
+        }
+
         if (minuteUrgency >= 6) {
             return {
                 level: 'radical',
-                label: 'Финальное окно решения: применить до 84-й',
+                label: 'Финальное окно решения: подготовить 85-90',
                 uiLabel: 'Кардинальная смена',
                 allowPreset: true,
                 allowFamilyChange: true,
                 overrideProgressionGuard: false,
                 decisionWindow,
-                reason: 'последнее окно для изменения картины игры на 86-90'
+                reason: 'последнее окно до 85-й минуты для решения на 85-90'
             };
         }
 

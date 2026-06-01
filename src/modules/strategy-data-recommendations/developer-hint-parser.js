@@ -47,14 +47,9 @@ const DeveloperHintParser = {
                 line.includes('диагональные передачи') ||
                 line.includes('атаку по центру') ||
                 line.includes('дальних ударов') ||
-                t.includes('лучше проводим') ||
-                t.includes('лучше проводит') ||
-                t.includes('проводим матч лучше') ||
-                t.includes('выше ожидан') ||
+                this.isExplicitBetterThanExpectedText(line) ||
                 t.includes('ниже ожидан') ||
                 t.includes('хуже ожидан') ||
-                t.includes('качество игры') ||
-                t.includes('генератор доволен') ||
                 t.includes('генератор ожидает')
             );
         });
@@ -90,10 +85,7 @@ const DeveloperHintParser = {
             return 'control';
         }
 
-        if (
-            t.includes('генератор доволен') ||
-            t.includes('генератор ожидает')
-        ) {
+        if (t.includes('генератор ожидает')) {
             return 'generator_feedback';
         }
 
@@ -165,19 +157,20 @@ const DeveloperHintParser = {
         return null;
     },
 
+    isExplicitBetterThanExpectedText(text) {
+        const t = String(text || '').toLowerCase().replace(',', '.');
+        return /(?:\+\s*\d+(?:\.\d+)?\s*%\s*)?(?:вы\s+)?(?:играете|играем|проводим(?:\s+матч)?|проводит(?:\s+матч)?)\s+лучше/.test(t) ||
+            /(?:вы\s+)?(?:играете|играем|проводим(?:\s+матч)?)\s+лучше\s+(?:ожид|генератор)/.test(t) ||
+            /лучше\s+ожидан[^\d+]*(?:\+\s*\d+(?:\.\d+)?\s*%)/.test(t);
+    },
+
     isGeneratorQualityText(text) {
         const t = String(text || '').toLowerCase();
 
         return (
-            t.includes('лучше проводим') ||
-            t.includes('лучше проводит') ||
-            t.includes('проводим матч лучше') ||
-            t.includes('проводит матч лучше') ||
-            t.includes('выше ожидан') ||
+            this.isExplicitBetterThanExpectedText(t) ||
             t.includes('ниже ожидан') ||
-            t.includes('хуже ожидан') ||
-            t.includes('качество игры') ||
-            (t.includes('генератор') && (t.includes('доволен') || t.includes('ожидает')))
+            t.includes('хуже ожидан')
         );
     },
 
@@ -199,28 +192,25 @@ const DeveloperHintParser = {
                 direction: 'neutral',
                 confidenceBoost: 0,
                 percent: null,
-                text: ''
+                text: '',
+                explicitBetterThanExpected: false
             };
         }
 
         const text = candidates.map(h => h.text || String(h || '')).join(' | ');
         const lower = text.toLowerCase();
         const percent = this.parsePercent(text);
+        const explicitBetterThanExpected = this.isExplicitBetterThanExpectedText(text);
         let direction = 'neutral';
 
-        if (
-            lower.includes('лучше') ||
-            lower.includes('выше ожид') ||
-            lower.includes('доволен') ||
-            (percent != null && percent > 0)
-        ) {
+        if (explicitBetterThanExpected) {
             direction = 'positive';
         }
 
         if (
             lower.includes('хуже') ||
             lower.includes('ниже ожид') ||
-            (percent != null && percent < 0)
+            (percent != null && percent < 0 && !explicitBetterThanExpected)
         ) {
             direction = 'negative';
         }
@@ -233,12 +223,13 @@ const DeveloperHintParser = {
 
         return {
             schema: 'slf_generator_quality_signal_v1',
-            detected: true,
+            detected: direction !== 'neutral',
             direction,
             confidenceBoost: Number(confidenceBoost.toFixed(2)),
             percent,
             text,
-            source: 'pep_generator_hint'
+            explicitBetterThanExpected,
+            source: explicitBetterThanExpected ? 'explicit_generator_better_text' : 'pep_generator_hint'
         };
     },
 

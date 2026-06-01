@@ -11,8 +11,8 @@
             { index: 3, from: 31, to: 45, label: '31-45', generationMinutes: 15, realMinutes: 6, phase: 'first_half' },
             { index: 4, from: 46, to: 60, label: '46-60', generationMinutes: 15, realMinutes: 6, phase: 'second_half' },
             { index: 5, from: 61, to: 75, label: '61-75', generationMinutes: 15, realMinutes: 6, phase: 'second_half' },
-            { index: 6, from: 76, to: 85, label: '76-85', generationMinutes: 10, realMinutes: 4, phase: 'late' },
-            { index: 7, from: 86, to: 90, label: '86-90', generationMinutes: 5, realMinutes: 2, phase: 'final_5', isFinal: true }
+            { index: 6, from: 76, to: 84, label: '76-84', generationMinutes: 9, realMinutes: 3.6, phase: 'late' },
+            { index: 7, from: 85, to: 90, label: '85-90', generationMinutes: 6, realMinutes: 2.4, phase: 'final_5', isFinal: true }
         ],
 
         clampMinute(minute) {
