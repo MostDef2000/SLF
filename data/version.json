@@ -1,16 +1,16 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.89",
+  "scriptVersion": "4.4.90",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_89_published",
+  "status": "release_4_4_90_published",
   "build": {
     "source": "src/**",
     "bundleOrder": "src/app/bundle-order.json",
-    "approvedCommit": "16ff806559b28cfbc8090a6f5d861a84cf908aba",
+    "approvedCommit": "ece30df24a72a8cde435d5cd3a9557ba65ea6c2d",
     "approvedFiles": [
       "src/modules/team-management/team4-alter-current-season-minutes-fix.js"
     ],
