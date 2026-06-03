@@ -4,6 +4,16 @@
 
 High-frequency product branch for transfer market logic, MKT/TM/SLF alter valuation, transfer recommendations, and transfer UI/details.
 
+## Shared governance policies
+
+This agent must follow:
+
+- `contracts/SLF_MINIMAL_CONFIRMATION_POLICY.md`
+
+When this policy conflicts with older local wording, the stricter safety rule applies. Confirmation requests must be batched whenever safe.
+
+After `COMMIT APPROVED`, do not ask for separate confirmation for each internal edit. Stop only for required confirmation cases or stop conditions defined in the shared policy.
+
 ## Scope
 
 This branch owns:
