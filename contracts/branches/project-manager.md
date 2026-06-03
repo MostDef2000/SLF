@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 1.1.0
+Version: 1.1.1
 Status: Active
 Agent: AI Project Manager Agent
 Project: SLF
@@ -328,18 +328,7 @@ Recommended ordering policy:
 
 The Project Manager Agent should generally recommend doing foundation work before a sequence of module changes when that foundation will reduce repeated manual work or release risk.
 
-Current initial priority recommendation for the existing backlog:
-
-```text
-1. #2 — test/preview environment for module changes
-2. #1 — show release version on main page
-3. #19 — replace real-career text with arrows
-4. #13 — compact Strategy UI hints and remove duplicates
-5. #15 — verify/fix alter.php minutes display
-6. #20 — expanded real-career evaluation block on player page
-```
-
-The ordering is advisory. The user may override it.
+Backlog ordering is advisory and must be recalculated from the current backlog when the user asks. Do not hard-code a permanent issue order inside this contract.
 
 ## 20. Contract change policy
 
