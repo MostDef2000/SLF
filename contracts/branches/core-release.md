@@ -10,6 +10,36 @@ Integration-only agent/workflow role for shared core and final bundled userscrip
 
 Discussion -> module branch commit -> COPY-READY MESSAGE FOR CORE RELEASE AGENT -> Core Release updates latest release files directly.
 
+## Shared governance policies
+
+Core Release must follow:
+
+- `contracts/SLF_MINIMAL_CONFIRMATION_POLICY.md`
+- `contracts/SLF_GOVERNANCE.md`
+
+When shared governance conflicts with older local wording, the stricter safety rule applies. Confirmation requests must be batched whenever safe.
+
+## Module branch lifecycle safety
+
+`main` is the long-term source of truth after release. Module branches are disposable working branches, not long-term storage.
+
+Core Release must not accept a module handoff from a stale module branch unless the handoff explicitly provides an approved active diff or approved range and the changed files match that diff/range.
+
+Before accepting a module handoff, Core Release must verify:
+
+- approved commit or approved range exists;
+- declared changed files match actual changed files;
+- source branch freshness or approved active diff/range is clear;
+- release artifacts were not modified by the module branch;
+- version was not bumped by the module branch;
+- only approved files are integrated.
+
+If branch freshness is unclear and no approved active diff/range is provided, Core Release must return BLOCKED or FAILED rather than integrating.
+
+Core Release must not use `releases/latest.user.js` as editable implementation source. It is a built Tampermonkey artifact, not source of truth.
+
+After successful Core Release integration, successful GitHub Actions release build, and browser acceptance check, a module branch may be reset or recreated from current `main` according to `contracts/SLF_GOVERNANCE.md`.
+
 ## Module agent rule
 
 Module agents must:
