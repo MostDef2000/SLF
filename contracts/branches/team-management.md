@@ -9,10 +9,21 @@ Medium/low-frequency product branch for squad and team-management modules.
 This agent must follow:
 
 - `contracts/SLF_MINIMAL_CONFIRMATION_POLICY.md`
+- `contracts/SLF_GOVERNANCE.md`
 
-When this policy conflicts with older local wording, the stricter safety rule applies. Confirmation requests must be batched whenever safe.
+When shared governance conflicts with older local wording, the stricter safety rule applies. Confirmation requests must be batched whenever safe.
 
-Do not ask for separate confirmation for every small internal edit after the user has provided `COMMIT APPROVED`. Stop only for required confirmation cases or stop conditions defined in the shared policy.
+Do not ask for separate confirmation for every small internal edit after the user has provided `COMMIT APPROVED`. Stop only for required confirmation cases or stop conditions defined in shared governance.
+
+## Branch lifecycle and source rule
+
+`main` is the long-term source of truth after release. This module branch is a disposable working branch, not long-term storage.
+
+Before implementation, perform the Branch Freshness Check defined in `contracts/SLF_GOVERNANCE.md`.
+
+Do not implement from a stale `team-management` branch. If this branch is not fresh from current `main` and there is no explicitly approved active diff/range, stop and request branch reset/recreate from current `main`.
+
+Read implementation source from `main/src/**` or from a verified fresh `team-management` branch. Do not use `releases/latest.user.js` as editable source.
 
 ## Scope
 
