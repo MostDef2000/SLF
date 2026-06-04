@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.4.96
+
+### Release notes
+- No module release notes provided.
+
+Changed files:
+- No changed files provided.
+
+Approved commit:
+- f17d659529b3b1fe5c6ac61b872304b2d671f600
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: UNKNOWN
+- Bundle-order/module-registry changes needed: UNKNOWN
+
 ## 4.4.95
 
 ### Release notes

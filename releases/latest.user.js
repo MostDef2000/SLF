@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.95
+// @version      4.4.96
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.95',
-        scriptVersion: '4.4.95',
+        version: '4.4.96',
+        scriptVersion: '4.4.96',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.95',
+        scriptVersion: '4.4.96',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -4904,6 +4904,194 @@ const RecommendationEngine = {
 };
     // ============================================================
 // <<< src/modules/strategy-data-recommendations/recommendation-engine.js
+
+
+// >>> src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+// 10.1 Strategy Data Task A UI extension
+// ============================================================
+
+(function strategyDataTaskAExtension() {
+    'use strict';
+
+    function getFallbackTargetTeam(snapshot) {
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+        if (!teams.length) return null;
+        const selector = document.getElementById('slf-foreign-match-target');
+        const side = selector?.value || 'home';
+        return side === 'away' ? teams[1] : teams[0];
+    }
+
+    function normalizeForeignSnapshot(snapshot) {
+        if (!snapshot || snapshot.myTeam || !Array.isArray(snapshot.teams) || snapshot.teams.length < 2) return snapshot;
+        const targetTeam = getFallbackTargetTeam(snapshot);
+        if (!targetTeam) return snapshot;
+
+        snapshot.matchOwnership = 'foreign';
+        snapshot.targetSide = Number(snapshot.teams[1]) === Number(targetTeam) ? 'away' : 'home';
+        snapshot.myTeam = targetTeam;
+        return snapshot;
+    }
+
+    function patchSnapshotBuild() {
+        if (typeof SnapshotEngine === 'undefined' || SnapshotEngine.__taskAPatchedBuild) return;
+        const originalBuild = SnapshotEngine.build;
+        SnapshotEngine.build = function patchedTaskABuild() {
+            return normalizeForeignSnapshot(originalBuild.apply(this, arguments));
+        };
+        SnapshotEngine.__taskAPatchedBuild = true;
+    }
+
+    function patchHasEnoughLiveData() {
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__taskAPatchedLiveGate) return;
+        const originalHasEnoughLiveData = RecommendationEngine.hasEnoughLiveData;
+        RecommendationEngine.hasEnoughLiveData = function patchedTaskAHasEnoughLiveData(snapshot) {
+            const gate = originalHasEnoughLiveData.apply(this, arguments);
+            const minute = this.getEffectiveMinute(snapshot);
+
+            if (gate?.phase === 'collect' && Number.isFinite(minute) && minute >= 10) {
+                return { ok: true, phase: 'pre_window' };
+            }
+
+            if (gate?.phase === 'collect') {
+                return Object.assign({}, gate, {
+                    reason: 'Сбор данных до первого pre-window. Первая предварительная рекомендация появится с 10-й минуты, чтобы подготовить смену до 15-й.'
+                });
+            }
+
+            return gate;
+        };
+        RecommendationEngine.__taskAPatchedLiveGate = true;
+    }
+
+    function getPresetOptionPair(name) {
+        if (!name || typeof RecommendationEngine === 'undefined') return { cautious: '', aggressive: '' };
+
+        const group = RecommendationEngine.getPresetGroup(name);
+        const ladder = RecommendationEngine.getPresetLadder(group);
+        const index = ladder.indexOf(name);
+        if (index < 0) return { cautious: '', aggressive: '' };
+
+        if (group === 'defensive') {
+            return {
+                cautious: ladder[index + 1] || '',
+                aggressive: ladder[index - 1] || ''
+            };
+        }
+
+        return {
+            cautious: ladder[index - 1] || '',
+            aggressive: ladder[index + 1] || ''
+        };
+    }
+
+    function appendPresetOptions(plan, name) {
+        if (!plan || !Array.isArray(plan.preset) || !name || typeof RecommendationEngine === 'undefined') return;
+
+        const options = getPresetOptionPair(name);
+        const rows = [];
+
+        if (options.cautious) rows.push(`Осторожнее: ${RecommendationEngine.getPresetTitle(options.cautious)}.`);
+        if (options.aggressive) rows.push(`Агрессивнее: ${RecommendationEngine.getPresetTitle(options.aggressive)}.`);
+
+        rows.forEach(row => {
+            if (!plan.preset.includes(row)) plan.preset.push(row);
+        });
+    }
+
+    function patchPresetOptions() {
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__taskBPatchedPresetOptions) return;
+        const originalSelectPreset = RecommendationEngine.selectPreset;
+        RecommendationEngine.selectPreset = function patchedTaskBSelectPreset(snapshot, my, opp, playerSignals, plan, state) {
+            const selectedName = originalSelectPreset.apply(this, arguments);
+            appendPresetOptions(plan, selectedName);
+            return selectedName;
+        };
+        RecommendationEngine.__taskBPatchedPresetOptions = true;
+    }
+
+    function renderManualRecommendation() {
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) return;
+
+        snapshot.recommendationSource = 'manual';
+        snapshot.manualRecommendationRefresh = true;
+        SnapshotEngine.rememberLiveSnapshot(snapshot);
+
+        const el = document.getElementById('slf-parser-recommendation');
+        const html = RecommendationEngine.make(snapshot);
+        if (el) el.innerHTML = html;
+        RecommendationEngine.persistRenderedRecommendation(html, snapshot, { source: 'manual_snapshot' });
+        SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer, manualSnapshotAt: Date.now() });
+        UI.addParserLog('Ручной snapshot: подсказка обновлена');
+        UI.updateParserStatus('Ручной snapshot выполнен');
+    }
+
+    function mountManualButton() {
+        if (!location.pathname.includes('/game.php')) return;
+        const panel = document.getElementById('slf-match-parser-panel');
+        if (!panel || document.getElementById('slf-manual-recommendation-btn')) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'slf-manual-recommendation-btn';
+        btn.type = 'button';
+        btn.textContent = '↻ Подсказка';
+        btn.title = 'Сделать ручной snapshot и обновить подсказку без остановки auto-логики';
+        btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
+        btn.onclick = () => {
+            btn.disabled = true;
+            try {
+                renderManualRecommendation();
+            } catch (error) {
+                console.error('[SLF] Manual recommendation refresh failed', error);
+                UI.addParserLog('Ручной snapshot: ошибка, см. console');
+            } finally {
+                btn.disabled = false;
+            }
+        };
+
+        const status = document.getElementById('slf-parser-status');
+        panel.insertBefore(btn, status || null);
+    }
+
+    function mountForeignSelector() {
+        if (!location.pathname.includes('/game.php')) return;
+        const panel = document.getElementById('slf-match-parser-panel');
+        if (!panel || document.getElementById('slf-foreign-match-target')) return;
+
+        const snapshot = SnapshotEngine.build();
+        if (!snapshot || snapshot.matchOwnership !== 'foreign') return;
+
+        const select = document.createElement('select');
+        select.id = 'slf-foreign-match-target';
+        select.title = 'Тестовый режим чужого матча: выбрать сторону для подсказок';
+        select.style.cssText = 'padding:4px 6px;background:#333;color:#fff;border:1px solid #777;border-radius:3px;';
+        select.innerHTML = '<option value="home">Анализ: хозяева</option><option value="away">Анализ: гости</option>';
+        select.onchange = () => renderManualRecommendation();
+
+        const status = document.getElementById('slf-parser-status');
+        panel.insertBefore(select, status || null);
+    }
+
+    function mount() {
+        patchSnapshotBuild();
+        patchHasEnoughLiveData();
+        patchPresetOptions();
+        mountManualButton();
+        mountForeignSelector();
+    }
+
+    const originalAddMatchParserPanel = UI.addMatchParserPanel;
+    UI.addMatchParserPanel = function patchedTaskAAddMatchParserPanel() {
+        const result = originalAddMatchParserPanel.apply(this, arguments);
+        mount();
+        return result;
+    };
+
+    mount();
+})();
+
+// ============================================================
+// <<< src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
 
 
 // >>> src/app/ui-layer.js
@@ -13740,6 +13928,134 @@ const TransferMarketAnalyzer = {
 // <<< src/modules/transfer-analyzer/transfer-market-analyzer.js
 
 
+// >>> src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
+// Transfer history VPS skip-synced guard
+// Prevents Analyze visible from reprocessing rows already marked as synced in VPS.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.isHistoryRowSyncedInVps = function isHistoryRowSyncedInVps(row, alreadySubmitted) {
+        if (!row) return false;
+
+        const badgeText = this.normalizeText(row.rowEl?.querySelector('.slf-transfer-analysis-badge')?.innerText || '');
+        if (/✓\s*VPS/i.test(badgeText)) return true;
+
+        const eventKeySource = this.buildHistoryEventKeySource(row);
+        const eventKey = row.historyEventKey || '';
+
+        return !!(
+            (eventKey && alreadySubmitted?.[eventKey]) ||
+            Object.values(alreadySubmitted || {}).some(item =>
+                item &&
+                String(item.playerId || '') === String(row.playerId || '') &&
+                this.normalizeText(item.dateText || '') === this.normalizeText(row.transferDateText || '') &&
+                Number(item.price || 0) === Number(row.salePrice || 0)
+            ) ||
+            (eventKeySource && row.dataset?.slfHistoryEventKeySource === eventKeySource)
+        );
+    };
+
+    TransferMarketAnalyzer.analyzeHistoryVisibleRows = async function analyzeHistoryVisibleRows() {
+        const rows = this.parseHistoryVisibleRows();
+
+        if (!rows.length) {
+            this.setStatus('История трансферов: строки не найдены.');
+            return;
+        }
+
+        const alreadySubmitted = this.loadHistorySyncedKeys();
+        const eventsToSend = [];
+        let skipped = 0;
+        let failed = 0;
+
+        const pendingRows = [];
+
+        for (const row of rows) {
+            const eventKeySource = this.buildHistoryEventKeySource(row);
+            const eventKey = await this.hashText(eventKeySource);
+            row.historyEventKey = eventKey;
+
+            if (alreadySubmitted[eventKey] || this.isHistoryRowSyncedInVps(row, alreadySubmitted)) {
+                skipped++;
+                this.renderHistoryVpsBadge(row, { confidence: 'local', key: eventKey, record: {} });
+                continue;
+            }
+
+            pendingRows.push(row);
+        }
+
+        if (!pendingRows.length) {
+            this.setStatus(`История готова: видимых строк ${rows.length}, уже в VPS ${skipped}, новых к анализу 0.`);
+            return;
+        }
+
+        this.setStatus(`История: видимых строк ${rows.length}, уже в VPS ${skipped}, к анализу ${pendingRows.length}.`);
+
+        for (let i = 0; i < pendingRows.length; i++) {
+            const row = pendingRows[i];
+            const tmCached = TMEnrichmentLayer.peekBySlfPlayerId(row.playerId);
+            const alterCached = SLFAlterLayer.peekByPlayerId(row.playerId);
+            const fromCache = !!tmCached && !!alterCached;
+
+            this.setStatus(`История ${i + 1}/${pendingRows.length}: ${fromCache ? 'cache' : 'анализ'} ${row.name || row.playerId}`);
+
+            this.renderHistorySyncStatus(row, '… VPS', 'pending');
+
+            try {
+                const tmResult = tmCached || await TMEnrichmentLayer.getBySlfPlayerId(row.playerId);
+
+                let slfAlter = alterCached || null;
+
+                if (!slfAlter) {
+                    try {
+                        slfAlter = await SLFAlterLayer.getByPlayerId(row.playerId);
+                    } catch (alterError) {
+                        console.warn('[SLF Transfer History] alter.php failed', row.playerId, alterError);
+                    }
+                }
+
+                row.tmUrl = tmResult.tmUrl || '';
+                row.tmProfile = tmResult.tmProfile || null;
+                row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
+                row.slfAlter = slfAlter;
+
+                const event = await this.buildTransferHistoryEvent(row, tmResult, slfAlter);
+                eventsToSend.push(event);
+                this.renderHistoryVpsBadge(row, { confidence: 'queued', key: event.eventKey, record: event });
+            } catch (e) {
+                failed++;
+                console.error('[SLF Transfer History] row failed', row, e);
+                this.renderHistorySyncStatus(row, 'ERR', 'error');
+
+                try {
+                    const fallbackEvent = await this.buildTransferHistoryEvent(row, {
+                        playerId: row.playerId,
+                        slfUrl: row.playerUrl,
+                        tmUrl: '',
+                        tmProfile: null,
+                        error: String(e?.message || e || 'history_analysis_failed')
+                    }, null);
+                    fallbackEvent.analysisFailed = true;
+                    fallbackEvent.analysisError = String(e?.message || e || 'unknown');
+                    eventsToSend.push(fallbackEvent);
+                    this.renderHistoryVpsBadge(row, { confidence: 'fallback', key: fallbackEvent.eventKey, record: fallbackEvent });
+                } catch (eventError) {
+                    console.warn('[SLF Transfer History] fallback event build failed', row.playerId, eventError);
+                }
+            }
+        }
+
+        if (eventsToSend.length) {
+            this.sendTransferHistoryEvents(eventsToSend);
+        }
+
+        this.setStatus(
+            `История готова: подготовлено к отправке ${eventsToSend.length}, уже в VPS ${skipped}, ошибок ${failed}.`
+        );
+    };
+}
+// <<< src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
+
+
 // >>> src/modules/team-management/training-reference-guide.js
 // 14.5 Training Reference Guide
 // ============================================================
@@ -16636,333 +16952,17 @@ const App = {
 App.start();
 // <<< src/app/bootstrap.js
 
-
-// >>> src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
-// 10.1 Strategy Data Task A UI extension
-// ============================================================
-
-(function strategyDataTaskAExtension() {
-    'use strict';
-
-    function getFallbackTargetTeam(snapshot) {
-        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
-        if (!teams.length) return null;
-        const selector = document.getElementById('slf-foreign-match-target');
-        const side = selector?.value || 'home';
-        return side === 'away' ? teams[1] : teams[0];
-    }
-
-    function normalizeForeignSnapshot(snapshot) {
-        if (!snapshot || snapshot.myTeam || !Array.isArray(snapshot.teams) || snapshot.teams.length < 2) return snapshot;
-        const targetTeam = getFallbackTargetTeam(snapshot);
-        if (!targetTeam) return snapshot;
-
-        snapshot.matchOwnership = 'foreign';
-        snapshot.targetSide = Number(snapshot.teams[1]) === Number(targetTeam) ? 'away' : 'home';
-        snapshot.myTeam = targetTeam;
-        return snapshot;
-    }
-
-    function patchSnapshotBuild() {
-        if (typeof SnapshotEngine === 'undefined' || SnapshotEngine.__taskAPatchedBuild) return;
-        const originalBuild = SnapshotEngine.build;
-        SnapshotEngine.build = function patchedTaskABuild() {
-            return normalizeForeignSnapshot(originalBuild.apply(this, arguments));
-        };
-        SnapshotEngine.__taskAPatchedBuild = true;
-    }
-
-    function patchHasEnoughLiveData() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__taskAPatchedLiveGate) return;
-        const originalHasEnoughLiveData = RecommendationEngine.hasEnoughLiveData;
-        RecommendationEngine.hasEnoughLiveData = function patchedTaskAHasEnoughLiveData(snapshot) {
-            const gate = originalHasEnoughLiveData.apply(this, arguments);
-            const minute = this.getEffectiveMinute(snapshot);
-
-            if (gate?.phase === 'collect' && Number.isFinite(minute) && minute >= 10) {
-                return { ok: true, phase: 'pre_window' };
-            }
-
-            if (gate?.phase === 'collect') {
-                return Object.assign({}, gate, {
-                    reason: 'Сбор данных до первого pre-window. Первая предварительная рекомендация появится с 10-й минуты, чтобы подготовить смену до 15-й.'
-                });
-            }
-
-            return gate;
-        };
-        RecommendationEngine.__taskAPatchedLiveGate = true;
-    }
-
-    function getPresetOptionPair(name) {
-        if (!name || typeof RecommendationEngine === 'undefined') return { cautious: '', aggressive: '' };
-
-        const group = RecommendationEngine.getPresetGroup(name);
-        const ladder = RecommendationEngine.getPresetLadder(group);
-        const index = ladder.indexOf(name);
-        if (index < 0) return { cautious: '', aggressive: '' };
-
-        if (group === 'defensive') {
-            return {
-                cautious: ladder[index + 1] || '',
-                aggressive: ladder[index - 1] || ''
-            };
-        }
-
-        return {
-            cautious: ladder[index - 1] || '',
-            aggressive: ladder[index + 1] || ''
-        };
-    }
-
-    function appendPresetOptions(plan, name) {
-        if (!plan || !Array.isArray(plan.preset) || !name || typeof RecommendationEngine === 'undefined') return;
-
-        const options = getPresetOptionPair(name);
-        const rows = [];
-
-        if (options.cautious) rows.push(`Осторожнее: ${RecommendationEngine.getPresetTitle(options.cautious)}.`);
-        if (options.aggressive) rows.push(`Агрессивнее: ${RecommendationEngine.getPresetTitle(options.aggressive)}.`);
-
-        rows.forEach(row => {
-            if (!plan.preset.includes(row)) plan.preset.push(row);
-        });
-    }
-
-    function patchPresetOptions() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__taskBPatchedPresetOptions) return;
-        const originalSelectPreset = RecommendationEngine.selectPreset;
-        RecommendationEngine.selectPreset = function patchedTaskBSelectPreset(snapshot, my, opp, playerSignals, plan, state) {
-            const selectedName = originalSelectPreset.apply(this, arguments);
-            appendPresetOptions(plan, selectedName);
-            return selectedName;
-        };
-        RecommendationEngine.__taskBPatchedPresetOptions = true;
-    }
-
-    function renderManualRecommendation() {
-        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
-        if (!snapshot) return;
-
-        snapshot.recommendationSource = 'manual';
-        snapshot.manualRecommendationRefresh = true;
-        SnapshotEngine.rememberLiveSnapshot(snapshot);
-
-        const el = document.getElementById('slf-parser-recommendation');
-        const html = RecommendationEngine.make(snapshot);
-        if (el) el.innerHTML = html;
-        RecommendationEngine.persistRenderedRecommendation(html, snapshot, { source: 'manual_snapshot' });
-        SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer, manualSnapshotAt: Date.now() });
-        UI.addParserLog('Ручной snapshot: подсказка обновлена');
-        UI.updateParserStatus('Ручной snapshot выполнен');
-    }
-
-    function mountManualButton() {
-        if (!location.pathname.includes('/game.php')) return;
-        const panel = document.getElementById('slf-match-parser-panel');
-        if (!panel || document.getElementById('slf-manual-recommendation-btn')) return;
-
-        const btn = document.createElement('button');
-        btn.id = 'slf-manual-recommendation-btn';
-        btn.type = 'button';
-        btn.textContent = '↻ Подсказка';
-        btn.title = 'Сделать ручной snapshot и обновить подсказку без остановки auto-логики';
-        btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
-        btn.onclick = () => {
-            btn.disabled = true;
-            try {
-                renderManualRecommendation();
-            } catch (error) {
-                console.error('[SLF] Manual recommendation refresh failed', error);
-                UI.addParserLog('Ручной snapshot: ошибка, см. console');
-            } finally {
-                btn.disabled = false;
-            }
-        };
-
-        const status = document.getElementById('slf-parser-status');
-        panel.insertBefore(btn, status || null);
-    }
-
-    function mountForeignSelector() {
-        if (!location.pathname.includes('/game.php')) return;
-        const panel = document.getElementById('slf-match-parser-panel');
-        if (!panel || document.getElementById('slf-foreign-match-target')) return;
-
-        const snapshot = SnapshotEngine.build();
-        if (!snapshot || snapshot.matchOwnership !== 'foreign') return;
-
-        const select = document.createElement('select');
-        select.id = 'slf-foreign-match-target';
-        select.title = 'Тестовый режим чужого матча: выбрать сторону для подсказок';
-        select.style.cssText = 'padding:4px 6px;background:#333;color:#fff;border:1px solid #777;border-radius:3px;';
-        select.innerHTML = '<option value="home">Анализ: хозяева</option><option value="away">Анализ: гости</option>';
-        select.onchange = () => renderManualRecommendation();
-
-        const status = document.getElementById('slf-parser-status');
-        panel.insertBefore(select, status || null);
-    }
-
-    function mount() {
-        patchSnapshotBuild();
-        patchHasEnoughLiveData();
-        patchPresetOptions();
-        mountManualButton();
-        mountForeignSelector();
-    }
-
-    const originalAddMatchParserPanel = UI.addMatchParserPanel;
-    UI.addMatchParserPanel = function patchedTaskAAddMatchParserPanel() {
-        const result = originalAddMatchParserPanel.apply(this, arguments);
-        mount();
-        return result;
-    };
-
-    mount();
-})();
-
-// ============================================================
-// <<< src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
-
-
-// >>> src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
-// Transfer history VPS skip-synced guard
-// Prevents Analyze visible from reprocessing rows already marked as synced in VPS.
-
-if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
-    TransferMarketAnalyzer.isHistoryRowSyncedInVps = function isHistoryRowSyncedInVps(row, alreadySubmitted) {
-        if (!row) return false;
-
-        const badgeText = this.normalizeText(row.rowEl?.querySelector('.slf-transfer-analysis-badge')?.innerText || '');
-        if (/✓\s*VPS/i.test(badgeText)) return true;
-
-        const eventKeySource = this.buildHistoryEventKeySource(row);
-        const eventKey = row.historyEventKey || '';
-
-        return !!(
-            (eventKey && alreadySubmitted?.[eventKey]) ||
-            Object.values(alreadySubmitted || {}).some(item =>
-                item &&
-                String(item.playerId || '') === String(row.playerId || '') &&
-                this.normalizeText(item.dateText || '') === this.normalizeText(row.transferDateText || '') &&
-                Number(item.price || 0) === Number(row.salePrice || 0)
-            ) ||
-            (eventKeySource && row.dataset?.slfHistoryEventKeySource === eventKeySource)
-        );
-    };
-
-    TransferMarketAnalyzer.analyzeHistoryVisibleRows = async function analyzeHistoryVisibleRows() {
-        const rows = this.parseHistoryVisibleRows();
-
-        if (!rows.length) {
-            this.setStatus('История трансферов: строки не найдены.');
-            return;
-        }
-
-        const alreadySubmitted = this.loadHistorySyncedKeys();
-        const eventsToSend = [];
-        let skipped = 0;
-        let failed = 0;
-
-        const pendingRows = [];
-
-        for (const row of rows) {
-            const eventKeySource = this.buildHistoryEventKeySource(row);
-            const eventKey = await this.hashText(eventKeySource);
-            row.historyEventKey = eventKey;
-
-            if (alreadySubmitted[eventKey] || this.isHistoryRowSyncedInVps(row, alreadySubmitted)) {
-                skipped++;
-                this.renderHistoryVpsBadge(row, { confidence: 'local', key: eventKey, record: {} });
-                continue;
-            }
-
-            pendingRows.push(row);
-        }
-
-        if (!pendingRows.length) {
-            this.setStatus(`История готова: видимых строк ${rows.length}, уже в VPS ${skipped}, новых к анализу 0.`);
-            return;
-        }
-
-        this.setStatus(`История: видимых строк ${rows.length}, уже в VPS ${skipped}, к анализу ${pendingRows.length}.`);
-
-        for (let i = 0; i < pendingRows.length; i++) {
-            const row = pendingRows[i];
-            const tmCached = TMEnrichmentLayer.peekBySlfPlayerId(row.playerId);
-            const alterCached = SLFAlterLayer.peekByPlayerId(row.playerId);
-            const fromCache = !!tmCached && !!alterCached;
-
-            this.setStatus(`История ${i + 1}/${pendingRows.length}: ${fromCache ? 'cache' : 'анализ'} ${row.name || row.playerId}`);
-
-            this.renderHistorySyncStatus(row, '… VPS', 'pending');
-
-            try {
-                const tmResult = tmCached || await TMEnrichmentLayer.getBySlfPlayerId(row.playerId);
-
-                let slfAlter = alterCached || null;
-
-                if (!slfAlter) {
-                    try {
-                        slfAlter = await SLFAlterLayer.getByPlayerId(row.playerId);
-                    } catch (alterError) {
-                        console.warn('[SLF Transfer History] alter.php failed', row.playerId, alterError);
-                    }
-                }
-
-                row.tmUrl = tmResult.tmUrl || '';
-                row.tmProfile = tmResult.tmProfile || null;
-                row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
-                row.slfAlter = slfAlter;
-
-                const event = await this.buildTransferHistoryEvent(row, tmResult, slfAlter);
-                eventsToSend.push(event);
-                this.renderHistoryVpsBadge(row, { confidence: 'queued', key: event.eventKey, record: event });
-            } catch (e) {
-                failed++;
-                console.error('[SLF Transfer History] row failed', row, e);
-                this.renderHistorySyncStatus(row, 'ERR', 'error');
-
-                try {
-                    const fallbackEvent = await this.buildTransferHistoryEvent(row, {
-                        playerId: row.playerId,
-                        slfUrl: row.playerUrl,
-                        tmUrl: '',
-                        tmProfile: null,
-                        error: String(e?.message || e || 'history_analysis_failed')
-                    }, null);
-                    fallbackEvent.analysisFailed = true;
-                    fallbackEvent.analysisError = String(e?.message || e || 'unknown');
-                    eventsToSend.push(fallbackEvent);
-                    this.renderHistoryVpsBadge(row, { confidence: 'fallback', key: fallbackEvent.eventKey, record: fallbackEvent });
-                } catch (eventError) {
-                    console.warn('[SLF Transfer History] fallback event build failed', row.playerId, eventError);
-                }
-            }
-        }
-
-        if (eventsToSend.length) {
-            this.sendTransferHistoryEvents(eventsToSend);
-        }
-
-        this.setStatus(
-            `История готова: подготовлено к отправке ${eventsToSend.length}, уже в VPS ${skipped}, ошибок ${failed}.`
-        );
-    };
-}
-// <<< src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
-
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.95',
-        scriptVersion: '4.4.95',
+        version: '4.4.96',
+        scriptVersion: '4.4.96',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.95',
+        scriptVersion: '4.4.96',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
