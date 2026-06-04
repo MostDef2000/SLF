@@ -123,6 +123,47 @@ Stop before writing only if:
 - the operation would delete or overwrite unrelated files;
 - a GitHub write operation fails.
 
+## Multi-file atomic integration rule
+
+If a runtime/source task requires multiple files to be complete and loadable, Core Release must commit the full required file set atomically.
+
+A required file set includes:
+
+- new runtime source files;
+- bundle-order wiring;
+- module-registry wiring if relevant;
+- bootstrap/app wiring if relevant;
+- any required companion config file.
+
+Core Release must not advance `main` with only part of the required file set.
+
+Before writing, Core Release must identify:
+
+```text
+Required file set:
+- ...
+
+Atomicity:
+- all files must be committed together: YES/NO
+- partial commit allowed: YES/NO
+```
+
+Partial commit is allowed only if the user explicitly requested a staged incomplete source state.
+
+For new runtime files, do not create the file on `main` unless it is also wired into bundle-order/module-registry/bootstrap in the same commit when required for runtime loading.
+
+Implementation requirement:
+For multi-file source changes, prefer Git tree/blob commit flow over sequential contents API writes:
+
+1. read current `main`;
+2. create/update all required blobs;
+3. create one tree;
+4. create one commit;
+5. advance `main`;
+6. verify every required file on `main`.
+
+If atomic multi-file write is not possible in the current environment, return BLOCKED before writing any file.
+
 ## Mandatory source/tool integration completion gate
 
 Every source/tool integration task may end only in one of three final states:
