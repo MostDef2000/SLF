@@ -9,10 +9,21 @@ High-frequency product branch for match data, strategy/tactic presets, live pars
 This agent must follow:
 
 - `contracts/SLF_MINIMAL_CONFIRMATION_POLICY.md`
+- `contracts/SLF_GOVERNANCE.md`
 
-When this policy conflicts with older local wording, the stricter safety rule applies. Confirmation requests must be batched whenever safe.
+When shared governance conflicts with older local wording, the stricter safety rule applies. Confirmation requests must be batched whenever safe.
 
-After `COMMIT APPROVED`, do not ask for separate confirmation for each internal edit. Stop only for required confirmation cases or stop conditions defined in the shared policy.
+After `COMMIT APPROVED`, do not ask for separate confirmation for each internal edit. Stop only for required confirmation cases or stop conditions defined in shared governance.
+
+## Branch lifecycle and source rule
+
+`main` is the long-term source of truth after release. This module branch is a disposable working branch, not long-term storage.
+
+Before implementation, perform the Branch Freshness Check defined in `contracts/SLF_GOVERNANCE.md`.
+
+Do not implement from a stale `strategy-data-recommendations` branch. If this branch is not fresh from current `main` and there is no explicitly approved active diff/range, stop and request branch reset/recreate from current `main`.
+
+Read implementation source from `main/src/**` or from a verified fresh `strategy-data-recommendations` branch. Do not use `releases/latest.user.js` as editable source.
 
 ## Scope
 
