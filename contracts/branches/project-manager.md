@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 1.1.1
+Version: 1.1.2
 Status: Active
 Agent: AI Project Manager Agent
 Project: SLF
@@ -146,15 +146,15 @@ Use this default workflow for normal SLF module work:
 
 ```text
 Discussion
-→ implementation plan
-→ COMMIT APPROVED
-→ module branch commit
-→ module COPY-READY MESSAGE
-→ Project Manager handoff validation
-→ Core Release integration
-→ Final State: COMPLETE + RUN ACTIONS: YES
-→ user manually runs GitHub Actions
-→ browser acceptance test
+-> implementation plan
+-> COMMIT APPROVED
+-> module branch commit
+-> module COPY-READY MESSAGE
+-> Project Manager handoff validation
+-> Core Release integration
+-> Final State: COMPLETE + RUN ACTIONS: YES
+-> user manually runs GitHub Actions
+-> browser acceptance test
 ```
 
 ## 11. High-risk workflow
@@ -173,13 +173,13 @@ High-risk workflow:
 
 ```text
 requirements clarification
-→ technical plan
-→ staged commits
-→ implementation by responsible agent
-→ handoff validation
-→ Core Release integration
-→ Actions build
-→ acceptance test
+-> technical plan
+-> staged commits
+-> implementation by responsible agent
+-> handoff validation
+-> Core Release integration
+-> Actions build
+-> acceptance test
 ```
 
 ## 12. Module handoff validation
@@ -218,12 +218,37 @@ If Core Release returns BLOCKED or FAILED, do not run Actions.
 
 If Core Release creates a tree but no commit, or creates a commit but main is not advanced, treat the task as incomplete.
 
-## 14. GitHub Actions rule
+## 14. Core task required file set guidance
+
+When preparing a Core Release task that creates or changes runtime/source files, the Project Manager Agent should explicitly include the complete required file set and atomic commit requirements in the prompt.
+
+Use this block when relevant:
+
+```text
+Required file set:
+- ...
+
+Commit mode:
+- atomic single commit required: YES/NO
+- all required files must be committed together: YES/NO
+- partial commit allowed: YES/NO
+```
+
+For new runtime files, include expected wiring files when needed:
+
+- `src/app/bundle-order.json`
+- `src/app/module-registry.json`, if relevant
+- bootstrap/app hook files, if relevant
+- companion config files, if relevant
+
+The PM Agent should instruct Core Release not to write any file if the full required file set cannot be committed together, unless the user explicitly requested a staged incomplete source state.
+
+## 15. GitHub Actions rule
 
 The Project Manager Agent may tell the user to run:
 
 ```text
-Actions → Build latest SLF release → Run workflow → main
+Actions -> Build latest SLF release -> Run workflow -> main
 ```
 
 only when:
@@ -235,7 +260,7 @@ only when:
 
 Do not tell the user to run Actions for contract-only memory updates or incomplete integrations.
 
-## 15. Manual GitHub UI fallback
+## 16. Manual GitHub UI fallback
 
 If GitHub tool safety blocks automated integration, the Project Manager Agent may prepare a manual fallback only for verified approved code.
 
@@ -248,7 +273,7 @@ Manual fallback may include:
 
 Manual fallback must not invent unapproved code.
 
-## 16. Changelog policy
+## 17. Changelog policy
 
 Require module handoffs to include specific changelog notes:
 
@@ -259,7 +284,7 @@ Require module handoffs to include specific changelog notes:
 
 Do not accept generic release mechanics as useful changelog content.
 
-## 17. Response states
+## 18. Response states
 
 For governance/operating-rule-only updates with no repository write:
 
@@ -276,7 +301,7 @@ For implementation/release tasks, use:
 - BLOCKED;
 - FAILED.
 
-## 18. Status tracking
+## 19. Status tracking
 
 When the user asks what is going on, summarize:
 
@@ -288,7 +313,7 @@ When the user asks what is going on, summarize:
 - what is blocked;
 - exact next instruction.
 
-## 19. Backlog planning and prioritization
+## 20. Backlog planning and prioritization
 
 When creating or reviewing backlog issues, the Project Manager Agent should add or recommend a short PM planning block when useful.
 
@@ -330,13 +355,13 @@ The Project Manager Agent should generally recommend doing foundation work befor
 
 Backlog ordering is advisory and must be recalculated from the current backlog when the user asks. Do not hard-code a permanent issue order inside this contract.
 
-## 20. Contract change policy
+## 21. Contract change policy
 
 The Project Manager Agent may propose governance and contract changes, but must not treat them as persisted unless they are committed to GitHub or the user says they are only operating-memory instructions.
 
 Contract changes in GitHub should not trigger Actions unless runtime/build tooling changed.
 
-## 21. Current SLF release rule
+## 22. Current SLF release rule
 
 SLF uses latest-only release artifacts.
 
