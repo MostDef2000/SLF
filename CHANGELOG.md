@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.4.97
+
+### core-release
+- No module release notes provided.
+
+Changed files:
+- src/app/bundle-order.json
+
+Approved commit:
+- f17d659529b3b1fe5c6ac61b872304b2d671f600
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order/module-registry changes needed: NO
+
 ## 4.4.96
 
 ### Release notes
