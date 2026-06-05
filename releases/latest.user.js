@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.99
+// @version      4.4.100
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.99',
-        scriptVersion: '4.4.99',
+        version: '4.4.100',
+        scriptVersion: '4.4.100',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.99',
+        scriptVersion: '4.4.100',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -4906,194 +4906,6 @@ const RecommendationEngine = {
 // <<< src/modules/strategy-data-recommendations/recommendation-engine.js
 
 
-// >>> src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
-// 10.1 Strategy Data Task A UI extension
-// ============================================================
-
-(function strategyDataTaskAExtension() {
-    'use strict';
-
-    function getFallbackTargetTeam(snapshot) {
-        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
-        if (!teams.length) return null;
-        const selector = document.getElementById('slf-foreign-match-target');
-        const side = selector?.value || 'home';
-        return side === 'away' ? teams[1] : teams[0];
-    }
-
-    function normalizeForeignSnapshot(snapshot) {
-        if (!snapshot || snapshot.myTeam || !Array.isArray(snapshot.teams) || snapshot.teams.length < 2) return snapshot;
-        const targetTeam = getFallbackTargetTeam(snapshot);
-        if (!targetTeam) return snapshot;
-
-        snapshot.matchOwnership = 'foreign';
-        snapshot.targetSide = Number(snapshot.teams[1]) === Number(targetTeam) ? 'away' : 'home';
-        snapshot.myTeam = targetTeam;
-        return snapshot;
-    }
-
-    function patchSnapshotBuild() {
-        if (typeof SnapshotEngine === 'undefined' || SnapshotEngine.__taskAPatchedBuild) return;
-        const originalBuild = SnapshotEngine.build;
-        SnapshotEngine.build = function patchedTaskABuild() {
-            return normalizeForeignSnapshot(originalBuild.apply(this, arguments));
-        };
-        SnapshotEngine.__taskAPatchedBuild = true;
-    }
-
-    function patchHasEnoughLiveData() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__taskAPatchedLiveGate) return;
-        const originalHasEnoughLiveData = RecommendationEngine.hasEnoughLiveData;
-        RecommendationEngine.hasEnoughLiveData = function patchedTaskAHasEnoughLiveData(snapshot) {
-            const gate = originalHasEnoughLiveData.apply(this, arguments);
-            const minute = this.getEffectiveMinute(snapshot);
-
-            if (gate?.phase === 'collect' && Number.isFinite(minute) && minute >= 10) {
-                return { ok: true, phase: 'pre_window' };
-            }
-
-            if (gate?.phase === 'collect') {
-                return Object.assign({}, gate, {
-                    reason: 'Сбор данных до первого pre-window. Первая предварительная рекомендация появится с 10-й минуты, чтобы подготовить смену до 15-й.'
-                });
-            }
-
-            return gate;
-        };
-        RecommendationEngine.__taskAPatchedLiveGate = true;
-    }
-
-    function getPresetOptionPair(name) {
-        if (!name || typeof RecommendationEngine === 'undefined') return { cautious: '', aggressive: '' };
-
-        const group = RecommendationEngine.getPresetGroup(name);
-        const ladder = RecommendationEngine.getPresetLadder(group);
-        const index = ladder.indexOf(name);
-        if (index < 0) return { cautious: '', aggressive: '' };
-
-        if (group === 'defensive') {
-            return {
-                cautious: ladder[index + 1] || '',
-                aggressive: ladder[index - 1] || ''
-            };
-        }
-
-        return {
-            cautious: ladder[index - 1] || '',
-            aggressive: ladder[index + 1] || ''
-        };
-    }
-
-    function appendPresetOptions(plan, name) {
-        if (!plan || !Array.isArray(plan.preset) || !name || typeof RecommendationEngine === 'undefined') return;
-
-        const options = getPresetOptionPair(name);
-        const rows = [];
-
-        if (options.cautious) rows.push(`Осторожнее: ${RecommendationEngine.getPresetTitle(options.cautious)}.`);
-        if (options.aggressive) rows.push(`Агрессивнее: ${RecommendationEngine.getPresetTitle(options.aggressive)}.`);
-
-        rows.forEach(row => {
-            if (!plan.preset.includes(row)) plan.preset.push(row);
-        });
-    }
-
-    function patchPresetOptions() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__taskBPatchedPresetOptions) return;
-        const originalSelectPreset = RecommendationEngine.selectPreset;
-        RecommendationEngine.selectPreset = function patchedTaskBSelectPreset(snapshot, my, opp, playerSignals, plan, state) {
-            const selectedName = originalSelectPreset.apply(this, arguments);
-            appendPresetOptions(plan, selectedName);
-            return selectedName;
-        };
-        RecommendationEngine.__taskBPatchedPresetOptions = true;
-    }
-
-    function renderManualRecommendation() {
-        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
-        if (!snapshot) return;
-
-        snapshot.recommendationSource = 'manual';
-        snapshot.manualRecommendationRefresh = true;
-        SnapshotEngine.rememberLiveSnapshot(snapshot);
-
-        const el = document.getElementById('slf-parser-recommendation');
-        const html = RecommendationEngine.make(snapshot);
-        if (el) el.innerHTML = html;
-        RecommendationEngine.persistRenderedRecommendation(html, snapshot, { source: 'manual_snapshot' });
-        SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer, manualSnapshotAt: Date.now() });
-        UI.addParserLog('Ручной snapshot: подсказка обновлена');
-        UI.updateParserStatus('Ручной snapshot выполнен');
-    }
-
-    function mountManualButton() {
-        if (!location.pathname.includes('/game.php')) return;
-        const panel = document.getElementById('slf-match-parser-panel');
-        if (!panel || document.getElementById('slf-manual-recommendation-btn')) return;
-
-        const btn = document.createElement('button');
-        btn.id = 'slf-manual-recommendation-btn';
-        btn.type = 'button';
-        btn.textContent = '↻ Подсказка';
-        btn.title = 'Сделать ручной snapshot и обновить подсказку без остановки auto-логики';
-        btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
-        btn.onclick = () => {
-            btn.disabled = true;
-            try {
-                renderManualRecommendation();
-            } catch (error) {
-                console.error('[SLF] Manual recommendation refresh failed', error);
-                UI.addParserLog('Ручной snapshot: ошибка, см. console');
-            } finally {
-                btn.disabled = false;
-            }
-        };
-
-        const status = document.getElementById('slf-parser-status');
-        panel.insertBefore(btn, status || null);
-    }
-
-    function mountForeignSelector() {
-        if (!location.pathname.includes('/game.php')) return;
-        const panel = document.getElementById('slf-match-parser-panel');
-        if (!panel || document.getElementById('slf-foreign-match-target')) return;
-
-        const snapshot = SnapshotEngine.build();
-        if (!snapshot || snapshot.matchOwnership !== 'foreign') return;
-
-        const select = document.createElement('select');
-        select.id = 'slf-foreign-match-target';
-        select.title = 'Тестовый режим чужого матча: выбрать сторону для подсказок';
-        select.style.cssText = 'padding:4px 6px;background:#333;color:#fff;border:1px solid #777;border-radius:3px;';
-        select.innerHTML = '<option value="home">Анализ: хозяева</option><option value="away">Анализ: гости</option>';
-        select.onchange = () => renderManualRecommendation();
-
-        const status = document.getElementById('slf-parser-status');
-        panel.insertBefore(select, status || null);
-    }
-
-    function mount() {
-        patchSnapshotBuild();
-        patchHasEnoughLiveData();
-        patchPresetOptions();
-        mountManualButton();
-        mountForeignSelector();
-    }
-
-    const originalAddMatchParserPanel = UI.addMatchParserPanel;
-    UI.addMatchParserPanel = function patchedTaskAAddMatchParserPanel() {
-        const result = originalAddMatchParserPanel.apply(this, arguments);
-        mount();
-        return result;
-    };
-
-    mount();
-})();
-
-// ============================================================
-// <<< src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
-
-
 // >>> src/app/ui-layer.js
     // 11. UI Layer
     // ============================================================
@@ -5562,6 +5374,194 @@ if (!isTacticPage) return;
 
     // ============================================================
 // <<< src/app/ui-layer.js
+
+
+// >>> src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+// 10.1 Strategy Data Task A UI extension
+// ============================================================
+
+(function strategyDataTaskAExtension() {
+    'use strict';
+
+    function getFallbackTargetTeam(snapshot) {
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+        if (!teams.length) return null;
+        const selector = document.getElementById('slf-foreign-match-target');
+        const side = selector?.value || 'home';
+        return side === 'away' ? teams[1] : teams[0];
+    }
+
+    function normalizeForeignSnapshot(snapshot) {
+        if (!snapshot || snapshot.myTeam || !Array.isArray(snapshot.teams) || snapshot.teams.length < 2) return snapshot;
+        const targetTeam = getFallbackTargetTeam(snapshot);
+        if (!targetTeam) return snapshot;
+
+        snapshot.matchOwnership = 'foreign';
+        snapshot.targetSide = Number(snapshot.teams[1]) === Number(targetTeam) ? 'away' : 'home';
+        snapshot.myTeam = targetTeam;
+        return snapshot;
+    }
+
+    function patchSnapshotBuild() {
+        if (typeof SnapshotEngine === 'undefined' || SnapshotEngine.__taskAPatchedBuild) return;
+        const originalBuild = SnapshotEngine.build;
+        SnapshotEngine.build = function patchedTaskABuild() {
+            return normalizeForeignSnapshot(originalBuild.apply(this, arguments));
+        };
+        SnapshotEngine.__taskAPatchedBuild = true;
+    }
+
+    function patchHasEnoughLiveData() {
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__taskAPatchedLiveGate) return;
+        const originalHasEnoughLiveData = RecommendationEngine.hasEnoughLiveData;
+        RecommendationEngine.hasEnoughLiveData = function patchedTaskAHasEnoughLiveData(snapshot) {
+            const gate = originalHasEnoughLiveData.apply(this, arguments);
+            const minute = this.getEffectiveMinute(snapshot);
+
+            if (gate?.phase === 'collect' && Number.isFinite(minute) && minute >= 10) {
+                return { ok: true, phase: 'pre_window' };
+            }
+
+            if (gate?.phase === 'collect') {
+                return Object.assign({}, gate, {
+                    reason: 'Сбор данных до первого pre-window. Первая предварительная рекомендация появится с 10-й минуты, чтобы подготовить смену до 15-й.'
+                });
+            }
+
+            return gate;
+        };
+        RecommendationEngine.__taskAPatchedLiveGate = true;
+    }
+
+    function getPresetOptionPair(name) {
+        if (!name || typeof RecommendationEngine === 'undefined') return { cautious: '', aggressive: '' };
+
+        const group = RecommendationEngine.getPresetGroup(name);
+        const ladder = RecommendationEngine.getPresetLadder(group);
+        const index = ladder.indexOf(name);
+        if (index < 0) return { cautious: '', aggressive: '' };
+
+        if (group === 'defensive') {
+            return {
+                cautious: ladder[index + 1] || '',
+                aggressive: ladder[index - 1] || ''
+            };
+        }
+
+        return {
+            cautious: ladder[index - 1] || '',
+            aggressive: ladder[index + 1] || ''
+        };
+    }
+
+    function appendPresetOptions(plan, name) {
+        if (!plan || !Array.isArray(plan.preset) || !name || typeof RecommendationEngine === 'undefined') return;
+
+        const options = getPresetOptionPair(name);
+        const rows = [];
+
+        if (options.cautious) rows.push(`Осторожнее: ${RecommendationEngine.getPresetTitle(options.cautious)}.`);
+        if (options.aggressive) rows.push(`Агрессивнее: ${RecommendationEngine.getPresetTitle(options.aggressive)}.`);
+
+        rows.forEach(row => {
+            if (!plan.preset.includes(row)) plan.preset.push(row);
+        });
+    }
+
+    function patchPresetOptions() {
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__taskBPatchedPresetOptions) return;
+        const originalSelectPreset = RecommendationEngine.selectPreset;
+        RecommendationEngine.selectPreset = function patchedTaskBSelectPreset(snapshot, my, opp, playerSignals, plan, state) {
+            const selectedName = originalSelectPreset.apply(this, arguments);
+            appendPresetOptions(plan, selectedName);
+            return selectedName;
+        };
+        RecommendationEngine.__taskBPatchedPresetOptions = true;
+    }
+
+    function renderManualRecommendation() {
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) return;
+
+        snapshot.recommendationSource = 'manual';
+        snapshot.manualRecommendationRefresh = true;
+        SnapshotEngine.rememberLiveSnapshot(snapshot);
+
+        const el = document.getElementById('slf-parser-recommendation');
+        const html = RecommendationEngine.make(snapshot);
+        if (el) el.innerHTML = html;
+        RecommendationEngine.persistRenderedRecommendation(html, snapshot, { source: 'manual_snapshot' });
+        SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer, manualSnapshotAt: Date.now() });
+        UI.addParserLog('Ручной snapshot: подсказка обновлена');
+        UI.updateParserStatus('Ручной snapshot выполнен');
+    }
+
+    function mountManualButton() {
+        if (!location.pathname.includes('/game.php')) return;
+        const panel = document.getElementById('slf-match-parser-panel');
+        if (!panel || document.getElementById('slf-manual-recommendation-btn')) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'slf-manual-recommendation-btn';
+        btn.type = 'button';
+        btn.textContent = '↻ Подсказка';
+        btn.title = 'Сделать ручной snapshot и обновить подсказку без остановки auto-логики';
+        btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
+        btn.onclick = () => {
+            btn.disabled = true;
+            try {
+                renderManualRecommendation();
+            } catch (error) {
+                console.error('[SLF] Manual recommendation refresh failed', error);
+                UI.addParserLog('Ручной snapshot: ошибка, см. console');
+            } finally {
+                btn.disabled = false;
+            }
+        };
+
+        const status = document.getElementById('slf-parser-status');
+        panel.insertBefore(btn, status || null);
+    }
+
+    function mountForeignSelector() {
+        if (!location.pathname.includes('/game.php')) return;
+        const panel = document.getElementById('slf-match-parser-panel');
+        if (!panel || document.getElementById('slf-foreign-match-target')) return;
+
+        const snapshot = SnapshotEngine.build();
+        if (!snapshot || snapshot.matchOwnership !== 'foreign') return;
+
+        const select = document.createElement('select');
+        select.id = 'slf-foreign-match-target';
+        select.title = 'Тестовый режим чужого матча: выбрать сторону для подсказок';
+        select.style.cssText = 'padding:4px 6px;background:#333;color:#fff;border:1px solid #777;border-radius:3px;';
+        select.innerHTML = '<option value="home">Анализ: хозяева</option><option value="away">Анализ: гости</option>';
+        select.onchange = () => renderManualRecommendation();
+
+        const status = document.getElementById('slf-parser-status');
+        panel.insertBefore(select, status || null);
+    }
+
+    function mount() {
+        patchSnapshotBuild();
+        patchHasEnoughLiveData();
+        patchPresetOptions();
+        mountManualButton();
+        mountForeignSelector();
+    }
+
+    const originalAddMatchParserPanel = UI.addMatchParserPanel;
+    UI.addMatchParserPanel = function patchedTaskAAddMatchParserPanel() {
+        const result = originalAddMatchParserPanel.apply(this, arguments);
+        mount();
+        return result;
+    };
+
+    mount();
+})();
+
+// ============================================================
+// <<< src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
 
 
 // >>> src/modules/team-management/youth-external-monitor.js
@@ -16954,15 +16954,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.99',
-        scriptVersion: '4.4.99',
+        version: '4.4.100',
+        scriptVersion: '4.4.100',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.99',
+        scriptVersion: '4.4.100',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
