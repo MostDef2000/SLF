@@ -1,19 +1,21 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.98",
+  "scriptVersion": "4.4.99",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_98_published",
+  "status": "release_4_4_99_published",
   "build": {
     "source": "src/**",
     "bundleOrder": "src/app/bundle-order.json",
-    "approvedCommit": "2f228fe102e53edac394edad9fc366cff1fc253f",
-    "approvedFiles": [],
-    "releaseNotesProvided": false,
-    "releaseNotesModule": "Release notes",
+    "approvedCommit": "3ed0cad8e663effdb7b6dc36c78b2786262951d0",
+    "approvedFiles": [
+      "src/app/bundle-order.json"
+    ],
+    "releaseNotesProvided": true,
+    "releaseNotesModule": "core-release",
     "team4AlterMinutesSchema": "slf_team4_current_season_minutes"
   }
 }
