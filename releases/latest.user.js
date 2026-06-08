@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.102
+// @version      4.4.103
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.102',
-        scriptVersion: '4.4.102',
+        version: '4.4.103',
+        scriptVersion: '4.4.103',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.102',
+        scriptVersion: '4.4.103',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -17008,32 +17008,42 @@ const SLFTeam4RealCareerArrowUiFix = (() => {
         style.textContent = `
             #generallist .slf-real-career-arrow {
                 display:inline-block;
-                min-width:14px;
-                height:14px;
-                line-height:14px;
+                min-width:18px;
+                height:18px;
+                line-height:18px;
                 text-align:center;
-                font:700 15px Verdana,Arial,sans-serif;
+                font:900 18px Arial,Verdana,sans-serif;
                 background:transparent;
                 border:0;
                 padding:0;
                 margin:0;
                 cursor:pointer;
                 vertical-align:middle;
-                text-shadow:0 1px 0 rgba(0,0,0,.45);
+                text-shadow:0 1px 0 rgba(0,0,0,.75), 0 0 2px rgba(0,0,0,.55);
             }
-            #generallist .slf-real-career-arrow.good { color:#35c414; }
-            #generallist .slf-real-career-arrow.warn { color:#d7b336; }
-            #generallist .slf-real-career-arrow.bad { color:#e24d4d; }
+            #generallist .slf-real-career-arrow.good { color:var(--green,#2caa0a); }
+            #generallist .slf-real-career-arrow.warn { color:#e0b23a; }
+            #generallist .slf-real-career-arrow.bad { color:#ff4b4b; }
             #generallist .slf-real-career-arrow.neutral { color:#9a9a9a; }
             #generallist td.slf-player-status-cell {
-                width:28px;
-                min-width:28px;
-                max-width:28px;
+                width:38px;
+                min-width:38px;
+                max-width:38px;
+                text-align:center;
+                padding-left:2px;
+                padding-right:2px;
             }
             #generallist th.slf-player-status-head {
-                width:34px;
-                min-width:34px;
-                max-width:34px;
+                width:38px;
+                min-width:38px;
+                max-width:38px;
+                text-align:center;
+            }
+            #generallist th.slf-player-status-head .slf-status-title {
+                font-size:11px;
+                letter-spacing:.3px;
+                color:var(--bright,yellowgreen);
+                text-transform:uppercase;
             }
         `;
         document.head.appendChild(style);
@@ -17051,6 +17061,12 @@ const SLFTeam4RealCareerArrowUiFix = (() => {
         return panel.escapeAttr(titleParts.join(' · '));
     }
 
+    function setHeaderTitle(panel) {
+        const head = document.querySelector(`th.${panel?.HEAD_CLASS || 'slf-player-status-head'}`);
+        const title = head?.querySelector?.('.slf-status-title');
+        if (title) title.textContent = 'ТМ';
+    }
+
     function patchPanel() {
         const panel = typeof PlayerStatusPanel !== 'undefined' ? PlayerStatusPanel : null;
         if (!panel || panel[PATCH_FLAG]) return false;
@@ -17066,6 +17082,14 @@ const SLFTeam4RealCareerArrowUiFix = (() => {
             ensureStyle();
         }
 
+        const originalEnsureHeader = panel.ensureHeader;
+        if (typeof originalEnsureHeader === 'function') {
+            panel.ensureHeader = function patchedEnsureHeader() {
+                originalEnsureHeader.call(this);
+                setHeaderTitle(this);
+            };
+        }
+
         panel.statusMarker = function arrowStatusMarker(data) {
             const code = data?.status?.code || '?';
             const type = data?.status?.className || 'neutral';
@@ -17077,6 +17101,8 @@ const SLFTeam4RealCareerArrowUiFix = (() => {
 
         try {
             ensureStyle();
+            panel.ensureHeader?.();
+            setHeaderTitle(panel);
             panel.render?.(false);
         } catch (error) {
             console.warn('[SLF Team4 RealCareer UI] render refresh failed', error);
@@ -17295,15 +17321,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.102',
-        scriptVersion: '4.4.102',
+        version: '4.4.103',
+        scriptVersion: '4.4.103',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.102',
+        scriptVersion: '4.4.103',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

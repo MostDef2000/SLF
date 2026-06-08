@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.4.103
+
+### team-management
+- Updated Team4 real-career status column header from 'обновить' to 'ТМ'.
+- Increased icon size, contrast and alignment for better visibility.
+- Preserved existing status calculations and tooltip behavior.
+
+Changed files:
+- src/modules/team-management/team4-real-career-arrow-ui-fix.js
+
+Approved commit:
+- 026cf96766017f7c97fb85bdbf975873e54f7372
+
+Source branch:
+- team-management
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order/module-registry changes needed: NO
+
 ## 4.4.102
 
 ### team-management

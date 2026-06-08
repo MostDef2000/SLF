@@ -1,19 +1,18 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.102",
+  "scriptVersion": "4.4.103",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_102_published",
+  "status": "release_4_4_103_published",
   "build": {
     "source": "src/**",
     "bundleOrder": "src/app/bundle-order.json",
-    "approvedCommit": "04d32cdf9a76c531a61d2fd77d9bca62e4b55400",
+    "approvedCommit": "026cf96766017f7c97fb85bdbf975873e54f7372",
     "approvedFiles": [
-      "src/modules/team-management/team4-real-career-arrow-ui-fix.js",
-      "src/app/bundle-order.json"
+      "src/modules/team-management/team4-real-career-arrow-ui-fix.js"
     ],
     "releaseNotesProvided": true,
     "releaseNotesModule": "team-management",
