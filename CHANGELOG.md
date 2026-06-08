@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.4.102
+
+### team-management
+- Team4 real-career status column now uses compact arrows/icons instead of text badges.
+- Table becomes visually cleaner and closer to native SLF indicators.
+- Existing real-career status calculations and tooltips are preserved.
+
+Changed files:
+- src/modules/team-management/team4-real-career-arrow-ui-fix.js
+- src/app/bundle-order.json
+
+Approved commit:
+- 04d32cdf9a76c531a61d2fd77d9bca62e4b55400
+
+Source branch:
+- team-management
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order/module-registry changes needed: NO
+
 ## 4.4.101
 
 ### Release notes

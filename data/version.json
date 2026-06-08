@@ -1,19 +1,22 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.101",
+  "scriptVersion": "4.4.102",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_101_published",
+  "status": "release_4_4_102_published",
   "build": {
     "source": "src/**",
     "bundleOrder": "src/app/bundle-order.json",
-    "approvedCommit": "10bec0d771f8e26fb546d8376cf1a15aa00d3582",
-    "approvedFiles": [],
-    "releaseNotesProvided": false,
-    "releaseNotesModule": "Release notes",
+    "approvedCommit": "04d32cdf9a76c531a61d2fd77d9bca62e4b55400",
+    "approvedFiles": [
+      "src/modules/team-management/team4-real-career-arrow-ui-fix.js",
+      "src/app/bundle-order.json"
+    ],
+    "releaseNotesProvided": true,
+    "releaseNotesModule": "team-management",
     "team4AlterMinutesSchema": "slf_team4_current_season_minutes"
   }
 }
