@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.100
+// @version      4.4.101
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.100',
-        scriptVersion: '4.4.100',
+        version: '4.4.101',
+        scriptVersion: '4.4.101',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.100',
+        scriptVersion: '4.4.101',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -587,6 +587,92 @@ function aliasMatchesTeamName(name, aliases) {
 }
 // ============================================================
 // <<< src/core/config.js
+
+
+// >>> src/core/token-storage.js
+// API token storage via Tampermonkey local storage.
+// Do not log or expose the token value.
+
+const SLF_API_TOKEN_STORAGE_KEY = 'slf_api_token';
+let SLF_API_TOKEN_MISSING_WARNED = false;
+let SLF_API_TOKEN_MENU_INSTALLED = false;
+
+function getApiToken() {
+    try {
+        if (typeof GM_getValue === 'function') {
+            return String(GM_getValue(SLF_API_TOKEN_STORAGE_KEY, '') || '').trim();
+        }
+    } catch (error) {
+        console.warn('[SLF] API token read failed', error);
+    }
+
+    return '';
+}
+
+function warnMissingApiTokenOnce() {
+    if (SLF_API_TOKEN_MISSING_WARNED) return;
+    SLF_API_TOKEN_MISSING_WARNED = true;
+    console.warn('[SLF] API token is not configured');
+}
+
+function hasApiToken() {
+    return getApiToken().length > 0;
+}
+
+function installApiTokenMenuCommands() {
+    if (SLF_API_TOKEN_MENU_INSTALLED) return;
+    if (typeof GM_registerMenuCommand !== 'function') return;
+
+    SLF_API_TOKEN_MENU_INSTALLED = true;
+
+    GM_registerMenuCommand('SLF: Set API token', () => {
+        try {
+            if (typeof GM_setValue !== 'function') {
+                console.warn('[SLF] GM_setValue is unavailable');
+                return;
+            }
+
+            const current = hasApiToken() ? 'configured' : 'not configured';
+            const value = prompt(`SLF API token (${current}). Enter new token:`, '');
+            if (value == null) return;
+
+            const token = String(value || '').trim();
+            if (!token) {
+                console.warn('[SLF] Empty API token was not saved');
+                return;
+            }
+
+            GM_setValue(SLF_API_TOKEN_STORAGE_KEY, token);
+            SLF_API_TOKEN_MISSING_WARNED = false;
+            console.info('[SLF] API token saved');
+        } catch (error) {
+            console.warn('[SLF] API token save failed', error);
+        }
+    });
+
+    GM_registerMenuCommand('SLF: Clear API token', () => {
+        try {
+            if (typeof GM_deleteValue !== 'function') {
+                console.warn('[SLF] GM_deleteValue is unavailable');
+                return;
+            }
+
+            GM_deleteValue(SLF_API_TOKEN_STORAGE_KEY);
+            SLF_API_TOKEN_MISSING_WARNED = false;
+            console.info('[SLF] API token cleared');
+        } catch (error) {
+            console.warn('[SLF] API token clear failed', error);
+        }
+    });
+
+    GM_registerMenuCommand('SLF: Show API token status', () => {
+        const status = hasApiToken() ? 'configured' : 'not configured';
+        alert(`SLF API token: ${status}`);
+    });
+}
+
+installApiTokenMenuCommands();
+// <<< src/core/token-storage.js
 
 
 // >>> src/modules/transfer-analyzer/config.js
@@ -5374,6 +5460,132 @@ if (!isTacticPage) return;
 
     // ============================================================
 // <<< src/app/ui-layer.js
+
+
+// >>> src/app/version-badge.js
+// App: SLF runtime version badge
+// Safe self-contained app-level module.
+// Must never break userscript startup.
+
+(function installSLFVersionBadge() {
+    'use strict';
+
+    try {
+        const BADGE_ID = 'slf-version-inline-badge';
+        const TARGET_SELECTOR = '.head-ui__information';
+
+        function safeGetGlobal() {
+            try {
+                if (typeof unsafeWindow !== 'undefined' && unsafeWindow) return unsafeWindow;
+            } catch (error) {}
+            try {
+                return window;
+            } catch (error) {}
+            return null;
+        }
+
+        function safeGetVersion() {
+            try {
+                const root = safeGetGlobal();
+                const slf = root && root.SLF ? root.SLF : (typeof window !== 'undefined' ? window.SLF : null);
+
+                return String(
+                    (slf && slf.scriptVersion) ||
+                    (slf && slf.versionInfo && slf.versionInfo.version) ||
+                    ''
+                ).trim();
+            } catch (error) {
+                return '';
+            }
+        }
+
+        function safeGetTarget() {
+            try {
+                if (typeof document === 'undefined' || !document.querySelector) return null;
+                return document.querySelector(TARGET_SELECTOR);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function safeRemoveExisting() {
+            try {
+                const existing = document.getElementById(BADGE_ID);
+                if (existing && existing.parentNode) {
+                    existing.parentNode.removeChild(existing);
+                }
+            } catch (error) {}
+        }
+
+        function render() {
+            try {
+                const target = safeGetTarget();
+                if (!target) return false;
+
+                const version = safeGetVersion();
+                if (!version) return false;
+
+                safeRemoveExisting();
+
+                const badge = document.createElement('span');
+                badge.id = BADGE_ID;
+                badge.textContent = ' • SLF ' + version;
+                badge.title = 'SLF userscript version';
+                badge.style.cssText = [
+                    'color:#36ff00',
+                    'font-weight:bold',
+                    'font-size:10px',
+                    'margin-left:6px',
+                    'white-space:nowrap',
+                    'text-shadow:0 1px 2px #000'
+                ].join(';');
+
+                target.appendChild(badge);
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function start() {
+            try {
+                const run = function () {
+                    try {
+                        if (render()) return;
+
+                        let tries = 0;
+                        const maxTries = 40;
+
+                        const timer = window.setInterval(function () {
+                            try {
+                                tries += 1;
+
+                                if (render() || tries >= maxTries) {
+                                    window.clearInterval(timer);
+                                }
+                            } catch (error) {
+                                try {
+                                    window.clearInterval(timer);
+                                } catch (inner) {}
+                            }
+                        }, 250);
+                    } catch (error) {}
+                };
+
+                if (typeof document === 'undefined') return;
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', run, { once: true });
+                } else {
+                    run();
+                }
+            } catch (error) {}
+        }
+
+        start();
+    } catch (error) {}
+})();
+// <<< src/app/version-badge.js
 
 
 // >>> src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
@@ -16954,15 +17166,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.100',
-        scriptVersion: '4.4.100',
+        version: '4.4.101',
+        scriptVersion: '4.4.101',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.100',
+        scriptVersion: '4.4.101',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
