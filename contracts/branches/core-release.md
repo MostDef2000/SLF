@@ -436,6 +436,54 @@ Never tell the user to run Actions unless the source/tooling commit is already p
 
 Never claim a release is published until GitHub Actions has produced and committed the release artifacts.
 
+## Manual Actions input block
+
+When Core Release returns:
+
+```text
+Manual Build Action:
+- RUN ACTIONS: YES
+```
+
+it must also provide a copy-ready GitHub Actions input block for:
+
+1. Approved source/tool integration commit
+2. Comma-separated approved files
+3. Structured release notes JSON
+4. Optional explicit target version
+
+Required format:
+
+Actions Input:
+
+Approved source/tool integration commit:
+```text
+<commit_sha>
+```
+
+Comma-separated approved files:
+```text
+<file1>,<file2>,<file3>
+```
+
+Structured release notes JSON:
+```json
+{"module":"...","source_branch":"...","approved_commit":"...","changed_files":["..."],"user_visible_changes":["..."],"technical_changes":["..."],"storage_cache_schema_impact":"...","bundle_order_module_registry_impact":"...","safety_notes":["..."]}
+```
+
+Optional explicit target version:
+```text
+leave empty
+```
+
+Rules:
+
+- The approved commit must match the source/tool integration commit on `main`.
+- The approved files must match the verified changed files.
+- The release notes JSON must describe the actual user-visible/runtime/technical change, not generic build mechanics.
+- Optional explicit target version should normally be `leave empty`.
+- If `RUN ACTIONS: NO`, do not provide Actions inputs unless the user explicitly asks for a future/manual draft.
+
 ## Final output requirements
 
 Every task must end with this final response shape:
@@ -467,6 +515,8 @@ Manual Build Action:
 - Required branch: main
 - Required workflow: Build latest SLF release
 - Build from commit:
+
+If RUN ACTIONS: YES, also include the `Actions Input` block defined above.
 
 Final release output must additionally include:
 
