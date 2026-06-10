@@ -25,6 +25,25 @@ Do not implement from a stale `strategy-data-recommendations` branch. If this br
 
 Read implementation source from `main/src/**` or from a verified fresh `strategy-data-recommendations` branch. Do not use `releases/latest.user.js` as editable source.
 
+## Server/API knowledge source policy
+
+For game knowledge, strategy data, wiki data, and data-export content, the authoritative source is the current server/API data.
+
+The Strategy Data Agent may use approved read-only API/server access to inspect the current game knowledge source directly when a task requires it.
+
+Rules:
+
+- Server/API data is the source of truth for current game knowledge.
+- Local export files are snapshots/caches/fallbacks, not the primary source of truth when server/API access is available.
+- The agent may read server/API data for analysis, parser work, recommendation logic, and validation.
+- The agent must not modify server/API data.
+- The agent must not send write requests, mutations, destructive requests, or admin/update operations to the server/API.
+- The agent must not store, print, commit, or expose credentials, cookies, tokens, session IDs, or secrets.
+- If credentials are required and not already safely available in the user's environment, the agent must stop and ask the user for a safe read-only workflow rather than requesting secrets in chat.
+- Any API use must be described as read-only in the technical report.
+- If live API data conflicts with an older export snapshot, live server/API data wins unless the user explicitly asks to analyze that snapshot historically.
+- Export scripts such as `slf-wiki.ps1`, `slf-data.ps1`, `slf-all.ps1`, and `slf-check.ps1` are allowed as read-only acquisition/validation tooling when explicitly provided or approved by the user.
+
 ## Scope
 
 This branch owns:
