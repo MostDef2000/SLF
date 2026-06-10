@@ -16,12 +16,18 @@ const LoanLimitPanel = {
         return String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
     },
 
+    isVisible(row) {
+        if (!row) return false;
+        const style = getComputedStyle(row);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+    },
+
     isLoanTabActive() {
         const activeTab = document.querySelector('.tpanel-a[data-tp="-1"]');
         if (activeTab && /аренд/i.test(activeTab.textContent || '')) return true;
 
         return [...document.querySelectorAll('tr.view-team__player.pl--1')]
-            .some(row => getComputedStyle(row).display !== 'none');
+            .some(row => this.isVisible(row));
     },
 
     getAgeColumnIndex() {
@@ -37,8 +43,10 @@ const LoanLimitPanel = {
     },
 
     getLoanRows() {
+        if (!this.isLoanTabActive()) return [];
+
         return [...document.querySelectorAll('tr.view-team__player.pl--1')]
-            .filter(row => row.querySelector('.player-loan') || /аренд/i.test(row.textContent || ''));
+            .filter(row => this.isVisible(row));
     },
 
     readLoanState() {
@@ -56,7 +64,7 @@ const LoanLimitPanel = {
         });
 
         const total = players.length;
-        const over23 = players.filter(player => Number.isFinite(player.age) && player.age >= 24).length;
+        const over23 = players.filter(player => Number.isFinite(player.age) && player.age >= 23).length;
         const leftTotal = Math.max(0, this.LIMIT_TOTAL - total);
         const leftOver23 = Math.max(0, this.LIMIT_OVER_23 - over23);
         const canOver23 = Math.min(leftTotal, leftOver23);
@@ -147,7 +155,7 @@ const LoanLimitPanel = {
 
         const state = this.readLoanState();
         let statusClass = 'ok';
-        let statusText = `Можно ещё: ${state.leftTotal} всего · ${state.canOver23} 24+`;
+        let statusText = `Можно ещё: ${state.leftTotal} всего · ${state.canOver23} 23+`;
 
         if (state.totalExceeded || state.over23Exceeded) {
             statusClass = 'bad';
@@ -157,7 +165,7 @@ const LoanLimitPanel = {
             statusText = 'Общий лимит заполнен';
         } else if (state.over23Full) {
             statusClass = 'warn';
-            statusText = `Можно ещё: ${state.leftTotal}, только ≤23`;
+            statusText = `Можно ещё: ${state.leftTotal}, только ≤22`;
         }
 
         box.innerHTML = `
@@ -167,7 +175,7 @@ const LoanLimitPanel = {
                 <b>${state.total}/${this.LIMIT_TOTAL}</b>
             </div>
             <div class="slf-loan-line">
-                <span>24+</span>
+                <span>23+</span>
                 <b>${state.over23}/${this.LIMIT_OVER_23}</b>
             </div>
             <div class="mini ${statusClass}">${statusText}</div>
