@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.4.106
+
+### team-management
+- No module release notes provided.
+
+Changed files:
+- src/modules/team-management/team-loan-limit-helper.js
+
+Approved commit:
+- 7071210e1eef38046f634abcfdc5703623b1556a
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order/module-registry changes needed: NO
+
 ## 4.4.105
 
 ### team-management

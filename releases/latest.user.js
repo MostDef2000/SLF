@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.105
+// @version      4.4.106
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.105',
-        scriptVersion: '4.4.105',
+        version: '4.4.106',
+        scriptVersion: '4.4.106',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.105',
+        scriptVersion: '4.4.106',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -14553,12 +14553,18 @@ const LoanLimitPanel = {
         return String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
     },
 
+    isVisible(row) {
+        if (!row) return false;
+        const style = getComputedStyle(row);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+    },
+
     isLoanTabActive() {
         const activeTab = document.querySelector('.tpanel-a[data-tp="-1"]');
         if (activeTab && /аренд/i.test(activeTab.textContent || '')) return true;
 
         return [...document.querySelectorAll('tr.view-team__player.pl--1')]
-            .some(row => getComputedStyle(row).display !== 'none');
+            .some(row => this.isVisible(row));
     },
 
     getAgeColumnIndex() {
@@ -14574,8 +14580,10 @@ const LoanLimitPanel = {
     },
 
     getLoanRows() {
+        if (!this.isLoanTabActive()) return [];
+
         return [...document.querySelectorAll('tr.view-team__player.pl--1')]
-            .filter(row => row.querySelector('.player-loan') || /аренд/i.test(row.textContent || ''));
+            .filter(row => this.isVisible(row));
     },
 
     readLoanState() {
@@ -14593,7 +14601,7 @@ const LoanLimitPanel = {
         });
 
         const total = players.length;
-        const over23 = players.filter(player => Number.isFinite(player.age) && player.age >= 24).length;
+        const over23 = players.filter(player => Number.isFinite(player.age) && player.age >= 23).length;
         const leftTotal = Math.max(0, this.LIMIT_TOTAL - total);
         const leftOver23 = Math.max(0, this.LIMIT_OVER_23 - over23);
         const canOver23 = Math.min(leftTotal, leftOver23);
@@ -14684,7 +14692,7 @@ const LoanLimitPanel = {
 
         const state = this.readLoanState();
         let statusClass = 'ok';
-        let statusText = `Можно ещё: ${state.leftTotal} всего · ${state.canOver23} 24+`;
+        let statusText = `Можно ещё: ${state.leftTotal} всего · ${state.canOver23} 23+`;
 
         if (state.totalExceeded || state.over23Exceeded) {
             statusClass = 'bad';
@@ -14694,7 +14702,7 @@ const LoanLimitPanel = {
             statusText = 'Общий лимит заполнен';
         } else if (state.over23Full) {
             statusClass = 'warn';
-            statusText = `Можно ещё: ${state.leftTotal}, только ≤23`;
+            statusText = `Можно ещё: ${state.leftTotal}, только ≤22`;
         }
 
         box.innerHTML = `
@@ -14704,7 +14712,7 @@ const LoanLimitPanel = {
                 <b>${state.total}/${this.LIMIT_TOTAL}</b>
             </div>
             <div class="slf-loan-line">
-                <span>24+</span>
+                <span>23+</span>
                 <b>${state.over23}/${this.LIMIT_OVER_23}</b>
             </div>
             <div class="mini ${statusClass}">${statusText}</div>
@@ -17321,15 +17329,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.105',
-        scriptVersion: '4.4.105',
+        version: '4.4.106',
+        scriptVersion: '4.4.106',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.105',
+        scriptVersion: '4.4.106',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

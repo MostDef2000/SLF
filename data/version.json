@@ -1,16 +1,16 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.105",
+  "scriptVersion": "4.4.106",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_105_published",
+  "status": "release_4_4_106_published",
   "build": {
     "source": "src/**",
     "bundleOrder": "src/app/bundle-order.json",
-    "approvedCommit": "b71f8c9e4a6d2f13c5e8a7b9d4f1c2e6a3b5d7f8",
+    "approvedCommit": "7071210e1eef38046f634abcfdc5703623b1556a",
     "approvedFiles": [
       "src/modules/team-management/team-loan-limit-helper.js"
     ],
