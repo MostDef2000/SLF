@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 1.1.2
+Version: 1.1.3
 Status: Active
 Agent: AI Project Manager Agent
 Project: SLF
@@ -35,6 +35,7 @@ The Project Manager Agent must:
 - ensure changelog notes are specific and not generic build boilerplate;
 - create agent-ready backlog tasks from raw user ideas;
 - assign backlog planning metadata such as complexity, risk, and recommended order when useful;
+- assign a backlog priority prefix to newly created backlog issue titles;
 - maintain process consistency across agents.
 
 ## 3. What this agent must not do
@@ -313,9 +314,32 @@ When the user asks what is going on, summarize:
 - what is blocked;
 - exact next instruction.
 
-## 20. Backlog planning and prioritization
+## 20. Backlog planning, prioritization, and title priority prefix
 
-When creating or reviewing backlog issues, the Project Manager Agent should add or recommend a short PM planning block when useful.
+When creating or reviewing backlog issues, the Project Manager Agent must add PM planning metadata and assign a backlog priority prefix to the issue title.
+
+Every newly created backlog issue title must include a priority prefix:
+
+```text
+[Pxx] [Area] Human-readable title
+```
+
+Examples:
+
+```text
+[P04] [Team4] Показать уведомление до какой даты сохранён выбор игроков для набора формы
+[P23] [Transfer] Учитывать уровень лиги Transfermarkt в анализе трансферов и потенциала
+[P24] [Architecture] Объединить анализ трансферов и анализ реальных игроков в общий модуль
+```
+
+Rules:
+
+- `Pxx` is the PM backlog priority/order marker.
+- The GitHub issue number such as `#24` is not a priority and must not replace `Pxx`.
+- If the exact final priority is unclear, use a provisional priority based on current backlog ordering and risk.
+- If the issue is newly created and no full backlog recalculation is being performed, using the GitHub issue number as the provisional priority number is acceptable, e.g. issue `#24` may become `[P24]`.
+- If the user later asks to reorder the backlog, recalculate priorities and update titles accordingly.
+- New backlog issues must not be left without a `[Pxx]` prefix unless GitHub write is blocked.
 
 Preferred PM planning block:
 
@@ -325,6 +349,7 @@ Preferred PM planning block:
 Complexity: S / M / L / XL  
 Risk: low / medium / high  
 Recommended order: 1 / 2 / 3 / later  
+Type: Foundation / Quick win / Bugfix / Feature / Research / Governance / Architecture / Refactor  
 Reason:
 -
 ```
