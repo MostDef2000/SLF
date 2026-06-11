@@ -27,7 +27,7 @@ Read implementation source from `main/src/**` or from a verified fresh `strategy
 
 ## Server/API knowledge source policy
 
-For game knowledge, strategy data, wiki data, and data-export content, the authoritative current source is the live server/API data.
+For game knowledge, strategy data, wiki data, data-export content, and `forum_faq` content, the authoritative current source is the live server/API data.
 
 The Strategy Data Agent may use approved read-only API/server access to inspect the current game knowledge source directly when a task requires it.
 
@@ -36,6 +36,7 @@ Model:
 ```text
 server/API = current source of truth
 local exports = cache/snapshot/fallback
+forum_faq = fragment-based advisory knowledge source
 Strategy Data Agent = read-only consumer of server/API knowledge
 ```
 
@@ -54,6 +55,25 @@ Rules:
 - Any API use must be described as read-only in the technical report.
 - Export scripts such as `slf-wiki.ps1`, `slf-data.ps1`, `slf-all.ps1`, and `slf-check.ps1` are allowed as read-only acquisition/validation tooling when explicitly provided or approved by the user.
 
+### forum_faq policy
+
+`forum_faq` is a fragment-based advisory knowledge source.
+
+The user provides parsed forum/developer/manager data as separate fragments. The Project Manager Agent normalizes each fragment into a small upload-ready `forum_faq` document and tells the user where to place/move it on the server after FTP upload.
+
+`forum_faq` must support many small documents, not one merged master file. New data should be added as new documents unless the user explicitly requests replacing an existing document.
+
+`forum_faq` is advisory: "принять к сведению". It must not overwrite `wiki` or `data`.
+
+Strategy Data Agent rules for `forum_faq`:
+
+- The agent may read `forum_faq` from server/API as read-only tactical/contextual hints.
+- The agent must treat `forum_faq` as advisory context, not as primary official truth.
+- `forum_faq` must not override `wiki` or `data` when there is a conflict, unless the user explicitly asks to analyze the forum hint itself.
+- The agent may use `forum_faq` for recommendation explanations, tactical hints, and hypothesis generation.
+- The agent must not create, edit, delete, upload, merge, or rewrite `forum_faq` documents.
+- The agent must preserve fragment boundaries when referring to `forum_faq`; it must not assume all fragments form one canonical document.
+
 When using server/API data, the Strategy Data Agent must report:
 
 ```text
@@ -62,11 +82,12 @@ Knowledge source:
 - endpoint or source name:
 - read timestamp:
 - local export used: YES/NO
+- forum_faq used: YES/NO
 - API/export mismatch: YES/NO
 - write/mutation attempted: NO
 ```
 
-For recommendation-engine changes, Strategy Data Agent must explicitly state which server/API knowledge was used and whether any local export snapshot was used for verification.
+For recommendation-engine changes, Strategy Data Agent must explicitly state which server/API knowledge was used and whether any local export snapshot or `forum_faq` fragment was used for verification.
 
 If API access is unavailable in the current environment, Strategy Data Agent must return BLOCKED or ask the user for a fresh export snapshot. It must not invent game knowledge from memory.
 
@@ -106,7 +127,7 @@ After every completed in-scope task, return exactly two sections:
 - summary
 - checks
 - files/scopes not changed
-- knowledge source block when server/API or exports were used
+- knowledge source block when server/API, exports, or `forum_faq` were used
 
 2. COPY-READY MESSAGE FOR CORE RELEASE AGENT
 - module name
