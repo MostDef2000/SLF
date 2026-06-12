@@ -25,6 +25,18 @@ Do not implement from a stale `team-management` branch. If this branch is not fr
 
 Read implementation source from `main/src/**` or from a verified fresh `team-management` branch. Do not use `releases/latest.user.js` as editable source.
 
+## Game knowledge source priority
+
+When team-management logic depends on game rules, youth/academy mechanics, training mechanics, real-career status, SoccerDonna/Transfermarkt context, or forum/developer explanations, use this priority order:
+
+1. Server/API structured data and current API output are the source of truth for current machine-readable game data.
+2. Official Wiki and documented game rules have priority for mechanics, rule interpretation, and user-facing explanations.
+3. `forum_faq` is an advisory context layer based on forum/developer/manager fragments.
+4. If Wiki/API and `forum_faq` conflict, follow Wiki/API and mention `forum_faq` only as context.
+5. `forum_faq` must never overwrite Wiki, API data, structured exports, or canonical game rules.
+
+Team Management may read `forum_faq` as read-only advisory context for youth academy, instant reports, real-career status, training, SoccerDonna, and developer intent. It must not treat `forum_faq` as primary official truth and must not create, edit, upload, merge, or rewrite `forum_faq` documents.
+
 ## Scope
 
 This branch owns:
@@ -67,6 +79,7 @@ After every completed in-scope implementation task, return exactly two sections:
 - summary
 - checks
 - files/scopes not changed
+- knowledge source block when server/API, exports, Wiki, or `forum_faq` were used
 
 2. COPY-READY MESSAGE FOR CORE RELEASE AGENT
 - Module name
