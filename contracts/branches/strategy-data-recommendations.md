@@ -35,10 +35,19 @@ Model:
 
 ```text
 server/API = current source of truth
+official wiki/API docs = primary game-rule source
 local exports = cache/snapshot/fallback
 forum_faq = fragment-based advisory knowledge source
 Strategy Data Agent = read-only consumer of server/API knowledge
 ```
+
+Knowledge priority for game rules:
+
+1. Server/API structured data and current API output are the source of truth for current machine-readable game data.
+2. Official Wiki and documented game rules have priority for mechanics, rule interpretation, and user-facing explanations.
+3. `forum_faq` is an advisory context layer based on forum/developer/manager fragments.
+4. If Wiki/API and `forum_faq` conflict, follow Wiki/API and mention `forum_faq` only as context.
+5. `forum_faq` must never overwrite Wiki, API data, structured exports, or canonical game rules.
 
 Rules:
 
