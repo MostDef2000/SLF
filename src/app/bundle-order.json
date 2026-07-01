@@ -43,6 +43,7 @@
     "src/modules/team-management/team4-marker-cache-persistence-fix.js",
     "src/modules/team-management/team4-update-button-performance-fix.js",
     "src/modules/team-management/team4-real-career-arrow-ui-fix.js",
+    "src/modules/team-management/team4-form-saved-choice-notice.js",
     "src/app/bootstrap.js"
   ]
 }
