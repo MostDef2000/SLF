@@ -1,6 +1,6 @@
 # SLF Governance
 
-Version: 1.0.0
+Version: 1.1.0
 Status: Active
 Applies to: all SLF agents and release workflows
 Source of truth: GitHub repository contracts
@@ -101,3 +101,121 @@ Do not store long-term work in module branches. Use GitHub issues, approved comm
 Governance-only contract changes do not require GitHub Actions.
 
 Run Actions only when a verified source/tooling integration on `main` affects runtime source, release tooling, or the latest release build inputs.
+
+## 7. Permanent decision records
+
+Permanent project decisions must be documented in `docs/decision_records/` when they change future agent behavior.
+
+Use a decision record for durable rules such as:
+
+- source-of-truth priority;
+- release model;
+- branch lifecycle;
+- cross-module ownership;
+- security/secret handling;
+- release gate policy.
+
+Do not create decision records for routine implementation details, one-off fixes, or temporary debugging notes.
+
+Every decision record must include:
+
+```text
+Status:
+Date:
+Decision:
+Scope:
+Consequences:
+Related contracts:
+```
+
+When a decision conflicts with older chat context, the repository decision record and active contracts win.
+
+## 8. Standard module handoff block
+
+After a completed module implementation task, the module agent must return a handoff block that Core Release can copy without interpretation.
+
+Required format:
+
+```text
+COPY-READY MESSAGE FOR CORE RELEASE AGENT
+
+Module:
+Source branch:
+Approved commit:
+Changed files:
+- ...
+Summary:
+- ...
+Integration notes:
+- ...
+Acceptance checks:
+- ...
+Safety checks:
+- Release files changed by module: NO
+- Version bumped by module: NO
+- Out-of-scope files changed: NO
+- Secrets/tokens committed: NO
+Knowledge/API sources used:
+- ... / NONE
+Cache/schema/storage impact:
+- ... / NONE
+Bundle-order/module-registry impact:
+- ... / NONE
+Core Release instruction:
+- Integrate only the approved files listed above.
+- Do not invent or rewrite business logic.
+- Do not use releases/latest.user.js as source.
+```
+
+If a field is not relevant, use `NONE`. Do not omit required fields.
+
+## 9. Review gate verdict standard
+
+Review and release gate agents must end with exactly one verdict:
+
+```text
+APPROVED FOR RELEASE
+CHANGES REQUIRED
+BLOCKED
+```
+
+### APPROVED FOR RELEASE
+
+Use only when:
+
+- approved scope matches the implementation;
+- changed files are in scope;
+- no secrets/tokens are introduced;
+- release artifacts and version files were not modified by module agents;
+- required checks passed or the missing checks are explicitly non-blocking.
+
+### CHANGES REQUIRED
+
+Use when:
+
+- the implementation is generally in scope but needs correction before release;
+- tests/checks fail due to fixable implementation issues;
+- output format, handoff, or acceptance evidence is incomplete but recoverable.
+
+### BLOCKED
+
+Use when:
+
+- required source/API/context is unavailable;
+- branch freshness or approved commit cannot be verified;
+- the requested change would violate branch contracts;
+- the operation requires credentials/secrets that are not safely available;
+- a tool/platform limitation prevents safe completion.
+
+A review verdict must include:
+
+```text
+Verdict:
+Reason:
+Scope checked:
+Changed files checked:
+Checks/evidence:
+Required next action:
+```
+
+Do not use ambiguous final states such as `looks good`, `probably okay`, `not complete`, or `waiting`.
