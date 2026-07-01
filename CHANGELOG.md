@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.4.107
+
+### team-management
+- No module release notes provided.
+
+Changed files:
+- src/app/bundle-order.json
+
+Approved commit:
+- 932c90a634c532beada71af6019997d281c9147e
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order/module-registry changes needed: NO
+
 ## 4.4.106
 
 ### team-management
