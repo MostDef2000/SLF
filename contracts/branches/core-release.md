@@ -40,6 +40,26 @@ Core Release must not use `releases/latest.user.js` as editable implementation s
 
 After successful Core Release integration, successful GitHub Actions release build, and browser acceptance check, a module branch may be reset or recreated from current `main` according to `contracts/SLF_GOVERNANCE.md`.
 
+## Mandatory Core Release intake review
+
+A `COPY-READY MESSAGE FOR CORE RELEASE AGENT` is not permission to skip review. It is permission for Core Release to begin intake review and, only if that review passes, perform integration and release-channel work.
+
+Core Release must always perform intake review before any integration into `main` or release output update.
+
+Intake review must verify:
+
+- the approved commit or approved range exists;
+- the actual changed files match the handoff's declared changed files;
+- source branch freshness or approved active diff/range is clear;
+- all changed files are inside the approved scope;
+- release artifacts were not modified by the module branch;
+- version was not bumped by the module branch;
+- integration can be limited to only the approved files listed in the handoff.
+
+If intake review fails, Core Release must not integrate into `main`, must not update release outputs, and must return `BLOCKED` or `FAILED` with the exact reason and required next action.
+
+If intake review passes, Core Release must continue under this contract: integrate only approved files, do not invent or rewrite module business logic, do not use `releases/latest.user.js` as source, and complete the required final-state reporting.
+
 ## Module agent rule
 
 Module agents must:
