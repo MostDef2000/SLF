@@ -53,7 +53,7 @@ const TrainingGuidePanel = {
     panelId: 'slf-training-guide-panel',
 
     isPage() {
-        return location.pathname.includes('/train.php');
+        return /\/train\.php$/i.test(location.pathname || '') && !(location.search || '');
     },
 
     escapeHtml(value) {
@@ -257,6 +257,3 @@ const TrainingGuidePanel = {
         this.validateRendered();
     }
 };
-
-
-// ============================================================
