@@ -13,6 +13,8 @@ Decision Records are not task notes. Use them only when a decision changes or pr
 | DR-002 | Latest-only release model | Active |
 | DR-003 | Module branch integration model | Active |
 | DR-004 | API token handling | Active |
+| DR-005 | Standard module handoff | Active |
+| DR-006 | Review gate verdicts | Active |
 
 ## When to create a new DR
 
