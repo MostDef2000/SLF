@@ -8,7 +8,6 @@ const App = {
     DataInspector.addGlobalMenuButton();
     TrainingGuidePanel.mount();
     LoanLimitPanel.mount();
-    PlayerStatusPanel.mount();
     EventTracker.startManualTacticWatcher();
 
 
