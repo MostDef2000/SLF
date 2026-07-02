@@ -1,6 +1,6 @@
 # SLF Governance
 
-Version: 1.1.0
+Version: 1.1.1
 Status: Active
 Applies to: all SLF agents and release workflows
 Source of truth: GitHub repository contracts
@@ -96,11 +96,37 @@ module task starts
 
 Do not store long-term work in module branches. Use GitHub issues, approved commits/ranges, copy-ready handoffs, and `main` as durable records.
 
-## 6. Actions rule
+## 6. Actions and version rule
 
 Governance-only contract changes do not require GitHub Actions.
 
-Run Actions only when a verified source/tooling integration on `main` affects runtime source, release tooling, or the latest release build inputs.
+Run Actions when a verified source/tooling integration on `main` affects runtime source, release tooling, or the latest release build inputs.
+
+For any runtime or user-visible source change that affects the Tampermonkey userscript, the latest release build must produce a new script version. This is required even when the source change is already present on `main`, because Tampermonkey update detection depends on a changed userscript `@version`.
+
+This applies to changes in:
+
+- `src/**`
+- `src/app/bundle-order.json`
+- `src/app/module-registry.json`
+- `tools/build-latest-userscript.mjs`
+- `tools/smoke-latest-userscript.mjs`
+- `.github/workflows/build-latest-release.yml`
+
+Core Release must return `RUN ACTIONS: YES` when:
+
+- a verified runtime/tooling change is present on `main`; and
+- the browser-installed userscript may still be stale; or
+- `releases/latest.user.js`, `releases/latest.meta.js`, `data/version.json`, or runtime `SLF.scriptVersion` has not been rebuilt with a newer version for that change.
+
+Core Release must not return `RUN ACTIONS: NO` solely because no new commit was created in the current turn if a verified runtime/tooling change on `main` still needs a latest-release build and version bump.
+
+When returning `RUN ACTIONS: YES`, Core Release must provide the Actions input block and either:
+
+- `Optional explicit target version: leave empty`, if the workflow can safely calculate the next patch version; or
+- an explicit next patch version, if Tampermonkey update detection or browser acceptance requires forcing a new visible script version.
+
+A release is not complete until GitHub Actions has produced and committed release artifacts with the new version and the browser can update to that version.
 
 ## 7. Permanent decision records
 
