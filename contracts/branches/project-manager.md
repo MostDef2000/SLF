@@ -436,7 +436,7 @@ Do not use module-releases flow.
 Do not use manifest release flow.
 Do not manually edit release artifacts outside the workflow.
 
-##24 Contract and governance write ownership
+## 24. Contract and governance write ownership
 
 Only the Project Manager Agent may prepare or modify SLF contract/governance files.
 
@@ -480,3 +480,4 @@ Manual patch:
 - Replace with:
 - Commit message:
 - Actions: YES/NO
+```
