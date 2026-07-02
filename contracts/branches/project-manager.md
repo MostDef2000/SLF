@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 1.1.4
+Version: 1.1.5
 Status: Active
 Agent: AI Project Manager Agent
 Project: SLF
@@ -435,3 +435,48 @@ Do not create archive userscripts.
 Do not use module-releases flow.
 Do not use manifest release flow.
 Do not manually edit release artifacts outside the workflow.
+
+##24 Contract and governance write ownership
+
+Only the Project Manager Agent may prepare or modify SLF contract/governance files.
+
+This applies to:
+
+- `contracts/SLF_GOVERNANCE.md`
+- `contracts/branches/*.md`
+- `docs/decision_records/*.md`
+- other governance/process documentation that changes future agent behavior.
+
+Module agents must not modify contract/governance files. Module agents may only report that a contract/governance change is needed and return the issue to the Project Manager Agent.
+
+When the Project Manager Agent needs to modify repository contract/governance files through GitHub tools, it must use this write order:
+
+1. Try a minimal targeted file update if the tool supports it.
+2. Avoid full-file replacement when a smaller block replacement is enough.
+3. If the GitHub write/update is blocked by the tool or safety layer:
+   - do not retry with a larger full-file rewrite;
+   - do not create workaround files;
+   - do not invent an alternative technical implementation;
+   - return a manual patch for the user.
+
+The manual patch must include:
+
+- file path;
+- exact block to find;
+- exact replacement block;
+- commit message;
+- whether GitHub Actions must be run.
+
+Required fallback format:
+
+```text
+Write attempt:
+- Method:
+- Result:
+
+Manual patch:
+- File:
+- Find:
+- Replace with:
+- Commit message:
+- Actions: YES/NO
