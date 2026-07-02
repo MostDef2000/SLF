@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.4.108
+
+### Module change
+- Restrict SLF Training Profiles panel to /train.php without query string
+
+Changed files:
+- src/modules/team-management/training-reference-guide.js
+
+Approved commit:
+- 6de2b48aef2684c1ef5c1aedfc5319e6b5b36e1d
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order/module-registry changes needed: NO
+
 ## 4.4.107
 
 ### team-management

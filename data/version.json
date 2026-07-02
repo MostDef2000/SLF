@@ -1,21 +1,21 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.107",
+  "scriptVersion": "4.4.108",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_107_published",
+  "status": "release_4_4_108_published",
   "build": {
     "source": "src/**",
     "bundleOrder": "src/app/bundle-order.json",
-    "approvedCommit": "932c90a634c532beada71af6019997d281c9147e",
+    "approvedCommit": "6de2b48aef2684c1ef5c1aedfc5319e6b5b36e1d",
     "approvedFiles": [
-      "src/app/bundle-order.json"
+      "src/modules/team-management/training-reference-guide.js"
     ],
     "releaseNotesProvided": true,
-    "releaseNotesModule": "team-management",
+    "releaseNotesModule": "Module change",
     "team4AlterMinutesSchema": "slf_team4_current_season_minutes"
   }
 }
