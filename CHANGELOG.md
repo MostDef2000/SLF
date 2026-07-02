@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.4.109
+
+### team-management
+- No module release notes provided.
+
+Changed files:
+- src/app/bootstrap.js
+- src/app/bundle-order.json
+
+Approved commit:
+- f41e4d1b8a6e9c73b2d7f54a1e5bc9d63a7e821f
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order/module-registry changes needed: NO
+
 ## 4.4.108
 
 ### Module change
