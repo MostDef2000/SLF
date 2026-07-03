@@ -39,16 +39,6 @@
             info.textContent = `SLF Parser | game ${gameId} | ${status}`;
             info.style.cssText = 'font-weight:bold;margin-right:8px;';
 
-            const liveBtn = document.createElement('button');
-            liveBtn.textContent = '▶ Live';
-            liveBtn.style.cssText = 'padding:5px 8px;background:#285;color:#fff;border:1px solid #6c6;border-radius:3px;cursor:pointer;';
-            liveBtn.onclick = () => SnapshotEngine.startLive();
-
-            const stopBtn = document.createElement('button');
-            stopBtn.textContent = '■ Stop';
-            stopBtn.style.cssText = 'padding:5px 8px;background:#633;color:#fff;border:1px solid #966;border-radius:3px;cursor:pointer;';
-            stopBtn.onclick = () => SnapshotEngine.stopLive();
-
             const parseBtn = document.createElement('button');
             parseBtn.textContent = 'Спарсить завершённый';
             parseBtn.style.cssText = 'padding:5px 8px;background:#444;color:#fff;border:1px solid #777;border-radius:3px;cursor:pointer;';
@@ -106,7 +96,7 @@ recBox.style.cssText = `
             logBox.id = 'slf-parser-log';
             logBox.style.cssText = 'color:#9f9;font-size:12px;max-width:760px;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
 
-            panel.append(info, liveBtn, stopBtn, parseBtn, statsBtn, statusBox, recBox, logBox);
+            panel.append(info, parseBtn, statsBtn, statusBox, recBox, logBox);
 
             const head = document.querySelector('#head');
             if (head && head.parentNode) {
