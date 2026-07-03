@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.4.114
+
+### Release notes
+- No module release notes provided.
+
+Changed files:
+- No changed files provided.
+
+Approved commit:
+- 1e729df5de8bb097274f052d5df10c5d56e787c0
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: UNKNOWN
+- Bundle-order/module-registry changes needed: UNKNOWN
+
 ## 4.4.113
 
 ### Release notes
