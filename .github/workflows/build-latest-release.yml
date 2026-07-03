@@ -2,23 +2,6 @@ name: Build latest SLF release
 
 on:
   workflow_dispatch:
-    inputs:
-      approved_commit:
-        description: Approved source/tool integration commit to record in data/version.json
-        required: false
-        type: string
-      approved_files:
-        description: Comma-separated approved files included in this release
-        required: false
-        type: string
-      release_notes_json:
-        description: Structured release notes JSON from the Core Release handoff
-        required: false
-        type: string
-      target_version:
-        description: Optional explicit target version; normally leave empty to bump patch
-        required: false
-        type: string
 
 permissions:
   contents: write
@@ -36,15 +19,9 @@ jobs:
       - name: Build latest-only userscript
         shell: bash
         env:
-          TARGET_VERSION: ${{ inputs.target_version }}
-          APPROVED_COMMIT: ${{ inputs.approved_commit || github.sha }}
-          APPROVED_FILES: ${{ inputs.approved_files }}
-          RELEASE_NOTES_JSON: ${{ inputs.release_notes_json }}
+          APPROVED_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if [ -z "${RELEASE_NOTES_JSON:-}" ]; then
-            echo "::warning::No structured release notes were provided. CHANGELOG.md will use the explicit fallback text."
-          fi
           node tools/build-latest-userscript.mjs
 
       - name: Validate latest-only release
