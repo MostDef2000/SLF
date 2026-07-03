@@ -33,6 +33,7 @@
     "src/modules/transfer-analyzer/tm-enrichment-layer.js",
     "src/modules/transfer-analyzer/slf-alter-layer.js",
     "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+    "src/modules/transfer-analyzer/tm-analysis-cache-ttl.js",
     "src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js",
     "src/modules/team-management/training-reference-guide.js",
     "src/modules/team-management/team-loan-limit-helper.js",
