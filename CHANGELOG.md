@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.4.116
+
+### strategy-data
+- Simplified parser panel into manual analytics-first flow.
+
+Changed files:
+- src/app/ui-layer.js
+
+Approved commit:
+- 16b729c5581baaf8619d9e09c6146d47cfaee192
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order/module-registry changes needed: NO
+
 ## 4.4.115
 
 ### Release notes
