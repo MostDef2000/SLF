@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.112
+// @version      4.4.113
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.112',
-        scriptVersion: '4.4.112',
+        version: '4.4.113',
+        scriptVersion: '4.4.113',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.112',
+        scriptVersion: '4.4.113',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -5691,6 +5691,54 @@ if (!isTacticPage) return;
         RecommendationEngine.__taskBPatchedPresetOptions = true;
     }
 
+    // ===== NEW: late losing press cooldown guard =====
+    function patchLateLosingPressCooldownGuard() {
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuard) return;
+        if (typeof RecommendationEngine.selectRawPreset !== 'function') return;
+
+        const original = RecommendationEngine.selectRawPreset;
+
+        RecommendationEngine.selectRawPreset = function(snapshot, state) {
+            const candidate = original.apply(this, arguments);
+
+            if (candidate?.name !== 'Pep_PressCooldown_bal2') return candidate;
+            if (!state?.pressFatigue?.active) return candidate;
+
+            const score = state.score || this.getScoreState(snapshot);
+            const minute = Number(state.minute ?? this.getEffectiveMinute(snapshot));
+
+            if (score?.state !== 'losing' || !Number.isFinite(minute) || minute < 75) {
+                return candidate;
+            }
+
+            const myBad = Number(state.myBad || 0);
+            const finalLosing = minute >= 80;
+            const lastApplied = STATE?.presetProgression?.lastAppliedPreset || '';
+            const currentIsChaos = lastApplied === 'Bielsa_ChaosPress_att5';
+
+            if (finalLosing && currentIsChaos && myBad < 26) {
+                return {
+                    name: 'Bielsa_ChaosPress_att5',
+                    reason: 'late game override: preserve chaos press'
+                };
+            }
+
+            if (finalLosing) {
+                return {
+                    name: myBad >= 24 ? 'Klopp_Gegenpress_att4' : 'Bielsa_ChaosPress_att5',
+                    reason: 'final losing state adjustment'
+                };
+            }
+
+            return {
+                name: myBad >= 24 ? 'Pep_ControlledPush_att3' : 'Klopp_Gegenpress_att4',
+                reason: 'late losing override'
+            };
+        };
+
+        RecommendationEngine.__lateLosingPressCooldownGuard = true;
+    }
+
     function renderManualRecommendation() {
         const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
         if (!snapshot) return;
@@ -5757,6 +5805,7 @@ if (!isTacticPage) return;
     function mount() {
         patchSnapshotBuild();
         patchHasEnoughLiveData();
+        patchLateLosingPressCooldownGuard(); // NEW
         patchPresetOptions();
         mountManualButton();
         mountForeignSelector();
@@ -15632,15 +15681,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.112',
-        scriptVersion: '4.4.112',
+        version: '4.4.113',
+        scriptVersion: '4.4.113',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.112',
+        scriptVersion: '4.4.113',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
