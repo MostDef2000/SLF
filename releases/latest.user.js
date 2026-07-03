@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.117
+// @version      4.4.118
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.117',
-        scriptVersion: '4.4.117',
+        version: '4.4.118',
+        scriptVersion: '4.4.118',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.117',
+        scriptVersion: '4.4.118',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -14244,6 +14244,73 @@ const TransferMarketAnalyzer = {
 // <<< src/modules/transfer-analyzer/transfer-market-analyzer.js
 
 
+// >>> src/modules/transfer-analyzer/tm-analysis-cache-ttl.js
+// Transfer Analyzer: 7-day TM analysis cache policy
+// ============================================================
+
+(function () {
+    if (typeof TransferMarketAnalyzer === 'undefined' || !TransferMarketAnalyzer) return;
+
+    const TM_ANALYSIS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+    const originalLoadAnalysisCache = TransferMarketAnalyzer.loadAnalysisCache;
+    const originalSaveAnalysisCache = TransferMarketAnalyzer.saveAnalysisCache;
+    const originalMount = TransferMarketAnalyzer.mount;
+    const originalAnalyzeVisibleRows = TransferMarketAnalyzer.analyzeVisibleRows;
+
+    TransferMarketAnalyzer.analysisCacheTtlMs = TM_ANALYSIS_CACHE_TTL_MS;
+
+    TransferMarketAnalyzer.isAnalysisCacheItemExpired = function isAnalysisCacheItemExpired(item, now = Date.now()) {
+        const savedAt = Number(item?.savedAt || 0);
+        return !savedAt || now - savedAt > this.analysisCacheTtlMs;
+    };
+
+    TransferMarketAnalyzer.pruneExpiredAnalysisCache = function pruneExpiredAnalysisCache(cache = null) {
+        const current = cache || originalLoadAnalysisCache.call(this);
+        const now = Date.now();
+        let changed = false;
+
+        Object.keys(current || {}).forEach(key => {
+            if (this.isAnalysisCacheItemExpired(current[key], now)) {
+                delete current[key];
+                changed = true;
+            }
+        });
+
+        if (changed) {
+            originalSaveAnalysisCache.call(this, current);
+        }
+
+        return current || {};
+    };
+
+    TransferMarketAnalyzer.loadAnalysisCache = function loadAnalysisCacheWithTtlCleanup() {
+        return this.pruneExpiredAnalysisCache(originalLoadAnalysisCache.call(this));
+    };
+
+    TransferMarketAnalyzer.saveAnalysisCache = function saveAnalysisCacheWithTtlCleanup(cache) {
+        const pruned = this.pruneExpiredAnalysisCache(cache || {});
+        originalSaveAnalysisCache.call(this, pruned);
+    };
+
+    TransferMarketAnalyzer.mount = function mountWithTtlCleanup() {
+        if (this.isPage && this.isPage() && !this.isHistoryPage()) {
+            this.pruneExpiredAnalysisCache();
+        }
+
+        return originalMount.call(this);
+    };
+
+    TransferMarketAnalyzer.analyzeVisibleRows = async function analyzeVisibleRowsWithTtlCleanup() {
+        if (this.isHistoryPage && !this.isHistoryPage()) {
+            this.pruneExpiredAnalysisCache();
+        }
+
+        return originalAnalyzeVisibleRows.call(this);
+    };
+}());
+// <<< src/modules/transfer-analyzer/tm-analysis-cache-ttl.js
+
+
 // >>> src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
 // Transfer history VPS skip-synced guard
 // Prevents Analyze visible from reprocessing rows already marked as synced in VPS.
@@ -15736,15 +15803,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.117',
-        scriptVersion: '4.4.117',
+        version: '4.4.118',
+        scriptVersion: '4.4.118',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.117',
+        scriptVersion: '4.4.118',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
