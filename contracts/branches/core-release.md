@@ -103,6 +103,51 @@ Core Release must:
 6. Preserve Tampermonkey update/download URLs.
 7. Commit release outputs directly to `main` when validation passes.
 
+## Git-safe continuous release execution
+
+Core Release must not stop at intermediate states such as:
+
+- ACKNOWLEDGED;
+- PARTIAL;
+- MODULE COMMIT CREATED;
+- SOURCE PATCH APPLIED;
+- CHANGE VERIFIED;
+- tree prepared;
+- commit created but `main` not advanced.
+
+These are not terminal states. Core Release must continue until one of these final states is reached:
+
+- COMPLETE / RELEASE COMPLETE;
+- BLOCKED / HARD BLOCK;
+- FAILED.
+
+A hard block is allowed only when:
+
+- repository access is unavailable or permission is denied;
+- the requested branch or commit does not exist;
+- required source files are missing;
+- Git state is corrupted or cannot be reconciled safely;
+- the requested operation would modify unapproved or out-of-scope files.
+
+On stale SHA, 409 conflict, or file mismatch during a GitHub write, Core Release must not ask the user to manually retry. It must:
+
+1. re-fetch the latest target file from `main`;
+2. re-apply the same approved patch idempotently;
+3. retry the write once with the latest SHA;
+4. continue the pipeline from the same step.
+
+If the retry still fails with a deterministic Git conflict, Core Release must return BLOCKED with the exact error and a continuation command. It must not report ACKNOWLEDGED or PARTIAL as the final state.
+
+If integration is partially complete, Core Release must resume from the last successful step and continue the remaining steps. It must not restart from scratch when a safe resume point exists.
+
+Core Release must maintain release-channel consistency:
+
+- `bundle-order.json` must not contain missing or obsolete module references;
+- `bootstrap.js` must not contain missing or duplicate entrypoints;
+- deleted modules must not remain wired;
+- runtime source changes must produce rebuilt release artifacts;
+- Tampermonkey-visible runtime behavior changes must bump the userscript version.
+
 ## Same-turn source integration rule
 
 A prepared Git tree is an internal implementation detail. A prepared tree is not a completed task.
@@ -141,7 +186,7 @@ Stop before writing only if:
 - the operation would modify release artifacts manually;
 - the operation would modify unapproved files;
 - the operation would delete or overwrite unrelated files;
-- a GitHub write operation fails.
+- a non-recoverable GitHub hard blocker remains after the Git-safe continuous release execution path.
 
 ## Multi-file atomic integration rule
 
@@ -274,7 +319,7 @@ Only stop before writing if:
 - operation would modify release artifacts manually;
 - operation would modify unapproved files;
 - operation would delete/overwrite unrelated files;
-- GitHub/tooling returns a hard blocker.
+- GitHub/tooling returns a hard blocker after required retry/reconcile behavior.
 
 ### Continuation command for BLOCKED state
 
