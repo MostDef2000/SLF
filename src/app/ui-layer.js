@@ -273,13 +273,78 @@ if (!isTacticPage) return;
             select.style.cssText =
                 'flex:1;min-width:120px;padding:5px;background:#333;color:#fff;border:1px solid #555;border-radius:3px;font-size:14px;';
 
+            function getCoachGroup(key, label = '') {
+                const l = String(label).toLowerCase();
+
+                if (l.includes('bielsa')) return 'Bielsa';
+                if (l.includes('conte')) return 'Conte';
+                if (l.includes('de zerbi')) return 'De Zerbi';
+                if (l.includes('klopp')) return 'Klopp';
+                if (l.includes('mourinho')) return 'Mourinho';
+                if (l.includes('pep')) return 'Pep';
+                if (l.includes('simeone')) return 'Simeone';
+                if (l.includes('xabi')) return 'Xabi Alonso';
+
+                if (BASE_PRESETS.hasOwnProperty(key)) return 'Other';
+
+                return 'Custom';
+            }
+
+            function buildGroupedOptions(labels) {
+                const groups = {};
+
+                Object.entries(labels).forEach(([key, value]) => {
+                    const group = getCoachGroup(key, value);
+
+                    if (!groups[group]) groups[group] = [];
+                    groups[group].push({ key, value });
+                });
+
+                Object.keys(groups).forEach(groupName => {
+                    groups[groupName].sort((a, b) =>
+                        String(a.value).localeCompare(String(b.value), 'ru', { sensitivity: 'base' })
+                    );
+                });
+
+                return groups;
+            }
+
             function refreshSelect(keepValue) {
                 const labels = PresetStorage.getAllLabels();
                 const cur = keepValue || select.value;
+                const groups = buildGroupedOptions(labels);
 
-                select.innerHTML = Object.keys(labels)
-                    .map(k => `<option value="${k}">${labels[k]}</option>`)
-                    .join('');
+                select.innerHTML = '';
+
+                const groupOrder = [
+                    'Bielsa',
+                    'Conte',
+                    'De Zerbi',
+                    'Klopp',
+                    'Mourinho',
+                    'Pep',
+                    'Simeone',
+                    'Xabi Alonso',
+                    'Other',
+                    'Custom'
+                ];
+
+                groupOrder.forEach(groupName => {
+                    const items = groups[groupName];
+                    if (!items || items.length === 0) return;
+
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.label = groupName;
+
+                    items.forEach(item => {
+                        const opt = document.createElement('option');
+                        opt.value = item.key;
+                        opt.textContent = item.value;
+                        optgroup.appendChild(opt);
+                    });
+
+                    select.appendChild(optgroup);
+                });
 
                 if (labels.hasOwnProperty(cur)) {
                     select.value = cur;
