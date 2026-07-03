@@ -100,6 +100,54 @@
         RecommendationEngine.__taskBPatchedPresetOptions = true;
     }
 
+    // ===== NEW: late losing press cooldown guard =====
+    function patchLateLosingPressCooldownGuard() {
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuard) return;
+        if (typeof RecommendationEngine.selectRawPreset !== 'function') return;
+
+        const original = RecommendationEngine.selectRawPreset;
+
+        RecommendationEngine.selectRawPreset = function(snapshot, state) {
+            const candidate = original.apply(this, arguments);
+
+            if (candidate?.name !== 'Pep_PressCooldown_bal2') return candidate;
+            if (!state?.pressFatigue?.active) return candidate;
+
+            const score = state.score || this.getScoreState(snapshot);
+            const minute = Number(state.minute ?? this.getEffectiveMinute(snapshot));
+
+            if (score?.state !== 'losing' || !Number.isFinite(minute) || minute < 75) {
+                return candidate;
+            }
+
+            const myBad = Number(state.myBad || 0);
+            const finalLosing = minute >= 80;
+            const lastApplied = STATE?.presetProgression?.lastAppliedPreset || '';
+            const currentIsChaos = lastApplied === 'Bielsa_ChaosPress_att5';
+
+            if (finalLosing && currentIsChaos && myBad < 26) {
+                return {
+                    name: 'Bielsa_ChaosPress_att5',
+                    reason: 'late game override: preserve chaos press'
+                };
+            }
+
+            if (finalLosing) {
+                return {
+                    name: myBad >= 24 ? 'Klopp_Gegenpress_att4' : 'Bielsa_ChaosPress_att5',
+                    reason: 'final losing state adjustment'
+                };
+            }
+
+            return {
+                name: myBad >= 24 ? 'Pep_ControlledPush_att3' : 'Klopp_Gegenpress_att4',
+                reason: 'late losing override'
+            };
+        };
+
+        RecommendationEngine.__lateLosingPressCooldownGuard = true;
+    }
+
     function renderManualRecommendation() {
         const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
         if (!snapshot) return;
@@ -166,6 +214,7 @@
     function mount() {
         patchSnapshotBuild();
         patchHasEnoughLiveData();
+        patchLateLosingPressCooldownGuard(); // NEW
         patchPresetOptions();
         mountManualButton();
         mountForeignSelector();
