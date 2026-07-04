@@ -1,7 +1,5 @@
-// Strategy Data: preset fit scoring layer
+// Strategy Data: preset fit scoring and decision fusion
 // ============================================================
-// Preparatory scoring helpers only. This module does not change
-// selectRawPreset(), progression guard behavior, UI, or final recommendation.
 
 (function () {
     if (typeof RecommendationEngine === 'undefined' || !RecommendationEngine) return;
@@ -41,11 +39,8 @@
         if (!presetLanes.length || !targetLanes.length) return result;
 
         const matches = targetLanes.filter(lane => presetLanes.includes(lane));
-        if (matches.length) {
-            addReason(result, matches.length * 2, `направление пресета совпадает с целевой зоной: ${matches.join(', ')}`);
-        } else {
-            addReason(result, -2, `направление пресета (${presetLanes.join(', ')}) не совпадает с целевой зоной (${targetLanes.join(', ')})`);
-        }
+        if (matches.length) addReason(result, matches.length * 2, `направление пресета совпадает с целевой зоной: ${matches.join(', ')}`);
+        else addReason(result, -2, `направление пресета (${presetLanes.join(', ')}) не совпадает с целевой зоной (${targetLanes.join(', ')})`);
 
         return result;
     };
@@ -105,13 +100,7 @@
 
     RecommendationEngine.scorePresetFit = function scorePresetFit(name, state = {}) {
         const traits = this.getPresetTraits(name);
-        const result = {
-            name,
-            score: 0,
-            traitsFound: !!traits,
-            reasons: [],
-            parts: {}
-        };
+        const result = { name, score: 0, traitsFound: !!traits, reasons: [], parts: {} };
 
         if (!traits) {
             result.reasons.push({ delta: 0, reason: 'structured traits missing' });
@@ -144,4 +133,93 @@
         });
         return rows;
     };
+
+    function groupOf(name) {
+        return TacticPresetLibrary?.getGroup ? TacticPresetLibrary.getGroup(name) : TacticPresetLibrary?.meta?.[name]?.group || 'custom';
+    }
+
+    function isHighProfile(name) {
+        const traits = RecommendationEngine.getPresetTraits(name);
+        return /high|very_high/.test(`${traits?.risk || ''} ${traits?.tempo || ''} ${traits?.press || ''}`);
+    }
+
+    RecommendationEngine.getPresetFusionCandidateNames = function getPresetFusionCandidateNames(rawCandidate, state = {}) {
+        const names = [rawCandidate?.name];
+        names.push(...(this.getPresetLadder ? this.getPresetLadder(groupOf(rawCandidate?.name)) : []));
+
+        if (hasTag(state, 'attack_left')) names.push('Henta_LeftTrap_att3', 'Klopp_WideTrap_att4', 'Conte_WingbackWidth_bal4', 'Mourinho_WeakSide_def3');
+        if (hasTag(state, 'attack_right')) names.push('Henta_RightTrap_att3', 'Klopp_WideTrap_att4', 'Conte_WingbackWidth_bal4', 'Mourinho_WeakSide_def3');
+        if (hasTag(state, 'center_weak')) names.push('Xabi_VerticalBox_att3', 'Xabi_BoxMidfield_bal3', 'Henta_CentralTrap_att3', 'Pep_ControlledPush_att3');
+        if (hasTag(state, 'opponent_high_press')) names.push('DeZerbi_BaitPress_bal3', 'DeZerbi_Release_att4', 'Henta_CounterTrap_att4', 'Pep_PressCooldown_bal2');
+        if (hasTag(state, 'opponent_low_block')) names.push('Pep_TwoThreeFive_att3', 'Xabi_VerticalBox_att3', 'Conte_WingbackWidth_bal4');
+        if (hasTag(state, 'press_fatigue_risk') || hasTag(state, 'high_bad_actions')) names.push('Pep_PressCooldown_bal2', 'Pep_BoxControl_bal2', 'Compact_Counter_def3');
+
+        if (state?.strengthContext?.mode === 'disadvantage') names.push('Mourinho_WeakSide_def3', 'Compact_Counter_def3', 'Pep_BoxControl_bal2');
+        if (state?.strengthContext?.mode === 'advantage') names.push('Xabi_BoxMidfield_bal3', 'Pep_TwoThreeFive_att3', 'Pep_ControlledPush_att3');
+
+        const scoreState = state?.score?.state || 'unknown';
+        const minute = Number(state?.minute || 0);
+        if (scoreState === 'losing' && minute >= 55) names.push('Pep_ControlledPush_att3', 'Xabi_VerticalBox_att3', 'Klopp_Gegenpress_att4', 'DeZerbi_Release_att4');
+        if (scoreState === 'losing' && minute >= 80) names.push('Bielsa_ChaosPress_att5');
+        if (scoreState === 'winning' && minute >= 70) names.push('Pep_BoxControl_bal2', 'Simeone_Compact442_def4', 'Simeone_LowBlock_def5');
+
+        return [...new Set(names.filter(Boolean))].filter(name => !!TacticPresetLibrary?.meta?.[name]);
+    };
+
+    RecommendationEngine.rankPresetFusionCandidates = function rankPresetFusionCandidates(rawCandidate, state = {}) {
+        return this.getPresetFusionCandidateNames(rawCandidate, state)
+            .map(name => this.scorePresetFit(name, state))
+            .filter(fit => fit?.traitsFound)
+            .sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                if (a.name === rawCandidate?.name) return -1;
+                if (b.name === rawCandidate?.name) return 1;
+                return 0;
+            });
+    };
+
+    RecommendationEngine.shouldApplyPresetFusion = function shouldApplyPresetFusion(rawFit, bestFit, rawCandidate, state = {}) {
+        if (!rawCandidate?.name || !bestFit?.name || bestFit.name === rawCandidate.name) return false;
+        const diff = Number(bestFit.score || 0) - Number(rawFit.score || 0);
+        const urgent = ['emergency', 'radical'].includes(state?.urgency?.level || '');
+        if (diff < (urgent ? 5 : 3)) return false;
+        if (Number(bestFit.score || 0) < 2) return false;
+
+        const scoreState = state?.score?.state || 'unknown';
+        const minute = Number(state?.minute || 0);
+        if (scoreState === 'winning' && minute >= 70 && isHighProfile(bestFit.name)) return false;
+        if ((hasTag(state, 'press_fatigue_risk') || hasTag(state, 'high_bad_actions')) && isHighProfile(bestFit.name)) return false;
+        if (scoreState === 'losing' && minute >= 80 && groupOf(rawCandidate.name) === 'attack' && groupOf(bestFit.name) !== 'attack' && diff < 6) return false;
+        return true;
+    };
+
+    RecommendationEngine.applyPresetDecisionFusion = function applyPresetDecisionFusion(rawCandidate, state = {}) {
+        if (!rawCandidate?.name || !this.scorePresetFit) return rawCandidate;
+        const ranked = this.rankPresetFusionCandidates(rawCandidate, state);
+        const rawFit = ranked.find(item => item.name === rawCandidate.name) || this.scorePresetFit(rawCandidate.name, state);
+        const bestFit = ranked[0] || rawFit;
+
+        if (!this.shouldApplyPresetFusion(rawFit, bestFit, rawCandidate, state)) {
+            return Object.assign({}, rawCandidate, { fusion: { applied: false, rawFit, bestFit, ranked: ranked.slice(0, 5) } });
+        }
+
+        const diff = Number(bestFit.score || 0) - Number(rawFit.score || 0);
+        const positives = bestFit.reasons.filter(item => Number(item.delta || 0) > 0).slice(0, 2).map(item => item.reason);
+        const suffix = positives.length ? ` ${positives.join('; ')}` : '';
+        return {
+            name: bestFit.name,
+            reason: `${rawCandidate.reason || 'базовый выбор'}; fusion: ${this.getPresetTitle ? this.getPresetTitle(bestFit.name) : bestFit.name} лучше совпадает с контекстом по score ${bestFit.score} против ${rawFit.score} (${diff >= 0 ? '+' : ''}${diff}).${suffix}`,
+            fusion: { applied: true, originalName: rawCandidate.name, rawFit, bestFit, ranked: ranked.slice(0, 5) }
+        };
+    };
+
+    if (typeof RecommendationEngine.selectRawPreset === 'function' && !RecommendationEngine.selectRawPreset.__slfFusionWrapped) {
+        const originalSelectRawPreset = RecommendationEngine.selectRawPreset;
+        const wrapped = function selectRawPresetWithDecisionFusion(snapshot, state) {
+            const rawCandidate = originalSelectRawPreset.call(this, snapshot, state);
+            return this.applyPresetDecisionFusion(rawCandidate, state || {});
+        };
+        wrapped.__slfFusionWrapped = true;
+        RecommendationEngine.selectRawPreset = wrapped;
+    }
 }());
