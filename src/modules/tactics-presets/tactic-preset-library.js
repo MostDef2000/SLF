@@ -269,9 +269,40 @@ const TacticPresetLibrary = {
         Henta_CentralTrap_att3: 'center_weak'
     },
 
+    traits: {
+        standard: { attackLanes: ['right'], build: 'balanced', tempo: 'medium', press: 'medium', risk: 'medium', strengths: ['baseline'], requires: [], avoids: [] },
+        Simeone_LowBlock_def5: { attackLanes: ['right'], build: 'low_block', tempo: 'low', press: 'low', risk: 'very_low', strengths: ['compactness', 'protect_lead', 'low_transition_risk'], requires: ['lead_or_pressure_context'], avoids: ['urgent_chase', 'need_high_volume_attack'] },
+        Simeone_Compact442_def4: { attackLanes: ['left', 'right'], build: 'compact', tempo: 'low', press: 'medium', risk: 'low', strengths: ['compactness', 'safe_wide_outlet', 'transition_control'], requires: ['defensive_stability'], avoids: ['full_low_block_when_goal_needed'] },
+        Mourinho_WeakSide_def3: { attackLanes: ['left', 'right'], build: 'counter', tempo: 'medium', press: 'medium', risk: 'low_medium', strengths: ['weak_side_attack', 'compact_counter', 'low_risk_exit'], requires: ['space_behind_opponent', 'first_pass_quality'], avoids: ['slow_no_outlet_attack'] },
+        Henta_Hold_def3: { attackLanes: ['left', 'right'], build: 'hold_counter', tempo: 'low', press: 'medium_high', risk: 'medium', strengths: ['low_block', 'aggressive_recovery', 'hold_score'], requires: ['defensive_workrate'], avoids: ['sterile_no_threat'] },
+        Pep_StandardControl_bal3: { attackLanes: ['center'], build: 'control', tempo: 'medium', press: 'medium', risk: 'medium', strengths: ['structure', 'central_control', 'baseline_reset'], requires: ['stable_possession'], avoids: ['late_emergency_chase'] },
+        Xabi_BoxMidfield_bal3: { attackLanes: ['center'], build: 'box_midfield', tempo: 'medium', press: 'medium', risk: 'medium', strengths: ['central_overload', 'transition_control', 'half_space_entry'], requires: ['midfield_quality', 'low_bad_actions'], avoids: ['center_closed'] },
+        Pep_BoxControl_bal2: { attackLanes: ['center'], build: 'control', tempo: 'low', press: 'medium_low', risk: 'low', strengths: ['low_chaos', 'safe_possession', 'central_progression'], requires: ['need_stability'], avoids: ['urgent_chase', 'need_fast_goal'] },
+        Pep_ControlledPush_att3: { attackLanes: ['center'], build: 'controlled_attack', tempo: 'medium_high', press: 'medium', risk: 'medium', strengths: ['controlled_pressure', 'attacking_upgrade_without_breaking_shape'], requires: ['defense_working'], avoids: ['very_high_bad_actions'] },
+        Xabi_VerticalBox_att3: { attackLanes: ['center'], build: 'vertical_box', tempo: 'medium_high', press: 'medium', risk: 'medium_high', strengths: ['vertical_entry', 'between_lines_attack', 'central_progression'], requires: ['center_available', 'low_bad_actions'], avoids: ['center_closed', 'high_press_with_bad_actions'] },
+        Pep_PressCooldown_bal2: { attackLanes: ['center', 'right'], build: 'cooldown_control', tempo: 'medium', press: 'medium_low', risk: 'low', strengths: ['fatigue_control', 'reduce_press_cost', 'restore_structure'], requires: ['press_fatigue_or_bad_actions'], avoids: ['late_emergency_chase'] },
+        Compact_Counter_def3: { attackLanes: ['left', 'right'], build: 'compact_counter', tempo: 'medium_high', press: 'medium', risk: 'medium', strengths: ['transition_protection', 'fast_outlet', 'defensive_reset'], requires: ['opponent_transition_threat'], avoids: ['need_sustained_positional_attack'] },
+        DeZerbi_BaitPress_bal3: { attackLanes: ['center'], build: 'bait_press', tempo: 'low_medium', press: 'medium_low', risk: 'medium', strengths: ['draw_press', 'open_space_higher', 'positional_bait'], requires: ['passing_quality', 'low_bad_actions'], avoids: ['weak_defenders_under_press'] },
+        Conte_WingbackWidth_bal4: { attackLanes: ['left', 'right'], build: 'wide', tempo: 'medium', press: 'medium', risk: 'medium', strengths: ['width', 'wingback_overload', 'wide_corridors', 'cross_volume'], requires: ['wing_quality', 'center_closed_or_wide_available'], avoids: ['own_crosses_bad', 'weak_flanks', 'opponent_crosses_dangerous'] },
+        Klopp_Gegenpress_att4: { attackLanes: ['left', 'right'], build: 'gegenpress', tempo: 'high', press: 'high', risk: 'high', strengths: ['counterpress', 'high_pressure', 'fast_attack'], requires: ['fitness', 'need_pressure'], avoids: ['press_fatigue_risk', 'high_bad_actions', 'large_space_behind'] },
+        Bielsa_ChaosPress_att5: { attackLanes: ['left', 'center', 'right'], build: 'chaos_press', tempo: 'very_high', press: 'very_high', risk: 'very_high', strengths: ['max_pressure', 'late_chase', 'volume_attack'], requires: ['emergency_need_goal'], avoids: ['protect_lead', 'early_match', 'press_fatigue_risk'] },
+        Pep_TwoThreeFive_att3: { attackLanes: ['center'], build: 'positional_attack', tempo: 'medium_high', press: 'medium_high', risk: 'medium_high', strengths: ['territorial_pressure', 'final_third_presence', 'positional_overload'], requires: ['attacking_momentum', 'transition_control'], avoids: ['opponent_fast_counter_threat'] },
+        DeZerbi_Release_att4: { attackLanes: ['center', 'right'], build: 'release_space', tempo: 'high', press: 'medium_high', risk: 'high', strengths: ['release_after_bait', 'attack_space_behind', 'fast_vertical_exit'], requires: ['opponent_high_line_or_press', 'passing_quality'], avoids: ['no_space_behind', 'high_bad_actions'] },
+        Klopp_WideTrap_att4: { attackLanes: ['left', 'right'], build: 'wide_press', tempo: 'high', press: 'high', risk: 'high', strengths: ['wide_pressure', 'bypass_closed_center', 'counterpress'], requires: ['wide_advantage'], avoids: ['weak_flanks', 'own_crosses_bad', 'press_fatigue_risk'] },
+        Henta_LeftTrap_att3: { attackLanes: ['left'], build: 'left_trap', tempo: 'medium', press: 'medium_high', risk: 'medium', strengths: ['left_lane_focus', 'aggressive_recovery', 'weak_right_side_attack'], requires: ['opponent_right_weak_or_own_left_strong'], avoids: ['left_lane_blocked', 'predictable_single_lane'] },
+        Henta_RightTrap_att3: { attackLanes: ['right'], build: 'right_trap', tempo: 'medium', press: 'medium_high', risk: 'medium', strengths: ['right_lane_focus', 'aggressive_recovery', 'weak_left_side_attack'], requires: ['opponent_left_weak_or_own_right_strong'], avoids: ['right_lane_blocked', 'predictable_single_lane'] },
+        Henta_WideTrap_att3: { attackLanes: ['left', 'right'], build: 'wide_trap', tempo: 'medium', press: 'medium_high', risk: 'medium', strengths: ['wide_attack', 'aggressive_recovery', 'bypass_center'], requires: ['center_closed_or_wide_available'], avoids: ['weak_flanks', 'own_crosses_bad'] },
+        Henta_CounterTrap_att4: { attackLanes: ['left', 'right'], build: 'counter_trap', tempo: 'high', press: 'medium_high', risk: 'medium_high', strengths: ['fast_counter', 'space_attack', 'low_recovery_block'], requires: ['opponent_pressure_or_space_behind'], avoids: ['high_bad_actions', 'no_space_behind'] },
+        Henta_CentralTrap_att3: { attackLanes: ['center'], build: 'central_trap', tempo: 'medium', press: 'medium_high', risk: 'medium', strengths: ['central_attack', 'weak_dm_cm_dc_attack', 'low_cross_dependence'], requires: ['opponent_center_weak', 'low_bad_actions'], avoids: ['center_closed'] }
+    },
+
     getSchemeForPreset(name) {
         const state = this.presetSchemeState[name] || 'base_balance';
         return this.schemeStates[state] || this.schemeStates.base_balance;
+    },
+
+    getTraits(name) {
+        return this.traits?.[name] || null;
     },
 
     makeSchemeHint(name) {
