@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.121
+// @version      4.4.122
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.121',
-        scriptVersion: '4.4.121',
+        version: '4.4.122',
+        scriptVersion: '4.4.122',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.121',
+        scriptVersion: '4.4.122',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -14389,12 +14389,28 @@ const TransferMarketAnalyzer = {
     TransferMarketAnalyzer.hasRestorableAnalysisCacheItem = function hasRestorableAnalysisCacheItem(item) {
         if (!item || typeof item !== 'object') return false;
 
-        const hasTmResult = !!item.tmResult;
+        const hasTmProfile = !!item.tmResult?.tmProfile;
+        const hasUsefulTmUrl = !!item.tmResult?.tmUrl && !item.tmResult?.error;
         const hasSlfAlter = !!item.slfAlter;
         const hasSavedRow = !!item.row;
         const hasPlayerId = !!String(item.playerId || item.row?.playerId || '').trim();
 
-        return hasPlayerId && (hasTmResult || hasSlfAlter || hasSavedRow);
+        return hasPlayerId && (hasTmProfile || hasUsefulTmUrl || hasSlfAlter || hasSavedRow);
+    };
+
+    TransferMarketAnalyzer.isAnalysisCacheCompleteEnoughToSkip = function isAnalysisCacheCompleteEnoughToSkip(item) {
+        if (!item || typeof item !== 'object') return false;
+
+        const hasTmProfile = !!item.tmResult?.tmProfile;
+        const hasUsefulTmUrl = !!item.tmResult?.tmUrl && !item.tmResult?.error;
+        const hasSlfAlter = !!item.slfAlter;
+        const tmError = String(item.tmResult?.error || '').trim();
+        const rowOnly = !!item.row && !hasTmProfile && !hasUsefulTmUrl && !hasSlfAlter;
+
+        if (rowOnly) return false;
+        if (tmError && !hasTmProfile && !hasUsefulTmUrl && !hasSlfAlter) return false;
+
+        return hasTmProfile || hasUsefulTmUrl || hasSlfAlter;
     };
 
     TransferMarketAnalyzer.pruneExpiredAnalysisCache = function pruneExpiredAnalysisCache(cache = null) {
@@ -14402,7 +14418,8 @@ const TransferMarketAnalyzer = {
         const now = Date.now();
 
         Object.keys(current || {}).forEach(key => {
-            if (this.isAnalysisCacheItemExpired(current[key], now)) {
+            const item = current[key];
+            if (this.isAnalysisCacheItemExpired(item, now)) {
                 delete current[key];
             }
         });
@@ -14449,6 +14466,7 @@ const TransferMarketAnalyzer = {
             if (!item) continue;
             if (this.isAnalysisCacheItemExpired(item)) continue;
             if (!this.hasRestorableAnalysisCacheItem(item)) continue;
+            if (this.analysisCacheStrictSkipMode && !this.isAnalysisCacheCompleteEnoughToSkip(item)) continue;
 
             return item;
         }
@@ -14504,13 +14522,18 @@ const TransferMarketAnalyzer = {
         return originalMount.call(this);
     };
 
-    TransferMarketAnalyzer.analyzeVisibleRows = async function analyzeVisibleRowsWithTtlCleanup() {
+    TransferMarketAnalyzer.analyzeVisibleRows = async function analyzeVisibleRowsWithStrictSkipCache() {
         if (this.isHistoryPage && !this.isHistoryPage()) {
             const pruned = this.pruneExpiredAnalysisCache();
             this.saveAnalysisCache(pruned);
         }
 
-        return originalAnalyzeVisibleRows.call(this);
+        this.analysisCacheStrictSkipMode = true;
+        try {
+            return await originalAnalyzeVisibleRows.call(this);
+        } finally {
+            this.analysisCacheStrictSkipMode = false;
+        }
     };
 }());
 // <<< src/modules/transfer-analyzer/tm-analysis-cache-ttl.js
@@ -16311,15 +16334,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.121',
-        scriptVersion: '4.4.121',
+        version: '4.4.122',
+        scriptVersion: '4.4.122',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.121',
+        scriptVersion: '4.4.122',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
