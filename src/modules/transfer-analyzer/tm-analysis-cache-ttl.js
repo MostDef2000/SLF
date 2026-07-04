@@ -17,6 +17,17 @@
         return !savedAt || now - savedAt > this.analysisCacheTtlMs;
     };
 
+    TransferMarketAnalyzer.hasRestorableAnalysisCacheItem = function hasRestorableAnalysisCacheItem(item) {
+        if (!item || typeof item !== 'object') return false;
+
+        const hasTmResult = !!item.tmResult;
+        const hasSlfAlter = !!item.slfAlter;
+        const hasSavedRow = !!item.row;
+        const hasPlayerId = !!String(item.playerId || item.row?.playerId || '').trim();
+
+        return hasPlayerId && (hasTmResult || hasSlfAlter || hasSavedRow);
+    };
+
     TransferMarketAnalyzer.pruneExpiredAnalysisCache = function pruneExpiredAnalysisCache(cache = null) {
         const current = cache || originalLoadAnalysisCache.call(this);
         const now = Date.now();
@@ -43,6 +54,22 @@
     TransferMarketAnalyzer.saveAnalysisCache = function saveAnalysisCacheWithTtlCleanup(cache) {
         const pruned = this.pruneExpiredAnalysisCache(cache || {});
         originalSaveAnalysisCache.call(this, pruned);
+    };
+
+    TransferMarketAnalyzer.getCachedAnalysis = function getCachedAnalysisWithPartialRestore(row) {
+        const cache = this.loadAnalysisCache();
+        const keys = this.buildAnalysisCacheKeys(row, null);
+
+        for (const key of keys) {
+            const item = cache[key];
+            if (!item) continue;
+            if (this.isAnalysisCacheItemExpired(item)) continue;
+            if (!this.hasRestorableAnalysisCacheItem(item)) continue;
+
+            return item;
+        }
+
+        return null;
     };
 
     TransferMarketAnalyzer.mount = function mountWithTtlCleanup() {
