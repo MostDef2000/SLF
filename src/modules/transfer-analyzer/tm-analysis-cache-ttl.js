@@ -111,12 +111,28 @@
     TransferMarketAnalyzer.hasRestorableAnalysisCacheItem = function hasRestorableAnalysisCacheItem(item) {
         if (!item || typeof item !== 'object') return false;
 
-        const hasTmResult = !!item.tmResult;
+        const hasTmProfile = !!item.tmResult?.tmProfile;
+        const hasUsefulTmUrl = !!item.tmResult?.tmUrl && !item.tmResult?.error;
         const hasSlfAlter = !!item.slfAlter;
         const hasSavedRow = !!item.row;
         const hasPlayerId = !!String(item.playerId || item.row?.playerId || '').trim();
 
-        return hasPlayerId && (hasTmResult || hasSlfAlter || hasSavedRow);
+        return hasPlayerId && (hasTmProfile || hasUsefulTmUrl || hasSlfAlter || hasSavedRow);
+    };
+
+    TransferMarketAnalyzer.isAnalysisCacheCompleteEnoughToSkip = function isAnalysisCacheCompleteEnoughToSkip(item) {
+        if (!item || typeof item !== 'object') return false;
+
+        const hasTmProfile = !!item.tmResult?.tmProfile;
+        const hasUsefulTmUrl = !!item.tmResult?.tmUrl && !item.tmResult?.error;
+        const hasSlfAlter = !!item.slfAlter;
+        const tmError = String(item.tmResult?.error || '').trim();
+        const rowOnly = !!item.row && !hasTmProfile && !hasUsefulTmUrl && !hasSlfAlter;
+
+        if (rowOnly) return false;
+        if (tmError && !hasTmProfile && !hasUsefulTmUrl && !hasSlfAlter) return false;
+
+        return hasTmProfile || hasUsefulTmUrl || hasSlfAlter;
     };
 
     TransferMarketAnalyzer.pruneExpiredAnalysisCache = function pruneExpiredAnalysisCache(cache = null) {
@@ -124,7 +140,8 @@
         const now = Date.now();
 
         Object.keys(current || {}).forEach(key => {
-            if (this.isAnalysisCacheItemExpired(current[key], now)) {
+            const item = current[key];
+            if (this.isAnalysisCacheItemExpired(item, now)) {
                 delete current[key];
             }
         });
@@ -171,6 +188,7 @@
             if (!item) continue;
             if (this.isAnalysisCacheItemExpired(item)) continue;
             if (!this.hasRestorableAnalysisCacheItem(item)) continue;
+            if (this.analysisCacheStrictSkipMode && !this.isAnalysisCacheCompleteEnoughToSkip(item)) continue;
 
             return item;
         }
@@ -226,12 +244,17 @@
         return originalMount.call(this);
     };
 
-    TransferMarketAnalyzer.analyzeVisibleRows = async function analyzeVisibleRowsWithTtlCleanup() {
+    TransferMarketAnalyzer.analyzeVisibleRows = async function analyzeVisibleRowsWithStrictSkipCache() {
         if (this.isHistoryPage && !this.isHistoryPage()) {
             const pruned = this.pruneExpiredAnalysisCache();
             this.saveAnalysisCache(pruned);
         }
 
-        return originalAnalyzeVisibleRows.call(this);
+        this.analysisCacheStrictSkipMode = true;
+        try {
+            return await originalAnalyzeVisibleRows.call(this);
+        } finally {
+            this.analysisCacheStrictSkipMode = false;
+        }
     };
 }());
