@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.144
+// @version      4.4.145
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.144',
-        scriptVersion: '4.4.144',
+        version: '4.4.145',
+        scriptVersion: '4.4.145',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.144',
+        scriptVersion: '4.4.145',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -14610,13 +14610,13 @@ const TransferMarketAnalyzer = {
 
 
 // >>> src/modules/transfer-analyzer/tm-analysis-cache-backfill.js
-// Transfer Analyzer: stable persistence + fast visible analysis
+// Transfer Analyzer: compact state persistence + fast visible analysis
 // ============================================================
 // Single active pipeline:
-// - one analyzeVisibleRows implementation
-// - compact per-player persistence
-// - stable restore after refresh
-// - safe parallel analysis for visible rows
+// - save analysis only to compact per-player state
+// - do not write legacy row-analysis blob cache
+// - restore from compact state first, then lower TM/SLF cache
+// - fast visible analysis with safe concurrency
 
 (function () {
     if (typeof TransferMarketAnalyzer === 'undefined' || !TransferMarketAnalyzer) return;
@@ -14628,36 +14628,39 @@ const TransferMarketAnalyzer = {
     const INDEX_KEY = 'slf_ps2_index';
     const LEGACY_BLOB_KEY = 'slf_player_state_v1';
     const SNAPSHOT_KEYS = ['slf_transfer_analysis_snapshot_cache_v2', 'slf_transfer_analysis_snapshot_cache_v1'];
-
-    const originalGetCachedAnalysis = A.getCachedAnalysis;
-    const originalSaveRowAnalysis = A.saveRowAnalysis;
-    const originalClearAnalysisCache = A.clearAnalysisCache;
-
-    A.analysisCacheTtlMs = TTL_MS;
+    const oldGetCachedAnalysis = A.getCachedAnalysis;
+    const oldClearAnalysisCache = A.clearAnalysisCache;
 
     const now = () => Date.now();
-    const key = id => PREFIX + String(id || '').trim();
-    const parse = (v, f) => { try { return JSON.parse(v || '') || f; } catch { return f; } };
+    const storageKey = id => PREFIX + String(id || '').trim();
+    const parse = (value, fallback) => { try { return JSON.parse(value || '') || fallback; } catch { return fallback; } };
     const readIndex = () => {
-        const v = parse(localStorage.getItem(INDEX_KEY), []);
-        return Array.isArray(v) ? v.map(String) : [];
+        const ids = parse(localStorage.getItem(INDEX_KEY), []);
+        return Array.isArray(ids) ? ids.map(String) : [];
     };
     const writeIndex = ids => {
-        try { localStorage.setItem(INDEX_KEY, JSON.stringify([...new Set((ids || []).map(String).filter(Boolean))].slice(-1000))); } catch (e) { console.warn('[SLF Transfer Persist] index write failed', e); }
+        try {
+            localStorage.setItem(INDEX_KEY, JSON.stringify([...new Set((ids || []).map(String).filter(Boolean))].slice(-1000)));
+        } catch (error) {
+            console.warn('[SLF Transfer Persist] index write failed', error);
+        }
     };
     const addIndex = id => {
         const ids = readIndex();
-        if (!ids.includes(String(id))) { ids.push(String(id)); writeIndex(ids); }
+        if (!ids.includes(String(id))) {
+            ids.push(String(id));
+            writeIndex(ids);
+        }
     };
     const expired = item => !item || !item.t || now() - Number(item.t || 0) > TTL_MS;
 
     function pruneOldest() {
         const items = readIndex()
-            .map(id => ({ id, item: parse(localStorage.getItem(key(id)), null) }))
-            .filter(x => x.item?.t)
+            .map(id => ({ id, item: parse(localStorage.getItem(storageKey(id)), null) }))
+            .filter(x => x.item && x.item.t)
             .sort((a, b) => Number(a.item.t || 0) - Number(b.item.t || 0));
         const removeCount = Math.max(10, Math.ceil(items.length * 0.15));
-        items.slice(0, removeCount).forEach(x => localStorage.removeItem(key(x.id)));
+        items.slice(0, removeCount).forEach(x => localStorage.removeItem(storageKey(x.id)));
         writeIndex(items.slice(removeCount).map(x => x.id));
     }
 
@@ -14666,29 +14669,28 @@ const TransferMarketAnalyzer = {
         if (!id || !item) return false;
         const payload = JSON.stringify({ ...item, id, v: 2, t: now() });
         try {
-            localStorage.setItem(key(id), payload);
+            localStorage.setItem(storageKey(id), payload);
             addIndex(id);
             return true;
-        } catch (e) {
+        } catch (error) {
             pruneOldest();
-            try { localStorage.setItem(key(id), payload); addIndex(id); return true; }
-            catch (e2) { console.warn('[SLF Transfer Persist] write failed', id, e2); return false; }
+            try {
+                localStorage.setItem(storageKey(id), payload);
+                addIndex(id);
+                return true;
+            } catch (error2) {
+                console.warn('[SLF Transfer Persist] compact state write failed', id, error2);
+                return false;
+            }
         }
     }
 
     function readState(id) {
         id = String(id || '').trim();
         if (!id) return null;
-        const item = parse(localStorage.getItem(key(id)), null);
+        const item = parse(localStorage.getItem(storageKey(id)), null);
         if (item && !expired(item)) return item;
-        if (item) localStorage.removeItem(key(id));
-
-        const legacy = parse(localStorage.getItem(LEGACY_BLOB_KEY), {})?.[id] || null;
-        if (legacy && !expired(legacy)) {
-            const migrated = { ...legacy, id, v: 2, t: Number(legacy.t || legacy.updatedAt || legacy.savedAt || now()) };
-            writeState(id, migrated);
-            return migrated;
-        }
+        if (item) localStorage.removeItem(storageKey(id));
         return null;
     }
 
@@ -14721,37 +14723,60 @@ const TransferMarketAnalyzer = {
         };
     }
 
-    function compactSeason(r) {
-        return r ? {
-            season: r.season || '', seasonLabel: r.seasonLabel || '', leagueLevel: r.leagueLevel ?? null,
-            leagueSkill: r.leagueSkill ?? null, minutesPct: r.minutesPct ?? null, minutes: r.minutes ?? null,
-            gamesPlayed: r.gamesPlayed ?? null, gamesPossible: r.gamesPossible ?? null, starts: r.starts ?? null
+    function compactSeason(row) {
+        return row ? {
+            season: row.season || '',
+            seasonLabel: row.seasonLabel || '',
+            leagueLevel: row.leagueLevel ?? null,
+            leagueSkill: row.leagueSkill ?? null,
+            minutesPct: row.minutesPct ?? null,
+            minutes: row.minutes ?? null,
+            gamesPlayed: row.gamesPlayed ?? null,
+            gamesPossible: row.gamesPossible ?? null,
+            starts: row.starts ?? null
         } : null;
     }
 
     function compactAlter(a) {
         if (!a) return null;
         return {
-            age: a.age ?? null, talent: a.talent ?? null, currentSkill: a.currentSkill ?? null,
-            finalSkill: a.finalSkill ?? null, skillDelta: a.skillDelta ?? null,
-            currentSeasonYear: a.currentSeasonYear ?? null, currentSeasonLabel: a.currentSeasonLabel || '',
-            hasCurrentSeason: !!a.hasCurrentSeason, isCurrentSeasonActive: !!a.isCurrentSeasonActive,
-            staleActivity: !!a.staleActivity, lastSeasonYear: a.lastSeasonYear ?? null,
-            currentRow: compactSeason(a.currentRow), talentUpgradeEligible: !!a.talentUpgradeEligible,
-            talentUpgradeRow: compactSeason(a.talentUpgradeRow), bestEligibleRow: compactSeason(a.bestEligibleRow),
+            age: a.age ?? null,
+            talent: a.talent ?? null,
+            currentSkill: a.currentSkill ?? null,
+            finalSkill: a.finalSkill ?? null,
+            skillDelta: a.skillDelta ?? null,
+            currentSeasonYear: a.currentSeasonYear ?? null,
+            currentSeasonLabel: a.currentSeasonLabel || '',
+            hasCurrentSeason: !!a.hasCurrentSeason,
+            isCurrentSeasonActive: !!a.isCurrentSeasonActive,
+            staleActivity: !!a.staleActivity,
+            lastSeasonYear: a.lastSeasonYear ?? null,
+            currentRow: compactSeason(a.currentRow),
+            talentUpgradeEligible: !!a.talentUpgradeEligible,
+            talentUpgradeRow: compactSeason(a.talentUpgradeRow),
+            bestEligibleRow: compactSeason(a.bestEligibleRow),
             leagueAboveSkill: !!a.leagueAboveSkill
         };
     }
 
-    function compactRow(r) {
-        return r ? {
-            playerId: String(r.playerId || ''), playerUrl: r.playerUrl || '', name: r.name || '',
-            positions: Array.isArray(r.positions) ? r.positions.slice(0, 4) : [],
-            age: r.age ?? null, talent: r.talent ?? null, scoutSkill: r.scoutSkill ?? null, potentialText: r.potentialText || '',
-            slfPrice: r.slfPrice ?? r.salePrice ?? null, slfPriceText: r.slfPriceText || r.salePriceText || '',
-            slfPriceCellText: r.slfPriceCellText || '', slfSecondaryPrice: r.slfSecondaryPrice ?? null,
-            slfSecondaryPriceText: r.slfSecondaryPriceText || '', nominalRatio: r.nominalRatio ?? null,
-            nominalBase: r.nominalBase ?? null, slfPriceSource: r.slfPriceSource || ''
+    function compactRow(row) {
+        return row ? {
+            playerId: String(row.playerId || ''),
+            playerUrl: row.playerUrl || '',
+            name: row.name || '',
+            positions: Array.isArray(row.positions) ? row.positions.slice(0, 4) : [],
+            age: row.age ?? null,
+            talent: row.talent ?? null,
+            scoutSkill: row.scoutSkill ?? null,
+            potentialText: row.potentialText || '',
+            slfPrice: row.slfPrice ?? row.salePrice ?? null,
+            slfPriceText: row.slfPriceText || row.salePriceText || '',
+            slfPriceCellText: row.slfPriceCellText || '',
+            slfSecondaryPrice: row.slfSecondaryPrice ?? null,
+            slfSecondaryPriceText: row.slfSecondaryPriceText || '',
+            nominalRatio: row.nominalRatio ?? null,
+            nominalBase: row.nominalBase ?? null,
+            slfPriceSource: row.slfPriceSource || ''
         } : null;
     }
 
@@ -14769,9 +14794,8 @@ const TransferMarketAnalyzer = {
         };
     }
 
-    function stateToCached(row, state) {
-        if (!state) return null;
-        const savedRow = state.row || {};
+    function applySavedRowFields(row, savedRow) {
+        savedRow = savedRow || {};
         row.slfPrice = row.slfPrice ?? savedRow.slfPrice ?? null;
         row.slfPriceText = row.slfPriceText || savedRow.slfPriceText || '';
         row.slfPriceCellText = row.slfPriceCellText || savedRow.slfPriceCellText || '';
@@ -14780,21 +14804,24 @@ const TransferMarketAnalyzer = {
         row.nominalRatio = row.nominalRatio ?? savedRow.nominalRatio ?? null;
         row.nominalBase = row.nominalBase ?? savedRow.nominalBase ?? null;
         row.slfPriceSource = row.slfPriceSource || savedRow.slfPriceSource || '';
+    }
 
+    function stateToCached(row, state) {
+        if (!state) return null;
+        applySavedRowFields(row, state.row);
         return {
             schema: 'transfer_row_analysis_state_v2',
             savedAt: Number(state.t || now()),
             playerId: String(state.id || row.playerId || ''),
-            name: row.name || savedRow.name || '',
             tmResult: {
                 playerId: String(state.id || row.playerId || ''),
-                slfUrl: row.playerUrl || savedRow.playerUrl || '',
+                slfUrl: row.playerUrl || state.row?.playerUrl || '',
                 tmUrl: state.tmUrl || state.tmProfile?.tmUrl || '',
                 tmProfile: state.tmProfile || null,
                 error: ''
             },
             slfAlter: state.slfAlter || null,
-            row: savedRow
+            row: state.row || {}
         };
     }
 
@@ -14804,14 +14831,16 @@ const TransferMarketAnalyzer = {
     }
 
     function clearState() {
-        readIndex().forEach(id => localStorage.removeItem(key(id)));
+        readIndex().forEach(id => localStorage.removeItem(storageKey(id)));
         localStorage.removeItem(INDEX_KEY);
         localStorage.removeItem(LEGACY_BLOB_KEY);
     }
 
     window.SLF = window.SLF || {};
     window.SLF.PlayerStateStore = {
-        KEY: INDEX_KEY, PREFIX, TTL_MS,
+        KEY: INDEX_KEY,
+        PREFIX,
+        TTL_MS,
         get: id => readState(id),
         saveAnalysis,
         upsert: (id, patch) => writeState(id, { ...(readState(id) || {}), ...(patch || {}) }),
@@ -14821,21 +14850,19 @@ const TransferMarketAnalyzer = {
         stats: () => ({ index: readIndex().length, key: INDEX_KEY, prefix: PREFIX })
     };
 
-    A.getCachedAnalysis = function getCachedAnalysisStable(row) {
+    A.getCachedAnalysis = function getCachedAnalysisCompact(row) {
         const state = readState(row?.playerId);
         if (state) return stateToCached(row, state);
-        return typeof originalGetCachedAnalysis === 'function' ? originalGetCachedAnalysis.call(this, row) : null;
+        const cached = typeof oldGetCachedAnalysis === 'function' ? oldGetCachedAnalysis.call(this, row) : null;
+        if (cached && cached.tmResult?.tmProfile) return cached;
+        return null;
     };
 
-    A.saveRowAnalysis = function saveRowAnalysisStable(row, enriched, slfAlter) {
-        const result = typeof originalSaveRowAnalysis === 'function'
-            ? originalSaveRowAnalysis.call(this, row, enriched, slfAlter)
-            : undefined;
+    A.saveRowAnalysis = function saveRowAnalysisCompactStateOnly(row, enriched, slfAlter) {
         saveAnalysis(row, enriched, slfAlter || null);
-        return result;
     };
 
-    A.renderCachedRows = function renderCachedRowsStable() {
+    A.renderCachedRows = function renderCachedRowsCompactState() {
         const rows = this.parseVisibleRows?.() || [];
         if (!rows.length) return;
 
@@ -14893,19 +14920,14 @@ const TransferMarketAnalyzer = {
         this.setStatus?.(`Fast анализ: ${rows.length} игроков, parallel ${CONCURRENCY}...`);
 
         try {
-            await mapLimit(rows, CONCURRENCY, async (row) => {
+            await mapLimit(rows, CONCURRENCY, async row => {
                 try {
                     const cached = this.getCachedAnalysis?.(row);
-                    if (cached && this.applyCachedAnalysis?.(row, cached)) {
-                        cache++; done++;
-                        if (done % 3 === 0 || done === rows.length) this.setStatus?.(`Fast ${done}/${rows.length}: cache ${cache}, lower ${lower}, analyzed ${analyzed}, errors ${errors}`);
-                        return;
-                    }
+                    if (cached && this.applyCachedAnalysis?.(row, cached)) { cache++; return; }
 
                     const tmCached = typeof TMEnrichmentLayer !== 'undefined' ? TMEnrichmentLayer.peekBySlfPlayerId(row.playerId) : null;
                     const alterCached = typeof SLFAlterLayer !== 'undefined' ? SLFAlterLayer.peekByPlayerId(row.playerId) : null;
                     const fromLower = !!tmCached && !!alterCached;
-
                     if (!fromLower) this.renderLoadingBadge?.(row);
 
                     const tmPromise = tmCached ? Promise.resolve(tmCached) : TMEnrichmentLayer.getBySlfPlayerId(row.playerId);
@@ -14913,8 +14935,8 @@ const TransferMarketAnalyzer = {
                         console.warn('[SLF Transfer Analyzer] alter.php failed', row.playerId, error);
                         return null;
                     });
-
                     const [tmResult, slfAlter] = await Promise.all([tmPromise, alterPromise]);
+
                     row.tmUrl = tmResult?.tmUrl || '';
                     row.tmProfile = tmResult?.tmProfile || null;
                     row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
@@ -14922,7 +14944,6 @@ const TransferMarketAnalyzer = {
 
                     this.renderRowBadge?.(row, tmResult, slfAlter || null);
                     this.saveRowAnalysis?.(row, tmResult, slfAlter || null);
-
                     if (fromLower) lower++; else analyzed++;
                 } catch (error) {
                     errors++;
@@ -14930,7 +14951,9 @@ const TransferMarketAnalyzer = {
                     this.renderErrorBadge?.(row, error);
                 } finally {
                     done++;
-                    if (done % 3 === 0 || done === rows.length) this.setStatus?.(`Fast ${done}/${rows.length}: cache ${cache}, lower ${lower}, analyzed ${analyzed}, errors ${errors}`);
+                    if (done % 3 === 0 || done === rows.length) {
+                        this.setStatus?.(`Fast ${done}/${rows.length}: cache ${cache}, lower ${lower}, analyzed ${analyzed}, errors ${errors}`);
+                    }
                 }
             });
         } finally {
@@ -14943,14 +14966,14 @@ const TransferMarketAnalyzer = {
         this.setStatus?.(`Готово fast: ${rows.length} игроков · cache ${cache} · lower ${lower} · analyzed ${analyzed} · errors ${errors}`);
     };
 
-    A.clearAnalysisCache = function clearAnalysisStable() {
-        originalClearAnalysisCache?.call(this);
+    A.clearAnalysisCache = function clearAnalysisCompactState() {
+        oldClearAnalysisCache?.call(this);
         clearState();
-        SNAPSHOT_KEYS.forEach(storageKey => localStorage.removeItem(storageKey));
+        SNAPSHOT_KEYS.forEach(k => localStorage.removeItem(k));
         this.setStatus?.('TM/SLF/analysis/state cache очищен.');
     };
 
-    console.log('[SLF Transfer Analyzer] stable fast core active', { concurrency: CONCURRENCY, state: window.SLF.PlayerStateStore.stats() });
+    console.log('[SLF Transfer Analyzer] compact state + fast core active', { concurrency: CONCURRENCY, state: window.SLF.PlayerStateStore.stats() });
 }());
 // <<< src/modules/transfer-analyzer/tm-analysis-cache-backfill.js
 
@@ -18233,15 +18256,15 @@ if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer && !TMEnrichme
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.144',
-        scriptVersion: '4.4.144',
+        version: '4.4.145',
+        scriptVersion: '4.4.145',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.144',
+        scriptVersion: '4.4.145',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
