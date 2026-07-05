@@ -96,6 +96,21 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         return marker;
     };
 
+    TransferMarketAnalyzer.renderSemanticAnalysisGroups = function renderOnlyCoreAnalysisChips(markers, linksHtml, detailsHtml) {
+        const visibleMarkers = [
+            this.firstMarkerByCategory(markers, 'slf'),
+            this.firstMarkerByCategory(markers, 'activity'),
+            this.firstMarkerByCategory(markers, 'tm')
+        ].filter(Boolean);
+
+        return `
+            <div class="ta-line ta-primary" data-ta-line="primary" aria-label="SLF MIN TM">
+                ${visibleMarkers.map(marker => this.renderCompactChip(this.withVisualPriority(marker, 'high'))).join('')}
+                ${detailsHtml || ''}
+            </div>
+        `;
+    };
+
     TransferMarketAnalyzer.clearAllTransferAnalysisState();
 
     const style = document.createElement('style');
