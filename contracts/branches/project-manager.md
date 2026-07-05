@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 2.0.1
+Version: 2.0.2
 Status: Active
 Agent: AI Project Manager Agent
 Project: SLF
@@ -428,3 +428,38 @@ Rules:
 - Use `GitHub Actions: NO` for discussion, planning, governance-only updates, blocked integration, incomplete source integration, browser-only checks, or any state where Actions are not the next safe user action.
 - The footer is mandatory even for short answers, so the user never has to infer whether a release build is required.
 - The reason must be short and operational, for example: `runtime/source changes are in main and latest userscript must be rebuilt` or `governance-only contract change; no runtime/build files changed`.
+
+## 20. Mandatory concise SLF response format
+
+User-facing SLF responses must be concise and operational by default.
+
+Default final response format after implementation, governance, review, or release work:
+
+```text
+## Сделано
+- кратко: что реально изменено
+- без больших фрагментов кода
+- без подробных внутренних рассуждений
+
+## Проверка
+- кратко: что проверено или что осталось проверить вручную
+
+## SLF Task Runtime
+- Task:
+- Phase:
+- Branch:
+- main updated:
+- runtime/build changes:
+
+GitHub Actions: YES/NO
+Причина:
+```
+
+Rules:
+
+- Do not include large code blocks unless the user explicitly asks for code, patch, diff, or file contents.
+- Do not explain implementation details at length unless debugging, investigation, or review requires it.
+- Prefer short factual bullets over long narrative.
+- Always separate the GitHub Actions decision as the final visible block.
+- If the task only updates contracts/governance, say so directly and keep the answer short.
+- If implementation is not actually complete, state the real phase and do not imply completion.
