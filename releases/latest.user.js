@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.145
+// @version      4.4.146
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.145',
-        scriptVersion: '4.4.145',
+        version: '4.4.146',
+        scriptVersion: '4.4.146',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.145',
+        scriptVersion: '4.4.146',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -14275,855 +14275,143 @@ const TransferMarketAnalyzer = {
 // <<< src/modules/transfer-analyzer/transfer-market-analyzer.js
 
 
-// >>> src/modules/transfer-analyzer/tm-analysis-cache-ttl.js
-// Transfer Analyzer: 7-day TM analysis cache policy
+// >>> src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js
+// Transfer Analyzer: compact MKT UI
 // ============================================================
 
-(function () {
-    if (typeof TransferMarketAnalyzer === 'undefined' || !TransferMarketAnalyzer) return;
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !TransferMarketAnalyzer.slfCompactMktUiApplied) {
+    TransferMarketAnalyzer.slfCompactMktUiApplied = true;
 
-    const TM_ANALYSIS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-    const originalLoadAnalysisCache = TransferMarketAnalyzer.loadAnalysisCache;
-    const originalMount = TransferMarketAnalyzer.mount;
-    const originalAnalyzeVisibleRows = TransferMarketAnalyzer.analyzeVisibleRows;
-    const originalApplyCachedAnalysis = TransferMarketAnalyzer.applyCachedAnalysis;
+    TransferMarketAnalyzer.removeMktSortToolbarButtons = function removeMktSortToolbarButtons() {
+        const bargainButton = document.getElementById('slf-transfer-sort-mkt-bargain');
+        const overpricedButton = document.getElementById('slf-transfer-sort-mkt-overpriced');
 
-    TransferMarketAnalyzer.analysisCacheTtlMs = TM_ANALYSIS_CACHE_TTL_MS;
+        if (bargainButton && bargainButton.parentNode) {
+            bargainButton.parentNode.removeChild(bargainButton);
+        }
 
-    function compactActivity(activity) {
-        if (!activity || typeof activity !== 'object') return null;
-        return {
-            startingElevenPct: activity.startingElevenPct ?? null,
-            minutesPct: activity.minutesPct ?? null,
-            goalParticipationPct: activity.goalParticipationPct ?? null
-        };
-    }
-
-    function compactProfile(profile) {
-        if (!profile || typeof profile !== 'object') return null;
-        return {
-            tmUrl: profile.tmUrl || '',
-            tmId: profile.tmId || '',
-            marketValueText: profile.marketValueText || '',
-            marketValueEur: profile.marketValueEur ?? null,
-            lastKnownMarketValueText: profile.lastKnownMarketValueText || '',
-            lastKnownMarketValueEur: profile.lastKnownMarketValueEur ?? null,
-            lastKnownMarketValueDate: profile.lastKnownMarketValueDate || '',
-            marketValueIsHistorical: !!profile.marketValueIsHistorical,
-            highestMarketValueText: profile.highestMarketValueText || '',
-            highestMarketValueEur: profile.highestMarketValueEur ?? null,
-            highestMarketValueDate: profile.highestMarketValueDate || '',
-            valuePeakRatio: profile.valuePeakRatio ?? null,
-            isRetired: !!profile.isRetired,
-            isFreeAgent: !!profile.isFreeAgent,
-            currentClub: profile.currentClub || '',
-            playerAgent: profile.playerAgent || '',
-            contractExpires: profile.contractExpires || '',
-            joined: profile.joined || '',
-            lastContractExtension: profile.lastContractExtension || '',
-            age: profile.age ?? null,
-            activity: compactActivity(profile.activity),
-            transferHistory: Array.isArray(profile.transferHistory)
-                ? profile.transferHistory.slice(0, 12).map(item => ({ text: item?.text || '', dateText: item?.dateText || '', club: item?.club || '' }))
-                : [],
-            youthClubs: Array.isArray(profile.youthClubs) ? profile.youthClubs.slice(0, 12) : [],
-            rumors: Array.isArray(profile.rumors)
-                ? profile.rumors.slice(0, 12).map(item => ({ text: item?.text || item?.rawText || '', rawText: item?.rawText || '', club: item?.club || '', dateText: item?.dateText || '', dateTs: item?.dateTs ?? null }))
-                : []
-        };
-    }
-
-    function compactTmResult(enriched, row) {
-        const profile = compactProfile(enriched?.tmProfile || null);
-        return {
-            playerId: String(enriched?.playerId || row?.playerId || ''),
-            slfUrl: enriched?.slfUrl || row?.playerUrl || '',
-            tmUrl: enriched?.tmUrl || profile?.tmUrl || '',
-            tmProfile: profile,
-            error: enriched?.error || ''
-        };
-    }
-
-    function compactSeasonRow(row) {
-        if (!row || typeof row !== 'object') return null;
-        return {
-            season: row.season || '',
-            seasonLabel: row.seasonLabel || '',
-            leagueLevel: row.leagueLevel ?? null,
-            leagueSkill: row.leagueSkill ?? null,
-            minutesPct: row.minutesPct ?? null,
-            minutes: row.minutes ?? null,
-            gamesPlayed: row.gamesPlayed ?? null,
-            gamesPossible: row.gamesPossible ?? null,
-            starts: row.starts ?? null,
-            teamText: row.teamText || ''
-        };
-    }
-
-    function compactSlfAlter(slfAlter) {
-        if (!slfAlter || typeof slfAlter !== 'object') return null;
-        return {
-            age: slfAlter.age ?? null,
-            talent: slfAlter.talent ?? null,
-            currentSkill: slfAlter.currentSkill ?? null,
-            finalSkill: slfAlter.finalSkill ?? null,
-            skillDelta: slfAlter.skillDelta ?? null,
-            currentSeasonYear: slfAlter.currentSeasonYear ?? null,
-            currentSeasonLabel: slfAlter.currentSeasonLabel || '',
-            hasCurrentSeason: !!slfAlter.hasCurrentSeason,
-            isCurrentSeasonActive: !!slfAlter.isCurrentSeasonActive,
-            staleActivity: !!slfAlter.staleActivity,
-            lastSeasonYear: slfAlter.lastSeasonYear ?? null,
-            currentRow: compactSeasonRow(slfAlter.currentRow),
-            talentUpgradeEligible: !!slfAlter.talentUpgradeEligible,
-            talentUpgradeRow: compactSeasonRow(slfAlter.talentUpgradeRow),
-            bestEligibleRow: compactSeasonRow(slfAlter.bestEligibleRow),
-            seasonSkills: Array.isArray(slfAlter.seasonSkills) ? slfAlter.seasonSkills.slice(0, 8).map(item => ({ season: item?.season || '', skill: item?.skill ?? null })) : []
-        };
-    }
-
-    function getRenderedBadgeSnapshot(row) {
-        const box = row?.rowEl?.querySelector?.('.slf-transfer-analysis-badge') || null;
-        const html = String(box?.innerHTML || row?.renderedBadgeHtml || '').trim();
-        const text = String(box?.innerText || box?.textContent || row?.renderedBadgeText || '')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-        if (!html || !text) return null;
-
-        return {
-            html: html.slice(0, 45000),
-            text: text.slice(0, 1400)
-        };
-    }
-
-    function applySavedRowFields(target, cached) {
-        const savedRow = cached?.row || {};
-        target.slfPrice = target.slfPrice ?? savedRow.slfPrice ?? null;
-        target.slfPriceText = target.slfPriceText || savedRow.slfPriceText || '';
-        target.slfPriceCellText = target.slfPriceCellText || savedRow.slfPriceCellText || '';
-        target.slfSecondaryPriceText = target.slfSecondaryPriceText || savedRow.slfSecondaryPriceText || '';
-        target.slfSecondaryPrice = target.slfSecondaryPrice ?? savedRow.slfSecondaryPrice ?? null;
-        target.nominalRatio = target.nominalRatio ?? savedRow.nominalRatio ?? null;
-        target.nominalBase = target.nominalBase ?? savedRow.nominalBase ?? null;
-        target.slfPriceSource = target.slfPriceSource || savedRow.slfPriceSource || '';
-    }
-
-    TransferMarketAnalyzer.isAnalysisCacheItemExpired = function isAnalysisCacheItemExpired(item, now = Date.now()) {
-        const savedAt = Number(item?.savedAt || 0);
-        return !savedAt || now - savedAt > this.analysisCacheTtlMs;
-    };
-
-    TransferMarketAnalyzer.hasRestorableAnalysisCacheItem = function hasRestorableAnalysisCacheItem(item) {
-        if (!item || typeof item !== 'object') return false;
-
-        const hasTmProfile = !!item.tmResult?.tmProfile;
-        const hasUsefulTmUrl = !!item.tmResult?.tmUrl && !item.tmResult?.error;
-        const hasSlfAlter = !!item.slfAlter;
-        const hasSavedRow = !!item.row;
-        const hasRenderedBadge = !!item.renderedBadgeHtml;
-        const hasPlayerId = !!String(item.playerId || item.row?.playerId || '').trim();
-
-        return hasPlayerId && (hasTmProfile || hasUsefulTmUrl || hasSlfAlter || hasSavedRow || hasRenderedBadge);
-    };
-
-    TransferMarketAnalyzer.isAnalysisCacheCompleteEnoughToSkip = function isAnalysisCacheCompleteEnoughToSkip(item) {
-        if (!item || typeof item !== 'object') return false;
-
-        const hasTmProfile = !!item.tmResult?.tmProfile;
-        const hasUsefulTmUrl = !!item.tmResult?.tmUrl && !item.tmResult?.error;
-        const hasSlfAlter = !!item.slfAlter;
-        const hasRenderedBadge = !!item.renderedBadgeHtml;
-        const tmError = String(item.tmResult?.error || '').trim();
-        const rowOnly = (!!item.row || hasRenderedBadge) && !hasTmProfile && !hasUsefulTmUrl && !hasSlfAlter;
-
-        if (rowOnly) return false;
-        if (tmError && !hasTmProfile && !hasUsefulTmUrl && !hasSlfAlter) return false;
-
-        return hasTmProfile || hasUsefulTmUrl || hasSlfAlter;
-    };
-
-    TransferMarketAnalyzer.pruneExpiredAnalysisCache = function pruneExpiredAnalysisCache(cache = null) {
-        const current = cache || originalLoadAnalysisCache.call(this);
-        const now = Date.now();
-
-        Object.keys(current || {}).forEach(key => {
-            const item = current[key];
-            if (this.isAnalysisCacheItemExpired(item, now)) {
-                delete current[key];
-            }
-        });
-
-        return current || {};
-    };
-
-    TransferMarketAnalyzer.saveAnalysisCache = function saveAnalysisCacheCompact(cache) {
-        const pruned = this.pruneExpiredAnalysisCache(cache || {});
-        const entries = Object.entries(pruned)
-            .filter(([, value]) => value && Number(value.savedAt || 0))
-            .sort((a, b) => Number(b[1].savedAt || 0) - Number(a[1].savedAt || 0));
-
-        const trySave = limit => {
-            localStorage.setItem(this.analysisCacheKey, JSON.stringify(Object.fromEntries(entries.slice(0, limit))));
-        };
-
-        try {
-            trySave(350);
-        } catch (firstError) {
-            try {
-                trySave(160);
-            } catch (secondError) {
-                try {
-                    trySave(60);
-                } catch (thirdError) {
-                    console.warn('[SLF Transfer Analyzer] compact analysis cache save failed', thirdError);
-                    this.setStatus?.('Analysis cache не сохранился: localStorage quota. Нажми Сброс cache и повтори анализ.');
-                }
-            }
+        if (overpricedButton && overpricedButton.parentNode) {
+            overpricedButton.parentNode.removeChild(overpricedButton);
         }
     };
 
-    TransferMarketAnalyzer.loadAnalysisCache = function loadAnalysisCacheWithTtlCleanup() {
-        return this.pruneExpiredAnalysisCache(originalLoadAnalysisCache.call(this));
+    TransferMarketAnalyzer.formatCompactMktRatio = function formatCompactMktRatio(ratio) {
+        const value = Number(ratio || 0);
+        if (!Number.isFinite(value) || value <= 0) return '';
+
+        const raw = value >= 10 ? value.toFixed(1) : value.toFixed(2);
+        return raw.replace(/0$/, '').replace(/\.0$/, '');
     };
 
-    TransferMarketAnalyzer.getCachedAnalysis = function getCachedAnalysisWithPartialRestore(row) {
-        const cache = this.loadAnalysisCache();
-        const keys = this.buildAnalysisCacheKeys(row, null);
-
-        for (const key of keys) {
-            const item = cache[key];
-            if (!item) continue;
-            if (this.isAnalysisCacheItemExpired(item)) continue;
-            if (!this.hasRestorableAnalysisCacheItem(item)) continue;
-            if (this.analysisCacheStrictSkipMode && !this.isAnalysisCacheCompleteEnoughToSkip(item)) continue;
-
-            return item;
-        }
-
-        return null;
+    const addToolbarOriginal = TransferMarketAnalyzer.addToolbar;
+    TransferMarketAnalyzer.addToolbar = function addToolbarCompactMktUi() {
+        const result = addToolbarOriginal.apply(this, arguments);
+        this.removeMktSortToolbarButtons();
+        setTimeout(() => this.removeMktSortToolbarButtons(), 0);
+        return result;
     };
 
-    TransferMarketAnalyzer.saveRowAnalysis = function saveRowAnalysisCompact(row, enriched, slfAlter) {
-        if (!row?.playerId) return;
+    const getMarketSalePriceMarkerOriginal = TransferMarketAnalyzer.getMarketSalePriceMarker;
+    TransferMarketAnalyzer.getMarketSalePriceMarker = function getCompactMarketSalePriceMarker() {
+        const marker = getMarketSalePriceMarkerOriginal.apply(this, arguments);
+        if (!marker || marker.category !== 'market') return marker;
 
-        const cache = this.loadAnalysisCache();
-        const keys = this.buildAnalysisCacheKeys(row, enriched);
-        const renderedBadge = getRenderedBadgeSnapshot(row);
-        const item = {
-            schema: 'transfer_row_analysis_cache_v2_compact',
-            savedAt: Date.now(),
-            playerId: String(row.playerId || ''),
-            name: row.name || '',
-            tmResult: compactTmResult(enriched, row),
-            slfAlter: compactSlfAlter(slfAlter),
-            renderedBadgeHtml: renderedBadge?.html || '',
-            renderedBadgeText: renderedBadge?.text || '',
-            row: {
-                playerId: String(row.playerId || ''),
-                playerUrl: row.playerUrl || '',
-                name: row.name || '',
-                positions: row.positions || [],
-                age: row.age ?? null,
-                talent: row.talent ?? null,
-                scoutSkill: row.scoutSkill ?? null,
-                potentialText: row.potentialText || '',
-                slfPriceText: row.slfPriceText || row.salePriceText || '',
-                slfPriceCellText: row.slfPriceCellText || '',
-                slfPrice: row.slfPrice ?? row.salePrice ?? null,
-                slfSecondaryPriceText: row.slfSecondaryPriceText || '',
-                slfSecondaryPrice: row.slfSecondaryPrice ?? null,
-                nominalRatio: row.nominalRatio ?? null,
-                nominalBase: row.nominalBase ?? null,
-                slfPriceSource: row.slfPriceSource || ''
-            }
-        };
-
-        keys.forEach(key => {
-            cache[key] = item;
-        });
-
-        this.saveAnalysisCache(cache);
+        const ratio = Number(marker.marketDetails && marker.marketDetails.ratio || 0);
+        const ratioText = this.formatCompactMktRatio(ratio);
+        marker.label = ratioText ? `MKT x${ratioText}` : 'MKT ?';
+        return marker;
     };
 
-    TransferMarketAnalyzer.restoreRenderedBadgeSnapshot = function restoreRenderedBadgeSnapshot(row, cached) {
-        if (!row || !cached?.renderedBadgeHtml) return false;
-
-        applySavedRowFields(row, cached);
-
-        const box = this.getOrCreateBadgeCell?.(row);
-        if (!box) return false;
-
-        box.innerHTML = cached.renderedBadgeHtml;
-
-        try {
-            this.bindDetailsAutoClose?.();
-            this.bindHtmlTooltipPortal?.(box);
-            this.cleanupStandaloneMarketNominalControls?.(box);
-            this.refreshVisibleRankBadges?.();
-        } catch (error) {
-            console.warn('[SLF Transfer Analyzer] display snapshot restore post-bind failed', row.playerId, error);
-        }
-
-        return true;
-    };
-
-    TransferMarketAnalyzer.applyCachedAnalysis = function applyCachedAnalysisWithDisplaySnapshot(row, cached) {
-        if (!row || !cached) return false;
-
-        const hasTmProfile = !!cached.tmResult?.tmProfile;
-        const hasSlfAlter = !!cached.slfAlter;
-
-        if (hasTmProfile || hasSlfAlter) {
-            return originalApplyCachedAnalysis.call(this, row, cached);
-        }
-
-        if (this.restoreRenderedBadgeSnapshot(row, cached)) return true;
-
-        return originalApplyCachedAnalysis.call(this, row, cached);
-    };
-
-    TransferMarketAnalyzer.mount = function mountWithTtlCleanup() {
-        if (this.isPage && this.isPage() && !this.isHistoryPage()) {
-            const pruned = this.pruneExpiredAnalysisCache();
-            this.saveAnalysisCache(pruned);
-        }
-
-        return originalMount.call(this);
-    };
-
-    TransferMarketAnalyzer.analyzeVisibleRows = async function analyzeVisibleRowsWithStrictSkipCache() {
-        if (this.isHistoryPage && !this.isHistoryPage()) {
-            const pruned = this.pruneExpiredAnalysisCache();
-            this.saveAnalysisCache(pruned);
-        }
-
-        this.analysisCacheStrictSkipMode = true;
-        try {
-            return await originalAnalyzeVisibleRows.call(this);
-        } finally {
-            this.analysisCacheStrictSkipMode = false;
-        }
-    };
-}());
-// <<< src/modules/transfer-analyzer/tm-analysis-cache-ttl.js
+    const style = document.createElement('style');
+    style.textContent = '.slf-transfer-analysis-chip[data-slf-tip-category="league"],.slf-transfer-analysis-chip[data-slf-tip-category="activity"],.slf-transfer-analysis-chip[data-slf-tip-category="talent"]{flex:0 0 auto!important;width:auto!important;min-width:max-content!important;max-width:none!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}.slf-transfer-analysis-chip[data-slf-tip-category="league"]>span:first-child,.slf-transfer-analysis-chip[data-slf-tip-category="activity"]>span:first-child,.slf-transfer-analysis-chip[data-slf-tip-category="talent"]>span:first-child{min-width:max-content!important;max-width:none!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}';
+    document.head.appendChild(style);
+}
+// <<< src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js
 
 
-// >>> src/modules/transfer-analyzer/tm-analysis-cache-backfill.js
-// Transfer Analyzer: compact state persistence + fast visible analysis
+// >>> src/modules/transfer-analyzer/transfer-tm-profile-guard.js
+// Transfer Analyzer: TM profile value guard
 // ============================================================
-// Single active pipeline:
-// - save analysis only to compact per-player state
-// - do not write legacy row-analysis blob cache
-// - restore from compact state first, then lower TM/SLF cache
-// - fast visible analysis with safe concurrency
 
-(function () {
-    if (typeof TransferMarketAnalyzer === 'undefined' || !TransferMarketAnalyzer) return;
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !TransferMarketAnalyzer.slfTmProfileGuardApplied) {
+    TransferMarketAnalyzer.slfTmProfileGuardApplied = true;
+    TransferMarketAnalyzer.snapshotCacheKey = 'slf_transfer_analysis_snapshot_cache_v2';
 
-    const A = TransferMarketAnalyzer;
-    const TTL_MS = 7 * 24 * 60 * 60 * 1000;
-    const CONCURRENCY = 3;
-    const PREFIX = 'slf_ps2_';
-    const INDEX_KEY = 'slf_ps2_index';
-    const LEGACY_BLOB_KEY = 'slf_player_state_v1';
-    const SNAPSHOT_KEYS = ['slf_transfer_analysis_snapshot_cache_v2', 'slf_transfer_analysis_snapshot_cache_v1'];
-    const oldGetCachedAnalysis = A.getCachedAnalysis;
-    const oldClearAnalysisCache = A.clearAnalysisCache;
+    const originalGetTmValueMarker = TransferMarketAnalyzer.getTmValueMarker;
+    const originalGetValueTrendMarker = TransferMarketAnalyzer.getValueTrendMarker;
 
-    const now = () => Date.now();
-    const storageKey = id => PREFIX + String(id || '').trim();
-    const parse = (value, fallback) => { try { return JSON.parse(value || '') || fallback; } catch { return fallback; } };
-    const readIndex = () => {
-        const ids = parse(localStorage.getItem(INDEX_KEY), []);
-        return Array.isArray(ids) ? ids.map(String) : [];
-    };
-    const writeIndex = ids => {
-        try {
-            localStorage.setItem(INDEX_KEY, JSON.stringify([...new Set((ids || []).map(String).filter(Boolean))].slice(-1000)));
-        } catch (error) {
-            console.warn('[SLF Transfer Persist] index write failed', error);
-        }
-    };
-    const addIndex = id => {
-        const ids = readIndex();
-        if (!ids.includes(String(id))) {
-            ids.push(String(id));
-            writeIndex(ids);
-        }
-    };
-    const expired = item => !item || !item.t || now() - Number(item.t || 0) > TTL_MS;
-
-    function pruneOldest() {
-        const items = readIndex()
-            .map(id => ({ id, item: parse(localStorage.getItem(storageKey(id)), null) }))
-            .filter(x => x.item && x.item.t)
-            .sort((a, b) => Number(a.item.t || 0) - Number(b.item.t || 0));
-        const removeCount = Math.max(10, Math.ceil(items.length * 0.15));
-        items.slice(0, removeCount).forEach(x => localStorage.removeItem(storageKey(x.id)));
-        writeIndex(items.slice(removeCount).map(x => x.id));
+    function hasText(value) {
+        return String(value || '').trim().length > 0;
     }
 
-    function writeState(id, item) {
-        id = String(id || '').trim();
-        if (!id || !item) return false;
-        const payload = JSON.stringify({ ...item, id, v: 2, t: now() });
-        try {
-            localStorage.setItem(storageKey(id), payload);
-            addIndex(id);
-            return true;
-        } catch (error) {
-            pruneOldest();
-            try {
-                localStorage.setItem(storageKey(id), payload);
-                addIndex(id);
-                return true;
-            } catch (error2) {
-                console.warn('[SLF Transfer Persist] compact state write failed', id, error2);
-                return false;
-            }
-        }
-    }
+    TransferMarketAnalyzer.hasValidTmProfileForValue = function hasValidTmProfileForValue(profile) {
+        if (!profile || typeof profile !== 'object') return false;
+        if (!hasText(profile.tmUrl) && !hasText(profile.tmId)) return false;
 
-    function readState(id) {
-        id = String(id || '').trim();
-        if (!id) return null;
-        const item = parse(localStorage.getItem(storageKey(id)), null);
-        if (item && !expired(item)) return item;
-        if (item) localStorage.removeItem(storageKey(id));
-        return null;
-    }
+        if (hasText(profile.currentClub)) return true;
+        if (hasText(profile.playerAgent)) return true;
+        if (hasText(profile.contractExpires)) return true;
+        if (hasText(profile.dateOfBirth)) return true;
+        if (profile.age != null) return true;
+        if (Array.isArray(profile.transferHistory) && profile.transferHistory.length > 0) return true;
+        if (Array.isArray(profile.youthClubs) && profile.youthClubs.length > 0) return true;
+        if (profile.isRetired === true || profile.isFreeAgent === true) return true;
 
-    function compactProfile(p) {
-        if (!p) return null;
-        return {
-            tmUrl: p.tmUrl || '',
-            tmId: p.tmId || '',
-            marketValueText: p.marketValueText || '',
-            marketValueEur: Number(p.marketValueEur || 0),
-            lastKnownMarketValueText: p.lastKnownMarketValueText || '',
-            lastKnownMarketValueEur: Number(p.lastKnownMarketValueEur || 0),
-            lastKnownMarketValueDate: p.lastKnownMarketValueDate || '',
-            marketValueIsHistorical: !!p.marketValueIsHistorical,
-            highestMarketValueText: p.highestMarketValueText || '',
-            highestMarketValueEur: Number(p.highestMarketValueEur || 0),
-            highestMarketValueDate: p.highestMarketValueDate || '',
-            valuePeakRatio: p.valuePeakRatio ?? null,
-            isRetired: !!p.isRetired,
-            isFreeAgent: !!p.isFreeAgent,
-            currentClub: p.currentClub || '',
-            playerAgent: p.playerAgent || '',
-            contractExpires: p.contractExpires || '',
-            joined: p.joined || '',
-            lastContractExtension: p.lastContractExtension || '',
-            age: p.age ?? null,
-            transferHistory: (p.transferHistory || []).slice(0, 8).map(x => ({ text: String(x?.text || '').slice(0, 180), dateText: x?.dateText || '', club: x?.club || '' })),
-            youthClubs: (p.youthClubs || []).slice(0, 8).map(x => String(x || '').slice(0, 80)),
-            rumors: (p.rumors || []).slice(0, 5).map(x => ({ text: String(x?.text || x?.rawText || '').slice(0, 160), club: x?.club || '', dateText: x?.dateText || '', dateTs: x?.dateTs ?? null }))
-        };
-    }
-
-    function compactSeason(row) {
-        return row ? {
-            season: row.season || '',
-            seasonLabel: row.seasonLabel || '',
-            leagueLevel: row.leagueLevel ?? null,
-            leagueSkill: row.leagueSkill ?? null,
-            minutesPct: row.minutesPct ?? null,
-            minutes: row.minutes ?? null,
-            gamesPlayed: row.gamesPlayed ?? null,
-            gamesPossible: row.gamesPossible ?? null,
-            starts: row.starts ?? null
-        } : null;
-    }
-
-    function compactAlter(a) {
-        if (!a) return null;
-        return {
-            age: a.age ?? null,
-            talent: a.talent ?? null,
-            currentSkill: a.currentSkill ?? null,
-            finalSkill: a.finalSkill ?? null,
-            skillDelta: a.skillDelta ?? null,
-            currentSeasonYear: a.currentSeasonYear ?? null,
-            currentSeasonLabel: a.currentSeasonLabel || '',
-            hasCurrentSeason: !!a.hasCurrentSeason,
-            isCurrentSeasonActive: !!a.isCurrentSeasonActive,
-            staleActivity: !!a.staleActivity,
-            lastSeasonYear: a.lastSeasonYear ?? null,
-            currentRow: compactSeason(a.currentRow),
-            talentUpgradeEligible: !!a.talentUpgradeEligible,
-            talentUpgradeRow: compactSeason(a.talentUpgradeRow),
-            bestEligibleRow: compactSeason(a.bestEligibleRow),
-            leagueAboveSkill: !!a.leagueAboveSkill
-        };
-    }
-
-    function compactRow(row) {
-        return row ? {
-            playerId: String(row.playerId || ''),
-            playerUrl: row.playerUrl || '',
-            name: row.name || '',
-            positions: Array.isArray(row.positions) ? row.positions.slice(0, 4) : [],
-            age: row.age ?? null,
-            talent: row.talent ?? null,
-            scoutSkill: row.scoutSkill ?? null,
-            potentialText: row.potentialText || '',
-            slfPrice: row.slfPrice ?? row.salePrice ?? null,
-            slfPriceText: row.slfPriceText || row.salePriceText || '',
-            slfPriceCellText: row.slfPriceCellText || '',
-            slfSecondaryPrice: row.slfSecondaryPrice ?? null,
-            slfSecondaryPriceText: row.slfSecondaryPriceText || '',
-            nominalRatio: row.nominalRatio ?? null,
-            nominalBase: row.nominalBase ?? null,
-            slfPriceSource: row.slfPriceSource || ''
-        } : null;
-    }
-
-    function buildState(row, enriched, slfAlter) {
-        const id = String(row?.playerId || enriched?.playerId || '').trim();
-        if (!id) return null;
-        const profile = enriched?.tmProfile || row?.tmProfile || null;
-        return {
-            id,
-            row: compactRow(row),
-            tmUrl: enriched?.tmUrl || profile?.tmUrl || row?.tmUrl || '',
-            tmValueEur: Number(profile?.marketValueEur || profile?.lastKnownMarketValueEur || row?.tmValueEur || 0),
-            tmProfile: compactProfile(profile),
-            slfAlter: compactAlter(slfAlter || row?.slfAlter || null)
-        };
-    }
-
-    function applySavedRowFields(row, savedRow) {
-        savedRow = savedRow || {};
-        row.slfPrice = row.slfPrice ?? savedRow.slfPrice ?? null;
-        row.slfPriceText = row.slfPriceText || savedRow.slfPriceText || '';
-        row.slfPriceCellText = row.slfPriceCellText || savedRow.slfPriceCellText || '';
-        row.slfSecondaryPrice = row.slfSecondaryPrice ?? savedRow.slfSecondaryPrice ?? null;
-        row.slfSecondaryPriceText = row.slfSecondaryPriceText || savedRow.slfSecondaryPriceText || '';
-        row.nominalRatio = row.nominalRatio ?? savedRow.nominalRatio ?? null;
-        row.nominalBase = row.nominalBase ?? savedRow.nominalBase ?? null;
-        row.slfPriceSource = row.slfPriceSource || savedRow.slfPriceSource || '';
-    }
-
-    function stateToCached(row, state) {
-        if (!state) return null;
-        applySavedRowFields(row, state.row);
-        return {
-            schema: 'transfer_row_analysis_state_v2',
-            savedAt: Number(state.t || now()),
-            playerId: String(state.id || row.playerId || ''),
-            tmResult: {
-                playerId: String(state.id || row.playerId || ''),
-                slfUrl: row.playerUrl || state.row?.playerUrl || '',
-                tmUrl: state.tmUrl || state.tmProfile?.tmUrl || '',
-                tmProfile: state.tmProfile || null,
-                error: ''
-            },
-            slfAlter: state.slfAlter || null,
-            row: state.row || {}
-        };
-    }
-
-    function saveAnalysis(row, enriched, slfAlter) {
-        const state = buildState(row, enriched, slfAlter);
-        return state ? writeState(state.id, state) : false;
-    }
-
-    function clearState() {
-        readIndex().forEach(id => localStorage.removeItem(storageKey(id)));
-        localStorage.removeItem(INDEX_KEY);
-        localStorage.removeItem(LEGACY_BLOB_KEY);
-    }
-
-    window.SLF = window.SLF || {};
-    window.SLF.PlayerStateStore = {
-        KEY: INDEX_KEY,
-        PREFIX,
-        TTL_MS,
-        get: id => readState(id),
-        saveAnalysis,
-        upsert: (id, patch) => writeState(id, { ...(readState(id) || {}), ...(patch || {}) }),
-        batchUpsert: arr => (arr || []).forEach(x => x?.playerId && window.SLF.PlayerStateStore.upsert(x.playerId, x.patch || x)),
-        load: () => Object.fromEntries(readIndex().map(id => [id, readState(id)]).filter(([, value]) => !!value)),
-        clear: clearState,
-        stats: () => ({ index: readIndex().length, key: INDEX_KEY, prefix: PREFIX })
+        return false;
     };
 
-    A.getCachedAnalysis = function getCachedAnalysisCompact(row) {
-        const state = readState(row?.playerId);
-        if (state) return stateToCached(row, state);
-        const cached = typeof oldGetCachedAnalysis === 'function' ? oldGetCachedAnalysis.call(this, row) : null;
-        if (cached && cached.tmResult?.tmProfile) return cached;
-        return null;
-    };
-
-    A.saveRowAnalysis = function saveRowAnalysisCompactStateOnly(row, enriched, slfAlter) {
-        saveAnalysis(row, enriched, slfAlter || null);
-    };
-
-    A.renderCachedRows = function renderCachedRowsCompactState() {
-        const rows = this.parseVisibleRows?.() || [];
-        if (!rows.length) return;
-
-        let stable = 0, lower = 0, missing = 0;
-        rows.forEach(row => {
-            const cached = this.getCachedAnalysis(row);
-            if (cached && this.applyCachedAnalysis?.(row, cached)) { stable++; return; }
-
-            const tmCached = typeof TMEnrichmentLayer !== 'undefined' ? TMEnrichmentLayer.peekBySlfPlayerId(row.playerId) : null;
-            const alterCached = typeof SLFAlterLayer !== 'undefined' ? SLFAlterLayer.peekByPlayerId(row.playerId) : null;
-            if (!tmCached && !alterCached) { missing++; return; }
-
-            const tmResult = tmCached || { playerId: row.playerId, slfUrl: row.playerUrl, tmUrl: '', tmProfile: null, error: 'not_cached' };
-            row.tmUrl = tmResult.tmUrl || '';
-            row.tmProfile = tmResult.tmProfile || null;
-            row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
-            row.slfAlter = alterCached || null;
-            this.renderRowBadge?.(row, tmResult, alterCached || null);
-            this.saveRowAnalysis?.(row, tmResult, alterCached || null);
-            lower++;
-        });
-
-        this.setStatus?.(`Cache: stable ${stable} · lower ${lower} · missing ${missing}`);
-    };
-
-    async function mapLimit(items, limit, worker) {
-        let cursor = 0;
-        const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
-            while (cursor < items.length) {
-                const index = cursor++;
-                await worker(items[index], index);
-            }
-        });
-        await Promise.all(workers);
-    }
-
-    A.analyzeVisibleRows = async function analyzeVisibleRowsFastCore() {
-        if (this.isHistoryPage?.()) {
-            await this.analyzeHistoryVisibleRows();
-            return;
+    TransferMarketAnalyzer.getTmValueMarker = function getTmValueMarkerWithProfileGuard(profileOrValue) {
+        if (profileOrValue && typeof profileOrValue === 'object' && !this.hasValidTmProfileForValue(profileOrValue)) {
+            return {
+                label: 'TM €?',
+                level: 'unknown',
+                score: 0,
+                redFlag: false,
+                hardStop: false,
+                text: 'TM profile is not confirmed, so TM value is hidden.'
+            };
         }
 
-        const rows = this.parseVisibleRows?.() || [];
-        if (!rows.length) {
-            this.setStatus?.('Игроки не найдены.');
-            return;
+        return originalGetTmValueMarker.apply(this, arguments);
+    };
+
+    TransferMarketAnalyzer.getValueTrendMarker = function getValueTrendMarkerWithProfileGuard(profile) {
+        if (!this.hasValidTmProfileForValue(profile)) {
+            return {
+                label: 'trend ?',
+                level: 'unknown',
+                score: 0,
+                redFlag: false,
+                hardStop: false,
+                text: 'TM profile is not confirmed, so TM trend is hidden.'
+            };
         }
 
-        await this.loadMarketBaseline?.();
+        return originalGetValueTrendMarker.apply(this, arguments);
+    };
+}
 
-        let done = 0, cache = 0, lower = 0, analyzed = 0, errors = 0;
-        const originalRefreshRanks = this.refreshVisibleRankBadges;
-        if (typeof originalRefreshRanks === 'function') this.refreshVisibleRankBadges = function noopDuringFastAnalysis() {};
+if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer && !TMEnrichmentLayer.slfStrictMarketValueApplied) {
+    TMEnrichmentLayer.slfStrictMarketValueApplied = true;
 
-        this.setStatus?.(`Fast анализ: ${rows.length} игроков, parallel ${CONCURRENCY}...`);
+    TMEnrichmentLayer.extractTmMarketValueText = function extractTmMarketValueTextStrict(doc) {
+        const selectors = [
+            '.data-header__market-value-wrapper',
+            '.tm-player-market-value-development__current-value'
+        ];
 
-        try {
-            await mapLimit(rows, CONCURRENCY, async row => {
-                try {
-                    const cached = this.getCachedAnalysis?.(row);
-                    if (cached && this.applyCachedAnalysis?.(row, cached)) { cache++; return; }
-
-                    const tmCached = typeof TMEnrichmentLayer !== 'undefined' ? TMEnrichmentLayer.peekBySlfPlayerId(row.playerId) : null;
-                    const alterCached = typeof SLFAlterLayer !== 'undefined' ? SLFAlterLayer.peekByPlayerId(row.playerId) : null;
-                    const fromLower = !!tmCached && !!alterCached;
-                    if (!fromLower) this.renderLoadingBadge?.(row);
-
-                    const tmPromise = tmCached ? Promise.resolve(tmCached) : TMEnrichmentLayer.getBySlfPlayerId(row.playerId);
-                    const alterPromise = alterCached ? Promise.resolve(alterCached) : SLFAlterLayer.getByPlayerId(row.playerId).catch(error => {
-                        console.warn('[SLF Transfer Analyzer] alter.php failed', row.playerId, error);
-                        return null;
-                    });
-                    const [tmResult, slfAlter] = await Promise.all([tmPromise, alterPromise]);
-
-                    row.tmUrl = tmResult?.tmUrl || '';
-                    row.tmProfile = tmResult?.tmProfile || null;
-                    row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
-                    row.slfAlter = slfAlter || null;
-
-                    this.renderRowBadge?.(row, tmResult, slfAlter || null);
-                    this.saveRowAnalysis?.(row, tmResult, slfAlter || null);
-                    if (fromLower) lower++; else analyzed++;
-                } catch (error) {
-                    errors++;
-                    console.error('[SLF Transfer Analyzer] row failed', row, error);
-                    this.renderErrorBadge?.(row, error);
-                } finally {
-                    done++;
-                    if (done % 3 === 0 || done === rows.length) {
-                        this.setStatus?.(`Fast ${done}/${rows.length}: cache ${cache}, lower ${lower}, analyzed ${analyzed}, errors ${errors}`);
-                    }
-                }
-            });
-        } finally {
-            if (typeof originalRefreshRanks === 'function') {
-                this.refreshVisibleRankBadges = originalRefreshRanks;
-                try { this.refreshVisibleRankBadges?.(); } catch (error) { console.warn('[SLF Transfer Analyzer] rank refresh failed', error); }
+        for (const selector of selectors) {
+            const el = doc.querySelector(selector);
+            const text = this.normalizeText(el && el.textContent || '');
+            if (text && text.indexOf('€') >= 0) {
+                return text;
             }
         }
 
-        this.setStatus?.(`Готово fast: ${rows.length} игроков · cache ${cache} · lower ${lower} · analyzed ${analyzed} · errors ${errors}`);
+        return '';
     };
-
-    A.clearAnalysisCache = function clearAnalysisCompactState() {
-        oldClearAnalysisCache?.call(this);
-        clearState();
-        SNAPSHOT_KEYS.forEach(k => localStorage.removeItem(k));
-        this.setStatus?.('TM/SLF/analysis/state cache очищен.');
-    };
-
-    console.log('[SLF Transfer Analyzer] compact state + fast core active', { concurrency: CONCURRENCY, state: window.SLF.PlayerStateStore.stats() });
-}());
-// <<< src/modules/transfer-analyzer/tm-analysis-cache-backfill.js
-
-
-// >>> src/modules/transfer-analyzer/transfer-fast-visible-analysis.js
-// Transfer Analyzer: fast visible analysis
-// ========================================
-// Safe speed-up for active transfer page:
-// - cache-first restore
-// - limited parallel analysis
-// - TM + SLF requests in parallel per player
-// - reduced rank recalculation pressure during batch
-
-(function () {
-    if (typeof TransferMarketAnalyzer === 'undefined' || !TransferMarketAnalyzer) return;
-
-    const A = TransferMarketAnalyzer;
-    const CONCURRENCY = 3;
-
-    function playerLabel(row) {
-        return row?.name || row?.playerId || 'player';
-    }
-
-    async function mapLimit(items, limit, worker) {
-        let cursor = 0;
-        const results = [];
-        const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
-            while (cursor < items.length) {
-                const index = cursor++;
-                results[index] = await worker(items[index], index);
-            }
-        });
-        await Promise.all(workers);
-        return results;
-    }
-
-    async function analyzeOne(row, index, total) {
-        const cached = this.getCachedAnalysis?.(row);
-        if (cached && this.applyCachedAnalysis?.(row, cached)) {
-            return { status: 'cache', row };
-        }
-
-        const tmCached = typeof TMEnrichmentLayer !== 'undefined'
-            ? TMEnrichmentLayer.peekBySlfPlayerId(row.playerId)
-            : null;
-        const alterCached = typeof SLFAlterLayer !== 'undefined'
-            ? SLFAlterLayer.peekByPlayerId(row.playerId)
-            : null;
-
-        const fromCache = !!tmCached && !!alterCached;
-
-        if (!fromCache) {
-            this.renderLoadingBadge?.(row);
-        }
-
-        try {
-            const tmPromise = tmCached
-                ? Promise.resolve(tmCached)
-                : TMEnrichmentLayer.getBySlfPlayerId(row.playerId);
-
-            const alterPromise = alterCached
-                ? Promise.resolve(alterCached)
-                : SLFAlterLayer.getByPlayerId(row.playerId).catch(error => {
-                    console.warn('[SLF Transfer Analyzer] alter.php failed', row.playerId, error);
-                    return null;
-                });
-
-            const [tmResult, slfAlter] = await Promise.all([tmPromise, alterPromise]);
-
-            row.tmUrl = tmResult?.tmUrl || '';
-            row.tmProfile = tmResult?.tmProfile || null;
-            row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
-            row.slfAlter = slfAlter || null;
-
-            this.renderRowBadge?.(row, tmResult, slfAlter || null);
-            this.saveRowAnalysis?.(row, tmResult, slfAlter || null);
-            window.SLF?.PlayerStateStore?.saveAnalysis?.(row, tmResult, slfAlter || null);
-
-            return { status: fromCache ? 'lower-cache' : 'analyzed', row };
-        } catch (error) {
-            console.error('[SLF Transfer Analyzer] row failed', row, error);
-            this.renderErrorBadge?.(row, error);
-            return { status: 'error', row, error };
-        }
-    }
-
-    A.analyzeVisibleRows = async function analyzeVisibleRowsFast() {
-        if (this.isHistoryPage?.()) {
-            await this.analyzeHistoryVisibleRows();
-            return;
-        }
-
-        const rows = this.parseVisibleRows?.() || [];
-
-        if (!rows.length) {
-            this.setStatus?.('Игроки не найдены.');
-            return;
-        }
-
-        await this.loadMarketBaseline?.();
-
-        let done = 0;
-        let cache = 0;
-        let lowerCache = 0;
-        let analyzed = 0;
-        let errors = 0;
-
-        const originalRefreshRanks = this.refreshVisibleRankBadges;
-        let refreshSuppressed = false;
-
-        if (typeof originalRefreshRanks === 'function') {
-            this.refreshVisibleRankBadges = function noopDuringFastAnalysis() {};
-            refreshSuppressed = true;
-        }
-
-        this.setStatus?.(`Fast анализ: ${rows.length} игроков, parallel ${CONCURRENCY}...`);
-
-        try {
-            await mapLimit(rows, CONCURRENCY, async (row, index) => {
-                const result = await analyzeOne.call(this, row, index, rows.length);
-                done++;
-
-                if (result.status === 'cache') cache++;
-                else if (result.status === 'lower-cache') lowerCache++;
-                else if (result.status === 'analyzed') analyzed++;
-                else if (result.status === 'error') errors++;
-
-                if (done === rows.length || done % 3 === 0) {
-                    this.setStatus?.(`Fast ${done}/${rows.length}: cache ${cache}, lower ${lowerCache}, analyzed ${analyzed}, errors ${errors}`);
-                }
-
-                return result;
-            });
-        } finally {
-            if (refreshSuppressed) {
-                this.refreshVisibleRankBadges = originalRefreshRanks;
-                try {
-                    this.refreshVisibleRankBadges?.();
-                } catch (error) {
-                    console.warn('[SLF Transfer Analyzer] rank refresh failed after fast analysis', error);
-                }
-            }
-        }
-
-        this.setStatus?.(`Готово fast: ${rows.length} игроков · cache ${cache} · lower ${lowerCache} · analyzed ${analyzed} · errors ${errors}`);
-    };
-
-    console.log('[SLF Transfer Analyzer] fast visible analysis active', { concurrency: CONCURRENCY });
-}());
-// <<< src/modules/transfer-analyzer/transfer-fast-visible-analysis.js
+}
+// <<< src/modules/transfer-analyzer/transfer-tm-profile-guard.js
 
 
 // >>> src/modules/transfer-analyzer/transfer-my-bids-rank.js
@@ -17859,6 +17147,375 @@ App.start();
 // <<< src/modules/transfer-analyzer/player-state-store.js
 
 
+// >>> src/modules/transfer-analyzer/tm-analysis-cache-backfill.js
+// Transfer Analyzer: compact state persistence + fast visible analysis
+// ============================================================
+// Single active pipeline:
+// - save analysis only to compact per-player state
+// - do not write legacy row-analysis blob cache
+// - restore from compact state first, then lower TM/SLF cache
+// - fast visible analysis with safe concurrency
+
+(function () {
+    if (typeof TransferMarketAnalyzer === 'undefined' || !TransferMarketAnalyzer) return;
+
+    const A = TransferMarketAnalyzer;
+    const TTL_MS = 7 * 24 * 60 * 60 * 1000;
+    const CONCURRENCY = 3;
+    const PREFIX = 'slf_ps2_';
+    const INDEX_KEY = 'slf_ps2_index';
+    const LEGACY_BLOB_KEY = 'slf_player_state_v1';
+    const SNAPSHOT_KEYS = ['slf_transfer_analysis_snapshot_cache_v2', 'slf_transfer_analysis_snapshot_cache_v1'];
+    const oldGetCachedAnalysis = A.getCachedAnalysis;
+    const oldClearAnalysisCache = A.clearAnalysisCache;
+
+    const now = () => Date.now();
+    const storageKey = id => PREFIX + String(id || '').trim();
+    const parse = (value, fallback) => { try { return JSON.parse(value || '') || fallback; } catch { return fallback; } };
+    const readIndex = () => {
+        const ids = parse(localStorage.getItem(INDEX_KEY), []);
+        return Array.isArray(ids) ? ids.map(String) : [];
+    };
+    const writeIndex = ids => {
+        try {
+            localStorage.setItem(INDEX_KEY, JSON.stringify([...new Set((ids || []).map(String).filter(Boolean))].slice(-1000)));
+        } catch (error) {
+            console.warn('[SLF Transfer Persist] index write failed', error);
+        }
+    };
+    const addIndex = id => {
+        const ids = readIndex();
+        if (!ids.includes(String(id))) {
+            ids.push(String(id));
+            writeIndex(ids);
+        }
+    };
+    const expired = item => !item || !item.t || now() - Number(item.t || 0) > TTL_MS;
+
+    function pruneOldest() {
+        const items = readIndex()
+            .map(id => ({ id, item: parse(localStorage.getItem(storageKey(id)), null) }))
+            .filter(x => x.item && x.item.t)
+            .sort((a, b) => Number(a.item.t || 0) - Number(b.item.t || 0));
+        const removeCount = Math.max(10, Math.ceil(items.length * 0.15));
+        items.slice(0, removeCount).forEach(x => localStorage.removeItem(storageKey(x.id)));
+        writeIndex(items.slice(removeCount).map(x => x.id));
+    }
+
+    function writeState(id, item) {
+        id = String(id || '').trim();
+        if (!id || !item) return false;
+        const payload = JSON.stringify({ ...item, id, v: 2, t: now() });
+        try {
+            localStorage.setItem(storageKey(id), payload);
+            addIndex(id);
+            return true;
+        } catch (error) {
+            pruneOldest();
+            try {
+                localStorage.setItem(storageKey(id), payload);
+                addIndex(id);
+                return true;
+            } catch (error2) {
+                console.warn('[SLF Transfer Persist] compact state write failed', id, error2);
+                return false;
+            }
+        }
+    }
+
+    function readState(id) {
+        id = String(id || '').trim();
+        if (!id) return null;
+        const item = parse(localStorage.getItem(storageKey(id)), null);
+        if (item && !expired(item)) return item;
+        if (item) localStorage.removeItem(storageKey(id));
+        return null;
+    }
+
+    function compactProfile(p) {
+        if (!p) return null;
+        return {
+            tmUrl: p.tmUrl || '',
+            tmId: p.tmId || '',
+            marketValueText: p.marketValueText || '',
+            marketValueEur: Number(p.marketValueEur || 0),
+            lastKnownMarketValueText: p.lastKnownMarketValueText || '',
+            lastKnownMarketValueEur: Number(p.lastKnownMarketValueEur || 0),
+            lastKnownMarketValueDate: p.lastKnownMarketValueDate || '',
+            marketValueIsHistorical: !!p.marketValueIsHistorical,
+            highestMarketValueText: p.highestMarketValueText || '',
+            highestMarketValueEur: Number(p.highestMarketValueEur || 0),
+            highestMarketValueDate: p.highestMarketValueDate || '',
+            valuePeakRatio: p.valuePeakRatio ?? null,
+            isRetired: !!p.isRetired,
+            isFreeAgent: !!p.isFreeAgent,
+            currentClub: p.currentClub || '',
+            playerAgent: p.playerAgent || '',
+            contractExpires: p.contractExpires || '',
+            joined: p.joined || '',
+            lastContractExtension: p.lastContractExtension || '',
+            age: p.age ?? null,
+            transferHistory: (p.transferHistory || []).slice(0, 8).map(x => ({ text: String(x?.text || '').slice(0, 180), dateText: x?.dateText || '', club: x?.club || '' })),
+            youthClubs: (p.youthClubs || []).slice(0, 8).map(x => String(x || '').slice(0, 80)),
+            rumors: (p.rumors || []).slice(0, 5).map(x => ({ text: String(x?.text || x?.rawText || '').slice(0, 160), club: x?.club || '', dateText: x?.dateText || '', dateTs: x?.dateTs ?? null }))
+        };
+    }
+
+    function compactSeason(row) {
+        return row ? {
+            season: row.season || '',
+            seasonLabel: row.seasonLabel || '',
+            leagueLevel: row.leagueLevel ?? null,
+            leagueSkill: row.leagueSkill ?? null,
+            minutesPct: row.minutesPct ?? null,
+            minutes: row.minutes ?? null,
+            gamesPlayed: row.gamesPlayed ?? null,
+            gamesPossible: row.gamesPossible ?? null,
+            starts: row.starts ?? null
+        } : null;
+    }
+
+    function compactAlter(a) {
+        if (!a) return null;
+        return {
+            age: a.age ?? null,
+            talent: a.talent ?? null,
+            currentSkill: a.currentSkill ?? null,
+            finalSkill: a.finalSkill ?? null,
+            skillDelta: a.skillDelta ?? null,
+            currentSeasonYear: a.currentSeasonYear ?? null,
+            currentSeasonLabel: a.currentSeasonLabel || '',
+            hasCurrentSeason: !!a.hasCurrentSeason,
+            isCurrentSeasonActive: !!a.isCurrentSeasonActive,
+            staleActivity: !!a.staleActivity,
+            lastSeasonYear: a.lastSeasonYear ?? null,
+            currentRow: compactSeason(a.currentRow),
+            talentUpgradeEligible: !!a.talentUpgradeEligible,
+            talentUpgradeRow: compactSeason(a.talentUpgradeRow),
+            bestEligibleRow: compactSeason(a.bestEligibleRow),
+            leagueAboveSkill: !!a.leagueAboveSkill
+        };
+    }
+
+    function compactRow(row) {
+        return row ? {
+            playerId: String(row.playerId || ''),
+            playerUrl: row.playerUrl || '',
+            name: row.name || '',
+            positions: Array.isArray(row.positions) ? row.positions.slice(0, 4) : [],
+            age: row.age ?? null,
+            talent: row.talent ?? null,
+            scoutSkill: row.scoutSkill ?? null,
+            potentialText: row.potentialText || '',
+            slfPrice: row.slfPrice ?? row.salePrice ?? null,
+            slfPriceText: row.slfPriceText || row.salePriceText || '',
+            slfPriceCellText: row.slfPriceCellText || '',
+            slfSecondaryPrice: row.slfSecondaryPrice ?? null,
+            slfSecondaryPriceText: row.slfSecondaryPriceText || '',
+            nominalRatio: row.nominalRatio ?? null,
+            nominalBase: row.nominalBase ?? null,
+            slfPriceSource: row.slfPriceSource || ''
+        } : null;
+    }
+
+    function buildState(row, enriched, slfAlter) {
+        const id = String(row?.playerId || enriched?.playerId || '').trim();
+        if (!id) return null;
+        const profile = enriched?.tmProfile || row?.tmProfile || null;
+        return {
+            id,
+            row: compactRow(row),
+            tmUrl: enriched?.tmUrl || profile?.tmUrl || row?.tmUrl || '',
+            tmValueEur: Number(profile?.marketValueEur || profile?.lastKnownMarketValueEur || row?.tmValueEur || 0),
+            tmProfile: compactProfile(profile),
+            slfAlter: compactAlter(slfAlter || row?.slfAlter || null)
+        };
+    }
+
+    function applySavedRowFields(row, savedRow) {
+        savedRow = savedRow || {};
+        row.slfPrice = row.slfPrice ?? savedRow.slfPrice ?? null;
+        row.slfPriceText = row.slfPriceText || savedRow.slfPriceText || '';
+        row.slfPriceCellText = row.slfPriceCellText || savedRow.slfPriceCellText || '';
+        row.slfSecondaryPrice = row.slfSecondaryPrice ?? savedRow.slfSecondaryPrice ?? null;
+        row.slfSecondaryPriceText = row.slfSecondaryPriceText || savedRow.slfSecondaryPriceText || '';
+        row.nominalRatio = row.nominalRatio ?? savedRow.nominalRatio ?? null;
+        row.nominalBase = row.nominalBase ?? savedRow.nominalBase ?? null;
+        row.slfPriceSource = row.slfPriceSource || savedRow.slfPriceSource || '';
+    }
+
+    function stateToCached(row, state) {
+        if (!state) return null;
+        applySavedRowFields(row, state.row);
+        return {
+            schema: 'transfer_row_analysis_state_v2',
+            savedAt: Number(state.t || now()),
+            playerId: String(state.id || row.playerId || ''),
+            tmResult: {
+                playerId: String(state.id || row.playerId || ''),
+                slfUrl: row.playerUrl || state.row?.playerUrl || '',
+                tmUrl: state.tmUrl || state.tmProfile?.tmUrl || '',
+                tmProfile: state.tmProfile || null,
+                error: ''
+            },
+            slfAlter: state.slfAlter || null,
+            row: state.row || {}
+        };
+    }
+
+    function saveAnalysis(row, enriched, slfAlter) {
+        const state = buildState(row, enriched, slfAlter);
+        return state ? writeState(state.id, state) : false;
+    }
+
+    function clearState() {
+        readIndex().forEach(id => localStorage.removeItem(storageKey(id)));
+        localStorage.removeItem(INDEX_KEY);
+        localStorage.removeItem(LEGACY_BLOB_KEY);
+    }
+
+    window.SLF = window.SLF || {};
+    window.SLF.PlayerStateStore = {
+        KEY: INDEX_KEY,
+        PREFIX,
+        TTL_MS,
+        get: id => readState(id),
+        saveAnalysis,
+        upsert: (id, patch) => writeState(id, { ...(readState(id) || {}), ...(patch || {}) }),
+        batchUpsert: arr => (arr || []).forEach(x => x?.playerId && window.SLF.PlayerStateStore.upsert(x.playerId, x.patch || x)),
+        load: () => Object.fromEntries(readIndex().map(id => [id, readState(id)]).filter(([, value]) => !!value)),
+        clear: clearState,
+        stats: () => ({ index: readIndex().length, key: INDEX_KEY, prefix: PREFIX })
+    };
+
+    A.getCachedAnalysis = function getCachedAnalysisCompact(row) {
+        const state = readState(row?.playerId);
+        if (state) return stateToCached(row, state);
+        const cached = typeof oldGetCachedAnalysis === 'function' ? oldGetCachedAnalysis.call(this, row) : null;
+        if (cached && cached.tmResult?.tmProfile) return cached;
+        return null;
+    };
+
+    A.saveRowAnalysis = function saveRowAnalysisCompactStateOnly(row, enriched, slfAlter) {
+        saveAnalysis(row, enriched, slfAlter || null);
+    };
+
+    A.renderCachedRows = function renderCachedRowsCompactState() {
+        const rows = this.parseVisibleRows?.() || [];
+        if (!rows.length) return;
+
+        let stable = 0, lower = 0, missing = 0;
+        rows.forEach(row => {
+            const cached = this.getCachedAnalysis(row);
+            if (cached && this.applyCachedAnalysis?.(row, cached)) { stable++; return; }
+
+            const tmCached = typeof TMEnrichmentLayer !== 'undefined' ? TMEnrichmentLayer.peekBySlfPlayerId(row.playerId) : null;
+            const alterCached = typeof SLFAlterLayer !== 'undefined' ? SLFAlterLayer.peekByPlayerId(row.playerId) : null;
+            if (!tmCached && !alterCached) { missing++; return; }
+
+            const tmResult = tmCached || { playerId: row.playerId, slfUrl: row.playerUrl, tmUrl: '', tmProfile: null, error: 'not_cached' };
+            row.tmUrl = tmResult.tmUrl || '';
+            row.tmProfile = tmResult.tmProfile || null;
+            row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
+            row.slfAlter = alterCached || null;
+            this.renderRowBadge?.(row, tmResult, alterCached || null);
+            this.saveRowAnalysis?.(row, tmResult, alterCached || null);
+            lower++;
+        });
+
+        this.setStatus?.(`Cache: stable ${stable} · lower ${lower} · missing ${missing}`);
+    };
+
+    async function mapLimit(items, limit, worker) {
+        let cursor = 0;
+        const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+            while (cursor < items.length) {
+                const index = cursor++;
+                await worker(items[index], index);
+            }
+        });
+        await Promise.all(workers);
+    }
+
+    A.analyzeVisibleRows = async function analyzeVisibleRowsFastCore() {
+        if (this.isHistoryPage?.()) {
+            await this.analyzeHistoryVisibleRows();
+            return;
+        }
+
+        const rows = this.parseVisibleRows?.() || [];
+        if (!rows.length) {
+            this.setStatus?.('Игроки не найдены.');
+            return;
+        }
+
+        await this.loadMarketBaseline?.();
+
+        let done = 0, cache = 0, lower = 0, analyzed = 0, errors = 0;
+        const originalRefreshRanks = this.refreshVisibleRankBadges;
+        if (typeof originalRefreshRanks === 'function') this.refreshVisibleRankBadges = function noopDuringFastAnalysis() {};
+
+        this.setStatus?.(`Fast анализ: ${rows.length} игроков, parallel ${CONCURRENCY}...`);
+
+        try {
+            await mapLimit(rows, CONCURRENCY, async row => {
+                try {
+                    const cached = this.getCachedAnalysis?.(row);
+                    if (cached && this.applyCachedAnalysis?.(row, cached)) { cache++; return; }
+
+                    const tmCached = typeof TMEnrichmentLayer !== 'undefined' ? TMEnrichmentLayer.peekBySlfPlayerId(row.playerId) : null;
+                    const alterCached = typeof SLFAlterLayer !== 'undefined' ? SLFAlterLayer.peekByPlayerId(row.playerId) : null;
+                    const fromLower = !!tmCached && !!alterCached;
+                    if (!fromLower) this.renderLoadingBadge?.(row);
+
+                    const tmPromise = tmCached ? Promise.resolve(tmCached) : TMEnrichmentLayer.getBySlfPlayerId(row.playerId);
+                    const alterPromise = alterCached ? Promise.resolve(alterCached) : SLFAlterLayer.getByPlayerId(row.playerId).catch(error => {
+                        console.warn('[SLF Transfer Analyzer] alter.php failed', row.playerId, error);
+                        return null;
+                    });
+                    const [tmResult, slfAlter] = await Promise.all([tmPromise, alterPromise]);
+
+                    row.tmUrl = tmResult?.tmUrl || '';
+                    row.tmProfile = tmResult?.tmProfile || null;
+                    row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
+                    row.slfAlter = slfAlter || null;
+
+                    this.renderRowBadge?.(row, tmResult, slfAlter || null);
+                    this.saveRowAnalysis?.(row, tmResult, slfAlter || null);
+                    if (fromLower) lower++; else analyzed++;
+                } catch (error) {
+                    errors++;
+                    console.error('[SLF Transfer Analyzer] row failed', row, error);
+                    this.renderErrorBadge?.(row, error);
+                } finally {
+                    done++;
+                    if (done % 3 === 0 || done === rows.length) {
+                        this.setStatus?.(`Fast ${done}/${rows.length}: cache ${cache}, lower ${lower}, analyzed ${analyzed}, errors ${errors}`);
+                    }
+                }
+            });
+        } finally {
+            if (typeof originalRefreshRanks === 'function') {
+                this.refreshVisibleRankBadges = originalRefreshRanks;
+                try { this.refreshVisibleRankBadges?.(); } catch (error) { console.warn('[SLF Transfer Analyzer] rank refresh failed', error); }
+            }
+        }
+
+        this.setStatus?.(`Готово fast: ${rows.length} игроков · cache ${cache} · lower ${lower} · analyzed ${analyzed} · errors ${errors}`);
+    };
+
+    A.clearAnalysisCache = function clearAnalysisCompactState() {
+        oldClearAnalysisCache?.call(this);
+        clearState();
+        SNAPSHOT_KEYS.forEach(k => localStorage.removeItem(k));
+        this.setStatus?.('TM/SLF/analysis/state cache очищен.');
+    };
+
+    console.log('[SLF Transfer Analyzer] compact state + fast core active', { concurrency: CONCURRENCY, state: window.SLF.PlayerStateStore.stats() });
+}());
+// <<< src/modules/transfer-analyzer/tm-analysis-cache-backfill.js
+
+
 // >>> src/modules/transfer-analyzer/transfer-analysis-snapshot-cache.js
 // Transfer Analyzer: durable row analysis snapshot cache
 // ============================================================
@@ -18116,155 +17773,164 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
 // <<< src/modules/transfer-analyzer/transfer-analysis-snapshot-cache.js
 
 
-// >>> src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js
-// Transfer Analyzer: compact MKT UI
-// ============================================================
+// >>> src/modules/transfer-analyzer/transfer-fast-visible-analysis.js
+// Transfer Analyzer: fast visible analysis
+// ========================================
+// Safe speed-up for active transfer page:
+// - cache-first restore
+// - limited parallel analysis
+// - TM + SLF requests in parallel per player
+// - reduced rank recalculation pressure during batch
 
-if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !TransferMarketAnalyzer.slfCompactMktUiApplied) {
-    TransferMarketAnalyzer.slfCompactMktUiApplied = true;
+(function () {
+    if (typeof TransferMarketAnalyzer === 'undefined' || !TransferMarketAnalyzer) return;
 
-    TransferMarketAnalyzer.removeMktSortToolbarButtons = function removeMktSortToolbarButtons() {
-        const bargainButton = document.getElementById('slf-transfer-sort-mkt-bargain');
-        const overpricedButton = document.getElementById('slf-transfer-sort-mkt-overpriced');
+    const A = TransferMarketAnalyzer;
+    const CONCURRENCY = 3;
 
-        if (bargainButton && bargainButton.parentNode) {
-            bargainButton.parentNode.removeChild(bargainButton);
-        }
-
-        if (overpricedButton && overpricedButton.parentNode) {
-            overpricedButton.parentNode.removeChild(overpricedButton);
-        }
-    };
-
-    TransferMarketAnalyzer.formatCompactMktRatio = function formatCompactMktRatio(ratio) {
-        const value = Number(ratio || 0);
-        if (!Number.isFinite(value) || value <= 0) return '';
-
-        const raw = value >= 10 ? value.toFixed(1) : value.toFixed(2);
-        return raw.replace(/0$/, '').replace(/\.0$/, '');
-    };
-
-    const addToolbarOriginal = TransferMarketAnalyzer.addToolbar;
-    TransferMarketAnalyzer.addToolbar = function addToolbarCompactMktUi() {
-        const result = addToolbarOriginal.apply(this, arguments);
-        this.removeMktSortToolbarButtons();
-        setTimeout(() => this.removeMktSortToolbarButtons(), 0);
-        return result;
-    };
-
-    const getMarketSalePriceMarkerOriginal = TransferMarketAnalyzer.getMarketSalePriceMarker;
-    TransferMarketAnalyzer.getMarketSalePriceMarker = function getCompactMarketSalePriceMarker() {
-        const marker = getMarketSalePriceMarkerOriginal.apply(this, arguments);
-        if (!marker || marker.category !== 'market') return marker;
-
-        const ratio = Number(marker.marketDetails && marker.marketDetails.ratio || 0);
-        const ratioText = this.formatCompactMktRatio(ratio);
-        marker.label = ratioText ? `MKT x${ratioText}` : 'MKT ?';
-        return marker;
-    };
-
-    const style = document.createElement('style');
-    style.textContent = '.slf-transfer-analysis-chip[data-slf-tip-category="league"],.slf-transfer-analysis-chip[data-slf-tip-category="activity"],.slf-transfer-analysis-chip[data-slf-tip-category="talent"]{flex:0 0 auto!important;width:auto!important;min-width:max-content!important;max-width:none!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}.slf-transfer-analysis-chip[data-slf-tip-category="league"]>span:first-child,.slf-transfer-analysis-chip[data-slf-tip-category="activity"]>span:first-child,.slf-transfer-analysis-chip[data-slf-tip-category="talent"]>span:first-child{min-width:max-content!important;max-width:none!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}';
-    document.head.appendChild(style);
-}
-// <<< src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js
-
-
-// >>> src/modules/transfer-analyzer/transfer-tm-profile-guard.js
-// Transfer Analyzer: TM profile value guard
-// ============================================================
-
-if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !TransferMarketAnalyzer.slfTmProfileGuardApplied) {
-    TransferMarketAnalyzer.slfTmProfileGuardApplied = true;
-    TransferMarketAnalyzer.snapshotCacheKey = 'slf_transfer_analysis_snapshot_cache_v2';
-
-    const originalGetTmValueMarker = TransferMarketAnalyzer.getTmValueMarker;
-    const originalGetValueTrendMarker = TransferMarketAnalyzer.getValueTrendMarker;
-
-    function hasText(value) {
-        return String(value || '').trim().length > 0;
+    function playerLabel(row) {
+        return row?.name || row?.playerId || 'player';
     }
 
-    TransferMarketAnalyzer.hasValidTmProfileForValue = function hasValidTmProfileForValue(profile) {
-        if (!profile || typeof profile !== 'object') return false;
-        if (!hasText(profile.tmUrl) && !hasText(profile.tmId)) return false;
+    async function mapLimit(items, limit, worker) {
+        let cursor = 0;
+        const results = [];
+        const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+            while (cursor < items.length) {
+                const index = cursor++;
+                results[index] = await worker(items[index], index);
+            }
+        });
+        await Promise.all(workers);
+        return results;
+    }
 
-        if (hasText(profile.currentClub)) return true;
-        if (hasText(profile.playerAgent)) return true;
-        if (hasText(profile.contractExpires)) return true;
-        if (hasText(profile.dateOfBirth)) return true;
-        if (profile.age != null) return true;
-        if (Array.isArray(profile.transferHistory) && profile.transferHistory.length > 0) return true;
-        if (Array.isArray(profile.youthClubs) && profile.youthClubs.length > 0) return true;
-        if (profile.isRetired === true || profile.isFreeAgent === true) return true;
-
-        return false;
-    };
-
-    TransferMarketAnalyzer.getTmValueMarker = function getTmValueMarkerWithProfileGuard(profileOrValue) {
-        if (profileOrValue && typeof profileOrValue === 'object' && !this.hasValidTmProfileForValue(profileOrValue)) {
-            return {
-                label: 'TM €?',
-                level: 'unknown',
-                score: 0,
-                redFlag: false,
-                hardStop: false,
-                text: 'TM profile is not confirmed, so TM value is hidden.'
-            };
+    async function analyzeOne(row, index, total) {
+        const cached = this.getCachedAnalysis?.(row);
+        if (cached && this.applyCachedAnalysis?.(row, cached)) {
+            return { status: 'cache', row };
         }
 
-        return originalGetTmValueMarker.apply(this, arguments);
-    };
+        const tmCached = typeof TMEnrichmentLayer !== 'undefined'
+            ? TMEnrichmentLayer.peekBySlfPlayerId(row.playerId)
+            : null;
+        const alterCached = typeof SLFAlterLayer !== 'undefined'
+            ? SLFAlterLayer.peekByPlayerId(row.playerId)
+            : null;
 
-    TransferMarketAnalyzer.getValueTrendMarker = function getValueTrendMarkerWithProfileGuard(profile) {
-        if (!this.hasValidTmProfileForValue(profile)) {
-            return {
-                label: 'trend ?',
-                level: 'unknown',
-                score: 0,
-                redFlag: false,
-                hardStop: false,
-                text: 'TM profile is not confirmed, so TM trend is hidden.'
-            };
+        const fromCache = !!tmCached && !!alterCached;
+
+        if (!fromCache) {
+            this.renderLoadingBadge?.(row);
         }
 
-        return originalGetValueTrendMarker.apply(this, arguments);
-    };
-}
+        try {
+            const tmPromise = tmCached
+                ? Promise.resolve(tmCached)
+                : TMEnrichmentLayer.getBySlfPlayerId(row.playerId);
 
-if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer && !TMEnrichmentLayer.slfStrictMarketValueApplied) {
-    TMEnrichmentLayer.slfStrictMarketValueApplied = true;
+            const alterPromise = alterCached
+                ? Promise.resolve(alterCached)
+                : SLFAlterLayer.getByPlayerId(row.playerId).catch(error => {
+                    console.warn('[SLF Transfer Analyzer] alter.php failed', row.playerId, error);
+                    return null;
+                });
 
-    TMEnrichmentLayer.extractTmMarketValueText = function extractTmMarketValueTextStrict(doc) {
-        const selectors = [
-            '.data-header__market-value-wrapper',
-            '.tm-player-market-value-development__current-value'
-        ];
+            const [tmResult, slfAlter] = await Promise.all([tmPromise, alterPromise]);
 
-        for (const selector of selectors) {
-            const el = doc.querySelector(selector);
-            const text = this.normalizeText(el && el.textContent || '');
-            if (text && text.indexOf('€') >= 0) {
-                return text;
+            row.tmUrl = tmResult?.tmUrl || '';
+            row.tmProfile = tmResult?.tmProfile || null;
+            row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
+            row.slfAlter = slfAlter || null;
+
+            this.renderRowBadge?.(row, tmResult, slfAlter || null);
+            this.saveRowAnalysis?.(row, tmResult, slfAlter || null);
+            window.SLF?.PlayerStateStore?.saveAnalysis?.(row, tmResult, slfAlter || null);
+
+            return { status: fromCache ? 'lower-cache' : 'analyzed', row };
+        } catch (error) {
+            console.error('[SLF Transfer Analyzer] row failed', row, error);
+            this.renderErrorBadge?.(row, error);
+            return { status: 'error', row, error };
+        }
+    }
+
+    A.analyzeVisibleRows = async function analyzeVisibleRowsFast() {
+        if (this.isHistoryPage?.()) {
+            await this.analyzeHistoryVisibleRows();
+            return;
+        }
+
+        const rows = this.parseVisibleRows?.() || [];
+
+        if (!rows.length) {
+            this.setStatus?.('Игроки не найдены.');
+            return;
+        }
+
+        await this.loadMarketBaseline?.();
+
+        let done = 0;
+        let cache = 0;
+        let lowerCache = 0;
+        let analyzed = 0;
+        let errors = 0;
+
+        const originalRefreshRanks = this.refreshVisibleRankBadges;
+        let refreshSuppressed = false;
+
+        if (typeof originalRefreshRanks === 'function') {
+            this.refreshVisibleRankBadges = function noopDuringFastAnalysis() {};
+            refreshSuppressed = true;
+        }
+
+        this.setStatus?.(`Fast анализ: ${rows.length} игроков, parallel ${CONCURRENCY}...`);
+
+        try {
+            await mapLimit(rows, CONCURRENCY, async (row, index) => {
+                const result = await analyzeOne.call(this, row, index, rows.length);
+                done++;
+
+                if (result.status === 'cache') cache++;
+                else if (result.status === 'lower-cache') lowerCache++;
+                else if (result.status === 'analyzed') analyzed++;
+                else if (result.status === 'error') errors++;
+
+                if (done === rows.length || done % 3 === 0) {
+                    this.setStatus?.(`Fast ${done}/${rows.length}: cache ${cache}, lower ${lowerCache}, analyzed ${analyzed}, errors ${errors}`);
+                }
+
+                return result;
+            });
+        } finally {
+            if (refreshSuppressed) {
+                this.refreshVisibleRankBadges = originalRefreshRanks;
+                try {
+                    this.refreshVisibleRankBadges?.();
+                } catch (error) {
+                    console.warn('[SLF Transfer Analyzer] rank refresh failed after fast analysis', error);
+                }
             }
         }
 
-        return '';
+        this.setStatus?.(`Готово fast: ${rows.length} игроков · cache ${cache} · lower ${lowerCache} · analyzed ${analyzed} · errors ${errors}`);
     };
-}
-// <<< src/modules/transfer-analyzer/transfer-tm-profile-guard.js
+
+    console.log('[SLF Transfer Analyzer] fast visible analysis active', { concurrency: CONCURRENCY });
+}());
+// <<< src/modules/transfer-analyzer/transfer-fast-visible-analysis.js
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.145',
-        scriptVersion: '4.4.145',
+        version: '4.4.146',
+        scriptVersion: '4.4.146',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.145',
+        scriptVersion: '4.4.146',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
