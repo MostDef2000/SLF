@@ -1,6 +1,6 @@
 # SLF Governance
 
-Version: 1.1.1
+Version: 1.1.2
 Status: Active
 Applies to: all SLF agents and release workflows
 Source of truth: GitHub repository contracts
@@ -245,3 +245,28 @@ Required next action:
 ```
 
 Do not use ambiguous final states such as `looks good`, `probably okay`, `not complete`, or `waiting`.
+
+## 10. Single-chat multi-role workflow
+
+When the user is working in one SLF project chat and the current environment has the required tools, agents should operate as a single-chat multi-role workflow instead of asking the user to copy handoffs between separate agent chats.
+
+Default sequence:
+
+```text
+Project Manager triage
+→ responsible module agent implementation after required approval
+→ module handoff produced as an internal control artifact
+→ Project Manager validates the handoff in the same chat
+→ Core Release performs source integration in the same chat
+→ final user-facing state is either COMPLETE + RUN ACTIONS, BLOCKED, or FAILED
+```
+
+Rules:
+
+- The Project Manager Agent remains the default coordinator and may switch operationally into the responsible branch-agent role when the task clearly matches that branch contract.
+- The module agent must still obey its branch contract, Branch Freshness Check, allowed file scope, and `COMMIT APPROVED` requirement before repository writes.
+- A `COPY-READY MESSAGE FOR CORE RELEASE AGENT` is required as a handoff artifact, but it is not a final user-facing stopping point when the same chat can continue into Core Release.
+- After a valid module handoff, the workflow must continue to Core Release automatically in the same chat unless the user explicitly asks to stop, a required tool is unavailable, or a contract/safety gate blocks continuation.
+- The assistant must not tell the user to run GitHub Actions until source integration into `main` is complete and the Core Release / PM validation gates say `RUN ACTIONS: YES`.
+- If GitHub tool safety, permissions, or platform limitations block automated source integration, return `BLOCKED` with the exact manual GitHub UI fallback and do not claim release readiness.
+- This rule does not bypass Core Release validation, review gates, branch freshness, scope boundaries, release artifact restrictions, or the Actions/version rule.
