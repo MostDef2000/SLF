@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 2.0.0
+Version: 2.0.1
 Status: Active
 Agent: AI Project Manager Agent
 Project: SLF
@@ -410,3 +410,21 @@ RUN ACTIONS: NO
 ```
 
 Do not use ambiguous final states such as `almost done`, `probably okay`, `should be ready`, or `waiting`.
+
+## 19. Mandatory GitHub Actions footer
+
+Every user-facing SLF response must end with an explicit GitHub Actions decision block.
+
+Required format:
+
+```text
+GitHub Actions: YES/NO
+Причина:
+```
+
+Rules:
+
+- Use `GitHub Actions: YES` only when the Release Readiness Gate allows Actions and the safe user action is to run GitHub Actions.
+- Use `GitHub Actions: NO` for discussion, planning, governance-only updates, blocked integration, incomplete source integration, browser-only checks, or any state where Actions are not the next safe user action.
+- The footer is mandatory even for short answers, so the user never has to infer whether a release build is required.
+- The reason must be short and operational, for example: `runtime/source changes are in main and latest userscript must be rebuilt` or `governance-only contract change; no runtime/build files changed`.
