@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.149
+// @version      4.4.150
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.149',
-        scriptVersion: '4.4.149',
+        version: '4.4.150',
+        scriptVersion: '4.4.150',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.149',
+        scriptVersion: '4.4.150',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -16593,246 +16593,6 @@ App.start();
 // <<< src/modules/strategy-data-recommendations/preset-fit-scoring.js
 
 
-// >>> src/modules/transfer-analyzer/migration-phase3-runtime.js
-// SLF Migration Phase 3 Runtime Override
-// =======================================
-// Goal: force state-first behavior without rewriting legacy analyzer core
-// SAFE MIGRATION: non-destructive monkey-patch layer
-
-(function () {
-    const A = window.TransferMarketAnalyzer;
-    const S = window.SLF?.PlayerStateStore;
-
-    if (!A) {
-        console.warn('[SLF Phase3] Analyzer not found');
-        return;
-    }
-
-    function getId(row) {
-        return String(row?.playerId || '').trim();
-    }
-
-    function getState(id) {
-        try {
-            return S?.get?.(id) || null;
-        } catch {
-            return null;
-        }
-    }
-
-    // -----------------------------------------------------
-    // 1. DIAGNOSTICS WRAPPER
-    // -----------------------------------------------------
-    const diag = {
-        restored: 0,
-        partial: 0,
-        missing: 0
-    };
-
-    A.__slfPhase3Diagnostics = diag;
-
-    // -----------------------------------------------------
-    // 2. OVERRIDE renderCachedRows (STATE FIRST)
-    // -----------------------------------------------------
-    const originalRenderCachedRows = A.renderCachedRows;
-
-    A.renderCachedRows = function () {
-        const rows = this.parseVisibleRows?.() || [];
-
-        for (const row of rows) {
-            const id = getId(row);
-            if (!id) continue;
-
-            const state = getState(id);
-            if (!state) {
-                diag.missing++;
-                continue;
-            }
-
-            // classify completeness
-            const hasTM = !!state.tmProfile;
-            const hasAlter = !!state.slfAlter;
-
-            if (hasTM && hasAlter) diag.restored++;
-            else diag.partial++;
-
-            // hydrate row fully
-            row.tmProfile = state.tmProfile || row.tmProfile || null;
-            row.tmUrl = state.tmUrl || row.tmUrl || '';
-            row.tmValueEur = state.tmValueEur || row.tmValueEur || 0;
-            row.slfAlter = state.slfAlter || row.slfAlter || null;
-            row.slfPrice = state.slfPrice ?? row.slfPrice ?? null;
-
-            this.renderRowBadge?.(row, row.tmProfile, row.slfAlter);
-        }
-
-        if (diag.restored || diag.partial) {
-            this.setStatus?.(`Phase3: R:${diag.restored} P:${diag.partial} M:${diag.missing}`);
-        }
-
-        return originalRenderCachedRows?.apply(this, arguments);
-    };
-
-    // -----------------------------------------------------
-    // 3. OVERRIDE getCachedAnalysis (STATE ONLY, IGNORE LEGACY CACHE)
-    // -----------------------------------------------------
-    const originalGetCachedAnalysis = A.getCachedAnalysis;
-
-    A.getCachedAnalysis = function (row) {
-        const id = getId(row);
-        const state = getState(id);
-
-        if (!state) return null;
-
-        // enforce TTL = 7 days (override legacy 14d)
-        const savedAt = state.savedAt || 0;
-        const ttl = 1000 * 60 * 60 * 24 * 7;
-
-        if (!savedAt || Date.now() - savedAt > ttl) {
-            return null;
-        }
-
-        if (!state.slfAlter?.finalSkill) {
-            return null;
-        }
-
-        return {
-            tmResult: { tmProfile: state.tmProfile, tmUrl: state.tmUrl },
-            slfAlter: state.slfAlter,
-            row: state.row || {}
-        };
-    };
-
-    // -----------------------------------------------------
-    // 4. SAFETY: fallback logging for missing renderRowBadge
-    // -----------------------------------------------------
-    if (!A.renderRowBadge) {
-        console.warn('[SLF Phase3] renderRowBadge missing');
-    }
-
-    console.log('[SLF Phase3] active');
-})();
-// <<< src/modules/transfer-analyzer/migration-phase3-runtime.js
-
-
-// >>> src/modules/transfer-analyzer/migration-phase4-2-state-capture.js
-// SLF Migration Phase 4.2 - STATE CAPTURE PATCH
-// =====================================================
-// Fixes missing persistence by enforcing guaranteed write-through
-// EVEN WHEN analysis pipeline is partial or legacy-driven
-
-(function () {
-    const A = window.TransferMarketAnalyzer;
-    const S = window.SLF?.PlayerStateStore;
-
-    if (!A || !S) {
-        console.warn('[SLF Phase4.2] missing dependencies');
-        return;
-    }
-
-    function getId(row) {
-        return String(row?.playerId || '').trim();
-    }
-
-    function safeState(id) {
-        return S.get(id) || null;
-    }
-
-    function upsert(row, enriched, slfAlter) {
-        const id = getId(row);
-        if (!id) return;
-
-        S.upsert(id, {
-            tmProfile: enriched?.tmProfile || row.tmProfile || null,
-            tmUrl: enriched?.tmUrl || row.tmUrl || '',
-            tmValueEur: row.tmValueEur || 0,
-            slfAlter: slfAlter || row.slfAlter || null,
-            slfPrice: row.slfPrice ?? null,
-            row: {
-                slfPrice: row.slfPrice ?? null,
-                tmValueEur: row.tmValueEur || 0
-            },
-            savedAt: Date.now()
-        });
-    }
-
-    const originalRenderRowBadge = A.renderRowBadge;
-
-    A.renderRowBadge = function (row, enriched, slfAlter) {
-        const result = originalRenderRowBadge?.apply(this, arguments);
-
-        try {
-            upsert(row, enriched, slfAlter);
-        } catch (e) {
-            console.warn('[SLF Phase4.2] renderRowBadge persist failed', e);
-        }
-
-        return result;
-    };
-
-    const originalRenderCachedRows = A.renderCachedRows;
-
-    A.renderCachedRows = function () {
-        const rows = this.parseVisibleRows?.() || [];
-
-        let backfilled = 0;
-
-        for (const row of rows) {
-            const id = getId(row);
-            if (!id) continue;
-
-            const state = safeState(id);
-
-            if (!state) {
-                upsert(row, row.tmProfile, row.slfAlter);
-                backfilled++;
-                continue;
-            }
-
-            if (!state.tmProfile || !state.slfAlter) {
-                upsert(row, row.tmProfile, row.slfAlter);
-                backfilled++;
-            }
-        }
-
-        if (backfilled > 0) {
-            this.setStatus?.(`Phase4.2 backfill: ${backfilled}`);
-        }
-
-        return originalRenderCachedRows?.apply(this, arguments);
-    };
-
-    const originalParseVisibleRows = A.parseVisibleRows;
-
-    A.parseVisibleRows = function () {
-        const rows = originalParseVisibleRows?.apply(this, arguments) || [];
-
-        let repaired = 0;
-
-        for (const row of rows) {
-            const id = getId(row);
-            if (!id) continue;
-
-            const state = safeState(id);
-
-            if (!state) {
-                upsert(row, row.tmProfile, row.slfAlter);
-                repaired++;
-            }
-        }
-
-        if (repaired > 0) {
-            console.log(`[SLF Phase4.2] repaired ${repaired} missing states`);
-        }
-
-        return rows;
-    };
-
-    console.log('[SLF Phase4.2] STATE CAPTURE ACTIVE');
-})();
-// <<< src/modules/transfer-analyzer/migration-phase4-2-state-capture.js
-
-
 // >>> src/modules/transfer-analyzer/migration-phase4-sspm.js
 // SLF SINGLE SOURCE PRODUCTION MODE (PHASE 4 FINAL)
 // =====================================================
@@ -16935,227 +16695,6 @@ App.start();
     console.log('[SLF SSPM] SINGLE SOURCE MODE ACTIVE');
 })();
 // <<< src/modules/transfer-analyzer/migration-phase4-sspm.js
-
-
-// >>> src/modules/transfer-analyzer/player-state-integration.js
-// SLF Player State Integration (MIGRATION PHASE 2)
-// =====================================================
-// Bridges legacy analyzer cache -> unified PlayerStateStore
-
-(function () {
-    const A = window.TransferMarketAnalyzer;
-    const S = window.SLF?.PlayerStateStore;
-
-    if (!A || !S) {
-        console.warn('[SLF State Integration] missing dependencies');
-        return;
-    }
-
-    function getId(row) {
-        return String(row?.playerId || '').trim();
-    }
-
-    function hydrateFromState(row) {
-        const id = getId(row);
-        if (!id) return false;
-
-        const state = S.get(id);
-        if (!state) return false;
-
-        row.tmProfile = state.tmProfile || row.tmProfile || null;
-        row.tmUrl = state.tmUrl || row.tmUrl || '';
-        row.tmValueEur = state.tmValueEur || row.tmValueEur || 0;
-        row.slfAlter = state.slfAlter || row.slfAlter || null;
-        row.slfPrice = state.slfPrice ?? row.slfPrice ?? null;
-
-        return true;
-    }
-
-    const originalRenderCachedRows = A.renderCachedRows;
-
-    A.renderCachedRows = function () {
-        const rows = this.parseVisibleRows?.() || [];
-
-        let stateHits = 0;
-
-        for (const row of rows) {
-            if (hydrateFromState(row)) {
-                stateHits++;
-                this.renderRowBadge?.(row, row.tmProfile, row.slfAlter);
-                continue;
-            }
-        }
-
-        if (stateHits > 0) {
-            this.setStatus?.(`State restore: ${stateHits}`);
-        }
-
-        if (originalRenderCachedRows) {
-            return originalRenderCachedRows.apply(this, arguments);
-        }
-    };
-
-    const originalRenderRowBadge = A.renderRowBadge;
-
-    A.renderRowBadge = function (row, enriched, slfAlter) {
-        const result = originalRenderRowBadge?.apply(this, arguments);
-
-        const id = getId(row);
-        if (!id) return result;
-
-        try {
-            S.upsert(id, {
-                tmProfile: enriched?.tmProfile || row.tmProfile || null,
-                tmUrl: enriched?.tmUrl || row.tmUrl || '',
-                tmValueEur: row.tmValueEur || 0,
-                slfAlter: slfAlter || row.slfAlter || null,
-                slfPrice: row.slfPrice || null
-            });
-        } catch (e) {
-            console.warn('[SLF State Integration] write failed', e);
-        }
-
-        return result;
-    };
-
-    console.log('[SLF State Integration] phase 2 active');
-})();
-// <<< src/modules/transfer-analyzer/player-state-integration.js
-
-
-// >>> src/modules/transfer-analyzer/player-state-store.js
-// Transfer Analyzer: compact PlayerStateStore
-// Quota-safe per-player persistence with saveAnalysis API.
-(function () {
-  if (typeof window === 'undefined') return;
-
-  const PREFIX = 'slf_ps2_';
-  const INDEX_KEY = 'slf_ps2_index';
-  const LEGACY_KEY = 'slf_player_state_v1';
-  const TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-  const now = () => Date.now();
-  const key = id => PREFIX + String(id || '').trim();
-  const parse = (v, f) => { try { return JSON.parse(v || '') || f; } catch { return f; } };
-  const readIndex = () => {
-    const v = parse(localStorage.getItem(INDEX_KEY), []);
-    return Array.isArray(v) ? v.map(String) : [];
-  };
-  const writeIndex = ids => {
-    try { localStorage.setItem(INDEX_KEY, JSON.stringify([...new Set((ids || []).map(String).filter(Boolean))].slice(-1000))); } catch (e) { console.warn(e); }
-  };
-  const addIndex = id => {
-    const ids = readIndex();
-    if (!ids.includes(String(id))) { ids.push(String(id)); writeIndex(ids); }
-  };
-  const expired = item => !item || !item.t || now() - Number(item.t || 0) > TTL_MS;
-  const prune = () => {
-    const items = readIndex().map(id => ({ id, item: get(id, true) })).filter(x => x.item?.t).sort((a, b) => a.item.t - b.item.t);
-    const n = Math.max(10, Math.ceil(items.length * 0.15));
-    items.slice(0, n).forEach(x => localStorage.removeItem(key(x.id)));
-    writeIndex(items.slice(n).map(x => x.id));
-  };
-
-  function get(id, raw = false) {
-    id = String(id || '').trim();
-    if (!id) return null;
-    const item = parse(localStorage.getItem(key(id)), null);
-    if (raw) return item;
-    if (item && !expired(item)) return item;
-    if (item) localStorage.removeItem(key(id));
-    const legacy = parse(localStorage.getItem(LEGACY_KEY), {})?.[id] || null;
-    return legacy && !expired(legacy) ? legacy : null;
-  }
-
-  function set(id, item) {
-    id = String(id || '').trim();
-    if (!id || !item) return false;
-    const payload = JSON.stringify({ ...item, id, v: 2, t: now() });
-    try {
-      localStorage.setItem(key(id), payload);
-      addIndex(id);
-      return true;
-    } catch (e) {
-      prune();
-      try { localStorage.setItem(key(id), payload); addIndex(id); return true; } catch (e2) { console.warn('[SLF PlayerStateStore] write failed', id, e2); return false; }
-    }
-  }
-
-  function compactProfile(p) {
-    if (!p) return null;
-    return {
-      tmUrl: p.tmUrl || '',
-      marketValueEur: Number(p.marketValueEur || 0),
-      lastKnownMarketValueEur: Number(p.lastKnownMarketValueEur || 0),
-      marketValueText: p.marketValueText || '',
-      highestMarketValueEur: Number(p.highestMarketValueEur || 0),
-      highestMarketValueDate: p.highestMarketValueDate || '',
-      valuePeakRatio: Number(p.valuePeakRatio || 0),
-      currentClub: p.currentClub || '',
-      playerAgent: p.playerAgent || '',
-      contractExpires: p.contractExpires || '',
-      age: p.age ?? null,
-      isRetired: p.isRetired === true,
-      isFreeAgent: p.isFreeAgent === true,
-      transferHistory: (p.transferHistory || []).slice(0, 6).map(x => ({ text: String(x?.text || '').slice(0, 160) })),
-      youthClubs: (p.youthClubs || []).slice(0, 6).map(x => String(x || '').slice(0, 80)),
-      rumors: (p.rumors || []).slice(0, 4).map(x => ({ text: String(x?.text || '').slice(0, 140), dateTs: Number(x?.dateTs || 0) }))
-    };
-  }
-
-  function compactAlter(a) {
-    if (!a) return null;
-    const row = r => r ? { season: r.season || '', seasonLabel: r.seasonLabel || '', leagueLevel: r.leagueLevel ?? null, leagueSkill: r.leagueSkill ?? null, minutesPct: r.minutesPct ?? null, minutes: r.minutes ?? null } : null;
-    return {
-      currentSkill: a.currentSkill ?? null,
-      finalSkill: a.finalSkill ?? null,
-      skillDelta: a.skillDelta ?? null,
-      age: a.age ?? null,
-      talent: a.talent ?? null,
-      hasCurrentSeason: a.hasCurrentSeason === true,
-      staleActivity: a.staleActivity === true,
-      currentRow: row(a.currentRow),
-      talentUpgradeEligible: a.talentUpgradeEligible === true,
-      talentUpgradeRow: row(a.talentUpgradeRow),
-      leagueAboveSkill: a.leagueAboveSkill === true
-    };
-  }
-
-  function compactRow(r) {
-    return r ? {
-      playerId: String(r.playerId || ''), playerUrl: r.playerUrl || '', name: r.name || '', positions: Array.isArray(r.positions) ? r.positions.slice(0, 4) : [],
-      age: r.age ?? null, talent: r.talent ?? null, scoutSkill: r.scoutSkill ?? null, potentialText: r.potentialText || '',
-      slfPrice: r.slfPrice ?? null, slfPriceText: r.slfPriceText || '', slfPriceCellText: r.slfPriceCellText || '',
-      slfSecondaryPrice: r.slfSecondaryPrice ?? null, slfSecondaryPriceText: r.slfSecondaryPriceText || '', nominalRatio: r.nominalRatio ?? null, nominalBase: r.nominalBase ?? null
-    } : null;
-  }
-
-  function saveAnalysis(row, enriched, slfAlter) {
-    const id = String(row?.playerId || enriched?.playerId || '').trim();
-    if (!id) return false;
-    const p = enriched?.tmProfile || row?.tmProfile || null;
-    const a = slfAlter || row?.slfAlter || null;
-    return set(id, { row: compactRow(row), tmUrl: enriched?.tmUrl || p?.tmUrl || row?.tmUrl || '', tmValueEur: Number(p?.marketValueEur || p?.lastKnownMarketValueEur || row?.tmValueEur || 0), tmProfile: compactProfile(p), slfAlter: compactAlter(a) });
-  }
-
-  function upsert(id, patch) {
-    return set(id, { ...(get(id) || {}), ...(patch || {}) });
-  }
-
-  function batchUpsert(arr) {
-    (arr || []).forEach(x => x?.playerId && upsert(x.playerId, x.patch || x));
-  }
-
-  function clear() {
-    readIndex().forEach(id => localStorage.removeItem(key(id)));
-    localStorage.removeItem(INDEX_KEY);
-    localStorage.removeItem(LEGACY_KEY);
-  }
-
-  window.SLF = window.SLF || {};
-  window.SLF.PlayerStateStore = { KEY: INDEX_KEY, PREFIX, TTL_MS, get, upsert, batchUpsert, saveAnalysis, load: () => Object.fromEntries(readIndex().map(id => [id, get(id)]).filter(([, v]) => !!v)), clear, stats: () => ({ index: readIndex().length, key: INDEX_KEY, prefix: PREFIX }) };
-})();
-// <<< src/modules/transfer-analyzer/player-state-store.js
 
 
 // >>> src/modules/transfer-analyzer/tm-analysis-cache-backfill.js
@@ -17933,15 +17472,15 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.149',
-        scriptVersion: '4.4.149',
+        version: '4.4.150',
+        scriptVersion: '4.4.150',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.149',
+        scriptVersion: '4.4.150',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
