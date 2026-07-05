@@ -111,6 +111,117 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         `;
     };
 
+    const analyzeVisibleRowsOriginal = TransferMarketAnalyzer.analyzeVisibleRows;
+    TransferMarketAnalyzer.analyzeVisibleRows = async function analyzeVisibleRowsLiveParallel() {
+        if (this.isHistoryPage?.()) {
+            return analyzeVisibleRowsOriginal.apply(this, arguments);
+        }
+
+        const rows = this.parseVisibleRows?.() || [];
+        if (!rows.length) {
+            this.setStatus?.('Игроки не найдены.');
+            return;
+        }
+
+        const concurrency = 3;
+        const runMemory = new Map();
+        let done = 0;
+        let analyzed = 0;
+        let errors = 0;
+        const total = rows.length;
+
+        const originalRefreshRanks = this.refreshVisibleRankBadges;
+        let refreshSuppressed = false;
+        if (typeof originalRefreshRanks === 'function') {
+            this.refreshVisibleRankBadges = function noopDuringLiveParallelAnalysis() {};
+            refreshSuppressed = true;
+        }
+
+        const loadPlayerData = row => {
+            const playerId = String(row?.playerId || '').trim();
+            if (!playerId) {
+                return Promise.resolve({ tmResult: null, slfAlter: null, tmError: null, slfError: null });
+            }
+            if (!runMemory.has(playerId)) {
+                runMemory.set(playerId, Promise.allSettled([
+                    TMEnrichmentLayer.getBySlfPlayerId(playerId),
+                    SLFAlterLayer.getByPlayerId(playerId)
+                ]).then(([tmSettled, slfSettled]) => ({
+                    tmResult: tmSettled.status === 'fulfilled' ? tmSettled.value : null,
+                    slfAlter: slfSettled.status === 'fulfilled' ? slfSettled.value : null,
+                    tmError: tmSettled.status === 'rejected' ? tmSettled.reason : null,
+                    slfError: slfSettled.status === 'rejected' ? slfSettled.reason : null
+                })));
+            }
+            return runMemory.get(playerId);
+        };
+
+        const analyzeOne = async row => {
+            this.renderLoadingBadge?.(row);
+            try {
+                const result = await loadPlayerData(row);
+                if (result.tmError) console.warn('[SLF Transfer Analyzer] TM failed', row.playerId, result.tmError);
+                if (result.slfError) console.warn('[SLF Transfer Analyzer] alter.php failed', row.playerId, result.slfError);
+
+                const tmResult = result.tmResult || {
+                    playerId: row.playerId,
+                    slfUrl: row.playerUrl,
+                    tmUrl: '',
+                    tmProfile: null,
+                    error: result.tmError ? 'tm_failed' : 'empty_enrichment'
+                };
+                const slfAlter = result.slfAlter || null;
+
+                row.tmUrl = tmResult.tmUrl || '';
+                row.tmProfile = tmResult.tmProfile || null;
+                row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
+                row.slfAlter = slfAlter;
+
+                this.renderRowBadge?.(row, tmResult, slfAlter);
+                analyzed++;
+                return { ok: true, row };
+            } catch (error) {
+                errors++;
+                console.error('[SLF Transfer Analyzer] row failed', row, error);
+                this.renderErrorBadge?.(row, error);
+                return { ok: false, row, error };
+            } finally {
+                done++;
+                if (done === total || done % 3 === 0) {
+                    this.setStatus?.(`Live ${done}/${total}: analyzed ${analyzed}, errors ${errors}`);
+                }
+            }
+        };
+
+        const mapLimit = async (items, limit, worker) => {
+            let cursor = 0;
+            const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+                while (cursor < items.length) {
+                    const index = cursor++;
+                    await worker(items[index], index);
+                }
+            });
+            await Promise.all(workers);
+        };
+
+        this.setStatus?.(`Live анализ: ${total} игроков, parallel ${concurrency}...`);
+        try {
+            await this.loadMarketBaseline?.();
+            await mapLimit(rows, concurrency, analyzeOne);
+        } finally {
+            if (refreshSuppressed) {
+                this.refreshVisibleRankBadges = originalRefreshRanks;
+                try {
+                    this.refreshVisibleRankBadges?.();
+                } catch (error) {
+                    console.warn('[SLF Transfer Analyzer] rank refresh failed after live analysis', error);
+                }
+            }
+        }
+
+        this.setStatus?.(`Готово live: ${total} игроков · analyzed ${analyzed} · errors ${errors}`);
+    };
+
     TransferMarketAnalyzer.clearAllTransferAnalysisState();
 
     const style = document.createElement('style');
