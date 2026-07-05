@@ -35,6 +35,8 @@
     "src/modules/transfer-analyzer/transfer-market-analyzer.js",
     "src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js",
     "src/modules/transfer-analyzer/tm-analysis-cache-ttl.js",
+    "src/modules/transfer-analyzer/transfer-analysis-snapshot-cache.js",
+    "src/modules/transfer-analyzer/transfer-tm-profile-guard.js",
     "src/modules/transfer-analyzer/tm-analysis-cache-backfill.js",
     "src/modules/transfer-analyzer/transfer-my-bids-rank.js",
     "src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js",
