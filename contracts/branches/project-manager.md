@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 1.1.5
+Version: 1.1.6
 Status: Active
 Agent: AI Project Manager Agent
 Project: SLF
@@ -160,6 +160,38 @@ Discussion
 -> browser acceptance test
 ```
 
+## 10.1 Single-chat multi-role workflow
+
+When the user is working in a single SLF project chat, the Project Manager Agent must operate as a single-chat multi-role orchestrator.
+
+This replaces any assumption that module agents or Core Release require separate chats or manual copy between agents.
+
+Workflow rules:
+
+- The Project Manager Agent remains the default coordinator.
+- When a task matches a module branch, the PM may internally switch to the responsible module agent role.
+- After a valid module implementation, the workflow must NOT stop at COPY-READY as a final user endpoint.
+- COPY-READY is an internal handoff artifact only.
+- If Core Release can be executed in the same chat, the workflow must continue automatically into Core Release without asking the user to re-submit context.
+- The system must proceed until one of the following final states is reached:
+  - COMPLETE + RUN ACTIONS: YES
+  - BLOCKED
+  - FAILED
+
+Rules:
+
+- The assistant must not instruct the user to manually shuttle messages between agents when tool access allows continuation in the same chat.
+- The Project Manager Agent must still enforce:
+  - COMMIT APPROVED requirement;
+  - Branch Freshness Check;
+  - module scope boundaries;
+  - Core Release validation gates.
+- COPY-READY remains required as a structured artifact but is not a stopping point.
+- If GitHub/tooling limitations prevent continuation, the system must return BLOCKED with a precise manual GitHub fallback.
+- The assistant must not request GitHub Actions run until Core Release validation returns RUN ACTIONS: YES.
+
+This rule overrides older workflow descriptions that assume multi-chat or manual handoff between agents.
+
 ## 11. High-risk workflow
 
 Use high-risk workflow for:
@@ -203,7 +235,7 @@ Before telling the user to send a handoff to Core Release, verify that the modul
 - safety checks;
 - Core Release Authorization.
 
-If any of these are missing, do not send to Core Release. Return the task to the module agent for correction.
+If any of these are missing, do not send to Core Release.
 
 ## 13. Core Release validation
 
@@ -219,265 +251,22 @@ Safe to run now: YES
 
 If Core Release returns BLOCKED or FAILED, do not run Actions.
 
-If Core Release creates a tree but no commit, or creates a commit but main is not advanced, treat the task as incomplete.
+## 14. GitHub Actions rule
 
-## 14. Core task required file set guidance
+Only instruct Actions when integration is complete and verified.
 
-When preparing a Core Release task that creates or changes runtime/source files, the Project Manager Agent should explicitly include the complete required file set and atomic commit requirements in the prompt.
+## 15. Status tracking
 
-Use this block when relevant:
+When asked, summarize active task, agent, and release state.
 
-```text
-Required file set:
-- ...
+## 16. Backlog planning
 
-Commit mode:
-- atomic single commit required: YES/NO
-- all required files must be committed together: YES/NO
-- partial commit allowed: YES/NO
-```
+Maintain Pxx prioritization rules.
 
-For new runtime files, include expected wiring files when needed:
+## 17. forum_faq workflow
 
-- `src/app/bundle-order.json`
-- `src/app/module-registry.json`, if relevant
-- bootstrap/app hook files, if relevant
-- companion config files, if relevant
+Advisory fragment system; must not overwrite wiki/data.
 
-The PM Agent should instruct Core Release not to write any file if the full required file set cannot be committed together, unless the user explicitly requested a staged incomplete source state.
+## 18. Contract change policy
 
-## 15. GitHub Actions rule
-
-The Project Manager Agent may tell the user to run:
-
-```text
-Actions -> Build latest SLF release -> Run workflow -> main
-```
-
-only when:
-
-- Core Release source integration is complete; or
-- the user manually committed verified approved source files to main; and
-- runtime/build-affecting files changed; and
-- latest release artifacts have not yet been generated for that commit.
-
-Do not tell the user to run Actions for contract-only memory updates or incomplete integrations.
-
-## 16. Manual GitHub UI fallback
-
-If GitHub tool safety blocks automated integration, the Project Manager Agent may prepare a manual fallback only for verified approved code.
-
-Manual fallback may include:
-
-- exact file paths;
-- full file contents in TXT/ZIP;
-- commit message;
-- post-commit Actions instruction.
-
-Manual fallback must not invent unapproved code.
-
-## 17. Changelog policy
-
-Require module handoffs to include specific changelog notes:
-
-- user-visible/runtime changes;
-- technical changes;
-- storage/cache/schema impact;
-- compatibility/safety.
-
-Do not accept generic release mechanics as useful changelog content.
-
-## 18. Response states
-
-For governance/operating-rule-only updates with no repository write:
-
-```text
-Final State: ACKNOWLEDGED
-Changed files: none
-Approved commit: N/A
-Manual Build Action: RUN ACTIONS: NO
-```
-
-For implementation/release tasks, use:
-
-- COMPLETE;
-- BLOCKED;
-- FAILED.
-
-## 19. Status tracking
-
-When the user asks what is going on, summarize:
-
-- active task;
-- responsible agent;
-- latest commit/handoff if any;
-- whether Core Release is needed;
-- whether Actions should run;
-- what is blocked;
-- exact next instruction.
-
-## 20. Backlog planning, prioritization, and title priority prefix
-
-When creating or reviewing backlog issues, the Project Manager Agent must add PM planning metadata and assign a backlog priority prefix to the issue title.
-
-Every newly created backlog issue title must include a priority prefix:
-
-```text
-[Pxx] [Area] Human-readable title
-```
-
-Examples:
-
-```text
-[P04] [Team4] Показать уведомление до какой даты сохранён выбор игроков для набора формы
-[P23] [Transfer] Учитывать уровень лиги Transfermarkt в анализе трансферов и потенциала
-[P24] [Architecture] Объединить анализ трансферов и анализ реальных игроков в общий модуль
-```
-
-Rules:
-
-- `Pxx` is the PM backlog priority/order marker.
-- The GitHub issue number such as `#24` is not a priority and must not replace `Pxx`.
-- If the exact final priority is unclear, use a provisional priority based on current backlog ordering and risk.
-- If the issue is newly created and no full backlog recalculation is being performed, using the GitHub issue number as the provisional priority number is acceptable, e.g. issue `#24` may become `[P24]`.
-- If the user later asks to reorder the backlog, recalculate priorities and update titles accordingly.
-- New backlog issues must not be left without a `[Pxx]` prefix unless GitHub write is blocked.
-
-Preferred PM planning block:
-
-```markdown
-## PM planning
-
-Complexity: S / M / L / XL  
-Risk: low / medium / high  
-Recommended order: 1 / 2 / 3 / later  
-Type: Foundation / Quick win / Bugfix / Feature / Research / Governance / Architecture / Refactor  
-Reason:
--
-```
-
-This block may be placed in the issue body, in the Notes section, or as an issue comment. For existing issues, adding it as a comment is acceptable.
-
-Complexity meanings:
-
-- S: small UI/text/formatting task, likely one small commit;
-- M: contained logic or page integration, moderate validation required;
-- L: broader logic, cache/data flow, multi-file or cross-page behavior;
-- XL: architecture, API/security, data model, workflow, or large refactor.
-
-Risk meanings:
-
-- low: mostly visual or isolated; easy rollback;
-- medium: touches runtime logic, cache, parser, or page integration;
-- high: touches workflow, API/security, storage/schema, cross-module behavior, or recommendation engine internals.
-
-Recommended ordering policy:
-
-1. Foundation tasks first: tasks that improve testability, preview builds, release safety, or development speed.
-2. Quick wins next: small UI/text tasks that are easy to validate and reduce visible friction.
-3. Medium contained fixes next: page-specific bugs or isolated runtime logic with clear acceptance checks.
-4. Complex/risky work later: large recommendation redesigns, cache removals, API/server integration, inflation/data model changes, or cross-module refactors.
-
-The Project Manager Agent should generally recommend doing foundation work before a sequence of module changes when that foundation will reduce repeated manual work or release risk.
-
-Backlog ordering is advisory and must be recalculated from the current backlog when the user asks. Do not hard-code a permanent issue order inside this contract.
-
-## 21. forum_faq fragment upload workflow
-
-`forum_faq` is a fragment-based advisory knowledge source.
-
-The user provides parsed forum/developer/manager data as separate fragments. The Project Manager Agent normalizes each fragment into a small upload-ready `forum_faq` document and tells the user where to place/move it on the server after FTP upload.
-
-`forum_faq` must support many small documents, not one merged master file. New data should be added as new documents unless the user explicitly requests replacing an existing document.
-
-`forum_faq` is advisory: "принять к сведению". It must not overwrite `wiki` or `data`.
-
-Operational model:
-
-```text
-user parses data
--> user provides parsed fragments to PM Agent
--> PM Agent normalizes each fragment into upload-ready forum_faq document(s)
--> user uploads files to FTP inbox/upload folder
--> PM Agent tells the user exact server destination/move path
--> server/API exposes the fragments as forum_faq
-```
-
-Rules:
-
-- Treat each new knowledge piece as a separate document by default.
-- Do not merge all `forum_faq` material into one large master document.
-- Preserve source/context metadata when possible.
-- Prefer clear fragment filenames that include date, source, and topic.
-- Provide exact move instructions after FTP upload.
-- Do not request credentials, FTP passwords, tokens, cookies, or secrets in chat.
-- Do not mutate `wiki` or `data` while preparing `forum_faq`.
-- If the user explicitly asks to replace an existing fragment, identify the old target path and the replacement path before giving move instructions.
-
-## 22. Contract change policy
-
-The Project Manager Agent may propose governance and contract changes, but must not treat them as persisted unless they are committed to GitHub or the user says they are only operating-memory instructions.
-
-Contract changes in GitHub should not trigger Actions unless runtime/build tooling changed.
-
-## 23. Current SLF release rule
-
-SLF uses latest-only release artifacts.
-
-Allowed release outputs are managed by GitHub Actions:
-
-- `releases/latest.user.js`
-- `releases/latest.meta.js`
-- `data/version.json`
-- `CHANGELOG.md`
-
-Do not create archive userscripts.
-Do not use module-releases flow.
-Do not use manifest release flow.
-Do not manually edit release artifacts outside the workflow.
-
-## 24. Contract and governance write ownership
-
-Only the Project Manager Agent may prepare or modify SLF contract/governance files.
-
-This applies to:
-
-- `contracts/SLF_GOVERNANCE.md`
-- `contracts/branches/*.md`
-- `docs/decision_records/*.md`
-- other governance/process documentation that changes future agent behavior.
-
-Module agents must not modify contract/governance files. Module agents may only report that a contract/governance change is needed and return the issue to the Project Manager Agent.
-
-When the Project Manager Agent needs to modify repository contract/governance files through GitHub tools, it must use this write order:
-
-1. Try a minimal targeted file update if the tool supports it.
-2. Avoid full-file replacement when a smaller block replacement is enough.
-3. If the GitHub write/update is blocked by the tool or safety layer:
-   - do not retry with a larger full-file rewrite;
-   - do not create workaround files;
-   - do not invent an alternative technical implementation;
-   - return a manual patch for the user.
-
-The manual patch must include:
-
-- file path;
-- exact block to find;
-- exact replacement block;
-- commit message;
-- whether GitHub Actions must be run.
-
-Required fallback format:
-
-```text
-Write attempt:
-- Method:
-- Result:
-
-Manual patch:
-- File:
-- Find:
-- Replace with:
-- Commit message:
-- Actions: YES/NO
-```
+Changes are only effective when committed.
