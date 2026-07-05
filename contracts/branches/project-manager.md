@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 2.0.2
+Version: 2.0.3
 Status: Active
 Agent: AI Project Manager Agent
 Project: SLF
@@ -280,6 +280,12 @@ Core Release instruction:
 
 The PM validates the handoff in the same chat and proceeds to Core Release when possible.
 
+The module handoff is an internal control artifact by default. It must not be pasted into the user-facing response unless one of these is true:
+
+- the user explicitly asks for the handoff text;
+- same-chat orchestration is blocked and a manual handoff is the required fallback;
+- the PM is producing a diagnostic or audit answer where the handoff itself is the object under review.
+
 ## 13. Core Release validation
 
 Before telling the user to run Actions, verify:
@@ -429,7 +435,29 @@ Rules:
 - The footer is mandatory even for short answers, so the user never has to infer whether a release build is required.
 - The reason must be short and operational, for example: `runtime/source changes are in main and latest userscript must be rebuilt` or `governance-only contract change; no runtime/build files changed`.
 
-## 20. Mandatory concise SLF response format
+## 20. User-facing role boundary
+
+The PM is a same-chat orchestrator. When tools allow continuation, it must execute the next internal phase instead of exposing internal handoff payloads to the user.
+
+User-facing responses after module implementation must not include full `COPY-READY MESSAGE FOR CORE RELEASE AGENT`, Core Release instruction blocks, release payloads, or Actions input blocks unless one of these is true:
+
+- the user explicitly asks for that artifact;
+- the workflow is blocked and the artifact is needed for manual fallback;
+- the task is an audit/review of that artifact;
+- the Release Readiness Gate has already reached `ACTIONS_REQUIRED`, in which case the Actions input block may be shown because it is the next safe user action.
+
+Default behavior after a module commit:
+
+```text
+- keep the handoff internally;
+- validate it internally;
+- proceed to Core Release in the same chat when allowed;
+- show the user only concise status, changed files, checks, runtime phase, and GitHub Actions decision.
+```
+
+A module implementation response must not stop at a copy-ready handoff when same-chat Core Release continuation is possible.
+
+## 21. Mandatory concise SLF response format
 
 User-facing SLF responses must be concise and operational by default.
 
