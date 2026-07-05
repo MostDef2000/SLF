@@ -1,16 +1,16 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.154",
+  "scriptVersion": "4.4.155",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_154_published",
+  "status": "release_4_4_155_published",
   "build": {
     "source": "src/**",
     "bundleOrder": "src/app/bundle-order.json",
-    "approvedCommit": "eba7a690a40200ff9078542f4075b8f0fd767b7b",
+    "approvedCommit": "f84f4404b01896d5a335b27f22b69064dadc9a0a",
     "approvedFiles": [
       "src/**"
     ],
