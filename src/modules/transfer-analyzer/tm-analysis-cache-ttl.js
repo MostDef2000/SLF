@@ -8,6 +8,7 @@
     const originalLoadAnalysisCache = TransferMarketAnalyzer.loadAnalysisCache;
     const originalMount = TransferMarketAnalyzer.mount;
     const originalAnalyzeVisibleRows = TransferMarketAnalyzer.analyzeVisibleRows;
+    const originalApplyCachedAnalysis = TransferMarketAnalyzer.applyCachedAnalysis;
 
     TransferMarketAnalyzer.analysisCacheTtlMs = TM_ANALYSIS_CACHE_TTL_MS;
 
@@ -103,6 +104,33 @@
         };
     }
 
+    function getRenderedBadgeSnapshot(row) {
+        const box = row?.rowEl?.querySelector?.('.slf-transfer-analysis-badge') || null;
+        const html = String(box?.innerHTML || row?.renderedBadgeHtml || '').trim();
+        const text = String(box?.innerText || box?.textContent || row?.renderedBadgeText || '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (!html || !text) return null;
+
+        return {
+            html: html.slice(0, 45000),
+            text: text.slice(0, 1400)
+        };
+    }
+
+    function applySavedRowFields(target, cached) {
+        const savedRow = cached?.row || {};
+        target.slfPrice = target.slfPrice ?? savedRow.slfPrice ?? null;
+        target.slfPriceText = target.slfPriceText || savedRow.slfPriceText || '';
+        target.slfPriceCellText = target.slfPriceCellText || savedRow.slfPriceCellText || '';
+        target.slfSecondaryPriceText = target.slfSecondaryPriceText || savedRow.slfSecondaryPriceText || '';
+        target.slfSecondaryPrice = target.slfSecondaryPrice ?? savedRow.slfSecondaryPrice ?? null;
+        target.nominalRatio = target.nominalRatio ?? savedRow.nominalRatio ?? null;
+        target.nominalBase = target.nominalBase ?? savedRow.nominalBase ?? null;
+        target.slfPriceSource = target.slfPriceSource || savedRow.slfPriceSource || '';
+    }
+
     TransferMarketAnalyzer.isAnalysisCacheItemExpired = function isAnalysisCacheItemExpired(item, now = Date.now()) {
         const savedAt = Number(item?.savedAt || 0);
         return !savedAt || now - savedAt > this.analysisCacheTtlMs;
@@ -115,9 +143,10 @@
         const hasUsefulTmUrl = !!item.tmResult?.tmUrl && !item.tmResult?.error;
         const hasSlfAlter = !!item.slfAlter;
         const hasSavedRow = !!item.row;
+        const hasRenderedBadge = !!item.renderedBadgeHtml;
         const hasPlayerId = !!String(item.playerId || item.row?.playerId || '').trim();
 
-        return hasPlayerId && (hasTmProfile || hasUsefulTmUrl || hasSlfAlter || hasSavedRow);
+        return hasPlayerId && (hasTmProfile || hasUsefulTmUrl || hasSlfAlter || hasSavedRow || hasRenderedBadge);
     };
 
     TransferMarketAnalyzer.isAnalysisCacheCompleteEnoughToSkip = function isAnalysisCacheCompleteEnoughToSkip(item) {
@@ -126,8 +155,9 @@
         const hasTmProfile = !!item.tmResult?.tmProfile;
         const hasUsefulTmUrl = !!item.tmResult?.tmUrl && !item.tmResult?.error;
         const hasSlfAlter = !!item.slfAlter;
+        const hasRenderedBadge = !!item.renderedBadgeHtml;
         const tmError = String(item.tmResult?.error || '').trim();
-        const rowOnly = !!item.row && !hasTmProfile && !hasUsefulTmUrl && !hasSlfAlter;
+        const rowOnly = (!!item.row || hasRenderedBadge) && !hasTmProfile && !hasUsefulTmUrl && !hasSlfAlter;
 
         if (rowOnly) return false;
         if (tmError && !hasTmProfile && !hasUsefulTmUrl && !hasSlfAlter) return false;
@@ -201,6 +231,7 @@
 
         const cache = this.loadAnalysisCache();
         const keys = this.buildAnalysisCacheKeys(row, enriched);
+        const renderedBadge = getRenderedBadgeSnapshot(row);
         const item = {
             schema: 'transfer_row_analysis_cache_v2_compact',
             savedAt: Date.now(),
@@ -208,6 +239,8 @@
             name: row.name || '',
             tmResult: compactTmResult(enriched, row),
             slfAlter: compactSlfAlter(slfAlter),
+            renderedBadgeHtml: renderedBadge?.html || '',
+            renderedBadgeText: renderedBadge?.text || '',
             row: {
                 playerId: String(row.playerId || ''),
                 playerUrl: row.playerUrl || '',
@@ -233,6 +266,43 @@
         });
 
         this.saveAnalysisCache(cache);
+    };
+
+    TransferMarketAnalyzer.restoreRenderedBadgeSnapshot = function restoreRenderedBadgeSnapshot(row, cached) {
+        if (!row || !cached?.renderedBadgeHtml) return false;
+
+        applySavedRowFields(row, cached);
+
+        const box = this.getOrCreateBadgeCell?.(row);
+        if (!box) return false;
+
+        box.innerHTML = cached.renderedBadgeHtml;
+
+        try {
+            this.bindDetailsAutoClose?.();
+            this.bindHtmlTooltipPortal?.(box);
+            this.cleanupStandaloneMarketNominalControls?.(box);
+            this.refreshVisibleRankBadges?.();
+        } catch (error) {
+            console.warn('[SLF Transfer Analyzer] display snapshot restore post-bind failed', row.playerId, error);
+        }
+
+        return true;
+    };
+
+    TransferMarketAnalyzer.applyCachedAnalysis = function applyCachedAnalysisWithDisplaySnapshot(row, cached) {
+        if (!row || !cached) return false;
+
+        const hasTmProfile = !!cached.tmResult?.tmProfile;
+        const hasSlfAlter = !!cached.slfAlter;
+
+        if (hasTmProfile || hasSlfAlter) {
+            return originalApplyCachedAnalysis.call(this, row, cached);
+        }
+
+        if (this.restoreRenderedBadgeSnapshot(row, cached)) return true;
+
+        return originalApplyCachedAnalysis.call(this, row, cached);
     };
 
     TransferMarketAnalyzer.mount = function mountWithTtlCleanup() {
