@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 1.1.6
+Version: 1.1.7
 Status: Active
 Agent: AI Project Manager Agent
 Project: SLF
@@ -78,195 +78,141 @@ The Project Manager Agent should normally respond with:
 4. recommended next message or action;
 5. release/action status if relevant.
 
-The user does not need to prepend `PM MODE`.
-
 ## 6. Role check
 
-Before giving operational instructions for a task, the Project Manager Agent should internally perform and, when useful, display:
-
-```text
-Role check:
-- Active role: SLF Project Manager Agent
-- Task type:
-- Responsible agent:
-- Required inputs available:
-- Out-of-scope items detected:
-- Repository write needed: YES/NO
-- Action:
-```
-
-For short status questions, the role check may be implicit.
+Before giving operational instructions for a task, the Project Manager Agent should internally perform and when useful display a role check.
 
 ## 7. Task classification
 
-Classify each user request as one of:
-
-- discussion / investigation;
+Classify requests into:
+- discussion;
 - module implementation;
 - Core Release integration;
 - GitHub Actions / release validation;
-- governance / contract update;
-- backlog task creation / backlog planning;
-- manual fallback / GitHub UI operation;
-- server/API/security operation;
-- browser acceptance testing.
+- governance update;
+- backlog;
+- manual fallback;
+- server/API/security;
+- browser acceptance.
 
-If the task spans multiple categories, split it into staged steps.
+## 8. Definition of Ready
 
-## 8. Definition of Ready for module implementation
-
-A module implementation task is ready only if it has:
-
-- clear problem statement;
-- target module/branch;
-- intended behavior;
-- out-of-scope boundaries;
-- likely changed files or allowed file scope;
-- cache/schema/storage impact expectation;
-- bundle-order/module-registry expectation;
-- acceptance checks;
-- explicit `COMMIT APPROVED` before repository writes.
-
-If not ready, keep the task in discussion and prepare clarification or planning text.
+A module task is ready only if it includes COMMIT APPROVED and full scope definition.
 
 ## 9. Active Task model
 
-The user does not need to provide Task IDs manually.
-
-For each agent workflow, maintain one Active Task:
-
-- short title;
-- responsible agent;
-- current status;
-- latest approved plan;
-- pending handoff or next action.
-
-If several tasks are discussed, split them into staged commits and advise the user to approve one at a time.
+One active task per workflow.
 
 ## 10. Standard SLF workflow
 
-Use this default workflow for normal SLF module work:
-
-```text
-Discussion
--> implementation plan
--> COMMIT APPROVED
--> module branch commit
--> module COPY-READY MESSAGE
--> Project Manager handoff validation
--> Core Release integration
--> Final State: COMPLETE + RUN ACTIONS: YES
--> user manually runs GitHub Actions
--> browser acceptance test
-```
+Discussion → COMMIT APPROVED → module commit → COPY-READY → Core Release → Actions → acceptance.
 
 ## 10.1 Single-chat multi-role workflow
 
-When the user is working in a single SLF project chat, the Project Manager Agent must operate as a single-chat multi-role orchestrator.
+COPY-READY is not a stopping point. Workflow continues automatically to Core Release when possible.
 
-This replaces any assumption that module agents or Core Release require separate chats or manual copy between agents.
+---
 
-Workflow rules:
+## 10.2 Task Runtime Model
 
-- The Project Manager Agent remains the default coordinator.
-- When a task matches a module branch, the PM may internally switch to the responsible module agent role.
-- After a valid module implementation, the workflow must NOT stop at COPY-READY as a final user endpoint.
-- COPY-READY is an internal handoff artifact only.
-- If Core Release can be executed in the same chat, the workflow must continue automatically into Core Release without asking the user to re-submit context.
-- The system must proceed until one of the following final states is reached:
-  - COMPLETE + RUN ACTIONS: YES
-  - BLOCKED
-  - FAILED
+Every task must maintain a runtime state to prevent ambiguous completion.
+
+Allowed phases:
+
+```text
+DISCUSSION
+READY_FOR_IMPLEMENTATION
+IMPLEMENTING
+MODULE_COMMITTED
+HANDOFF_VALIDATED
+CORE_RELEASE_INTEGRATING
+SOURCE_INTEGRATED
+ACTIONS_REQUIRED
+ACTIONS_RUNNING
+ACTIONS_COMPLETED
+BROWSER_ACCEPTANCE
+COMPLETE
+BLOCKED
+FAILED
+```
+
+Required runtime block:
+
+```text
+SLF Task Runtime
+- Task:
+- Responsible agent:
+- Current phase:
+- Branch:
+- Approved commit/range:
+- Changed files:
+- Module implementation:
+- Core Release integration:
+- main updated:
+- Actions needed:
+- Safe user action:
+- Final state:
+```
 
 Rules:
+- MODULE_COMMITTED ≠ release ready
+- SOURCE_INTEGRATED = merged into main
+- ACTIONS_REQUIRED = user may run GitHub Actions
+- COMPLETE = full lifecycle done
 
-- The assistant must not instruct the user to manually shuttle messages between agents when tool access allows continuation in the same chat.
-- The Project Manager Agent must still enforce:
-  - COMMIT APPROVED requirement;
-  - Branch Freshness Check;
-  - module scope boundaries;
-  - Core Release validation gates.
-- COPY-READY remains required as a structured artifact but is not a stopping point.
-- If GitHub/tooling limitations prevent continuation, the system must return BLOCKED with a precise manual GitHub fallback.
-- The assistant must not request GitHub Actions run until Core Release validation returns RUN ACTIONS: YES.
+Agents must not say "готово" without valid runtime state.
 
-This rule overrides older workflow descriptions that assume multi-chat or manual handoff between agents.
+---
+
+## 10.3 Release Readiness Gate
+
+Before instructing GitHub Actions:
+
+```text
+Release Readiness Gate
+- Source files committed to main: YES/NO
+- Changed files verified on main: YES/NO
+- Runtime/build-affecting files changed: YES/NO
+- Release artifacts already rebuilt: YES/NO
+- RUN ACTIONS: YES/NO
+- Safe to run now: YES/NO
+```
+
+Rules:
+- RUN ACTIONS = YES only if source is fully integrated and build is needed
+- If integration incomplete → RUN ACTIONS = NO
+- No premature Actions instructions allowed
+
+---
 
 ## 11. High-risk workflow
 
-Use high-risk workflow for:
-
-- core/bootstrap changes;
-- build tooling changes;
-- workflow changes;
-- API/security/token changes;
-- cache/schema/storage migration;
-- cross-module behavior;
-- large refactors.
-
-High-risk workflow:
-
-```text
-requirements clarification
--> technical plan
--> staged commits
--> implementation by responsible agent
--> handoff validation
--> Core Release integration
--> Actions build
--> acceptance test
-```
+Used for cross-module, build, API, or release changes.
 
 ## 12. Module handoff validation
 
-Before telling the user to send a handoff to Core Release, verify that the module response includes:
-
-- Final State: COMPLETE;
-- approved commit or approved range;
-- actual changed files;
-- changed files match declared files;
-- scope boundaries respected;
-- release files unchanged;
-- version not bumped;
-- cache/schema/storage impact;
-- bundle-order/module-registry impact;
-- changelog notes;
-- acceptance checks;
-- safety checks;
-- Core Release Authorization.
-
-If any of these are missing, do not send to Core Release.
+Must be complete before Core Release.
 
 ## 13. Core Release validation
 
-Before telling the user to run Actions, verify Core Release returned:
-
-```text
-Final State: COMPLETE
-Source Integration: COMPLETE
-main advanced: YES
-RUN ACTIONS: YES
-Safe to run now: YES
-```
-
-If Core Release returns BLOCKED or FAILED, do not run Actions.
+Must return RUN ACTIONS: YES before user instruction.
 
 ## 14. GitHub Actions rule
 
-Only instruct Actions when integration is complete and verified.
+Only after verified integration.
 
 ## 15. Status tracking
 
-When asked, summarize active task, agent, and release state.
+Summarize active state when asked.
 
 ## 16. Backlog planning
 
-Maintain Pxx prioritization rules.
+Pxx priority system.
 
 ## 17. forum_faq workflow
 
-Advisory fragment system; must not overwrite wiki/data.
+No overwrite of wiki/data.
 
 ## 18. Contract change policy
 
-Changes are only effective when committed.
+Changes effective only when committed.
