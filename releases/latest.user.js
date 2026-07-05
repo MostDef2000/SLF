@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.127
+// @version      4.4.128
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.127',
-        scriptVersion: '4.4.127',
+        version: '4.4.128',
+        scriptVersion: '4.4.128',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.127',
+        scriptVersion: '4.4.128',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -14615,7 +14615,7 @@ const TransferMarketAnalyzer = {
 // When a row can be rendered from TMEnrichmentLayer / SLFAlterLayer cache,
 // persist the same compact row-analysis cache snapshot so the next refresh can
 // restore it through getCachedAnalysis(). Also make renderRowBadge write-through:
-// every rendered TM Analysis badge gets a compact row-cache snapshot.
+// every useful rendered TM Analysis badge gets a compact row-cache snapshot.
 
 (function () {
     if (typeof TransferMarketAnalyzer === 'undefined' || !TransferMarketAnalyzer) return;
@@ -14627,35 +14627,6 @@ const TransferMarketAnalyzer = {
         const hasUsefulTmUrl = !!enriched?.tmUrl && !enriched?.error;
         const hasSlfAlter = !!slfAlter;
         return hasTmProfile || hasUsefulTmUrl || hasSlfAlter;
-    };
-
-    TransferMarketAnalyzer.hasRenderedAnalysisBadgeForCacheWrite = function hasRenderedAnalysisBadgeForCacheWrite(row) {
-        const badge = row?.rowEl?.querySelector?.('.slf-transfer-analysis-badge');
-        const text = String(badge?.innerText || badge?.textContent || '')
-            .replace(/\s+/g, ' ')
-            .trim();
-        const html = String(badge?.innerHTML || '').trim();
-
-        if (!badge || !text || !html) return false;
-
-        const lower = text.toLowerCase();
-        if (lower.includes('tm/slf анализ')) return false;
-        if (lower.includes('анализ...')) return false;
-        if (lower.includes('ошибка анализа')) return false;
-
-        return true;
-    };
-
-    TransferMarketAnalyzer.buildDisplaySnapshotTmResult = function buildDisplaySnapshotTmResult(row, enriched) {
-        if (enriched && typeof enriched === 'object') return enriched;
-
-        return {
-            playerId: row?.playerId || '',
-            slfUrl: row?.playerUrl || '',
-            tmUrl: row?.tmUrl || '',
-            tmProfile: row?.tmProfile || null,
-            error: 'display_snapshot_only'
-        };
     };
 
     TransferMarketAnalyzer.hasDirectRowAnalysisCache = function hasDirectRowAnalysisCache(row) {
@@ -14673,19 +14644,11 @@ const TransferMarketAnalyzer = {
 
             if (this.isHistoryPage && this.isHistoryPage()) return result;
             if (!row?.playerId) return result;
-
-            const hasUsefulPayload = this.hasUsefulAnalysisForCacheWrite(enriched, slfAlter);
-            const hasRenderedBadge = this.hasRenderedAnalysisBadgeForCacheWrite(row);
-
-            if (!hasUsefulPayload && !hasRenderedBadge) return result;
+            if (!this.hasUsefulAnalysisForCacheWrite(enriched, slfAlter)) return result;
             if (this.hasDirectRowAnalysisCache(row)) return result;
 
             try {
-                this.saveRowAnalysis(
-                    row,
-                    this.buildDisplaySnapshotTmResult(row, enriched),
-                    slfAlter || null
-                );
+                this.saveRowAnalysis(row, enriched, slfAlter || null);
             } catch (error) {
                 console.warn('[SLF Transfer Analyzer] render badge cache write-through failed', row.playerId, error);
             }
@@ -16482,15 +16445,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.127',
-        scriptVersion: '4.4.127',
+        version: '4.4.128',
+        scriptVersion: '4.4.128',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.127',
+        scriptVersion: '4.4.128',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
