@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.158
+// @version      4.4.159
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.158',
-        scriptVersion: '4.4.158',
+        version: '4.4.159',
+        scriptVersion: '4.4.159',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.158',
+        scriptVersion: '4.4.159',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -14304,17 +14304,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
             'slf_ps2_',
             'slf_player_state'
         ];
-        const directKeys = [
-            'slf_transfer_analysis_row_cache_v1',
-            'slf_transfer_analysis_snapshot_cache_v1',
-            'slf_transfer_analysis_snapshot_cache_v2',
-            'slf_tm_enrichment_cache_v6',
-            'slf_alter_cache_v3',
-            'slf_player_state_v1',
-            'slf_ps2_index'
-        ];
 
-        directKeys.forEach(key => localStorage.removeItem(key));
         for (let i = localStorage.length - 1; i >= 0; i--) {
             const key = localStorage.key(i) || '';
             if (prefixes.some(prefix => key.startsWith(prefix))) localStorage.removeItem(key);
@@ -16647,15 +16637,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.158',
-        scriptVersion: '4.4.158',
+        version: '4.4.159',
+        scriptVersion: '4.4.159',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.158',
+        scriptVersion: '4.4.159',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
