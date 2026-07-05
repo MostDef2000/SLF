@@ -1,6 +1,6 @@
 # SLF Governance
 
-Version: 1.1.2
+Version: 1.1.3
 Status: Active
 Applies to: all SLF agents and release workflows
 Source of truth: GitHub repository contracts
@@ -270,3 +270,75 @@ Rules:
 - The assistant must not tell the user to run GitHub Actions until source integration into `main` is complete and the Core Release / PM validation gates say `RUN ACTIONS: YES`.
 - If GitHub tool safety, permissions, or platform limitations block automated source integration, return `BLOCKED` with the exact manual GitHub UI fallback and do not claim release readiness.
 - This rule does not bypass Core Release validation, review gates, branch freshness, scope boundaries, release artifact restrictions, or the Actions/version rule.
+
+## 11. Task Runtime Model
+
+For every implementation, release, governance, or manual fallback task, the active agent must maintain a concise runtime state. The purpose is to prevent ambiguous claims such as `готово` when only an intermediate step is complete.
+
+Allowed task phases:
+
+```text
+DISCUSSION
+READY_FOR_IMPLEMENTATION
+IMPLEMENTING
+MODULE_COMMITTED
+HANDOFF_VALIDATED
+CORE_RELEASE_INTEGRATING
+SOURCE_INTEGRATED
+ACTIONS_REQUIRED
+ACTIONS_RUNNING
+ACTIONS_COMPLETED
+BROWSER_ACCEPTANCE
+COMPLETE
+BLOCKED
+FAILED
+```
+
+Required runtime block when the task is implementation/release related:
+
+```text
+SLF Task Runtime
+- Task:
+- Responsible agent:
+- Current phase:
+- Branch:
+- Approved commit/range:
+- Changed files:
+- Module implementation:
+- Core Release integration:
+- main updated:
+- Actions needed:
+- Safe user action:
+- Final state:
+```
+
+Rules:
+
+- `MODULE_COMMITTED` is not a release-ready state.
+- `SOURCE_INTEGRATED` means approved source/tool files are verified on `main`.
+- `ACTIONS_REQUIRED` means the user may run GitHub Actions because source integration is complete and runtime/build-affecting files need release artifacts.
+- `COMPLETE` means the implementation, source integration, required Actions/release artifacts, and any required acceptance gate are complete.
+- If any required transition is blocked, the phase must be `BLOCKED` and the agent must provide the exact next safe action.
+- Agents must not use generic final wording such as `ready`, `done`, or `released` unless the runtime state supports it.
+
+## 12. Release Readiness Gate
+
+Before instructing the user to run GitHub Actions, the agent must emit or internally satisfy this gate:
+
+```text
+Release Readiness Gate
+- Source files committed to main: YES/NO
+- Changed files verified on main: YES/NO
+- Runtime/build-affecting files changed: YES/NO
+- Release artifacts already rebuilt for this change: YES/NO
+- RUN ACTIONS: YES/NO
+- Safe to run now: YES/NO
+```
+
+Rules:
+
+- `RUN ACTIONS: YES` is allowed only when source files are committed to `main`, changed files are verified on `main`, runtime/build-affecting files changed, and release artifacts have not yet been rebuilt for the change.
+- If source integration is incomplete, `RUN ACTIONS` must be `NO`.
+- If the change is governance-only or documentation-only and does not affect runtime/build tooling, `RUN ACTIONS` must be `NO`.
+- If GitHub Actions are already running, the task phase should be `ACTIONS_RUNNING` and the safe user action should be to wait for completion.
+- If GitHub Actions completed successfully and artifacts are committed, the phase may move to `ACTIONS_COMPLETED` or `COMPLETE` depending on whether browser acceptance is required.
