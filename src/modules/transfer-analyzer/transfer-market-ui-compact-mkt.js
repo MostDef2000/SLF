@@ -26,17 +26,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
             'slf_ps2_',
             'slf_player_state'
         ];
-        const directKeys = [
-            'slf_transfer_analysis_row_cache_v1',
-            'slf_transfer_analysis_snapshot_cache_v1',
-            'slf_transfer_analysis_snapshot_cache_v2',
-            'slf_tm_enrichment_cache_v6',
-            'slf_alter_cache_v3',
-            'slf_player_state_v1',
-            'slf_ps2_index'
-        ];
 
-        directKeys.forEach(key => localStorage.removeItem(key));
         for (let i = localStorage.length - 1; i >= 0; i--) {
             const key = localStorage.key(i) || '';
             if (prefixes.some(prefix => key.startsWith(prefix))) localStorage.removeItem(key);
