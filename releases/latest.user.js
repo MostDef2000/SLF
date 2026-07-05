@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.129
+// @version      4.4.130
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.129',
-        scriptVersion: '4.4.129',
+        version: '4.4.130',
+        scriptVersion: '4.4.130',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.129',
+        scriptVersion: '4.4.130',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -14275,6 +14275,56 @@ const TransferMarketAnalyzer = {
 // <<< src/modules/transfer-analyzer/transfer-market-analyzer.js
 
 
+// >>> src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js
+// Transfer Analyzer: compact MKT UI
+// ============================================================
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !TransferMarketAnalyzer.slfCompactMktUiApplied) {
+    TransferMarketAnalyzer.slfCompactMktUiApplied = true;
+
+    TransferMarketAnalyzer.removeMktSortToolbarButtons = function removeMktSortToolbarButtons() {
+        const bargainButton = document.getElementById('slf-transfer-sort-mkt-bargain');
+        const overpricedButton = document.getElementById('slf-transfer-sort-mkt-overpriced');
+
+        if (bargainButton && bargainButton.parentNode) {
+            bargainButton.parentNode.removeChild(bargainButton);
+        }
+
+        if (overpricedButton && overpricedButton.parentNode) {
+            overpricedButton.parentNode.removeChild(overpricedButton);
+        }
+    };
+
+    TransferMarketAnalyzer.formatCompactMktRatio = function formatCompactMktRatio(ratio) {
+        const value = Number(ratio || 0);
+        if (!Number.isFinite(value) || value <= 0) return '';
+
+        const raw = value >= 10 ? value.toFixed(1) : value.toFixed(2);
+        return raw.replace(/0$/, '').replace(/\.0$/, '');
+    };
+
+    const addToolbarOriginal = TransferMarketAnalyzer.addToolbar;
+    TransferMarketAnalyzer.addToolbar = function addToolbarCompactMktUi() {
+        const result = addToolbarOriginal.apply(this, arguments);
+        this.removeMktSortToolbarButtons();
+        setTimeout(() => this.removeMktSortToolbarButtons(), 0);
+        return result;
+    };
+
+    const getMarketSalePriceMarkerOriginal = TransferMarketAnalyzer.getMarketSalePriceMarker;
+    TransferMarketAnalyzer.getMarketSalePriceMarker = function getCompactMarketSalePriceMarker() {
+        const marker = getMarketSalePriceMarkerOriginal.apply(this, arguments);
+        if (!marker || marker.category !== 'market') return marker;
+
+        const ratio = Number(marker.marketDetails && marker.marketDetails.ratio || 0);
+        const ratioText = this.formatCompactMktRatio(ratio);
+        marker.label = ratioText ? `MKT x${ratioText}` : 'MKT ?';
+        return marker;
+    };
+}
+// <<< src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js
+
+
 // >>> src/modules/transfer-analyzer/tm-analysis-cache-ttl.js
 // Transfer Analyzer: 7-day TM analysis cache policy
 // ============================================================
@@ -16893,15 +16943,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.129',
-        scriptVersion: '4.4.129',
+        version: '4.4.130',
+        scriptVersion: '4.4.130',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.129',
+        scriptVersion: '4.4.130',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
