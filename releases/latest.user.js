@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.135
+// @version      4.4.136
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.135',
-        scriptVersion: '4.4.135',
+        version: '4.4.136',
+        scriptVersion: '4.4.136',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.135',
+        scriptVersion: '4.4.136',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -17423,6 +17423,232 @@ App.start();
 // <<< src/modules/strategy-data-recommendations/preset-fit-scoring.js
 
 
+// >>> src/modules/transfer-analyzer/migration-phase3-runtime.js
+// SLF Migration Phase 3 Runtime Override
+// =======================================
+// Goal: force state-first behavior without rewriting legacy analyzer core
+// SAFE MIGRATION: non-destructive monkey-patch layer
+
+(function () {
+    const A = window.TransferMarketAnalyzer;
+    const S = window.SLF?.PlayerStateStore;
+
+    if (!A) {
+        console.warn('[SLF Phase3] Analyzer not found');
+        return;
+    }
+
+    function getId(row) {
+        return String(row?.playerId || '').trim();
+    }
+
+    function getState(id) {
+        try {
+            return S?.get?.(id) || null;
+        } catch {
+            return null;
+        }
+    }
+
+    // -----------------------------------------------------
+    // 1. DIAGNOSTICS WRAPPER
+    // -----------------------------------------------------
+    const diag = {
+        restored: 0,
+        partial: 0,
+        missing: 0
+    };
+
+    A.__slfPhase3Diagnostics = diag;
+
+    // -----------------------------------------------------
+    // 2. OVERRIDE renderCachedRows (STATE FIRST)
+    // -----------------------------------------------------
+    const originalRenderCachedRows = A.renderCachedRows;
+
+    A.renderCachedRows = function () {
+        const rows = this.parseVisibleRows?.() || [];
+
+        for (const row of rows) {
+            const id = getId(row);
+            if (!id) continue;
+
+            const state = getState(id);
+            if (!state) {
+                diag.missing++;
+                continue;
+            }
+
+            // classify completeness
+            const hasTM = !!state.tmProfile;
+            const hasAlter = !!state.slfAlter;
+
+            if (hasTM && hasAlter) diag.restored++;
+            else diag.partial++;
+
+            // hydrate row fully
+            row.tmProfile = state.tmProfile || row.tmProfile || null;
+            row.tmUrl = state.tmUrl || row.tmUrl || '';
+            row.tmValueEur = state.tmValueEur || row.tmValueEur || 0;
+            row.slfAlter = state.slfAlter || row.slfAlter || null;
+            row.slfPrice = state.slfPrice ?? row.slfPrice ?? null;
+
+            this.renderRowBadge?.(row, row.tmProfile, row.slfAlter);
+        }
+
+        if (diag.restored || diag.partial) {
+            this.setStatus?.(`Phase3: R:${diag.restored} P:${diag.partial} M:${diag.missing}`);
+        }
+
+        return originalRenderCachedRows?.apply(this, arguments);
+    };
+
+    // -----------------------------------------------------
+    // 3. OVERRIDE getCachedAnalysis (STATE ONLY, IGNORE LEGACY CACHE)
+    // -----------------------------------------------------
+    const originalGetCachedAnalysis = A.getCachedAnalysis;
+
+    A.getCachedAnalysis = function (row) {
+        const id = getId(row);
+        const state = getState(id);
+
+        if (!state) return null;
+
+        // enforce TTL = 7 days (override legacy 14d)
+        const savedAt = state.savedAt || 0;
+        const ttl = 1000 * 60 * 60 * 24 * 7;
+
+        if (!savedAt || Date.now() - savedAt > ttl) {
+            return null;
+        }
+
+        if (!state.slfAlter?.finalSkill) {
+            return null;
+        }
+
+        return {
+            tmResult: { tmProfile: state.tmProfile, tmUrl: state.tmUrl },
+            slfAlter: state.slfAlter,
+            row: state.row || {}
+        };
+    };
+
+    // -----------------------------------------------------
+    // 4. SAFETY: fallback logging for missing renderRowBadge
+    // -----------------------------------------------------
+    if (!A.renderRowBadge) {
+        console.warn('[SLF Phase3] renderRowBadge missing');
+    }
+
+    console.log('[SLF Phase3] active');
+})();
+// <<< src/modules/transfer-analyzer/migration-phase3-runtime.js
+
+
+// >>> src/modules/transfer-analyzer/migration-phase4-sspm.js
+// SLF SINGLE SOURCE PRODUCTION MODE (PHASE 4 FINAL)
+// =====================================================
+// Hard override: PlayerStateStore is the ONLY source of truth
+
+(function () {
+    const A = window.TransferMarketAnalyzer;
+    const S = window.SLF?.PlayerStateStore;
+
+    if (!A || !S) {
+        console.warn('[SLF SSPM] missing dependencies');
+        return;
+    }
+
+    window.SLF_SS_MODE = true;
+
+    function getId(row) {
+        return String(row?.playerId || '').trim();
+    }
+
+    function getState(id) {
+        if (!id) return null;
+        return S.get(id);
+    }
+
+    // --------------------------------------------------
+    // 1. HARD OVERRIDE: renderCachedRows
+    // --------------------------------------------------
+    A.renderCachedRows = function () {
+        const rows = this.parseVisibleRows?.() || [];
+
+        let rendered = 0;
+        let missing = 0;
+
+        for (const row of rows) {
+            const id = getId(row);
+            const state = getState(id);
+
+            if (!state) {
+                missing++;
+                continue;
+            }
+
+            row.tmProfile = state.tmProfile || null;
+            row.tmUrl = state.tmUrl || '';
+            row.tmValueEur = state.tmValueEur || 0;
+            row.slfAlter = state.slfAlter || null;
+            row.slfPrice = state.slfPrice ?? null;
+
+            this.renderRowBadge?.(row, row.tmProfile, row.slfAlter);
+            rendered++;
+        }
+
+        this.setStatus?.(`SSPM: rendered ${rendered}, missing ${missing}`);
+    };
+
+    // --------------------------------------------------
+    // 2. HARD OVERRIDE: getCachedAnalysis (STATE ONLY)
+    // --------------------------------------------------
+    A.getCachedAnalysis = function (row) {
+        const id = getId(row);
+        const state = getState(id);
+
+        if (!state) return null;
+
+        return {
+            tmResult: {
+                tmProfile: state.tmProfile,
+                tmUrl: state.tmUrl
+            },
+            slfAlter: state.slfAlter,
+            row: state.row || {}
+        };
+    };
+
+    // --------------------------------------------------
+    // 3. DISABLE LEGACY SNAPSHOT RESTORE
+    // --------------------------------------------------
+    if (A.restoreAnalysisSnapshot) {
+        A.restoreAnalysisSnapshot = function () {
+            return false;
+        };
+    }
+
+    // --------------------------------------------------
+    // 4. DISABLE ANALYSIS CACHE FALLBACK
+    // --------------------------------------------------
+    if (A.findAnalysisCacheByPlayerId) {
+        A.findAnalysisCacheByPlayerId = function () {
+            return null;
+        };
+    }
+
+    if (A.hasDirectRowAnalysisCache) {
+        A.hasDirectRowAnalysisCache = function () {
+            return false;
+        };
+    }
+
+    console.log('[SLF SSPM] SINGLE SOURCE MODE ACTIVE');
+})();
+// <<< src/modules/transfer-analyzer/migration-phase4-sspm.js
+
+
 // >>> src/modules/transfer-analyzer/player-state-integration.js
 // SLF Player State Integration (MIGRATION PHASE 2)
 // =====================================================
@@ -17550,15 +17776,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.135',
-        scriptVersion: '4.4.135',
+        version: '4.4.136',
+        scriptVersion: '4.4.136',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.135',
+        scriptVersion: '4.4.136',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
