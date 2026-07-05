@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.123
+// @version      4.4.124
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.123',
-        scriptVersion: '4.4.123',
+        version: '4.4.124',
+        scriptVersion: '4.4.124',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.123',
+        scriptVersion: '4.4.124',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -14629,16 +14629,14 @@ const TransferMarketAnalyzer = {
             row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
             row.slfAlter = alterCached || null;
 
+            const hadDirectRowCache = this.hasDirectRowAnalysisCache(row);
+            const canBackfill = this.hasUsefulAnalysisForCacheWrite(tmResult, alterCached || null);
+
             this.renderRowBadge(row, tmResult, alterCached || null);
             lowerCacheRendered++;
 
-            try {
-                if (this.hasUsefulAnalysisForCacheWrite(tmResult, alterCached || null)) {
-                    this.saveRowAnalysis(row, tmResult, alterCached || null);
-                    lowerCacheBackfilled++;
-                }
-            } catch (error) {
-                console.warn('[SLF Transfer Analyzer] lower-cache backfill failed', row.playerId, error);
+            if (!hadDirectRowCache && canBackfill && this.hasDirectRowAnalysisCache(row)) {
+                lowerCacheBackfilled++;
             }
         });
 
@@ -16377,15 +16375,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.123',
-        scriptVersion: '4.4.123',
+        version: '4.4.124',
+        scriptVersion: '4.4.124',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.123',
+        scriptVersion: '4.4.124',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
