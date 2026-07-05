@@ -87,16 +87,14 @@
             row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
             row.slfAlter = alterCached || null;
 
+            const hadDirectRowCache = this.hasDirectRowAnalysisCache(row);
+            const canBackfill = this.hasUsefulAnalysisForCacheWrite(tmResult, alterCached || null);
+
             this.renderRowBadge(row, tmResult, alterCached || null);
             lowerCacheRendered++;
 
-            try {
-                if (this.hasUsefulAnalysisForCacheWrite(tmResult, alterCached || null)) {
-                    this.saveRowAnalysis(row, tmResult, alterCached || null);
-                    lowerCacheBackfilled++;
-                }
-            } catch (error) {
-                console.warn('[SLF Transfer Analyzer] lower-cache backfill failed', row.playerId, error);
+            if (!hadDirectRowCache && canBackfill && this.hasDirectRowAnalysisCache(row)) {
+                lowerCacheBackfilled++;
             }
         });
 
