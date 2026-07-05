@@ -1,4 +1,4 @@
-// Transfer Analyzer: compact MKT UI
+// Transfer Analyzer: compact MKT UI + zero-cache runtime
 // ============================================================
 
 if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !TransferMarketAnalyzer.slfCompactMktUiApplied) {
@@ -18,10 +18,80 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         return raw.replace(/0$/, '').replace(/\.0$/, '');
     };
 
+    TransferMarketAnalyzer.clearAllTransferAnalysisState = function clearAllTransferAnalysisState() {
+        const prefixes = [
+            'slf_transfer_analysis_',
+            'slf_tm_enrichment_cache_',
+            'slf_alter_cache_',
+            'slf_ps2_',
+            'slf_player_state'
+        ];
+        const directKeys = [
+            'slf_transfer_analysis_row_cache_v1',
+            'slf_transfer_analysis_snapshot_cache_v1',
+            'slf_transfer_analysis_snapshot_cache_v2',
+            'slf_tm_enrichment_cache_v6',
+            'slf_alter_cache_v3',
+            'slf_player_state_v1',
+            'slf_ps2_index'
+        ];
+
+        directKeys.forEach(key => localStorage.removeItem(key));
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i) || '';
+            if (prefixes.some(prefix => key.startsWith(prefix))) localStorage.removeItem(key);
+        }
+
+        document.querySelectorAll('.slf-transfer-analysis-badge').forEach(node => { node.innerHTML = ''; });
+        document.querySelectorAll('tr[data-slf-player-id]').forEach(row => {
+            delete row.dataset.slfAnalyzerScore;
+            delete row.dataset.slfSkillDelta;
+            delete row.dataset.slfMinutesPct;
+            delete row.dataset.slfTalentUp;
+            delete row.dataset.slfTmValue;
+            delete row.dataset.slfMktBargain;
+            delete row.dataset.slfMktOverpriced;
+        });
+    };
+
+    TransferMarketAnalyzer.loadAnalysisCache = function () { return {}; };
+    TransferMarketAnalyzer.saveAnalysisCache = function () {};
+    TransferMarketAnalyzer.getCachedAnalysis = function () { return null; };
+    TransferMarketAnalyzer.applyCachedAnalysis = function () { return false; };
+    TransferMarketAnalyzer.saveRowAnalysis = function () {};
+    TransferMarketAnalyzer.renderCachedRows = function () {};
+    TransferMarketAnalyzer.clearAnalysisCache = function () {
+        this.clearAllTransferAnalysisState();
+        this.setStatus?.('Cache полностью очищен. Transfer Analyzer работает без кеширования.');
+    };
+
+    if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer) {
+        TMEnrichmentLayer.loadCache = function () { return {}; };
+        TMEnrichmentLayer.saveCache = function () {};
+        TMEnrichmentLayer.clearCache = function () { TransferMarketAnalyzer.clearAllTransferAnalysisState(); };
+        TMEnrichmentLayer.getCache = function () { return null; };
+        TMEnrichmentLayer.peekBySlfPlayerId = function () { return null; };
+        TMEnrichmentLayer.setCache = function () {};
+    }
+
+    if (typeof SLFAlterLayer !== 'undefined' && SLFAlterLayer) {
+        SLFAlterLayer.loadCache = function () { return {}; };
+        SLFAlterLayer.saveCache = function () {};
+        SLFAlterLayer.clearCache = function () { TransferMarketAnalyzer.clearAllTransferAnalysisState(); };
+        SLFAlterLayer.getCache = function () { return null; };
+        SLFAlterLayer.peekByPlayerId = function () { return null; };
+        SLFAlterLayer.setCache = function () {};
+    }
+
     const addToolbarOriginal = TransferMarketAnalyzer.addToolbar;
     TransferMarketAnalyzer.addToolbar = function addToolbarCompactMktUi() {
         const result = addToolbarOriginal.apply(this, arguments);
         this.removeMktSortToolbarButtons();
+        const clearButton = document.getElementById('slf-transfer-clear-cache');
+        if (clearButton) {
+            clearButton.title = 'Полностью очистить все старые слои кеша Transfer Analyzer.';
+            clearButton.onclick = () => this.clearAnalysisCache();
+        }
         setTimeout(() => this.removeMktSortToolbarButtons(), 0);
         return result;
     };
@@ -36,9 +106,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         return marker;
     };
 
-    TransferMarketAnalyzer.getCachedAnalysis = function () { return null; };
-    TransferMarketAnalyzer.saveRowAnalysis = function () {};
-    TransferMarketAnalyzer.renderCachedRows = function () {};
+    TransferMarketAnalyzer.clearAllTransferAnalysisState();
 
     const style = document.createElement('style');
     style.textContent = '.slf-transfer-analysis-chip[data-slf-tip-category="league"],.slf-transfer-analysis-chip[data-slf-tip-category="activity"],.slf-transfer-analysis-chip[data-slf-tip-category="talent"]{flex:0 0 auto!important;width:auto!important;min-width:max-content!important;max-width:none!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}.slf-transfer-analysis-chip[data-slf-tip-category="league"]>span:first-child,.slf-transfer-analysis-chip[data-slf-tip-category="activity"]>span:first-child,.slf-transfer-analysis-chip[data-slf-tip-category="talent"]>span:first-child{min-width:max-content!important;max-width:none!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}';
