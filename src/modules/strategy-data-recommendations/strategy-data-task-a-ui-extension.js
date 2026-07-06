@@ -100,7 +100,6 @@
         RecommendationEngine.__taskBPatchedPresetOptions = true;
     }
 
-    // ===== NEW: late losing press cooldown guard =====
     function patchLateLosingPressCooldownGuard() {
         if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuard) return;
         if (typeof RecommendationEngine.selectRawPreset !== 'function') return;
@@ -148,6 +147,14 @@
         RecommendationEngine.__lateLosingPressCooldownGuard = true;
     }
 
+    function buildCurrentHintHtml(result) {
+        if (!result || typeof CurrentActionHintEngine === 'undefined') return '';
+        const rows = CurrentActionHintEngine.toPlanRows(result);
+        return ['<div style="font-weight:700;margin-bottom:4px;">SLF Подсказка</div>']
+            .concat(rows.map(row => `<div>${String(row)}</div>`))
+            .join('');
+    }
+
     function renderManualRecommendation() {
         const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
         if (!snapshot) return;
@@ -157,9 +164,21 @@
         SnapshotEngine.rememberLiveSnapshot(snapshot);
 
         const el = document.getElementById('slf-parser-recommendation');
-        const html = RecommendationEngine.make(snapshot);
+        let html = '';
+        let source = 'manual_snapshot';
+
+        if (typeof CurrentActionHintEngine !== 'undefined') {
+            const result = CurrentActionHintEngine.run(snapshot, {});
+            html = buildCurrentHintHtml(result);
+            source = 'manual_snapshot_current_action_hint_engine';
+        } else {
+            html = RecommendationEngine.make(snapshot);
+            source = 'manual_snapshot_fallback_recommendation_engine';
+            UI.addParserLog('CurrentActionHintEngine недоступен, использован fallback');
+        }
+
         if (el) el.innerHTML = html;
-        RecommendationEngine.persistRenderedRecommendation(html, snapshot, { source: 'manual_snapshot' });
+        RecommendationEngine.persistRenderedRecommendation(html, snapshot, { source });
         SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer, manualSnapshotAt: Date.now() });
         UI.addParserLog('Ручной snapshot: подсказка обновлена');
         UI.updateParserStatus('Ручной snapshot выполнен');
@@ -174,7 +193,7 @@
         btn.id = 'slf-manual-recommendation-btn';
         btn.type = 'button';
         btn.textContent = '↻ Подсказка';
-        btn.title = 'Сделать ручной snapshot и обновить подсказку без остановки auto-логики';
+        btn.title = 'Сделать ручной snapshot и обновить подсказку по текущему состоянию';
         btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
         btn.onclick = () => {
             btn.disabled = true;
@@ -214,7 +233,7 @@
     function mount() {
         patchSnapshotBuild();
         patchHasEnoughLiveData();
-        patchLateLosingPressCooldownGuard(); // NEW
+        patchLateLosingPressCooldownGuard();
         patchPresetOptions();
         mountManualButton();
         mountForeignSelector();
