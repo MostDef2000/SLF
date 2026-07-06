@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.174
+// @version      4.4.175
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.174',
-        scriptVersion: '4.4.174',
+        version: '4.4.175',
+        scriptVersion: '4.4.175',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.174',
+        scriptVersion: '4.4.175',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -5624,6 +5624,582 @@ if (typeof window !== 'undefined') {
     }
 })();
 // <<< src/modules/tactics-presets/active-preset-registry.js
+
+
+// >>> src/modules/strategy-data-recommendations/signal-noise-filter-layer.js
+// Signal Noise Filter Layer
+// ============================================================
+// Stage 2.4 guard for tactical hints.
+// Filters short-lived signal spikes before CurrentActionHintEngine
+// makes an on-demand recommendation.
+//
+// Contract:
+// - in-memory only;
+// - no localStorage;
+// - no UI explanation layer;
+// - score/minute emergency logic remains unfiltered;
+// - stable signals require repeat confirmation across recent samples.
+
+(function signalNoiseFilterLayer() {
+    'use strict';
+
+    if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
+    if (CurrentActionHintEngine.__signalNoiseFilterApplied) return;
+
+    const HISTORY_LIMIT = 4;
+    const MIN_CONFIRMATIONS = 2;
+
+    const ALWAYS_KEEP_SIGNALS = new Set([
+        'need_goal',
+        'late_need_goal',
+        'protect_lead',
+        'press_fatigue_risk',
+        'own_press_fatigue',
+        'press_cost_high',
+        'high_bad_actions'
+    ]);
+
+    const NOISY_SIGNALS = new Set([
+        'attacking_momentum',
+        'under_pressure',
+        'opponent_high_press',
+        'own_high_press',
+        'intensive_pressing',
+        'pressing_player',
+        'player_pressing',
+        'center_weak',
+        'center_available',
+        'center_closed',
+        'wide_quality',
+        'wide_advantage',
+        'attack_left',
+        'attack_right',
+        'space_behind',
+        'opponent_high_line',
+        'release_space',
+        'weak_side_available',
+        'opponent_flank_weak',
+        'opponent_low_block',
+        'transition_threat',
+        'opponent_fast_counter_threat',
+        'opponent_crosses_dangerous',
+        'own_crosses_bad_total',
+        'own_open_play_crosses_bad'
+    ]);
+
+    const metricKeys = [
+        'myXg', 'myXG', 'oppXg', 'oppXG',
+        'myXT', 'oppXT',
+        'myBad', 'badActionsPct', 'myBadActionsPct',
+        'oppPress', 'oppPressVector', 'opponentPress', 'opponentPressing',
+        'myPress', 'myPressVector', 'ownPress', 'ownPressVector',
+        'oppDef', 'oppDefVector'
+    ];
+
+    const historyByGame = new Map();
+    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
+
+    function num(value) {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    function getMetric(source, keys) {
+        const list = Array.isArray(keys) ? keys : [keys];
+        for (const key of list) {
+            if (source && source[key] !== undefined && source[key] !== null) return source[key];
+        }
+        return undefined;
+    }
+
+    function getGameId(snapshot, context) {
+        return String(
+            getMetric(context, ['gameId', 'matchId', 'id']) ||
+            getMetric(snapshot, ['gameId', 'matchId', 'id']) ||
+            'unknown'
+        );
+    }
+
+    function getMinute(snapshot, context) {
+        return Number(
+            getMetric(context, ['minute', 'baseMinute', 'effectiveMinute']) ??
+            getMetric(snapshot, ['minute', 'baseMinute', 'effectiveMinute']) ??
+            0
+        ) || 0;
+    }
+
+    function collectSignals(snapshot, context) {
+        const result = [];
+        const add = value => {
+            if (!value) return;
+            const key = String(value);
+            if (!result.includes(key)) result.push(key);
+        };
+
+        const contextSignals = Array.isArray(context?.signals) ? context.signals : [];
+        const snapshotSignals = Array.isArray(snapshot?.signals) ? snapshot.signals : [];
+
+        contextSignals.forEach(add);
+        snapshotSignals.forEach(add);
+
+        return result;
+    }
+
+    function getHistory(gameId) {
+        if (!historyByGame.has(gameId)) historyByGame.set(gameId, []);
+        return historyByGame.get(gameId);
+    }
+
+    function trimHistoryMap() {
+        if (historyByGame.size <= 6) return;
+        const keys = Array.from(historyByGame.keys());
+        keys.slice(0, Math.max(0, keys.length - 6)).forEach(key => historyByGame.delete(key));
+    }
+
+    function extractMetrics(snapshot, context) {
+        const metrics = {};
+
+        metricKeys.forEach(key => {
+            const value = getMetric(context, key) ?? getMetric(snapshot, key);
+            const n = num(value);
+            if (n !== null) metrics[key] = n;
+        });
+
+        return metrics;
+    }
+
+    function rememberSample(gameId, minute, signals, metrics) {
+        const history = getHistory(gameId);
+
+        if (history.length && minute < Number(history[history.length - 1].minute || 0)) {
+            history.splice(0, history.length);
+        }
+
+        history.push({ minute, signals: signals.slice(), metrics: Object.assign({}, metrics), ts: Date.now() });
+
+        while (history.length > HISTORY_LIMIT) history.shift();
+        trimHistoryMap();
+
+        return history;
+    }
+
+    function countSignal(history, signal) {
+        return history.reduce((count, sample) => count + (sample.signals.includes(signal) ? 1 : 0), 0);
+    }
+
+    function isStableSignal(signal, history) {
+        if (ALWAYS_KEEP_SIGNALS.has(signal)) return true;
+        if (!NOISY_SIGNALS.has(signal)) return true;
+        return countSignal(history, signal) >= MIN_CONFIRMATIONS;
+    }
+
+    function averageMetric(history, key, fallback) {
+        const values = history
+            .map(sample => num(sample.metrics?.[key]))
+            .filter(value => value !== null);
+
+        if (values.length < 2) return fallback;
+        return values.reduce((sum, value) => sum + value, 0) / values.length;
+    }
+
+    function smoothMetrics(snapshot, context, history) {
+        const smoothed = {};
+
+        metricKeys.forEach(key => {
+            const raw = num(getMetric(context, key) ?? getMetric(snapshot, key));
+            if (raw === null) return;
+
+            const avg = averageMetric(history, key, raw);
+            const maxJump = key.toLowerCase().includes('bad') ? 8 : 0.35;
+
+            if (Math.abs(raw - avg) > maxJump && history.length >= 2) {
+                smoothed[key] = avg;
+            }
+        });
+
+        return smoothed;
+    }
+
+    function cloneWithFilteredSignals(source, filteredSignals, smoothedMetrics) {
+        if (!source || typeof source !== 'object') return source;
+
+        const clone = Object.assign({}, source);
+
+        if (Array.isArray(source.signals)) {
+            clone.signals = filteredSignals.slice();
+        }
+
+        Object.entries(smoothedMetrics).forEach(([key, value]) => {
+            if (clone[key] !== undefined) clone[key] = value;
+        });
+
+        return clone;
+    }
+
+    function filterInput(snapshot, context) {
+        const gameId = getGameId(snapshot, context || {});
+        const minute = getMinute(snapshot, context || {});
+        const signals = collectSignals(snapshot, context || {});
+        const metrics = extractMetrics(snapshot, context || {});
+        const history = rememberSample(gameId, minute, signals, metrics);
+
+        const filteredSignals = signals.filter(signal => isStableSignal(signal, history));
+        const smoothedMetrics = smoothMetrics(snapshot, context || {}, history);
+
+        const nextSnapshot = cloneWithFilteredSignals(snapshot, filteredSignals, smoothedMetrics);
+        const nextContext = cloneWithFilteredSignals(context || {}, filteredSignals, smoothedMetrics) || {};
+
+        if (Array.isArray(context?.signals) || filteredSignals.length) nextContext.signals = filteredSignals.slice();
+        if (Array.isArray(snapshot?.signals) && nextSnapshot) nextSnapshot.signals = filteredSignals.slice();
+
+        nextContext.signalNoiseFilter = {
+            active: true,
+            gameId,
+            minute,
+            rawSignals: signals,
+            filteredSignals
+        };
+
+        return { snapshot: nextSnapshot, context: nextContext };
+    }
+
+    CurrentActionHintEngine.run = function runWithSignalNoiseFilter(snapshot, context = {}) {
+        const filtered = filterInput(snapshot, context);
+        return originalRun(filtered.snapshot, filtered.context);
+    };
+
+    CurrentActionHintEngine.__signalNoiseFilterApplied = true;
+
+    if (typeof window !== 'undefined') {
+        window.SLFSignalNoiseFilterLayer = {
+            getHistory: () => Array.from(historyByGame.entries()).map(([gameId, samples]) => ({ gameId, samples: samples.slice() }))
+        };
+    }
+})();
+// <<< src/modules/strategy-data-recommendations/signal-noise-filter-layer.js
+
+
+// >>> src/modules/strategy-data-recommendations/coach-mode-policy.js
+// Coach Mode v1 Policy Guard
+// ============================================================
+// Final intermediate coaching layer for on-demand tactical hints.
+//
+// Contract:
+// - no explanations in UI output;
+// - no new presets;
+// - suppress obvious anti-patterns;
+// - apply simple match phase policy;
+// - require sufficient signal strength unless emergency/protect conditions apply.
+
+(function coachModeV1Policy() {
+    'use strict';
+
+    if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
+    if (CurrentActionHintEngine.__coachModeV1Applied) return;
+
+    const SAFE_CONTROL = 'Pep_BoxControl_bal2';
+    const STRUCTURE_CONTROL = 'Arteta_Control433_bal3';
+    const PRESS_COOLDOWN = 'Pep_PressCooldown_bal2';
+    const COMPACT_COUNTER = 'Compact_Counter_def3';
+    const COMPACT_PROTECT = 'Simeone_Compact442_def4';
+    const CONTROLLED_PUSH = 'Pep_ControlledPush_att3';
+
+    const HIGH_PRESS_PRESETS = new Set([
+        'Klopp_Gegenpress_att4',
+        'Nagelsmann_WidePress_att4',
+        'Bielsa_ChaosPress_att5'
+    ]);
+
+    const CENTER_PRESETS = new Set([
+        'Xabi_BoxMidfield_bal3',
+        'Xabi_VerticalBox_att3'
+    ]);
+
+    const CROSS_WIDTH_PRESETS = new Set([
+        'Conte_WingbackWidth_bal4',
+        'Nagelsmann_WidePress_att4'
+    ]);
+
+    const AGGRESSIVE_POSSESSION_PRESETS = new Set([
+        'Pep_TwoThreeFive_att3',
+        'Klopp_Gegenpress_att4',
+        'Nagelsmann_WidePress_att4',
+        'Bielsa_ChaosPress_att5'
+    ]);
+
+    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
+
+    function contextOf(result) {
+        return result?.moment?.context || {};
+    }
+
+    function phaseOf(minute) {
+        const m = Number(minute || 0);
+        if (m <= 30) return 'caution';
+        if (m <= 55) return 'correction';
+        if (m <= 70) return 'first_active_change';
+        if (m <= 80) return 'risk_or_protect';
+        return 'emergency';
+    }
+
+    function countTrue(values) {
+        return values.reduce((sum, value) => sum + (value ? 1 : 0), 0);
+    }
+
+    function signalStrength(c) {
+        if (c.lateNeedGoal || (c.protectLead && c.minute >= 80) || c.highBadActions || c.pressFatigueRisk) return 5;
+
+        return countTrue([
+            c.needGoal,
+            c.underPressure,
+            c.attackingMomentum,
+            c.opponentHighPress,
+            c.opponentLowBlock,
+            c.centerWeak,
+            c.centerClosed,
+            c.wideQuality,
+            c.spaceBehind,
+            c.weakSideAvailable,
+            c.transitionThreat,
+            c.ownCrossesBad,
+            c.opponentCrossesDangerous
+        ]);
+    }
+
+    function allowedFallback(preset, c, phase) {
+        if (c.pressFatigueRisk) return PRESS_COOLDOWN;
+        if (c.highBadActions) return SAFE_CONTROL;
+        if (c.protectLead) return phase === 'emergency' ? 'Simeone_LowBlock_def5' : COMPACT_PROTECT;
+        if (c.underPressure || c.transitionThreat) return COMPACT_COUNTER;
+        if (c.needGoal) return CONTROLLED_PUSH;
+        return STRUCTURE_CONTROL;
+    }
+
+    function violatesAntiPattern(preset, c, phase) {
+        if (!preset) return true;
+
+        if (c.highBadActions && HIGH_PRESS_PRESETS.has(preset)) return true;
+        if (c.pressFatigueRisk && HIGH_PRESS_PRESETS.has(preset)) return true;
+        if (c.pressFatigueRisk && preset === 'Pep_TwoThreeFive_att3') return true;
+
+        if (c.needGoal && phase !== 'emergency' && preset === 'Simeone_LowBlock_def5') return true;
+        if (c.needGoal && preset === COMPACT_PROTECT && !c.underPressure) return true;
+
+        if (c.centerClosed && CENTER_PRESETS.has(preset)) return true;
+        if (c.ownCrossesBad && CROSS_WIDTH_PRESETS.has(preset)) return true;
+        if (c.transitionThreat && AGGRESSIVE_POSSESSION_PRESETS.has(preset) && !c.lateNeedGoal) return true;
+
+        if (c.protectLead && HIGH_PRESS_PRESETS.has(preset)) return true;
+        if (phase === 'caution' && HIGH_PRESS_PRESETS.has(preset) && !c.underPressure) return true;
+        if (phase === 'caution' && preset === 'Bielsa_ChaosPress_att5') return true;
+
+        return false;
+    }
+
+    function belowConfidenceThreshold(result, c, phase) {
+        if (phase === 'emergency') return false;
+        if (c.highBadActions || c.pressFatigueRisk || c.protectLead || c.needGoal) return false;
+        return signalStrength(c) < 2;
+    }
+
+    function applyCoachPolicy(result) {
+        if (!result?.action) return result;
+
+        const c = contextOf(result);
+        const phase = phaseOf(c.minute ?? result?.moment?.minute);
+        const candidatePreset = result.action.preset;
+        let nextPreset = candidatePreset;
+
+        if (belowConfidenceThreshold(result, c, phase)) {
+            nextPreset = allowedFallback(candidatePreset, c, phase);
+        }
+
+        if (violatesAntiPattern(nextPreset, c, phase)) {
+            nextPreset = allowedFallback(nextPreset, c, phase);
+        }
+
+        result.action = Object.assign({}, result.action, {
+            preset: nextPreset,
+            coachMode: 'v1',
+            matchPhase: phase,
+            confidence: signalStrength(c),
+            rawPreset: result.action.rawPreset || candidatePreset
+        });
+
+        return result;
+    }
+
+    CurrentActionHintEngine.run = function runWithCoachModePolicy(snapshot, context = {}) {
+        return applyCoachPolicy(originalRun(snapshot, context));
+    };
+
+    CurrentActionHintEngine.toPlanRows = function toCoachHintOnlyRows(result) {
+        if (!result?.action?.preset) return [];
+        return [`Подсказка: ${result.action.preset}`];
+    };
+
+    CurrentActionHintEngine.__coachModeV1Applied = true;
+
+    if (typeof window !== 'undefined') {
+        window.SLFCoachModeV1 = {
+            phaseOf,
+            signalStrength
+        };
+    }
+})();
+// <<< src/modules/strategy-data-recommendations/coach-mode-policy.js
+
+
+// >>> src/modules/strategy-data-recommendations/moment-drift-stabilizer.js
+// Moment Drift Stabilizer
+// ============================================================
+// Stabilizes button-generated tactical hints so the recommendation
+// does not jump on every noisy snapshot.
+//
+// Contract:
+// - in-memory only;
+// - no localStorage;
+// - no explanation layer;
+// - emergency/protect-lead states can override the hold window.
+
+(function momentDriftStabilizer() {
+    'use strict';
+
+    if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
+    if (CurrentActionHintEngine.__momentDriftStabilizerApplied) return;
+
+    const HOLD_MINUTES = 6;
+    const HOLD_MS = 6 * 60 * 1000;
+    const HARD_OVERRIDE_RULES = new Set([
+        'late_goal_emergency',
+        'late_protect_heavy_pressure',
+        'own_press_fatigue_cooldown',
+        'bad_actions_control_reset'
+    ]);
+
+    let stableState = null;
+
+    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
+
+    function getContext(result) {
+        return result?.moment?.context || {};
+    }
+
+    function getMinute(result) {
+        return Number(result?.moment?.minute ?? getContext(result).minute ?? 0) || 0;
+    }
+
+    function getScore(result) {
+        return String(result?.moment?.score ?? getContext(result).scoreState ?? 'unknown');
+    }
+
+    function getGameId(result) {
+        return String(result?.moment?.gameId ?? getContext(result).gameId ?? 'unknown');
+    }
+
+    function isHardOverride(result) {
+        const action = result?.action || {};
+        const context = getContext(result);
+
+        if (HARD_OVERRIDE_RULES.has(action.ruleId)) return true;
+        if (action.presetStatus === 'emergency') return true;
+        if (context.lateNeedGoal) return true;
+        if (context.protectLead && context.underPressure && Number(context.minute || 0) >= 80) return true;
+
+        return false;
+    }
+
+    function shouldReset(result) {
+        if (!stableState) return true;
+
+        const minute = getMinute(result);
+        const score = getScore(result);
+        const gameId = getGameId(result);
+
+        if (stableState.gameId !== gameId) return true;
+        if (stableState.score !== score) return true;
+        if (minute < stableState.minute) return true;
+
+        return false;
+    }
+
+    function remember(result) {
+        if (!result?.action) return result;
+
+        stableState = {
+            gameId: getGameId(result),
+            score: getScore(result),
+            minute: getMinute(result),
+            ts: Date.now(),
+            action: Object.assign({}, result.action, {
+                stabilized: false,
+                rawPreset: result.action.rawPreset || result.action.preset
+            })
+        };
+
+        result.action = Object.assign({}, stableState.action);
+        return result;
+    }
+
+    function stabilize(result) {
+        if (!result?.action) return result;
+
+        if (shouldReset(result) || isHardOverride(result)) {
+            return remember(result);
+        }
+
+        const candidate = Object.assign({}, result.action);
+        const minute = getMinute(result);
+        const now = Date.now();
+
+        if (stableState.action?.preset === candidate.preset) {
+            stableState.minute = minute;
+            stableState.ts = now;
+            stableState.score = getScore(result);
+            stableState.action = Object.assign({}, candidate, {
+                stabilized: false,
+                rawPreset: candidate.rawPreset || candidate.preset
+            });
+            result.action = Object.assign({}, stableState.action);
+            return result;
+        }
+
+        const elapsedMinutes = Math.max(0, minute - Number(stableState.minute || 0));
+        const elapsedMs = now - Number(stableState.ts || 0);
+        const expired = elapsedMinutes >= HOLD_MINUTES || elapsedMs >= HOLD_MS;
+
+        if (expired) {
+            return remember(result);
+        }
+
+        result.action = Object.assign({}, stableState.action, {
+            stabilized: true,
+            rawPreset: candidate.preset,
+            rawRuleId: candidate.ruleId
+        });
+
+        return result;
+    }
+
+    CurrentActionHintEngine.run = function runWithMomentDriftStabilizer(snapshot, context = {}) {
+        return stabilize(originalRun(snapshot, context));
+    };
+
+    CurrentActionHintEngine.toPlanRows = function toHintOnlyRows(result) {
+        if (!result?.action?.preset) return [];
+        return [`Подсказка: ${result.action.preset}`];
+    };
+
+    CurrentActionHintEngine.__momentDriftStabilizerApplied = true;
+
+    if (typeof window !== 'undefined') {
+        window.SLFMomentDriftStabilizer = {
+            holdMinutes: HOLD_MINUTES,
+            getState: () => stableState ? Object.assign({}, stableState) : null
+        };
+    }
+})();
+// <<< src/modules/strategy-data-recommendations/moment-drift-stabilizer.js
 
 
 // >>> src/app/ui-layer.js
@@ -17188,158 +17764,6 @@ App.start();
 // <<< src/app/bootstrap.js
 
 
-// >>> src/modules/strategy-data-recommendations/moment-drift-stabilizer.js
-// Moment Drift Stabilizer
-// ============================================================
-// Stabilizes button-generated tactical hints so the recommendation
-// does not jump on every noisy snapshot.
-//
-// Contract:
-// - in-memory only;
-// - no localStorage;
-// - no explanation layer;
-// - emergency/protect-lead states can override the hold window.
-
-(function momentDriftStabilizer() {
-    'use strict';
-
-    if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
-    if (CurrentActionHintEngine.__momentDriftStabilizerApplied) return;
-
-    const HOLD_MINUTES = 6;
-    const HOLD_MS = 6 * 60 * 1000;
-    const HARD_OVERRIDE_RULES = new Set([
-        'late_goal_emergency',
-        'late_protect_heavy_pressure',
-        'own_press_fatigue_cooldown',
-        'bad_actions_control_reset'
-    ]);
-
-    let stableState = null;
-
-    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
-
-    function getContext(result) {
-        return result?.moment?.context || {};
-    }
-
-    function getMinute(result) {
-        return Number(result?.moment?.minute ?? getContext(result).minute ?? 0) || 0;
-    }
-
-    function getScore(result) {
-        return String(result?.moment?.score ?? getContext(result).scoreState ?? 'unknown');
-    }
-
-    function getGameId(result) {
-        return String(result?.moment?.gameId ?? getContext(result).gameId ?? 'unknown');
-    }
-
-    function isHardOverride(result) {
-        const action = result?.action || {};
-        const context = getContext(result);
-
-        if (HARD_OVERRIDE_RULES.has(action.ruleId)) return true;
-        if (action.presetStatus === 'emergency') return true;
-        if (context.lateNeedGoal) return true;
-        if (context.protectLead && context.underPressure && Number(context.minute || 0) >= 80) return true;
-
-        return false;
-    }
-
-    function shouldReset(result) {
-        if (!stableState) return true;
-
-        const minute = getMinute(result);
-        const score = getScore(result);
-        const gameId = getGameId(result);
-
-        if (stableState.gameId !== gameId) return true;
-        if (stableState.score !== score) return true;
-        if (minute < stableState.minute) return true;
-
-        return false;
-    }
-
-    function remember(result) {
-        if (!result?.action) return result;
-
-        stableState = {
-            gameId: getGameId(result),
-            score: getScore(result),
-            minute: getMinute(result),
-            ts: Date.now(),
-            action: Object.assign({}, result.action, {
-                stabilized: false,
-                rawPreset: result.action.rawPreset || result.action.preset
-            })
-        };
-
-        result.action = Object.assign({}, stableState.action);
-        return result;
-    }
-
-    function stabilize(result) {
-        if (!result?.action) return result;
-
-        if (shouldReset(result) || isHardOverride(result)) {
-            return remember(result);
-        }
-
-        const candidate = Object.assign({}, result.action);
-        const minute = getMinute(result);
-        const now = Date.now();
-
-        if (stableState.action?.preset === candidate.preset) {
-            stableState.minute = minute;
-            stableState.ts = now;
-            stableState.score = getScore(result);
-            stableState.action = Object.assign({}, candidate, {
-                stabilized: false,
-                rawPreset: candidate.rawPreset || candidate.preset
-            });
-            result.action = Object.assign({}, stableState.action);
-            return result;
-        }
-
-        const elapsedMinutes = Math.max(0, minute - Number(stableState.minute || 0));
-        const elapsedMs = now - Number(stableState.ts || 0);
-        const expired = elapsedMinutes >= HOLD_MINUTES || elapsedMs >= HOLD_MS;
-
-        if (expired) {
-            return remember(result);
-        }
-
-        result.action = Object.assign({}, stableState.action, {
-            stabilized: true,
-            rawPreset: candidate.preset,
-            rawRuleId: candidate.ruleId
-        });
-
-        return result;
-    }
-
-    CurrentActionHintEngine.run = function runWithMomentDriftStabilizer(snapshot, context = {}) {
-        return stabilize(originalRun(snapshot, context));
-    };
-
-    CurrentActionHintEngine.toPlanRows = function toHintOnlyRows(result) {
-        if (!result?.action?.preset) return [];
-        return [`Подсказка: ${result.action.preset}`];
-    };
-
-    CurrentActionHintEngine.__momentDriftStabilizerApplied = true;
-
-    if (typeof window !== 'undefined') {
-        window.SLFMomentDriftStabilizer = {
-            holdMinutes: HOLD_MINUTES,
-            getState: () => stableState ? Object.assign({}, stableState) : null
-        };
-    }
-})();
-// <<< src/modules/strategy-data-recommendations/moment-drift-stabilizer.js
-
-
 // >>> src/modules/strategy-data-recommendations/preset-fit-scoring.js
 // Strategy Data: preset fit scoring and decision fusion
 // ============================================================
@@ -17569,259 +17993,6 @@ App.start();
 // <<< src/modules/strategy-data-recommendations/preset-fit-scoring.js
 
 
-// >>> src/modules/strategy-data-recommendations/signal-noise-filter-layer.js
-// Signal Noise Filter Layer
-// ============================================================
-// Stage 2.4 guard for tactical hints.
-// Filters short-lived signal spikes before CurrentActionHintEngine
-// makes an on-demand recommendation.
-//
-// Contract:
-// - in-memory only;
-// - no localStorage;
-// - no UI explanation layer;
-// - score/minute emergency logic remains unfiltered;
-// - stable signals require repeat confirmation across recent samples.
-
-(function signalNoiseFilterLayer() {
-    'use strict';
-
-    if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
-    if (CurrentActionHintEngine.__signalNoiseFilterApplied) return;
-
-    const HISTORY_LIMIT = 4;
-    const MIN_CONFIRMATIONS = 2;
-
-    const ALWAYS_KEEP_SIGNALS = new Set([
-        'need_goal',
-        'late_need_goal',
-        'protect_lead',
-        'press_fatigue_risk',
-        'own_press_fatigue',
-        'press_cost_high',
-        'high_bad_actions'
-    ]);
-
-    const NOISY_SIGNALS = new Set([
-        'attacking_momentum',
-        'under_pressure',
-        'opponent_high_press',
-        'own_high_press',
-        'intensive_pressing',
-        'pressing_player',
-        'player_pressing',
-        'center_weak',
-        'center_available',
-        'center_closed',
-        'wide_quality',
-        'wide_advantage',
-        'attack_left',
-        'attack_right',
-        'space_behind',
-        'opponent_high_line',
-        'release_space',
-        'weak_side_available',
-        'opponent_flank_weak',
-        'opponent_low_block',
-        'transition_threat',
-        'opponent_fast_counter_threat',
-        'opponent_crosses_dangerous',
-        'own_crosses_bad_total',
-        'own_open_play_crosses_bad'
-    ]);
-
-    const metricKeys = [
-        'myXg', 'myXG', 'oppXg', 'oppXG',
-        'myXT', 'oppXT',
-        'myBad', 'badActionsPct', 'myBadActionsPct',
-        'oppPress', 'oppPressVector', 'opponentPress', 'opponentPressing',
-        'myPress', 'myPressVector', 'ownPress', 'ownPressVector',
-        'oppDef', 'oppDefVector'
-    ];
-
-    const historyByGame = new Map();
-    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
-
-    function num(value) {
-        const n = Number(value);
-        return Number.isFinite(n) ? n : null;
-    }
-
-    function getMetric(source, keys) {
-        const list = Array.isArray(keys) ? keys : [keys];
-        for (const key of list) {
-            if (source && source[key] !== undefined && source[key] !== null) return source[key];
-        }
-        return undefined;
-    }
-
-    function getGameId(snapshot, context) {
-        return String(
-            getMetric(context, ['gameId', 'matchId', 'id']) ||
-            getMetric(snapshot, ['gameId', 'matchId', 'id']) ||
-            'unknown'
-        );
-    }
-
-    function getMinute(snapshot, context) {
-        return Number(
-            getMetric(context, ['minute', 'baseMinute', 'effectiveMinute']) ??
-            getMetric(snapshot, ['minute', 'baseMinute', 'effectiveMinute']) ??
-            0
-        ) || 0;
-    }
-
-    function collectSignals(snapshot, context) {
-        const result = [];
-        const add = value => {
-            if (!value) return;
-            const key = String(value);
-            if (!result.includes(key)) result.push(key);
-        };
-
-        const contextSignals = Array.isArray(context?.signals) ? context.signals : [];
-        const snapshotSignals = Array.isArray(snapshot?.signals) ? snapshot.signals : [];
-
-        contextSignals.forEach(add);
-        snapshotSignals.forEach(add);
-
-        return result;
-    }
-
-    function getHistory(gameId) {
-        if (!historyByGame.has(gameId)) historyByGame.set(gameId, []);
-        return historyByGame.get(gameId);
-    }
-
-    function trimHistoryMap() {
-        if (historyByGame.size <= 6) return;
-        const keys = Array.from(historyByGame.keys());
-        keys.slice(0, Math.max(0, keys.length - 6)).forEach(key => historyByGame.delete(key));
-    }
-
-    function extractMetrics(snapshot, context) {
-        const metrics = {};
-
-        metricKeys.forEach(key => {
-            const value = getMetric(context, key) ?? getMetric(snapshot, key);
-            const n = num(value);
-            if (n !== null) metrics[key] = n;
-        });
-
-        return metrics;
-    }
-
-    function rememberSample(gameId, minute, signals, metrics) {
-        const history = getHistory(gameId);
-
-        if (history.length && minute < Number(history[history.length - 1].minute || 0)) {
-            history.splice(0, history.length);
-        }
-
-        history.push({ minute, signals: signals.slice(), metrics: Object.assign({}, metrics), ts: Date.now() });
-
-        while (history.length > HISTORY_LIMIT) history.shift();
-        trimHistoryMap();
-
-        return history;
-    }
-
-    function countSignal(history, signal) {
-        return history.reduce((count, sample) => count + (sample.signals.includes(signal) ? 1 : 0), 0);
-    }
-
-    function isStableSignal(signal, history) {
-        if (ALWAYS_KEEP_SIGNALS.has(signal)) return true;
-        if (!NOISY_SIGNALS.has(signal)) return true;
-        return countSignal(history, signal) >= MIN_CONFIRMATIONS;
-    }
-
-    function averageMetric(history, key, fallback) {
-        const values = history
-            .map(sample => num(sample.metrics?.[key]))
-            .filter(value => value !== null);
-
-        if (values.length < 2) return fallback;
-        return values.reduce((sum, value) => sum + value, 0) / values.length;
-    }
-
-    function smoothMetrics(snapshot, context, history) {
-        const smoothed = {};
-
-        metricKeys.forEach(key => {
-            const raw = num(getMetric(context, key) ?? getMetric(snapshot, key));
-            if (raw === null) return;
-
-            const avg = averageMetric(history, key, raw);
-            const maxJump = key.toLowerCase().includes('bad') ? 8 : 0.35;
-
-            if (Math.abs(raw - avg) > maxJump && history.length >= 2) {
-                smoothed[key] = avg;
-            }
-        });
-
-        return smoothed;
-    }
-
-    function cloneWithFilteredSignals(source, filteredSignals, smoothedMetrics) {
-        if (!source || typeof source !== 'object') return source;
-
-        const clone = Object.assign({}, source);
-
-        if (Array.isArray(source.signals)) {
-            clone.signals = filteredSignals.slice();
-        }
-
-        Object.entries(smoothedMetrics).forEach(([key, value]) => {
-            if (clone[key] !== undefined) clone[key] = value;
-        });
-
-        return clone;
-    }
-
-    function filterInput(snapshot, context) {
-        const gameId = getGameId(snapshot, context || {});
-        const minute = getMinute(snapshot, context || {});
-        const signals = collectSignals(snapshot, context || {});
-        const metrics = extractMetrics(snapshot, context || {});
-        const history = rememberSample(gameId, minute, signals, metrics);
-
-        const filteredSignals = signals.filter(signal => isStableSignal(signal, history));
-        const smoothedMetrics = smoothMetrics(snapshot, context || {}, history);
-
-        const nextSnapshot = cloneWithFilteredSignals(snapshot, filteredSignals, smoothedMetrics);
-        const nextContext = cloneWithFilteredSignals(context || {}, filteredSignals, smoothedMetrics) || {};
-
-        if (Array.isArray(context?.signals) || filteredSignals.length) nextContext.signals = filteredSignals.slice();
-        if (Array.isArray(snapshot?.signals) && nextSnapshot) nextSnapshot.signals = filteredSignals.slice();
-
-        nextContext.signalNoiseFilter = {
-            active: true,
-            gameId,
-            minute,
-            rawSignals: signals,
-            filteredSignals
-        };
-
-        return { snapshot: nextSnapshot, context: nextContext };
-    }
-
-    CurrentActionHintEngine.run = function runWithSignalNoiseFilter(snapshot, context = {}) {
-        const filtered = filterInput(snapshot, context);
-        return originalRun(filtered.snapshot, filtered.context);
-    };
-
-    CurrentActionHintEngine.__signalNoiseFilterApplied = true;
-
-    if (typeof window !== 'undefined') {
-        window.SLFSignalNoiseFilterLayer = {
-            getHistory: () => Array.from(historyByGame.entries()).map(([gameId, samples]) => ({ gameId, samples: samples.slice() }))
-        };
-    }
-})();
-// <<< src/modules/strategy-data-recommendations/signal-noise-filter-layer.js
-
-
 // >>> src/modules/tactics-presets/tactics-dropdown-ui-policy.js
 // Tactics Dropdown UI Policy
 // ============================================================
@@ -18023,15 +18194,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.174',
-        scriptVersion: '4.4.174',
+        version: '4.4.175',
+        scriptVersion: '4.4.175',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.174',
+        scriptVersion: '4.4.175',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
