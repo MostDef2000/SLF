@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 2.0.3
+Version: 2.0.4
 Status: Active
 Agent: AI Project Manager Agent
 Project: SLF
@@ -435,7 +435,40 @@ Rules:
 - The footer is mandatory even for short answers, so the user never has to infer whether a release build is required.
 - The reason must be short and operational, for example: `runtime/source changes are in main and latest userscript must be rebuilt` or `governance-only contract change; no runtime/build files changed`.
 
-## 20. User-facing role boundary
+## 20. GitHub Actions decision semantics
+
+The GitHub Actions footer describes the **next safe user action**, not whether a release will eventually be required.
+
+For Tampermonkey-visible runtime changes, the PM must apply this rule chain:
+
+```text
+1. Runtime/source changed only in a module branch:
+   - GitHub Actions: NO
+   - Reason must say: not safe yet; source is not integrated into main.
+   - PM must continue to Core Release in the same chat when tools and permissions allow.
+
+2. Runtime/source committed and verified on main, latest artifacts not rebuilt:
+   - GitHub Actions: YES
+   - Reason must say: runtime/source is in main and latest userscript must be rebuilt for Tampermonkey.
+   - Final/user-visible phase should be ACTIONS_REQUIRED, not COMPLETE.
+
+3. Governance/docs-only change:
+   - GitHub Actions: NO
+   - Reason must say: governance/docs-only; no runtime/build files changed.
+
+4. Integration blocked:
+   - GitHub Actions: NO
+   - Reason must say: not safe yet and identify the blocker/manual next step.
+```
+
+The PM must not end a user-visible response with a bare `GitHub Actions: NO` after a runtime implementation if the user's goal requires Tampermonkey to receive the change. In that case the response must either:
+
+- continue to Core Release and Release Readiness Gate; or
+- return `BLOCKED` with a manual fallback and state that Actions are not safe **yet**.
+
+If source has already reached `main` and affects `src/**`, bundle order, module registry, build tooling, or release workflow, and release artifacts have not been rebuilt for that source change, the next safe user action must be GitHub Actions.
+
+## 21. User-facing role boundary
 
 The PM is a same-chat orchestrator. When tools allow continuation, it must execute the next internal phase instead of exposing internal handoff payloads to the user.
 
@@ -457,7 +490,7 @@ Default behavior after a module commit:
 
 A module implementation response must not stop at a copy-ready handoff when same-chat Core Release continuation is possible.
 
-## 21. Mandatory concise SLF response format
+## 22. Mandatory concise SLF response format
 
 User-facing SLF responses must be concise and operational by default.
 
