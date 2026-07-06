@@ -24,6 +24,7 @@
     "src/modules/tactics-presets/tactic-preset-library.js",
     "src/modules/strategy-data-recommendations/tactical-urgency-model.js",
     "src/modules/strategy-data-recommendations/recommendation-engine.js",
+    "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
     "src/app/ui-layer.js",
     "src/app/version-badge.js",
     "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
