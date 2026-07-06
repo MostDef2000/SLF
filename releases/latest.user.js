@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.171
+// @version      4.4.172
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.171',
-        scriptVersion: '4.4.171',
+        version: '4.4.172',
+        scriptVersion: '4.4.172',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.171',
+        scriptVersion: '4.4.172',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -5039,43 +5039,37 @@ const RecommendationEngine = {
 const CurrentActionHintEngine = {
     schema: 'slf_current_action_hint_v2',
 
-    // Source: docs/audit/tactical-preset-rag-audit.md
+    // Source: docs/audit/tactical-preset-rag-audit.md + active preset registry.
+    // RAG press note: "Прессинг Игрок" is treated as a pressure/pressing signal,
+    // not as a separate per-player tactical subsystem.
     PRESET_AUDIT_TIER: {
         primary: [
             'Pep_BoxControl_bal2',
+            'Arteta_Control433_bal3',
             'Compact_Counter_def3',
             'Pep_TwoThreeFive_att3',
             'Conte_WingbackWidth_bal4',
-            'Pep_PressCooldown_bal2'
+            'Pep_PressCooldown_bal2',
+            'Xabi_BoxMidfield_bal3',
+            'DeZerbi_BaitPress_bal3'
         ],
         restricted: [
             'Pep_ControlledPush_att3',
-            'Xabi_BoxMidfield_bal3',
-            'Klopp_Gegenpress_att4'
+            'Xabi_VerticalBox_att3',
+            'Mourinho_WeakSide_def3',
+            'Simeone_Compact442_def4',
+            'Klopp_Gegenpress_att4',
+            'Nagelsmann_WidePress_att4',
+            'DeZerbi_Release_att4',
+            'Henta_LeftTrap_att3'
         ],
         emergency: [
             'Bielsa_ChaosPress_att5',
             'Simeone_LowBlock_def5'
         ],
-        needsMoreData: [
-            'Xabi_VerticalBox_att3',
-            'Simeone_Compact442_def4',
-            'Mourinho_WeakSide_def3',
-            'DeZerbi_BaitPress_bal3',
-            'DeZerbi_Release_att4',
-            'Klopp_WideTrap_att4'
-        ],
-        experimental: [
-            'Henta_Hold_def3',
-            'Henta_LeftTrap_att3',
-            'Henta_RightTrap_att3',
-            'Henta_WideTrap_att3',
-            'Henta_CounterTrap_att4',
-            'Henta_CentralTrap_att3'
-        ],
-        blocked: [
-            'Pep_StandardControl_bal3'
-        ]
+        needsMoreData: [],
+        experimental: [],
+        blocked: []
     },
 
     HINT_RULES: [
@@ -5096,6 +5090,22 @@ const CurrentActionHintEngine = {
             when: c => c.protectLead && c.underPressure && c.minute >= 80
         },
         {
+            id: 'protect_compact_442',
+            preset: 'Simeone_Compact442_def4',
+            decision: 'compact_protect',
+            risk: 'medium',
+            reason: 'ведём, но полный низкий блок ещё не обязателен — компактная защита',
+            when: c => c.protectLead && c.minute < 80 && !c.lateNeedGoal
+        },
+        {
+            id: 'own_press_fatigue_cooldown',
+            preset: 'Pep_PressCooldown_bal2',
+            decision: 'cooldown_press',
+            risk: 'low',
+            reason: 'растёт цена собственного прессинга — снизить интенсивность и вернуть структуру',
+            when: c => c.pressFatigueRisk && !c.lateNeedGoal
+        },
+        {
             id: 'bad_actions_control_reset',
             preset: 'Pep_BoxControl_bal2',
             decision: 'stabilize_control',
@@ -5104,28 +5114,44 @@ const CurrentActionHintEngine = {
             when: c => c.highBadActions && !c.lateNeedGoal
         },
         {
-            id: 'press_cost_cooldown',
-            preset: 'Pep_PressCooldown_bal2',
-            decision: 'cooldown_press',
-            risk: 'low',
-            reason: 'нужно снизить цену прессинга и вернуть структуру',
-            when: c => c.pressFatigueRisk && !c.lateNeedGoal
+            id: 'opponent_press_release_space',
+            preset: 'DeZerbi_Release_att4',
+            decision: 'release_after_press',
+            risk: 'high',
+            reason: 'соперник прессингует, но есть пространство за линией — быстрее выпускать атаку',
+            when: c => c.opponentHighPress && c.spaceBehind && !c.highBadActions && !c.pressFatigueRisk && !c.lateNeedGoal
         },
         {
-            id: 'under_pressure_high_press_counter',
+            id: 'opponent_press_bait',
+            preset: 'DeZerbi_BaitPress_bal3',
+            decision: 'bait_press',
+            risk: 'medium',
+            reason: 'соперник высоко прессингует, а брак низкий — можно выманить прессинг',
+            when: c => c.opponentHighPress && c.lowBadActions && !c.underPressure && !c.transitionThreat && !c.lateNeedGoal
+        },
+        {
+            id: 'opponent_press_compact_counter',
             preset: 'Compact_Counter_def3',
             decision: 'stabilize_and_counter',
             risk: 'medium',
-            reason: 'соперник давит/прессингует — закрыть переходы и оставить быстрый выход',
-            when: c => c.underPressure && (c.opponentHighPress || c.transitionThreat) && !c.lateNeedGoal
+            reason: 'соперник прессингует и давит — не держать автобусом мяч, закрыться и выйти быстро',
+            when: c => c.opponentHighPress && c.underPressure && !c.lateNeedGoal
         },
         {
-            id: 'under_pressure_reset',
+            id: 'under_pressure_counter',
             preset: 'Compact_Counter_def3',
             decision: 'defensive_reset',
             risk: 'medium',
-            reason: 'соперник опаснее по текущим метрикам — нужен defensive reset',
-            when: c => c.underPressure && !c.lateNeedGoal
+            reason: 'соперник опаснее по текущим метрикам — нужен defensive reset с выходом в контратаку',
+            when: c => c.underPressure && (c.transitionThreat || !c.opponentHighPress) && !c.lateNeedGoal
+        },
+        {
+            id: 'weak_side_under_pressure',
+            preset: 'Mourinho_WeakSide_def3',
+            decision: 'attack_weak_side',
+            risk: 'medium',
+            reason: 'соперник давит, но есть слабая сторона или пространство для выхода',
+            when: c => c.underPressure && (c.spaceBehind || c.weakSideAvailable) && !c.highBadActions && !c.lateNeedGoal
         },
         {
             id: 'center_closed_wide_quality',
@@ -5133,7 +5159,23 @@ const CurrentActionHintEngine = {
             decision: 'use_width',
             risk: 'medium',
             reason: 'центр закрыт, но ширина доступна — растянуть блок через фланги',
-            when: c => c.opponentLowBlock && c.wideQuality && !c.ownCrossesBad && !c.opponentCrossesDangerous
+            when: c => c.opponentLowBlock && c.wideQuality && !c.needGoal && !c.ownCrossesBad && !c.opponentCrossesDangerous
+        },
+        {
+            id: 'urgent_wide_press',
+            preset: 'Nagelsmann_WidePress_att4',
+            decision: 'wide_pressure',
+            risk: 'high',
+            reason: 'нужен гол, центр закрыт, фланги доступны — широкий прессинг вместо хаоса',
+            when: c => c.needGoal && c.minute >= 65 && c.centerClosed && c.wideQuality && !c.highBadActions && !c.pressFatigueRisk
+        },
+        {
+            id: 'urgent_pressure_not_all_in',
+            preset: 'Klopp_Gegenpress_att4',
+            decision: 'urgent_pressure',
+            risk: 'high',
+            reason: 'нужен срочный рост давления, но guard допускает высокий прессинг',
+            when: c => c.needGoal && c.minute >= 70 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat
         },
         {
             id: 'attacking_momentum_positional',
@@ -5148,8 +5190,16 @@ const CurrentActionHintEngine = {
             preset: 'Pep_ControlledPush_att3',
             decision: 'increase_attack',
             risk: 'medium',
-            reason: 'нужен гол, но без all-in — усилить атаку контролируемо',
-            when: c => c.needGoal && !c.underPressure && !c.highBadActions
+            reason: 'нужен гол, но без all-in и без лишнего прессинг-риска',
+            when: c => c.needGoal && !c.underPressure && !c.highBadActions && !c.pressFatigueRisk
+        },
+        {
+            id: 'center_vertical_entry',
+            preset: 'Xabi_VerticalBox_att3',
+            decision: 'vertical_center_entry',
+            risk: 'medium',
+            reason: 'центр доступен и нужен более быстрый вертикальный вход',
+            when: c => c.centerWeak && c.attackingMomentum && !c.centerClosed && !c.highBadActions
         },
         {
             id: 'center_weak_box_midfield',
@@ -5160,12 +5210,12 @@ const CurrentActionHintEngine = {
             when: c => c.centerWeak && !c.centerClosed && !c.highBadActions
         },
         {
-            id: 'urgent_pressure_not_all_in',
-            preset: 'Klopp_Gegenpress_att4',
-            decision: 'urgent_pressure',
-            risk: 'high',
-            reason: 'нужен срочный рост давления, но ещё не all-in',
-            when: c => c.needGoal && c.minute >= 70 && !c.highBadActions && !c.pressFatigueRisk
+            id: 'standard_control_low_noise',
+            preset: 'Arteta_Control433_bal3',
+            decision: 'standard_control',
+            risk: 'low',
+            reason: 'игра без сильного аварийного сигнала — базовый контроль через структуру',
+            when: c => !c.needGoal && !c.underPressure && !c.highBadActions && !c.attackingMomentum
         },
         {
             id: 'safe_default_control',
@@ -5216,6 +5266,11 @@ const CurrentActionHintEngine = {
         return (Array.isArray(values) ? values : [values]).some(Boolean);
     },
 
+    hasSignal(signals, names) {
+        const list = Array.isArray(names) ? names : [names];
+        return list.some(name => signals.includes(name));
+    },
+
     buildContext(snapshot, context = {}) {
         const minute = this.getMinute(snapshot, context);
         const scoreState = this.getScoreState(snapshot, context);
@@ -5224,7 +5279,8 @@ const CurrentActionHintEngine = {
         const myXT = this.num(this.getMetric(snapshot, context, 'myXT'));
         const oppXT = this.num(this.getMetric(snapshot, context, 'oppXT'));
         const myBad = this.num(this.getMetric(snapshot, context, 'myBad', ['badActionsPct', 'myBadActionsPct']));
-        const oppPress = this.num(this.getMetric(snapshot, context, 'oppPress', ['oppPressVector']));
+        const oppPress = this.num(this.getMetric(snapshot, context, 'oppPress', ['oppPressVector', 'opponentPress', 'opponentPressing']));
+        const myPress = this.num(this.getMetric(snapshot, context, 'myPress', ['myPressVector', 'ownPress', 'ownPressVector', 'pressingPlayer', 'playerPressing', 'pressing_player', 'player_pressing']));
         const oppDef = this.num(this.getMetric(snapshot, context, 'oppDef', ['oppDefVector']));
         const signals = Array.isArray(context.signals)
             ? context.signals
@@ -5232,13 +5288,18 @@ const CurrentActionHintEngine = {
                 ? snapshot.signals
                 : [];
 
-        const ownCrossesBad = this.bool(this.getMetric(snapshot, context, 'ownCrossesBad')) || signals.includes('own_crosses_bad_total') || signals.includes('own_open_play_crosses_bad');
-        const opponentCrossesDangerous = this.bool(this.getMetric(snapshot, context, 'opponentCrossesDangerous')) || signals.includes('opponent_crosses_dangerous');
-        const pressFatigueRisk = this.bool(this.getMetric(snapshot, context, 'pressFatigueRisk')) || signals.includes('press_fatigue_risk');
-        const wideQuality = this.bool(this.getMetric(snapshot, context, 'wideQuality')) || signals.includes('wide_quality') || signals.includes('attack_left') || signals.includes('attack_right');
-        const centerWeak = this.bool(this.getMetric(snapshot, context, 'centerWeak')) || signals.includes('center_weak');
-        const centerClosed = this.bool(this.getMetric(snapshot, context, 'centerClosed')) || signals.includes('center_closed');
-        const transitionThreat = this.bool(this.getMetric(snapshot, context, 'transitionThreat')) || signals.includes('opponent_fast_counter_threat');
+        const ownCrossesBad = this.bool(this.getMetric(snapshot, context, 'ownCrossesBad')) || this.hasSignal(signals, ['own_crosses_bad_total', 'own_open_play_crosses_bad']);
+        const opponentCrossesDangerous = this.bool(this.getMetric(snapshot, context, 'opponentCrossesDangerous')) || this.hasSignal(signals, ['opponent_crosses_dangerous']);
+        const pressFatigueRisk = this.bool(this.getMetric(snapshot, context, 'pressFatigueRisk')) || this.hasSignal(signals, ['press_fatigue_risk', 'own_press_fatigue', 'press_cost_high']);
+        const wideQuality = this.bool(this.getMetric(snapshot, context, 'wideQuality')) || this.hasSignal(signals, ['wide_quality', 'attack_left', 'attack_right', 'wide_advantage']);
+        const centerWeak = this.bool(this.getMetric(snapshot, context, 'centerWeak')) || this.hasSignal(signals, ['center_weak', 'center_available']);
+        const centerClosed = this.bool(this.getMetric(snapshot, context, 'centerClosed')) || this.hasSignal(signals, ['center_closed']);
+        const transitionThreat = this.bool(this.getMetric(snapshot, context, 'transitionThreat')) || this.hasSignal(signals, ['opponent_fast_counter_threat', 'transition_threat']);
+        const spaceBehind = this.bool(this.getMetric(snapshot, context, 'spaceBehind')) || this.hasSignal(signals, ['space_behind', 'opponent_high_line', 'release_space']);
+        const weakSideAvailable = this.bool(this.getMetric(snapshot, context, 'weakSideAvailable')) || this.hasSignal(signals, ['weak_side_available', 'opponent_flank_weak']);
+        const ownHighPress = myPress > 65 || this.hasSignal(signals, ['own_high_press', 'intensive_pressing', 'pressing_player', 'player_pressing']);
+        const opponentHighPress = oppPress > 65 || this.hasSignal(signals, ['opponent_high_press']);
+        const highBadActions = myBad >= 20 || this.hasSignal(signals, ['high_bad_actions']);
 
         return {
             minute,
@@ -5248,24 +5309,29 @@ const CurrentActionHintEngine = {
             myXT,
             oppXT,
             myBad,
+            myPress,
             oppPress,
             oppDef,
             signals,
             needGoal: scoreState === 'losing' && minute >= 55,
             lateNeedGoal: scoreState === 'losing' && minute >= 80,
             protectLead: scoreState === 'winning' && minute >= 70,
-            underPressure: oppXg > myXg + 0.4 || oppXT > myXT + 0.2 || signals.includes('under_pressure'),
-            attackingMomentum: myXg > oppXg + 0.3 || myXT > oppXT + 0.2 || signals.includes('attacking_momentum'),
-            highBadActions: myBad >= 20 || signals.includes('high_bad_actions'),
-            opponentHighPress: oppPress > 65 || signals.includes('opponent_high_press'),
-            opponentLowBlock: (oppDef > 0 && oppDef < 45) || signals.includes('opponent_low_block'),
+            underPressure: oppXg > myXg + 0.4 || oppXT > myXT + 0.2 || this.hasSignal(signals, ['under_pressure']),
+            attackingMomentum: myXg > oppXg + 0.3 || myXT > oppXT + 0.2 || this.hasSignal(signals, ['attacking_momentum']),
+            highBadActions,
+            lowBadActions: !highBadActions && myBad < 12,
+            ownHighPress,
+            opponentHighPress,
+            opponentLowBlock: (oppDef > 0 && oppDef < 45) || this.hasSignal(signals, ['opponent_low_block']),
             ownCrossesBad,
             opponentCrossesDangerous,
             pressFatigueRisk,
             wideQuality,
             centerWeak,
             centerClosed,
-            transitionThreat
+            transitionThreat,
+            spaceBehind,
+            weakSideAvailable
         };
     },
 
@@ -5298,11 +5364,16 @@ const CurrentActionHintEngine = {
         if (c.underPressure) add('under_pressure', 'соперник опаснее по xG/xT или давлению');
         if (c.attackingMomentum) add('attacking_momentum', 'есть атакующий импульс');
         if (c.highBadActions) add('high_bad_actions', 'высокий процент брака');
+        if (c.lowBadActions) add('low_bad_actions', 'низкий процент брака');
+        if (c.ownHighPress) add('own_high_press', 'собственный прессинг активен');
         if (c.opponentHighPress) add('opponent_high_press', 'высокий прессинг соперника');
         if (c.opponentLowBlock) add('opponent_low_block', 'низкий блок соперника');
         if (c.pressFatigueRisk) add('press_fatigue_risk', 'растёт цена прессинга');
+        if (c.spaceBehind) add('space_behind', 'есть пространство за линией');
+        if (c.weakSideAvailable) add('weak_side_available', 'есть слабая сторона соперника');
         if (c.centerWeak) add('center_weak', 'центр соперника доступен');
         if (c.centerClosed) add('center_closed', 'центр закрыт');
+        if (c.wideQuality) add('wide_quality', 'ширина/фланги доступны');
         if (c.ownCrossesBad) add('own_crosses_bad', 'кроссы/фланговая доставка не работают');
         if (c.opponentCrossesDangerous) add('opponent_crosses_dangerous', 'кроссы соперника опасны');
         if (!signals.length) add('balanced_control', 'нет сильного сигнала');
@@ -17547,15 +17618,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.171',
-        scriptVersion: '4.4.171',
+        version: '4.4.172',
+        scriptVersion: '4.4.172',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.171',
+        scriptVersion: '4.4.172',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
