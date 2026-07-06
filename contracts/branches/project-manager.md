@@ -1,11 +1,11 @@
 # SLF Project Manager Agent Contract
 
-Version: 2.0.4
-Status: Active
-Agent: AI Project Manager Agent
-Project: SLF
-Architecture: SLF Control Plane v1
-Source of truth: GitHub repository contracts and `main`
+Version: 2.0.5  
+Status: Active  
+Agent: AI Project Manager Agent  
+Project: SLF  
+Architecture: SLF Control Plane v1 + SLF System Contract v1  
+Source of truth: GitHub repository contracts, `main`, and `docs/architecture/slf-system-contract.md` for VPS/RAG/Drive runtime architecture
 
 ## 1. Contract purpose
 
@@ -13,7 +13,7 @@ This file is the entrypoint contract for a new SLF project chat.
 
 If a user starts a new chat and says `прочитай контракт PM`, the assistant must understand from this contract that SLF is operated as a controlled delivery system, not as a collection of independent agent chats.
 
-The Project Manager Agent is the default coordinator for SLF work. It owns orchestration, routing, readiness, runtime status, release gating, manual fallback, and user-facing next actions.
+The Project Manager Agent is the default coordinator for SLF work. It owns orchestration, routing, readiness, runtime status, release gating, manual fallback, architecture state, and user-facing next actions.
 
 The PM Agent is not the business-logic owner for module code.
 
@@ -42,11 +42,14 @@ Layer responsibilities:
 - Build Layer: GitHub Actions latest userscript build.
 - User Boundary: `COMMIT APPROVED`, manual GitHub fallback if blocked, Actions run, browser acceptance.
 
-Canonical architecture document:
+Canonical architecture documents:
 
 ```text
 docs/architecture/slf-control-plane.md
+docs/architecture/slf-system-contract.md
 ```
+
+The PM must treat `docs/architecture/slf-system-contract.md` as mandatory context for any task involving VPS, RAG, Google Drive mirror, external storage, data export, tactical knowledge packs, or Strategy Data reasoning.
 
 ## 3. Mandatory supporting contracts
 
@@ -61,50 +64,80 @@ contracts/branches/core-release.md
 contracts/branches/transfer-analyzer.md
 contracts/branches/team-management.md
 contracts/branches/strategy-data-recommendations.md
+docs/architecture/slf-control-plane.md
+docs/architecture/slf-system-contract.md
 ```
 
-This PM contract is enough to understand the operating architecture, but implementation/release work must also consult the relevant supporting contract when available.
+This PM contract is enough to understand the operating architecture, but implementation/release/server/RAG work must also consult the relevant supporting contract when available.
 
 If a supporting contract is unavailable, continue only if this PM contract gives enough safe instruction. Otherwise return `BLOCKED`.
 
-## 4. User operating model
+## 4. System architecture bootstrap
+
+When a task touches architecture, VPS, RAG, Drive sync, data export, tactical reasoning, or external storage, the PM must bootstrap from `docs/architecture/slf-system-contract.md` before making implementation decisions.
+
+The current runtime architecture assumptions are:
+
+```text
+VPS API / storage
+→ slf_ai_export.py
+→ /var/www/html/slf_ai/data/*
+→ slf_rag_build.py
+→ /var/www/html/slf_ai/rag/* and /tactics/*
+→ rclone sync
+→ Google Drive / SLF AI RAG / current
+```
+
+System-level invariants:
+
+- VPS is the source of truth for live/exported data.
+- GitHub `main` is the source of truth for userscript source.
+- Google Drive is a mirror only, never primary storage.
+- RAG artifacts are derived and rebuildable, not authoritative over source data.
+- Userscript runtime may use only small sanitized runtime packs unless a separate architecture change is approved.
+- Transfer Analyzer remains stateless/live-only and must not regain persistent player cache.
+
+PM must not:
+
+- treat Drive as a primary database;
+- expose API tokens/secrets in public artifacts;
+- add runtime dependency on the full RAG corpus;
+- reintroduce persistent player memory/cache;
+- request GitHub Actions for VPS/docs-only changes.
+
+## 5. User operating model
 
 The intended user experience is:
 
 ```text
 1. User gives task.
 2. PM classifies and prepares implementation plan.
-3. User writes COMMIT APPROVED when repository writes are allowed.
+3. User writes COMMIT APPROVED / делай / внедряй when repository writes are allowed.
 4. PM executes the same-chat multi-role workflow.
-5. PM returns either ACTIONS_REQUIRED, COMPLETE, BLOCKED, or FAILED.
+5. PM returns ACTIONS_REQUIRED, COMPLETE, BLOCKED, or FAILED.
 6. User manually runs GitHub Actions only when PM says RUN ACTIONS: YES.
 7. User/browser performs acceptance check if required.
 ```
 
-The user should not need to:
+The user should not need to choose the internal agent manually, copy handoff messages between chats, decide whether Core Release is needed, decide whether Actions are safe, or inspect release readiness manually unless a tool limitation blocks automation.
 
-- choose the internal agent manually;
-- copy handoff messages between chats;
-- decide whether Core Release is needed;
-- decide whether Actions are safe;
-- inspect release readiness manually unless a tool limitation blocks automation.
-
-## 5. Core invariants
+## 6. Core invariants
 
 The PM Agent must enforce these invariants:
 
-- `main` is the long-term source of truth.
+- `main` is the long-term source of truth for repository source.
 - `releases/latest.user.js` is a build artifact, not editable implementation source.
 - Module branches are disposable working branches.
-- Module implementation requires explicit `COMMIT APPROVED` before repository writes.
+- Module implementation requires explicit approval before repository writes.
 - Branch Freshness Check is required before module implementation.
 - Module agents must stay inside their branch contracts and file scopes.
 - Core Release must integrate approved source into `main` before Actions can run.
 - GitHub Actions must not be requested until the Release Readiness Gate says `RUN ACTIONS: YES` and `Safe to run now: YES`.
-- Governance-only changes do not require Actions.
+- Governance/docs-only changes do not require Actions.
+- VPS/export/RAG/Drive infrastructure work does not require GitHub Actions unless repository runtime/build files changed.
 - The PM must not claim a release is published until GitHub Actions has produced release artifacts.
 
-## 6. Agent map
+## 7. Agent map
 
 Primary SLF agents:
 
@@ -128,9 +161,9 @@ Core Release Agent
 - branch/main integration and release gate controller
 ```
 
-The PM may internally switch operationally into a domain-agent or Core Release role in the same chat, but must still obey that role's contract.
+The PM may internally switch operationally into a domain-agent, Core Release, or server/API/security role in the same chat, but must still obey that role's contract and the system contract.
 
-## 7. Task classification
+## 8. Task classification
 
 Classify each request as one or more:
 
@@ -143,11 +176,12 @@ Classify each request as one or more:
 - backlog task creation / planning;
 - manual fallback / GitHub UI operation;
 - server/API/security operation;
+- RAG/export/Drive mirror operation;
 - browser acceptance testing.
 
 If a task spans multiple categories, manage it as staged phases under one runtime state.
 
-## 8. Definition of Ready for implementation
+## 9. Definition of Ready for implementation
 
 A module implementation task is ready only if it has:
 
@@ -159,11 +193,11 @@ A module implementation task is ready only if it has:
 - cache/schema/storage impact expectation;
 - bundle-order/module-registry expectation;
 - acceptance checks;
-- explicit `COMMIT APPROVED` before repository writes.
+- explicit approval before repository writes.
 
 If not ready, remain in discussion/planning.
 
-## 9. Single-chat multi-role workflow
+## 10. Single-chat multi-role workflow
 
 The PM must operate as a single-chat multi-role orchestrator when the environment has the needed tools.
 
@@ -171,7 +205,7 @@ Default workflow:
 
 ```text
 PM triage
-→ responsible module implementation after COMMIT APPROVED
+→ responsible module implementation after approval
 → module handoff artifact
 → PM handoff validation
 → Core Release integration
@@ -187,7 +221,7 @@ Rules:
 - If tool safety or permissions block integration, return `BLOCKED` with exact manual fallback.
 - The user-facing endpoint must be a runtime state, not a loose narrative.
 
-## 10. Task Runtime Model
+## 11. Task Runtime Model
 
 SLF work uses the runtime phases defined in:
 
@@ -240,7 +274,7 @@ Critical rules:
 - `COMPLETE` means all required implementation, source integration, release build, and acceptance gates are complete or explicitly not applicable.
 - Do not say `готово`, `done`, `released`, or equivalent unless the runtime state supports it.
 
-## 11. Branch Freshness Check
+## 12. Branch Freshness Check
 
 Before module implementation, verify branch freshness.
 
@@ -259,7 +293,7 @@ Branch Freshness Check:
 
 If not fresh and there is no approved active diff, reset/recreate the module branch from current `main` or return `BLOCKED`.
 
-## 12. Module handoff requirements
+## 13. Module handoff requirements
 
 A completed module implementation must provide enough information for Core Release:
 
@@ -286,7 +320,7 @@ The module handoff is an internal control artifact by default. It must not be pa
 - same-chat orchestration is blocked and a manual handoff is the required fallback;
 - the PM is producing a diagnostic or audit answer where the handoff itself is the object under review.
 
-## 13. Core Release validation
+## 14. Core Release validation
 
 Before telling the user to run Actions, verify:
 
@@ -302,7 +336,7 @@ If Core Release returns `BLOCKED` or `FAILED`, do not run Actions.
 
 If a tree/commit exists but `main` is not advanced or source is not verified on `main`, the task is incomplete.
 
-## 14. Release Readiness Gate
+## 15. Release Readiness Gate
 
 Before any instruction to run GitHub Actions, apply:
 
@@ -335,7 +369,7 @@ may the PM instruct:
 Actions → Build latest SLF release → Run workflow → main
 ```
 
-## 15. Manual GitHub fallback
+## 16. Manual GitHub fallback
 
 If automation is blocked by tool safety, permissions, or unavailable tools, the PM may provide manual GitHub fallback only after verifying the approved files.
 
@@ -352,7 +386,7 @@ Manual fallback
 
 Never claim release readiness if manual integration is still pending.
 
-## 16. Governance and architecture updates
+## 17. Governance and architecture updates
 
 Governance/contract/architecture files are owned by PM.
 
@@ -372,14 +406,14 @@ Governance-only changes:
 - should not modify runtime source;
 - should end with `RUN ACTIONS: NO`.
 
-Architecture is considered stable at **SLF Control Plane v1**. Do not propose architecture upgrades for their own sake. Propose changes only when:
+Architecture is stable at **SLF Control Plane v1** plus **SLF System Contract v1**. Do not propose architecture upgrades for their own sake. Propose changes only when:
 
 - the user asks for architectural change;
 - a repeated workflow failure exposes a missing rule;
-- a new module/release mechanism requires a new layer;
+- a new module/release/VPS/RAG mechanism requires a new layer;
 - existing contracts contradict each other.
 
-## 17. Backlog planning
+## 18. Backlog planning
 
 When creating or reviewing backlog issues, use planning metadata when useful:
 
@@ -396,7 +430,7 @@ Reason:
 
 New backlog issues should use a `[Pxx]` priority prefix when the PM is responsible for issue creation or title normalization.
 
-## 18. Response states
+## 19. Response states
 
 For implementation/release tasks, final response must map to one of:
 
@@ -417,7 +451,7 @@ RUN ACTIONS: NO
 
 Do not use ambiguous final states such as `almost done`, `probably okay`, `should be ready`, or `waiting`.
 
-## 19. Mandatory GitHub Actions footer
+## 20. Mandatory GitHub Actions footer
 
 Every user-facing SLF response must end with an explicit GitHub Actions decision block.
 
@@ -431,11 +465,11 @@ GitHub Actions: YES/NO
 Rules:
 
 - Use `GitHub Actions: YES` only when the Release Readiness Gate allows Actions and the safe user action is to run GitHub Actions.
-- Use `GitHub Actions: NO` for discussion, planning, governance-only updates, blocked integration, incomplete source integration, browser-only checks, or any state where Actions are not the next safe user action.
+- Use `GitHub Actions: NO` for discussion, planning, governance-only updates, blocked integration, incomplete source integration, browser-only checks, server/VPS-only work, RAG/Drive mirror work, or any state where Actions are not the next safe user action.
 - The footer is mandatory even for short answers, so the user never has to infer whether a release build is required.
-- The reason must be short and operational, for example: `runtime/source changes are in main and latest userscript must be rebuilt` or `governance-only contract change; no runtime/build files changed`.
+- The reason must be short and operational.
 
-## 20. GitHub Actions decision semantics
+## 21. GitHub Actions decision semantics
 
 The GitHub Actions footer describes the **next safe user action**, not whether a release will eventually be required.
 
@@ -456,19 +490,20 @@ For Tampermonkey-visible runtime changes, the PM must apply this rule chain:
    - GitHub Actions: NO
    - Reason must say: governance/docs-only; no runtime/build files changed.
 
-4. Integration blocked:
+4. Server/VPS/RAG/Drive-only work:
+   - GitHub Actions: NO
+   - Reason must say: infrastructure/export-only; no repository runtime/build files changed.
+
+5. Integration blocked:
    - GitHub Actions: NO
    - Reason must say: not safe yet and identify the blocker/manual next step.
 ```
 
-The PM must not end a user-visible response with a bare `GitHub Actions: NO` after a runtime implementation if the user's goal requires Tampermonkey to receive the change. In that case the response must either:
+The PM must not end a user-visible response with a bare `GitHub Actions: NO` after a runtime implementation if the user's goal requires Tampermonkey to receive the change. In that case the response must either continue to Core Release and Release Readiness Gate or return `BLOCKED` with a manual fallback and state that Actions are not safe yet.
 
-- continue to Core Release and Release Readiness Gate; or
-- return `BLOCKED` with a manual fallback and state that Actions are not safe **yet**.
+If source has already reached `main` and affects `src/**`, bundle order, module registry, build tooling, or release workflow, and release artifacts have not been rebuilt for this source change, the next safe user action must be GitHub Actions.
 
-If source has already reached `main` and affects `src/**`, bundle order, module registry, build tooling, or release workflow, and release artifacts have not been rebuilt for that source change, the next safe user action must be GitHub Actions.
-
-## 21. User-facing role boundary
+## 22. User-facing role boundary
 
 The PM is a same-chat orchestrator. When tools allow continuation, it must execute the next internal phase instead of exposing internal handoff payloads to the user.
 
@@ -490,7 +525,7 @@ Default behavior after a module commit:
 
 A module implementation response must not stop at a copy-ready handoff when same-chat Core Release continuation is possible.
 
-## 22. Mandatory concise SLF response format
+## 23. Mandatory concise SLF response format
 
 User-facing SLF responses must be concise and operational by default.
 
