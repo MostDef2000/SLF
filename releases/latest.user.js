@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.162
+// @version      4.4.163
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.162',
-        scriptVersion: '4.4.162',
+        version: '4.4.163',
+        scriptVersion: '4.4.163',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.162',
+        scriptVersion: '4.4.163',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -14281,12 +14281,21 @@ const TransferMarketAnalyzer = {
 
 if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !TransferMarketAnalyzer.slfCompactMktUiApplied) {
     TransferMarketAnalyzer.slfCompactMktUiApplied = true;
+    TransferMarketAnalyzer.slfLiveAnalysisRunning = false;
+    TransferMarketAnalyzer.slfLiveAnalysisRunId = 0;
 
     TransferMarketAnalyzer.removeMktSortToolbarButtons = function removeMktSortToolbarButtons() {
-        const bargainButton = document.getElementById('slf-transfer-sort-mkt-bargain');
-        const overpricedButton = document.getElementById('slf-transfer-sort-mkt-overpriced');
-        if (bargainButton && bargainButton.parentNode) bargainButton.parentNode.removeChild(bargainButton);
-        if (overpricedButton && overpricedButton.parentNode) overpricedButton.parentNode.removeChild(overpricedButton);
+        const buttonIds = [
+            'slf-transfer-sort-score',
+            'slf-transfer-sort-talent',
+            'slf-transfer-sort-mkt-bargain',
+            'slf-transfer-sort-mkt-overpriced'
+        ];
+
+        buttonIds.forEach(id => {
+            const button = document.getElementById(id);
+            if (button && button.parentNode) button.parentNode.removeChild(button);
+        });
     };
 
     TransferMarketAnalyzer.formatCompactMktRatio = function formatCompactMktRatio(ratio) {
@@ -14351,6 +14360,22 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         SLFAlterLayer.setCache = function () {};
     }
 
+    TransferMarketAnalyzer.mount = function mountZeroCacheTransferAnalyzer() {
+        if (!this.isPage()) return;
+
+        console.log('[SLF Transfer Analyzer] zero-cache mount on transfers.php');
+        this.addToolbar();
+
+        if (this.isHistoryPage()) {
+            this.hydrateHistoryFromVps()
+                .catch(error => console.warn('[SLF Transfer History] VPS hydrate failed', error));
+            return;
+        }
+
+        this.clearAllTransferAnalysisState();
+        this.setStatus?.('Live-only режим: нажми "Анализировать видимых", чтобы загрузить TM/SLF данные.');
+    };
+
     const addToolbarOriginal = TransferMarketAnalyzer.addToolbar;
     TransferMarketAnalyzer.addToolbar = function addToolbarCompactMktUi() {
         const result = addToolbarOriginal.apply(this, arguments);
@@ -14395,9 +14420,32 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
             return analyzeVisibleRowsOriginal.apply(this, arguments);
         }
 
+        if (this.slfLiveAnalysisRunning) {
+            this.setStatus?.('Live анализ уже выполняется. Дождись завершения текущего прохода.');
+            return;
+        }
+
+        const runId = Number(this.slfLiveAnalysisRunId || 0) + 1;
+        this.slfLiveAnalysisRunId = runId;
+        this.slfLiveAnalysisRunning = true;
+
+        const analyzeButton = document.getElementById('slf-transfer-analyze-visible');
+        const originalAnalyzeButtonText = analyzeButton ? analyzeButton.textContent : '';
+        if (analyzeButton) {
+            analyzeButton.disabled = true;
+            analyzeButton.textContent = 'Анализ идет...';
+        }
+
+        const isCurrentRun = () => this.slfLiveAnalysisRunId === runId;
+
         const rows = this.parseVisibleRows?.() || [];
         if (!rows.length) {
             this.setStatus?.('Игроки не найдены.');
+            this.slfLiveAnalysisRunning = false;
+            if (analyzeButton) {
+                analyzeButton.disabled = false;
+                analyzeButton.textContent = originalAnalyzeButtonText || 'Анализировать видимых';
+            }
             return;
         }
 
@@ -14407,13 +14455,6 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         let analyzed = 0;
         let errors = 0;
         const total = rows.length;
-
-        const originalRefreshRanks = this.refreshVisibleRankBadges;
-        let refreshSuppressed = false;
-        if (typeof originalRefreshRanks === 'function') {
-            this.refreshVisibleRankBadges = function noopDuringLiveParallelAnalysis() {};
-            refreshSuppressed = true;
-        }
 
         const loadPlayerData = row => {
             const playerId = String(row?.playerId || '').trim();
@@ -14435,11 +14476,11 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         };
 
         const analyzeOne = async row => {
+            if (!isCurrentRun()) return { ok: false, row, skipped: true };
             this.renderLoadingBadge?.(row);
             try {
                 const result = await loadPlayerData(row);
-                if (result.tmError) console.warn('[SLF Transfer Analyzer] TM failed', row.playerId, result.tmError);
-                if (result.slfError) console.warn('[SLF Transfer Analyzer] alter.php failed', row.playerId, result.slfError);
+                if (!isCurrentRun()) return { ok: false, row, skipped: true };
 
                 const tmResult = result.tmResult || {
                     playerId: row.playerId,
@@ -14448,6 +14489,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
                     tmProfile: null,
                     error: result.tmError ? 'tm_failed' : 'empty_enrichment'
                 };
+
                 const slfAlter = result.slfAlter || null;
 
                 row.tmUrl = tmResult.tmUrl || '';
@@ -14461,11 +14503,10 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
             } catch (error) {
                 errors++;
                 console.error('[SLF Transfer Analyzer] row failed', row, error);
-                this.renderErrorBadge?.(row, error);
                 return { ok: false, row, error };
             } finally {
                 done++;
-                if (done === total || done % 3 === 0) {
+                if (isCurrentRun() && (done === total || done % 3 === 0)) {
                     this.setStatus?.(`Live ${done}/${total}: analyzed ${analyzed}, errors ${errors}`);
                 }
             }
@@ -14474,7 +14515,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         const mapLimit = async (items, limit, worker) => {
             let cursor = 0;
             const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
-                while (cursor < items.length) {
+                while (cursor < items.length && isCurrentRun()) {
                     const index = cursor++;
                     await worker(items[index], index);
                 }
@@ -14484,27 +14525,19 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
 
         this.setStatus?.(`Live анализ: ${total} игроков, parallel ${concurrency}...`);
         try {
-            await this.loadMarketBaseline?.();
-            await mapLimit(rows, concurrency, analyzeOne);
+            if (isCurrentRun()) await mapLimit(rows, concurrency, analyzeOne);
         } finally {
-            if (refreshSuppressed) {
-                this.refreshVisibleRankBadges = originalRefreshRanks;
-                try {
-                    this.refreshVisibleRankBadges?.();
-                } catch (error) {
-                    console.warn('[SLF Transfer Analyzer] rank refresh failed after live analysis', error);
-                }
+            this.slfLiveAnalysisRunning = false;
+            if (analyzeButton) {
+                analyzeButton.disabled = false;
+                analyzeButton.textContent = originalAnalyzeButtonText || 'Анализировать видимых';
             }
         }
 
-        this.setStatus?.(`Готово live: ${total} игроков · analyzed ${analyzed} · errors ${errors}`);
+        if (isCurrentRun()) this.setStatus?.(`Готово live: ${total} игроков · analyzed ${analyzed} · errors ${errors}`);
     };
 
     TransferMarketAnalyzer.clearAllTransferAnalysisState();
-
-    const style = document.createElement('style');
-    style.textContent = '.slf-transfer-analysis-chip[data-slf-tip-category="league"],.slf-transfer-analysis-chip[data-slf-tip-category="activity"],.slf-transfer-analysis-chip[data-slf-tip-category="talent"]{flex:0 0 auto!important;width:auto!important;min-width:max-content!important;max-width:none!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}.slf-transfer-analysis-chip[data-slf-tip-category="league"]>span:first-child,.slf-transfer-analysis-chip[data-slf-tip-category="activity"]>span:first-child,.slf-transfer-analysis-chip[data-slf-tip-category="talent"]>span:first-child{min-width:max-content!important;max-width:none!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}';
-    document.head.appendChild(style);
 }
 // <<< src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js
 
@@ -16763,15 +16796,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.162',
-        scriptVersion: '4.4.162',
+        version: '4.4.163',
+        scriptVersion: '4.4.163',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.162',
+        scriptVersion: '4.4.163',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
