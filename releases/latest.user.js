@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.183
+// @version      4.4.184
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.183',
-        scriptVersion: '4.4.183',
+        version: '4.4.184',
+        scriptVersion: '4.4.184',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.183',
+        scriptVersion: '4.4.184',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -5434,6 +5434,316 @@ if (typeof window !== 'undefined') {
 // <<< src/modules/strategy-data-recommendations/current-action-hint-engine.js
 
 
+// >>> src/modules/strategy-data-recommendations/coach-hint-snapshot-context-layer.js
+// Coach Hint Snapshot Context Layer
+// ============================================================
+// Bridges raw SnapshotEngine output into CurrentActionHintEngine flat metrics.
+//
+// Contract:
+// - no UI explanation layer;
+// - no localStorage;
+// - no preset selection on its own;
+// - only enriches manual/current hint input with gameId, score state, xG/xT,
+//   team stats and derived tactical signals.
+
+(function coachHintSnapshotContextLayer() {
+    'use strict';
+
+    if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
+    if (CurrentActionHintEngine.__coachHintSnapshotContextApplied) return;
+
+    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
+
+    function num(value, fallback = 0) {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : fallback;
+    }
+
+    function hasValue(value) {
+        return value !== undefined && value !== null && value !== '';
+    }
+
+    function findStat(snapshot, teamId) {
+        const rows = Array.isArray(snapshot?.stats) ? snapshot.stats : [];
+        const id = Number(teamId);
+        return rows.find(row => Number(row?.teamId) === id)?.stats || null;
+    }
+
+    function getTeamContext(snapshot) {
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams.map(Number).filter(Boolean) : [];
+        const myTeam = Number(snapshot?.myTeam || 0) || null;
+        const myIndex = teams.findIndex(id => Number(id) === Number(myTeam));
+        const safeMyIndex = myIndex >= 0 ? myIndex : 0;
+        const oppIndex = safeMyIndex === 0 ? 1 : 0;
+        const myId = teams[safeMyIndex] || myTeam || null;
+        const oppId = teams[oppIndex] || null;
+
+        return {
+            teams,
+            myTeam: myId,
+            oppTeam: oppId,
+            mySide: safeMyIndex === 0 ? 'home' : 'away',
+            oppSide: safeMyIndex === 0 ? 'away' : 'home',
+            myStats: findStat(snapshot, myId),
+            oppStats: findStat(snapshot, oppId)
+        };
+    }
+
+    function deriveMinute(snapshot, context) {
+        const explicit = context?.minute ?? snapshot?.minute ?? snapshot?.baseMinute ?? snapshot?.effectiveMinute;
+        if (hasValue(explicit)) return num(explicit, 0);
+        if (snapshot?.status === 'finished') return 90;
+        return 0;
+    }
+
+    function deriveScoreState(snapshot, teamCtx) {
+        const score = snapshot?.score || {};
+        if (hasValue(score.diff)) {
+            const diff = num(score.diff, 0);
+            return {
+                diff,
+                state: diff > 0 ? 'winning' : diff < 0 ? 'losing' : 'draw'
+            };
+        }
+
+        if (!hasValue(score.home) || !hasValue(score.away)) {
+            return { diff: 0, state: 'unknown' };
+        }
+
+        const home = num(score.home, 0);
+        const away = num(score.away, 0);
+        const diff = teamCtx.mySide === 'away' ? away - home : home - away;
+
+        return {
+            diff,
+            state: diff > 0 ? 'winning' : diff < 0 ? 'losing' : 'draw'
+        };
+    }
+
+    function readXT(snapshot, side) {
+        const xT = snapshot?.xT || {};
+        return num(xT?.[side], 0);
+    }
+
+    function addSignal(signals, signal) {
+        if (signal && !signals.includes(signal)) signals.push(signal);
+    }
+
+    function hintTextList(snapshot) {
+        const hints = Array.isArray(snapshot?.developerHints) ? snapshot.developerHints : [];
+        return hints
+            .map(hint => String(hint?.text || hint || '').toLowerCase())
+            .filter(Boolean);
+    }
+
+    function deriveHintSignals(snapshot, signals) {
+        const texts = hintTextList(snapshot);
+        const has = pattern => texts.some(text => pattern.test(text));
+
+        if (has(/устал|требуются замены|замен/)) addSignal(signals, 'press_fatigue_risk');
+        if (has(/повысить интенсивность прессинга|высокий прессинг|прессинг/)) addSignal(signals, 'own_high_press');
+        if (has(/опустите прессинг|снизить прессинг/)) addSignal(signals, 'press_fatigue_risk');
+        if (has(/фланг|lw|rw|lm|rm|край/)) addSignal(signals, 'wide_quality');
+        if (has(/атака по центру|центр закрыт|отключите атаку по центру/)) addSignal(signals, 'center_closed');
+        if (has(/контратак|обрез|быстр/)) addSignal(signals, 'transition_threat');
+        if (has(/кросс|навес/)) addSignal(signals, 'wide_quality');
+        if (has(/ж[её]лт|карточ/)) addSignal(signals, 'opponent_cards_available');
+    }
+
+    function deriveSignals(snapshot, context, metrics) {
+        const signals = [];
+        const rawSignals = [];
+
+        if (Array.isArray(context?.signals)) rawSignals.push(...context.signals);
+        if (Array.isArray(snapshot?.signals)) rawSignals.push(...snapshot.signals);
+        rawSignals.forEach(signal => addSignal(signals, String(signal)));
+
+        if (metrics.needGoal) addSignal(signals, 'need_goal');
+        if (metrics.lateNeedGoal) addSignal(signals, 'late_need_goal');
+        if (metrics.protectLead) addSignal(signals, 'protect_lead');
+        if (metrics.underPressure) addSignal(signals, 'under_pressure');
+        if (metrics.attackingMomentum) addSignal(signals, 'attacking_momentum');
+        if (metrics.highBadActions) addSignal(signals, 'high_bad_actions');
+        if (metrics.myPress > 18) addSignal(signals, 'own_high_press');
+        if (metrics.oppPress > 18) addSignal(signals, 'opponent_high_press');
+        if (metrics.oppPress > metrics.myPress + 14) addSignal(signals, 'opponent_high_press');
+        if (metrics.oppXg > metrics.myXg + 0.65 && metrics.oppXT >= metrics.myXT) addSignal(signals, 'transition_threat');
+        if (metrics.oppDef < -15) addSignal(signals, 'opponent_low_block');
+        if (metrics.myXT > metrics.oppXT + 0.18) addSignal(signals, 'wide_quality');
+        if (metrics.myXg < 0.35 && metrics.oppXg < 0.35 && metrics.minute >= 25) addSignal(signals, 'center_closed');
+
+        deriveHintSignals(snapshot, signals);
+
+        return signals;
+    }
+
+    function deriveContext(snapshot, context = {}) {
+        const teamCtx = getTeamContext(snapshot || {});
+        const score = deriveScoreState(snapshot || {}, teamCtx);
+        const minute = deriveMinute(snapshot || {}, context || {});
+        const myStats = teamCtx.myStats || {};
+        const oppStats = teamCtx.oppStats || {};
+
+        const myXg = hasValue(context.myXg) ? num(context.myXg) : num(myStats.xG, 0);
+        const oppXg = hasValue(context.oppXg) ? num(context.oppXg) : num(oppStats.xG, 0);
+        const myXT = hasValue(context.myXT) ? num(context.myXT) : readXT(snapshot, teamCtx.mySide);
+        const oppXT = hasValue(context.oppXT) ? num(context.oppXT) : readXT(snapshot, teamCtx.oppSide);
+        const myBad = hasValue(context.myBad) ? num(context.myBad) : num(myStats.badActionsPct, 0);
+        const oppBad = num(oppStats.badActionsPct, 0);
+        const myPress = hasValue(context.myPress) ? num(context.myPress) : num(myStats.pressVector, 0);
+        const oppPress = hasValue(context.oppPress) ? num(context.oppPress) : num(oppStats.pressVector, 0);
+        const myDef = num(myStats.defVector, 0);
+        const oppDef = hasValue(context.oppDef) ? num(context.oppDef) : num(oppStats.defVector, 0);
+        const myPossession = num(myStats.possession, 0);
+        const oppPossession = num(oppStats.possession, 0);
+        const myShots = num(myStats.shots, 0);
+        const oppShots = num(oppStats.shots, 0);
+        const myPower = num(myStats.power, 0);
+        const oppPower = num(oppStats.power, 0);
+
+        const needGoal = score.state === 'losing' && minute >= 55;
+        const lateNeedGoal = score.state === 'losing' && minute >= 80;
+        const protectLead = score.state === 'winning' && minute >= 70;
+        const underPressure = oppXg > myXg + 0.4 || oppXT > myXT + 0.2 || oppShots > myShots + 4;
+        const attackingMomentum = myXg > oppXg + 0.3 || myXT > oppXT + 0.2 || myShots > oppShots + 4;
+        const highBadActions = myBad >= 20;
+
+        const metrics = {
+            minute,
+            scoreState: score.state,
+            myXg,
+            oppXg,
+            myXT,
+            oppXT,
+            myBad,
+            oppBad,
+            myPress,
+            oppPress,
+            myDef,
+            oppDef,
+            myPossession,
+            oppPossession,
+            myShots,
+            oppShots,
+            myPower,
+            oppPower,
+            needGoal,
+            lateNeedGoal,
+            protectLead,
+            underPressure,
+            attackingMomentum,
+            highBadActions
+        };
+
+        const signals = deriveSignals(snapshot || {}, context || {}, metrics);
+        const manualHintRequest = !!(
+            snapshot?.manualRecommendationRefresh ||
+            snapshot?.recommendationSource === 'manual' ||
+            context?.manualHintRequest
+        );
+
+        return Object.assign({}, context || {}, metrics, {
+            gameId: String(snapshot?.gameId || context?.gameId || 'unknown'),
+            matchStatus: snapshot?.status || context?.matchStatus || 'unknown',
+            scoreState: score.state,
+            score: Object.assign({}, snapshot?.score || {}, { diff: score.diff }),
+            teamSide: teamCtx.mySide,
+            myTeam: teamCtx.myTeam,
+            oppTeam: teamCtx.oppTeam,
+            signals,
+            manualHintRequest,
+            coachHintSnapshotContext: {
+                active: true,
+                source: 'snapshot_stats_bridge',
+                myTeam: teamCtx.myTeam,
+                oppTeam: teamCtx.oppTeam,
+                mySide: teamCtx.mySide,
+                scoreState: score.state,
+                signalCount: signals.length
+            }
+        });
+    }
+
+    function cloneSnapshot(snapshot, enrichedContext) {
+        if (!snapshot || typeof snapshot !== 'object') return snapshot;
+        const clone = Object.assign({}, snapshot);
+
+        clone.gameId = enrichedContext.gameId;
+        clone.minute = enrichedContext.minute;
+        clone.score = Object.assign({}, snapshot.score || {}, { diff: enrichedContext.score.diff });
+        clone.scoreState = enrichedContext.scoreState;
+        clone.signals = enrichedContext.signals.slice();
+        clone.myXg = enrichedContext.myXg;
+        clone.oppXg = enrichedContext.oppXg;
+        clone.myXT = enrichedContext.myXT;
+        clone.oppXT = enrichedContext.oppXT;
+        clone.myBad = enrichedContext.myBad;
+        clone.myPress = enrichedContext.myPress;
+        clone.oppPress = enrichedContext.oppPress;
+        clone.oppDef = enrichedContext.oppDef;
+        clone.manualHintRequest = enrichedContext.manualHintRequest;
+
+        return clone;
+    }
+
+    CurrentActionHintEngine.run = function runWithCoachHintSnapshotContext(snapshot, context = {}) {
+        const enrichedContext = deriveContext(snapshot, context || {});
+        const enrichedSnapshot = cloneSnapshot(snapshot, enrichedContext);
+        const result = originalRun(enrichedSnapshot, enrichedContext);
+
+        if (result?.moment) {
+            result.moment.gameId = enrichedContext.gameId;
+            result.moment.score = enrichedContext.scoreState;
+            result.moment.context = Object.assign({}, result.moment.context || {}, {
+                gameId: enrichedContext.gameId,
+                matchStatus: enrichedContext.matchStatus,
+                manualHintRequest: enrichedContext.manualHintRequest,
+                coachHintSnapshotContext: enrichedContext.coachHintSnapshotContext,
+                myPower: enrichedContext.myPower,
+                oppPower: enrichedContext.oppPower,
+                myPossession: enrichedContext.myPossession,
+                oppPossession: enrichedContext.oppPossession,
+                myShots: enrichedContext.myShots,
+                oppShots: enrichedContext.oppShots
+            });
+        }
+
+        if (result?.action) {
+            result.action.snapshotContextBridge = true;
+        }
+
+        if (typeof window !== 'undefined') {
+            window.SLFLastCoachHintContext = {
+                gameId: enrichedContext.gameId,
+                minute: enrichedContext.minute,
+                scoreState: enrichedContext.scoreState,
+                signals: enrichedContext.signals.slice(),
+                metrics: {
+                    myXg: enrichedContext.myXg,
+                    oppXg: enrichedContext.oppXg,
+                    myXT: enrichedContext.myXT,
+                    oppXT: enrichedContext.oppXT,
+                    myBad: enrichedContext.myBad,
+                    myPress: enrichedContext.myPress,
+                    oppPress: enrichedContext.oppPress
+                }
+            };
+        }
+
+        return result;
+    };
+
+    CurrentActionHintEngine.__coachHintSnapshotContextApplied = true;
+
+    if (typeof window !== 'undefined') {
+        window.SLFCoachHintSnapshotContextLayer = {
+            deriveContext
+        };
+    }
+})();
+// <<< src/modules/strategy-data-recommendations/coach-hint-snapshot-context-layer.js
+
+
 // >>> src/modules/tactics-presets/active-preset-registry.js
 // Active Tactical Preset Registry
 // ============================================================
@@ -5877,6 +6187,255 @@ if (typeof window !== 'undefined') {
     }
 })();
 // <<< src/modules/strategy-data-recommendations/signal-noise-filter-layer.js
+
+
+// >>> src/modules/strategy-data-recommendations/adaptive-opponent-style-layer.js
+// Adaptive Opponent Style Layer
+// ============================================================
+// Coach Mode v2: adapt tactical hints to the opponent style
+// detected inside the current match.
+//
+// Contract:
+// - in-memory match style only;
+// - no localStorage;
+// - no user feedback memory;
+// - no new presets;
+// - no UI explanation layer.
+
+(function adaptiveOpponentStyleLayer() {
+    'use strict';
+
+    if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
+    if (CurrentActionHintEngine.__adaptiveOpponentStyleApplied) return;
+
+    const STABLE_THRESHOLD = 3;
+    const HISTORY_LIMIT = 8;
+
+    const STYLE_TO_PRESET = {
+        high_press_team: {
+            prefer: ['DeZerbi_BaitPress_bal3', 'DeZerbi_Release_att4', 'Compact_Counter_def3'],
+            avoid: ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4']
+        },
+        low_block_team: {
+            prefer: ['Conte_WingbackWidth_bal4', 'Pep_TwoThreeFive_att3', 'Xabi_BoxMidfield_bal3'],
+            avoid: ['Compact_Counter_def3', 'Simeone_LowBlock_def5', 'Simeone_Compact442_def4']
+        },
+        counter_attack_team: {
+            prefer: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Pep_PressCooldown_bal2', 'Compact_Counter_def3'],
+            avoid: ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Bielsa_ChaosPress_att5']
+        },
+        wide_cross_team: {
+            prefer: ['Simeone_Compact442_def4', 'Compact_Counter_def3', 'Mourinho_WeakSide_def3'],
+            avoid: ['Conte_WingbackWidth_bal4', 'Nagelsmann_WidePress_att4']
+        },
+        center_compact_team: {
+            prefer: ['Conte_WingbackWidth_bal4', 'DeZerbi_Release_att4', 'Mourinho_WeakSide_def3'],
+            avoid: ['Xabi_BoxMidfield_bal3', 'Xabi_VerticalBox_att3']
+        },
+        open_game: {
+            prefer: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Pep_PressCooldown_bal2'],
+            avoid: ['Bielsa_ChaosPress_att5']
+        },
+        possession_team: {
+            prefer: ['Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Compact_Counter_def3'],
+            avoid: ['Pep_BoxControl_bal2']
+        }
+    };
+
+    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
+    const styleMemory = new Map();
+
+    function contextOf(result) {
+        return result?.moment?.context || {};
+    }
+
+    function gameIdOf(result) {
+        const c = contextOf(result);
+        return String(result?.moment?.gameId || c.gameId || 'unknown');
+    }
+
+    function minuteOf(result) {
+        const c = contextOf(result);
+        return Number(result?.moment?.minute ?? c.minute ?? 0) || 0;
+    }
+
+    function ensureGame(gameId) {
+        if (!styleMemory.has(gameId)) {
+            styleMemory.set(gameId, {
+                samples: [],
+                counts: {
+                    high_press_team: 0,
+                    low_block_team: 0,
+                    counter_attack_team: 0,
+                    wide_cross_team: 0,
+                    center_compact_team: 0,
+                    open_game: 0,
+                    possession_team: 0
+                }
+            });
+        }
+        return styleMemory.get(gameId);
+    }
+
+    function trimMemory() {
+        if (styleMemory.size <= 6) return;
+        const keys = Array.from(styleMemory.keys());
+        keys.slice(0, Math.max(0, keys.length - 6)).forEach(key => styleMemory.delete(key));
+    }
+
+    function hasSignal(c, name) {
+        return Array.isArray(c.signals) && c.signals.includes(name);
+    }
+
+    function detectSampleStyles(c) {
+        const styles = [];
+        const add = style => {
+            if (!styles.includes(style)) styles.push(style);
+        };
+
+        if (c.opponentHighPress || Number(c.oppPress || 0) > 65 || hasSignal(c, 'opponent_high_press')) {
+            add('high_press_team');
+        }
+
+        if (c.opponentLowBlock || Number(c.oppDef || 0) < 45 || hasSignal(c, 'opponent_low_block')) {
+            add('low_block_team');
+        }
+
+        if (c.transitionThreat || hasSignal(c, 'transition_threat') || hasSignal(c, 'opponent_fast_counter_threat')) {
+            add('counter_attack_team');
+        }
+
+        if (c.opponentCrossesDangerous || hasSignal(c, 'opponent_crosses_dangerous')) {
+            add('wide_cross_team');
+        }
+
+        if (c.centerClosed || hasSignal(c, 'center_closed')) {
+            add('center_compact_team');
+        }
+
+        if (c.underPressure && c.attackingMomentum) {
+            add('open_game');
+        }
+
+        if (Number(c.oppXT || 0) > Number(c.myXT || 0) + 0.15 && !c.opponentHighPress && !c.transitionThreat) {
+            add('possession_team');
+        }
+
+        return styles;
+    }
+
+    function rememberStyles(gameId, minute, styles) {
+        const memory = ensureGame(gameId);
+
+        if (memory.samples.length && minute < Number(memory.samples[memory.samples.length - 1].minute || 0)) {
+            memory.samples = [];
+            Object.keys(memory.counts).forEach(key => memory.counts[key] = 0);
+        }
+
+        memory.samples.push({ minute, styles: styles.slice(), ts: Date.now() });
+        while (memory.samples.length > HISTORY_LIMIT) memory.samples.shift();
+
+        Object.keys(memory.counts).forEach(key => memory.counts[key] = 0);
+        memory.samples.forEach(sample => {
+            sample.styles.forEach(style => {
+                if (memory.counts[style] !== undefined) memory.counts[style] += 1;
+            });
+        });
+
+        trimMemory();
+        return memory;
+    }
+
+    function stableStyles(memory) {
+        return Object.entries(memory.counts)
+            .filter(([, count]) => count >= STABLE_THRESHOLD)
+            .sort((a, b) => b[1] - a[1])
+            .map(([style]) => style);
+    }
+
+    function isEmergency(result, c) {
+        const action = result?.action || {};
+        return action.presetStatus === 'emergency' || c.lateNeedGoal || (c.protectLead && Number(c.minute || 0) >= 80);
+    }
+
+    function canUsePreset(preset, c) {
+        if (!preset) return false;
+        if (typeof CurrentActionHintEngine.isPresetAllowed === 'function' && !CurrentActionHintEngine.isPresetAllowed(preset, c)) return false;
+
+        if (c.highBadActions && ['Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Bielsa_ChaosPress_att5'].includes(preset)) return false;
+        if (c.pressFatigueRisk && ['Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Bielsa_ChaosPress_att5', 'Pep_TwoThreeFive_att3'].includes(preset)) return false;
+        if (c.centerClosed && ['Xabi_BoxMidfield_bal3', 'Xabi_VerticalBox_att3'].includes(preset)) return false;
+        if (c.ownCrossesBad && ['Conte_WingbackWidth_bal4', 'Nagelsmann_WidePress_att4'].includes(preset)) return false;
+        if (c.transitionThreat && ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Bielsa_ChaosPress_att5'].includes(preset) && !c.lateNeedGoal) return false;
+
+        return true;
+    }
+
+    function candidateFromStyle(style, currentPreset, c) {
+        const rule = STYLE_TO_PRESET[style];
+        if (!rule) return currentPreset;
+
+        if (!rule.avoid.includes(currentPreset)) return currentPreset;
+
+        return rule.prefer.find(preset => canUsePreset(preset, c)) || currentPreset;
+    }
+
+    function applyAdaptiveStyle(result) {
+        if (!result?.action) return result;
+
+        const c = contextOf(result);
+        const gameId = gameIdOf(result);
+        const minute = minuteOf(result);
+        const sampleStyles = detectSampleStyles(c);
+        const memory = rememberStyles(gameId, minute, sampleStyles);
+        const styles = stableStyles(memory);
+
+        if (!styles.length || isEmergency(result, c)) {
+            result.action = Object.assign({}, result.action, {
+                adaptiveCoach: 'v2',
+                opponentStyles: styles
+            });
+            return result;
+        }
+
+        let preset = result.action.preset;
+        const rawPreset = result.action.rawPreset || result.action.preset;
+
+        for (const style of styles) {
+            const next = candidateFromStyle(style, preset, c);
+            if (next !== preset) {
+                preset = next;
+                break;
+            }
+        }
+
+        result.action = Object.assign({}, result.action, {
+            preset,
+            adaptiveCoach: 'v2',
+            opponentStyles: styles,
+            rawPreset
+        });
+
+        return result;
+    }
+
+    CurrentActionHintEngine.run = function runWithAdaptiveOpponentStyle(snapshot, context = {}) {
+        return applyAdaptiveStyle(originalRun(snapshot, context));
+    };
+
+    CurrentActionHintEngine.__adaptiveOpponentStyleApplied = true;
+
+    if (typeof window !== 'undefined') {
+        window.SLFAdaptiveOpponentStyleLayer = {
+            getMemory: () => Array.from(styleMemory.entries()).map(([gameId, memory]) => ({
+                gameId,
+                counts: Object.assign({}, memory.counts),
+                samples: memory.samples.slice()
+            }))
+        };
+    }
+})();
+// <<< src/modules/strategy-data-recommendations/adaptive-opponent-style-layer.js
 
 
 // >>> src/modules/strategy-data-recommendations/coach-mode-policy.js
@@ -18391,565 +18950,6 @@ App.start();
 // <<< src/app/bootstrap.js
 
 
-// >>> src/modules/strategy-data-recommendations/adaptive-opponent-style-layer.js
-// Adaptive Opponent Style Layer
-// ============================================================
-// Coach Mode v2: adapt tactical hints to the opponent style
-// detected inside the current match.
-//
-// Contract:
-// - in-memory match style only;
-// - no localStorage;
-// - no user feedback memory;
-// - no new presets;
-// - no UI explanation layer.
-
-(function adaptiveOpponentStyleLayer() {
-    'use strict';
-
-    if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
-    if (CurrentActionHintEngine.__adaptiveOpponentStyleApplied) return;
-
-    const STABLE_THRESHOLD = 3;
-    const HISTORY_LIMIT = 8;
-
-    const STYLE_TO_PRESET = {
-        high_press_team: {
-            prefer: ['DeZerbi_BaitPress_bal3', 'DeZerbi_Release_att4', 'Compact_Counter_def3'],
-            avoid: ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4']
-        },
-        low_block_team: {
-            prefer: ['Conte_WingbackWidth_bal4', 'Pep_TwoThreeFive_att3', 'Xabi_BoxMidfield_bal3'],
-            avoid: ['Compact_Counter_def3', 'Simeone_LowBlock_def5', 'Simeone_Compact442_def4']
-        },
-        counter_attack_team: {
-            prefer: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Pep_PressCooldown_bal2', 'Compact_Counter_def3'],
-            avoid: ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Bielsa_ChaosPress_att5']
-        },
-        wide_cross_team: {
-            prefer: ['Simeone_Compact442_def4', 'Compact_Counter_def3', 'Mourinho_WeakSide_def3'],
-            avoid: ['Conte_WingbackWidth_bal4', 'Nagelsmann_WidePress_att4']
-        },
-        center_compact_team: {
-            prefer: ['Conte_WingbackWidth_bal4', 'DeZerbi_Release_att4', 'Mourinho_WeakSide_def3'],
-            avoid: ['Xabi_BoxMidfield_bal3', 'Xabi_VerticalBox_att3']
-        },
-        open_game: {
-            prefer: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Pep_PressCooldown_bal2'],
-            avoid: ['Bielsa_ChaosPress_att5']
-        },
-        possession_team: {
-            prefer: ['Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Compact_Counter_def3'],
-            avoid: ['Pep_BoxControl_bal2']
-        }
-    };
-
-    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
-    const styleMemory = new Map();
-
-    function contextOf(result) {
-        return result?.moment?.context || {};
-    }
-
-    function gameIdOf(result) {
-        const c = contextOf(result);
-        return String(result?.moment?.gameId || c.gameId || 'unknown');
-    }
-
-    function minuteOf(result) {
-        const c = contextOf(result);
-        return Number(result?.moment?.minute ?? c.minute ?? 0) || 0;
-    }
-
-    function ensureGame(gameId) {
-        if (!styleMemory.has(gameId)) {
-            styleMemory.set(gameId, {
-                samples: [],
-                counts: {
-                    high_press_team: 0,
-                    low_block_team: 0,
-                    counter_attack_team: 0,
-                    wide_cross_team: 0,
-                    center_compact_team: 0,
-                    open_game: 0,
-                    possession_team: 0
-                }
-            });
-        }
-        return styleMemory.get(gameId);
-    }
-
-    function trimMemory() {
-        if (styleMemory.size <= 6) return;
-        const keys = Array.from(styleMemory.keys());
-        keys.slice(0, Math.max(0, keys.length - 6)).forEach(key => styleMemory.delete(key));
-    }
-
-    function hasSignal(c, name) {
-        return Array.isArray(c.signals) && c.signals.includes(name);
-    }
-
-    function detectSampleStyles(c) {
-        const styles = [];
-        const add = style => {
-            if (!styles.includes(style)) styles.push(style);
-        };
-
-        if (c.opponentHighPress || Number(c.oppPress || 0) > 65 || hasSignal(c, 'opponent_high_press')) {
-            add('high_press_team');
-        }
-
-        if (c.opponentLowBlock || Number(c.oppDef || 0) < 45 || hasSignal(c, 'opponent_low_block')) {
-            add('low_block_team');
-        }
-
-        if (c.transitionThreat || hasSignal(c, 'transition_threat') || hasSignal(c, 'opponent_fast_counter_threat')) {
-            add('counter_attack_team');
-        }
-
-        if (c.opponentCrossesDangerous || hasSignal(c, 'opponent_crosses_dangerous')) {
-            add('wide_cross_team');
-        }
-
-        if (c.centerClosed || hasSignal(c, 'center_closed')) {
-            add('center_compact_team');
-        }
-
-        if (c.underPressure && c.attackingMomentum) {
-            add('open_game');
-        }
-
-        if (Number(c.oppXT || 0) > Number(c.myXT || 0) + 0.15 && !c.opponentHighPress && !c.transitionThreat) {
-            add('possession_team');
-        }
-
-        return styles;
-    }
-
-    function rememberStyles(gameId, minute, styles) {
-        const memory = ensureGame(gameId);
-
-        if (memory.samples.length && minute < Number(memory.samples[memory.samples.length - 1].minute || 0)) {
-            memory.samples = [];
-            Object.keys(memory.counts).forEach(key => memory.counts[key] = 0);
-        }
-
-        memory.samples.push({ minute, styles: styles.slice(), ts: Date.now() });
-        while (memory.samples.length > HISTORY_LIMIT) memory.samples.shift();
-
-        Object.keys(memory.counts).forEach(key => memory.counts[key] = 0);
-        memory.samples.forEach(sample => {
-            sample.styles.forEach(style => {
-                if (memory.counts[style] !== undefined) memory.counts[style] += 1;
-            });
-        });
-
-        trimMemory();
-        return memory;
-    }
-
-    function stableStyles(memory) {
-        return Object.entries(memory.counts)
-            .filter(([, count]) => count >= STABLE_THRESHOLD)
-            .sort((a, b) => b[1] - a[1])
-            .map(([style]) => style);
-    }
-
-    function isEmergency(result, c) {
-        const action = result?.action || {};
-        return action.presetStatus === 'emergency' || c.lateNeedGoal || (c.protectLead && Number(c.minute || 0) >= 80);
-    }
-
-    function canUsePreset(preset, c) {
-        if (!preset) return false;
-        if (typeof CurrentActionHintEngine.isPresetAllowed === 'function' && !CurrentActionHintEngine.isPresetAllowed(preset, c)) return false;
-
-        if (c.highBadActions && ['Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Bielsa_ChaosPress_att5'].includes(preset)) return false;
-        if (c.pressFatigueRisk && ['Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Bielsa_ChaosPress_att5', 'Pep_TwoThreeFive_att3'].includes(preset)) return false;
-        if (c.centerClosed && ['Xabi_BoxMidfield_bal3', 'Xabi_VerticalBox_att3'].includes(preset)) return false;
-        if (c.ownCrossesBad && ['Conte_WingbackWidth_bal4', 'Nagelsmann_WidePress_att4'].includes(preset)) return false;
-        if (c.transitionThreat && ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Bielsa_ChaosPress_att5'].includes(preset) && !c.lateNeedGoal) return false;
-
-        return true;
-    }
-
-    function candidateFromStyle(style, currentPreset, c) {
-        const rule = STYLE_TO_PRESET[style];
-        if (!rule) return currentPreset;
-
-        if (!rule.avoid.includes(currentPreset)) return currentPreset;
-
-        return rule.prefer.find(preset => canUsePreset(preset, c)) || currentPreset;
-    }
-
-    function applyAdaptiveStyle(result) {
-        if (!result?.action) return result;
-
-        const c = contextOf(result);
-        const gameId = gameIdOf(result);
-        const minute = minuteOf(result);
-        const sampleStyles = detectSampleStyles(c);
-        const memory = rememberStyles(gameId, minute, sampleStyles);
-        const styles = stableStyles(memory);
-
-        if (!styles.length || isEmergency(result, c)) {
-            result.action = Object.assign({}, result.action, {
-                adaptiveCoach: 'v2',
-                opponentStyles: styles
-            });
-            return result;
-        }
-
-        let preset = result.action.preset;
-        const rawPreset = result.action.rawPreset || result.action.preset;
-
-        for (const style of styles) {
-            const next = candidateFromStyle(style, preset, c);
-            if (next !== preset) {
-                preset = next;
-                break;
-            }
-        }
-
-        result.action = Object.assign({}, result.action, {
-            preset,
-            adaptiveCoach: 'v2',
-            opponentStyles: styles,
-            rawPreset
-        });
-
-        return result;
-    }
-
-    CurrentActionHintEngine.run = function runWithAdaptiveOpponentStyle(snapshot, context = {}) {
-        return applyAdaptiveStyle(originalRun(snapshot, context));
-    };
-
-    CurrentActionHintEngine.__adaptiveOpponentStyleApplied = true;
-
-    if (typeof window !== 'undefined') {
-        window.SLFAdaptiveOpponentStyleLayer = {
-            getMemory: () => Array.from(styleMemory.entries()).map(([gameId, memory]) => ({
-                gameId,
-                counts: Object.assign({}, memory.counts),
-                samples: memory.samples.slice()
-            }))
-        };
-    }
-})();
-// <<< src/modules/strategy-data-recommendations/adaptive-opponent-style-layer.js
-
-
-// >>> src/modules/strategy-data-recommendations/coach-hint-snapshot-context-layer.js
-// Coach Hint Snapshot Context Layer
-// ============================================================
-// Bridges raw SnapshotEngine output into CurrentActionHintEngine flat metrics.
-//
-// Contract:
-// - no UI explanation layer;
-// - no localStorage;
-// - no preset selection on its own;
-// - only enriches manual/current hint input with gameId, score state, xG/xT,
-//   team stats and derived tactical signals.
-
-(function coachHintSnapshotContextLayer() {
-    'use strict';
-
-    if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
-    if (CurrentActionHintEngine.__coachHintSnapshotContextApplied) return;
-
-    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
-
-    function num(value, fallback = 0) {
-        const n = Number(value);
-        return Number.isFinite(n) ? n : fallback;
-    }
-
-    function hasValue(value) {
-        return value !== undefined && value !== null && value !== '';
-    }
-
-    function findStat(snapshot, teamId) {
-        const rows = Array.isArray(snapshot?.stats) ? snapshot.stats : [];
-        const id = Number(teamId);
-        return rows.find(row => Number(row?.teamId) === id)?.stats || null;
-    }
-
-    function getTeamContext(snapshot) {
-        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams.map(Number).filter(Boolean) : [];
-        const myTeam = Number(snapshot?.myTeam || 0) || null;
-        const myIndex = teams.findIndex(id => Number(id) === Number(myTeam));
-        const safeMyIndex = myIndex >= 0 ? myIndex : 0;
-        const oppIndex = safeMyIndex === 0 ? 1 : 0;
-        const myId = teams[safeMyIndex] || myTeam || null;
-        const oppId = teams[oppIndex] || null;
-
-        return {
-            teams,
-            myTeam: myId,
-            oppTeam: oppId,
-            mySide: safeMyIndex === 0 ? 'home' : 'away',
-            oppSide: safeMyIndex === 0 ? 'away' : 'home',
-            myStats: findStat(snapshot, myId),
-            oppStats: findStat(snapshot, oppId)
-        };
-    }
-
-    function deriveMinute(snapshot, context) {
-        const explicit = context?.minute ?? snapshot?.minute ?? snapshot?.baseMinute ?? snapshot?.effectiveMinute;
-        if (hasValue(explicit)) return num(explicit, 0);
-        if (snapshot?.status === 'finished') return 90;
-        return 0;
-    }
-
-    function deriveScoreState(snapshot, teamCtx) {
-        const score = snapshot?.score || {};
-        if (hasValue(score.diff)) {
-            const diff = num(score.diff, 0);
-            return {
-                diff,
-                state: diff > 0 ? 'winning' : diff < 0 ? 'losing' : 'draw'
-            };
-        }
-
-        if (!hasValue(score.home) || !hasValue(score.away)) {
-            return { diff: 0, state: 'unknown' };
-        }
-
-        const home = num(score.home, 0);
-        const away = num(score.away, 0);
-        const diff = teamCtx.mySide === 'away' ? away - home : home - away;
-
-        return {
-            diff,
-            state: diff > 0 ? 'winning' : diff < 0 ? 'losing' : 'draw'
-        };
-    }
-
-    function readXT(snapshot, side) {
-        const xT = snapshot?.xT || {};
-        return num(xT?.[side], 0);
-    }
-
-    function addSignal(signals, signal) {
-        if (signal && !signals.includes(signal)) signals.push(signal);
-    }
-
-    function hintTextList(snapshot) {
-        const hints = Array.isArray(snapshot?.developerHints) ? snapshot.developerHints : [];
-        return hints
-            .map(hint => String(hint?.text || hint || '').toLowerCase())
-            .filter(Boolean);
-    }
-
-    function deriveHintSignals(snapshot, signals) {
-        const texts = hintTextList(snapshot);
-        const has = pattern => texts.some(text => pattern.test(text));
-
-        if (has(/устал|требуются замены|замен/)) addSignal(signals, 'press_fatigue_risk');
-        if (has(/повысить интенсивность прессинга|высокий прессинг|прессинг/)) addSignal(signals, 'own_high_press');
-        if (has(/опустите прессинг|снизить прессинг/)) addSignal(signals, 'press_fatigue_risk');
-        if (has(/фланг|lw|rw|lm|rm|край/)) addSignal(signals, 'wide_quality');
-        if (has(/атака по центру|центр закрыт|отключите атаку по центру/)) addSignal(signals, 'center_closed');
-        if (has(/контратак|обрез|быстр/)) addSignal(signals, 'transition_threat');
-        if (has(/кросс|навес/)) addSignal(signals, 'wide_quality');
-        if (has(/ж[её]лт|карточ/)) addSignal(signals, 'opponent_cards_available');
-    }
-
-    function deriveSignals(snapshot, context, metrics) {
-        const signals = [];
-        const rawSignals = [];
-
-        if (Array.isArray(context?.signals)) rawSignals.push(...context.signals);
-        if (Array.isArray(snapshot?.signals)) rawSignals.push(...snapshot.signals);
-        rawSignals.forEach(signal => addSignal(signals, String(signal)));
-
-        if (metrics.needGoal) addSignal(signals, 'need_goal');
-        if (metrics.lateNeedGoal) addSignal(signals, 'late_need_goal');
-        if (metrics.protectLead) addSignal(signals, 'protect_lead');
-        if (metrics.underPressure) addSignal(signals, 'under_pressure');
-        if (metrics.attackingMomentum) addSignal(signals, 'attacking_momentum');
-        if (metrics.highBadActions) addSignal(signals, 'high_bad_actions');
-        if (metrics.myPress > 18) addSignal(signals, 'own_high_press');
-        if (metrics.oppPress > 18) addSignal(signals, 'opponent_high_press');
-        if (metrics.oppPress > metrics.myPress + 14) addSignal(signals, 'opponent_high_press');
-        if (metrics.oppXg > metrics.myXg + 0.65 && metrics.oppXT >= metrics.myXT) addSignal(signals, 'transition_threat');
-        if (metrics.oppDef < -15) addSignal(signals, 'opponent_low_block');
-        if (metrics.myXT > metrics.oppXT + 0.18) addSignal(signals, 'wide_quality');
-        if (metrics.myXg < 0.35 && metrics.oppXg < 0.35 && metrics.minute >= 25) addSignal(signals, 'center_closed');
-
-        deriveHintSignals(snapshot, signals);
-
-        return signals;
-    }
-
-    function deriveContext(snapshot, context = {}) {
-        const teamCtx = getTeamContext(snapshot || {});
-        const score = deriveScoreState(snapshot || {}, teamCtx);
-        const minute = deriveMinute(snapshot || {}, context || {});
-        const myStats = teamCtx.myStats || {};
-        const oppStats = teamCtx.oppStats || {};
-
-        const myXg = hasValue(context.myXg) ? num(context.myXg) : num(myStats.xG, 0);
-        const oppXg = hasValue(context.oppXg) ? num(context.oppXg) : num(oppStats.xG, 0);
-        const myXT = hasValue(context.myXT) ? num(context.myXT) : readXT(snapshot, teamCtx.mySide);
-        const oppXT = hasValue(context.oppXT) ? num(context.oppXT) : readXT(snapshot, teamCtx.oppSide);
-        const myBad = hasValue(context.myBad) ? num(context.myBad) : num(myStats.badActionsPct, 0);
-        const oppBad = num(oppStats.badActionsPct, 0);
-        const myPress = hasValue(context.myPress) ? num(context.myPress) : num(myStats.pressVector, 0);
-        const oppPress = hasValue(context.oppPress) ? num(context.oppPress) : num(oppStats.pressVector, 0);
-        const myDef = num(myStats.defVector, 0);
-        const oppDef = hasValue(context.oppDef) ? num(context.oppDef) : num(oppStats.defVector, 0);
-        const myPossession = num(myStats.possession, 0);
-        const oppPossession = num(oppStats.possession, 0);
-        const myShots = num(myStats.shots, 0);
-        const oppShots = num(oppStats.shots, 0);
-        const myPower = num(myStats.power, 0);
-        const oppPower = num(oppStats.power, 0);
-
-        const needGoal = score.state === 'losing' && minute >= 55;
-        const lateNeedGoal = score.state === 'losing' && minute >= 80;
-        const protectLead = score.state === 'winning' && minute >= 70;
-        const underPressure = oppXg > myXg + 0.4 || oppXT > myXT + 0.2 || oppShots > myShots + 4;
-        const attackingMomentum = myXg > oppXg + 0.3 || myXT > oppXT + 0.2 || myShots > oppShots + 4;
-        const highBadActions = myBad >= 20;
-
-        const metrics = {
-            minute,
-            scoreState: score.state,
-            myXg,
-            oppXg,
-            myXT,
-            oppXT,
-            myBad,
-            oppBad,
-            myPress,
-            oppPress,
-            myDef,
-            oppDef,
-            myPossession,
-            oppPossession,
-            myShots,
-            oppShots,
-            myPower,
-            oppPower,
-            needGoal,
-            lateNeedGoal,
-            protectLead,
-            underPressure,
-            attackingMomentum,
-            highBadActions
-        };
-
-        const signals = deriveSignals(snapshot || {}, context || {}, metrics);
-        const manualHintRequest = !!(
-            snapshot?.manualRecommendationRefresh ||
-            snapshot?.recommendationSource === 'manual' ||
-            context?.manualHintRequest
-        );
-
-        return Object.assign({}, context || {}, metrics, {
-            gameId: String(snapshot?.gameId || context?.gameId || 'unknown'),
-            matchStatus: snapshot?.status || context?.matchStatus || 'unknown',
-            scoreState: score.state,
-            score: Object.assign({}, snapshot?.score || {}, { diff: score.diff }),
-            teamSide: teamCtx.mySide,
-            myTeam: teamCtx.myTeam,
-            oppTeam: teamCtx.oppTeam,
-            signals,
-            manualHintRequest,
-            coachHintSnapshotContext: {
-                active: true,
-                source: 'snapshot_stats_bridge',
-                myTeam: teamCtx.myTeam,
-                oppTeam: teamCtx.oppTeam,
-                mySide: teamCtx.mySide,
-                scoreState: score.state,
-                signalCount: signals.length
-            }
-        });
-    }
-
-    function cloneSnapshot(snapshot, enrichedContext) {
-        if (!snapshot || typeof snapshot !== 'object') return snapshot;
-        const clone = Object.assign({}, snapshot);
-
-        clone.gameId = enrichedContext.gameId;
-        clone.minute = enrichedContext.minute;
-        clone.score = Object.assign({}, snapshot.score || {}, { diff: enrichedContext.score.diff });
-        clone.scoreState = enrichedContext.scoreState;
-        clone.signals = enrichedContext.signals.slice();
-        clone.myXg = enrichedContext.myXg;
-        clone.oppXg = enrichedContext.oppXg;
-        clone.myXT = enrichedContext.myXT;
-        clone.oppXT = enrichedContext.oppXT;
-        clone.myBad = enrichedContext.myBad;
-        clone.myPress = enrichedContext.myPress;
-        clone.oppPress = enrichedContext.oppPress;
-        clone.oppDef = enrichedContext.oppDef;
-        clone.manualHintRequest = enrichedContext.manualHintRequest;
-
-        return clone;
-    }
-
-    CurrentActionHintEngine.run = function runWithCoachHintSnapshotContext(snapshot, context = {}) {
-        const enrichedContext = deriveContext(snapshot, context || {});
-        const enrichedSnapshot = cloneSnapshot(snapshot, enrichedContext);
-        const result = originalRun(enrichedSnapshot, enrichedContext);
-
-        if (result?.moment) {
-            result.moment.gameId = enrichedContext.gameId;
-            result.moment.score = enrichedContext.scoreState;
-            result.moment.context = Object.assign({}, result.moment.context || {}, {
-                gameId: enrichedContext.gameId,
-                matchStatus: enrichedContext.matchStatus,
-                manualHintRequest: enrichedContext.manualHintRequest,
-                coachHintSnapshotContext: enrichedContext.coachHintSnapshotContext,
-                myPower: enrichedContext.myPower,
-                oppPower: enrichedContext.oppPower,
-                myPossession: enrichedContext.myPossession,
-                oppPossession: enrichedContext.oppPossession,
-                myShots: enrichedContext.myShots,
-                oppShots: enrichedContext.oppShots
-            });
-        }
-
-        if (result?.action) {
-            result.action.snapshotContextBridge = true;
-        }
-
-        if (typeof window !== 'undefined') {
-            window.SLFLastCoachHintContext = {
-                gameId: enrichedContext.gameId,
-                minute: enrichedContext.minute,
-                scoreState: enrichedContext.scoreState,
-                signals: enrichedContext.signals.slice(),
-                metrics: {
-                    myXg: enrichedContext.myXg,
-                    oppXg: enrichedContext.oppXg,
-                    myXT: enrichedContext.myXT,
-                    oppXT: enrichedContext.oppXT,
-                    myBad: enrichedContext.myBad,
-                    myPress: enrichedContext.myPress,
-                    oppPress: enrichedContext.oppPress
-                }
-            };
-        }
-
-        return result;
-    };
-
-    CurrentActionHintEngine.__coachHintSnapshotContextApplied = true;
-
-    if (typeof window !== 'undefined') {
-        window.SLFCoachHintSnapshotContextLayer = {
-            deriveContext
-        };
-    }
-})();
-// <<< src/modules/strategy-data-recommendations/coach-hint-snapshot-context-layer.js
-
-
 // >>> src/modules/strategy-data-recommendations/preset-fit-scoring.js
 // Strategy Data: preset fit scoring and decision fusion
 // ============================================================
@@ -19444,15 +19444,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.183',
-        scriptVersion: '4.4.183',
+        version: '4.4.184',
+        scriptVersion: '4.4.184',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.183',
+        scriptVersion: '4.4.184',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
