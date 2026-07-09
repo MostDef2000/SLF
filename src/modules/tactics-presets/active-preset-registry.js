@@ -4,8 +4,7 @@
 // Henta is not a separate subsystem here: only Henta_LeftTrap_att3
 // remains as one normal preset in the common preset library.
 // build_temp means verticality of ball progression, not passing speed:
-// 1 = patient/horizontal, 2 = moderate, 3 = active verticality,
-// 4 = release/direct progression, 5 = emergency rush.
+// 1 = patient/horizontal, 2 = moderate, 3 = high/direct verticality.
 
 (function activeTacticalPresetRegistry() {
     'use strict';
@@ -45,12 +44,12 @@
         Xabi_BoxMidfield_bal3: { def_line: '2', press_line: '2', def_width: '2', press_intense: '3', build_type: '2', build_temp: '2', build_long: '1', build_fast: '2', style: '3', pass_risk: '3', dribble: '2', cross: '1', corner: '1', shot: '2', priority: ['center'] },
         Xabi_VerticalBox_att3: { def_line: '2', press_line: '2', def_width: '2', press_intense: '3', build_type: '2', build_temp: '3', build_long: '2', build_fast: '3', style: '4', pass_risk: '4', dribble: '2', cross: '1', corner: '1', shot: '2', priority: ['center'] },
         DeZerbi_BaitPress_bal3: { def_line: '2', press_line: '2', def_width: '2', press_intense: '2', build_type: '1', build_temp: '1', build_long: '1', build_fast: '2', style: '3', pass_risk: '3', dribble: '2', cross: '1', corner: '1', shot: '2', priority: ['center'] },
-        DeZerbi_Release_att4: { def_line: '2', press_line: '3', def_width: '2', press_intense: '3', build_type: '1', build_temp: '4', build_long: '2', build_fast: '4', style: '4', pass_risk: '4', dribble: '3', cross: '2', corner: '1', shot: '3', priority: ['center', 'right'] },
+        DeZerbi_Release_att4: { def_line: '2', press_line: '3', def_width: '2', press_intense: '3', build_type: '1', build_temp: '3', build_long: '2', build_fast: '4', style: '4', pass_risk: '4', dribble: '3', cross: '2', corner: '1', shot: '3', priority: ['center', 'right'] },
         Conte_WingbackWidth_bal4: { def_line: '2', press_line: '2', def_width: '3', press_intense: '3', build_type: '2', build_temp: '2', build_long: '2', build_fast: '3', style: '3', pass_risk: '3', dribble: '3', cross: '4', corner: '1', shot: '2', priority: ['left', 'right'] },
         Compact_Counter_def3: { def_line: '1', press_line: '2', def_width: '2', press_intense: '3', build_type: '1', build_temp: '2', build_long: '3', build_fast: '4', style: '3', pass_risk: '2', dribble: '3', cross: '3', corner: '1', shot: '2', priority: ['left', 'right'] },
-        Klopp_Gegenpress_att4: { def_line: '3', press_line: '4', def_width: '3', press_intense: '5', build_type: '3', build_temp: '4', build_long: '2', build_fast: '4', style: '5', pass_risk: '4', dribble: '4', cross: '3', corner: '1', shot: '3', priority: ['left', 'right'] },
-        Nagelsmann_WidePress_att4: { def_line: '3', press_line: '4', def_width: '4', press_intense: '5', build_type: '3', build_temp: '4', build_long: '2', build_fast: '4', style: '5', pass_risk: '4', dribble: '4', cross: '4', corner: '1', shot: '3', priority: ['left', 'right'] },
-        Bielsa_ChaosPress_att5: { def_line: '4', press_line: '5', def_width: '4', press_intense: '5', build_type: '3', build_temp: '5', build_long: '3', build_fast: '5', style: '5', pass_risk: '5', dribble: '5', cross: '4', corner: '1', shot: '4', priority: ['left', 'center', 'right'] },
+        Klopp_Gegenpress_att4: { def_line: '3', press_line: '4', def_width: '3', press_intense: '5', build_type: '3', build_temp: '3', build_long: '2', build_fast: '4', style: '5', pass_risk: '4', dribble: '4', cross: '3', corner: '1', shot: '3', priority: ['left', 'right'] },
+        Nagelsmann_WidePress_att4: { def_line: '3', press_line: '4', def_width: '4', press_intense: '5', build_type: '3', build_temp: '3', build_long: '2', build_fast: '4', style: '5', pass_risk: '4', dribble: '4', cross: '4', corner: '1', shot: '3', priority: ['left', 'right'] },
+        Bielsa_ChaosPress_att5: { def_line: '4', press_line: '5', def_width: '4', press_intense: '5', build_type: '3', build_temp: '3', build_long: '3', build_fast: '5', style: '5', pass_risk: '5', dribble: '5', cross: '4', corner: '1', shot: '4', priority: ['left', 'center', 'right'] },
         Henta_LeftTrap_att3: { def_line: '1', press_line: '2', def_width: '2', press_intense: '4', build_type: '1', build_temp: '2', build_long: '3', build_fast: '3', style: '3', pass_risk: '2', dribble: '3', cross: '3', corner: '1', shot: '2', priority: ['left'] }
     };
 
