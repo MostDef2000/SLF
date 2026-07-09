@@ -83,13 +83,11 @@ const DataInspector = {
                 <b style="font-size:15px;">SLF Data Inspector</b>
                 <button id="slf-data-overview-btn">Overview</button>
                 <button id="slf-data-players-btn">Players</button>
-                <button id="slf-data-youth-btn">Youth</button>
                 <button id="slf-data-presets-btn">Presets</button>
                 <button id="slf-data-close-btn">Закрыть</button>
-                <button id="slf-youth-reset-cache" title="Сбросить кэш проверки Youth Monitor">Сбросить кэш проверки</button>
             </div>
             <div id="slf-data-content" style="background:#111;border:1px solid #444;padding:10px;min-height:160px;max-height:66vh;overflow:auto;white-space:normal;">
-                Нажми Overview, Players, Youth или Presets.
+                Нажми Overview, Players или Presets.
             </div>
         `;
 
@@ -97,13 +95,8 @@ const DataInspector = {
 
         document.getElementById('slf-data-overview-btn').onclick = () => this.renderOverview();
         document.getElementById('slf-data-players-btn').onclick = () => this.renderPlayers();
-        document.getElementById('slf-data-youth-btn').onclick = () => this.renderYouth();
         document.getElementById('slf-data-presets-btn').onclick = () => this.renderPresets();
         document.getElementById('slf-data-close-btn').onclick = () => this.hide();
-        document.getElementById('slf-youth-reset-cache').onclick = () => {
-            YouthExternalMonitor.resetCache();
-            this.setContent('Кэш Youth Monitor сброшен. Нажми Youth ещё раз.');
-        };
     },
 
     show() {
@@ -212,28 +205,6 @@ const DataInspector = {
             },
             () => this.setContent('Ошибка загрузки Players')
         );
-    },
-
-    renderYouth() {
-        this.setContent('Проверяю молодёжные команды Transfermarkt...');
-
-        YouthExternalMonitor.scanAll(
-            msg => this.setContent(msg)
-        )
-            .then(result => {
-                this.setContent(YouthExternalMonitor.renderResult(result));
-                this.bindYouthFilters();
-            })
-            .catch(e => {
-                console.error('[SLF Youth Monitor]', e);
-                this.setContent(`Ошибка Youth Monitor: ${this.escapeHtml(e?.message || String(e))}. Частичные данные сохраняются в результате, если источники успели загрузиться.`);
-            });
-    },
-
-    bindYouthFilters() {
-        if (typeof YouthExternalMonitor !== 'undefined' && YouthExternalMonitor.bindRenderedFilters) {
-            YouthExternalMonitor.bindRenderedFilters(document);
-        }
     },
 
     renderPresetCard(name, meta, existsInStorage) {
