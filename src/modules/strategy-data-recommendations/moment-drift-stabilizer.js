@@ -7,7 +7,8 @@
 // - in-memory only;
 // - no localStorage;
 // - no explanation layer;
-// - emergency/protect-lead states can override the hold window.
+// - emergency/protect-lead states can override the hold window;
+// - explicit manual hint clicks recompute immediately.
 
 (function momentDriftStabilizer() {
     'use strict';
@@ -42,6 +43,15 @@
 
     function getGameId(result) {
         return String(result?.moment?.gameId ?? getContext(result).gameId ?? 'unknown');
+    }
+
+    function isManualHint(result) {
+        const context = getContext(result);
+        return !!(
+            context.manualHintRequest ||
+            context.coachHintSnapshotContext?.active ||
+            result?.action?.snapshotContextBridge
+        );
     }
 
     function isHardOverride(result) {
@@ -90,6 +100,10 @@
 
     function stabilize(result) {
         if (!result?.action) return result;
+
+        if (isManualHint(result)) {
+            return remember(result);
+        }
 
         if (shouldReset(result) || isHardOverride(result)) {
             return remember(result);
@@ -142,7 +156,8 @@
     if (typeof window !== 'undefined') {
         window.SLFMomentDriftStabilizer = {
             holdMinutes: HOLD_MINUTES,
-            getState: () => stableState ? Object.assign({}, stableState) : null
+            getState: () => stableState ? Object.assign({}, stableState) : null,
+            reset: () => { stableState = null; }
         };
     }
 })();
