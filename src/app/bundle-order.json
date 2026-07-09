@@ -41,6 +41,7 @@
     "src/modules/transfer-analyzer/tm-enrichment-layer.js",
     "src/modules/transfer-analyzer/slf-alter-layer.js",
     "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+    "src/modules/transfer-analyzer/transfer-history-money-parser-patch.js",
     "src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js",
     "src/modules/transfer-analyzer/transfer-tm-profile-guard.js",
     "src/modules/transfer-analyzer/transfer-my-bids-rank.js",
