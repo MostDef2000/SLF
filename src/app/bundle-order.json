@@ -27,6 +27,7 @@
     "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
     "src/modules/strategy-data-recommendations/coach-hint-snapshot-context-layer.js",
     "src/modules/tactics-presets/active-preset-registry.js",
+    "src/modules/tactics-presets/tactic-preset-direction-policy.js",
     "src/modules/strategy-data-recommendations/signal-noise-filter-layer.js",
     "src/modules/strategy-data-recommendations/adaptive-opponent-style-layer.js",
     "src/modules/strategy-data-recommendations/coach-mode-policy.js",
