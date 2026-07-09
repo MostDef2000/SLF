@@ -147,41 +147,57 @@
         RecommendationEngine.__lateLosingPressCooldownGuard = true;
     }
 
-    function buildCurrentHintHtml(result) {
-        if (!result || typeof CurrentActionHintEngine === 'undefined') return '';
-        const rows = CurrentActionHintEngine.toPlanRows(result);
-        return ['<div style="font-weight:700;margin-bottom:4px;">SLF Подсказка</div>']
-            .concat(rows.map(row => `<div>${String(row)}</div>`))
-            .join('');
+    function resetLiveOnlyRecommendationState() {
+        if (typeof STATE === 'undefined') return;
+        STATE.recommendationFreeze = null;
+        STATE.pendingPresetEvent = null;
+        STATE.liveWaitStatus = null;
+    }
+
+    function buildManualRecommendationHtml(snapshot) {
+        if (typeof RecommendationEngine === 'undefined') {
+            return '<div style="padding:7px 9px;background:#181818;border:1px solid #444;border-radius:5px;color:#ddd;">RecommendationEngine недоступен.</div>';
+        }
+
+        return RecommendationEngine.make(snapshot);
+    }
+
+    function rememberManualRecommendation(html, snapshot) {
+        if (typeof STATE === 'undefined' || typeof RecommendationEngine === 'undefined') return;
+        if (RecommendationEngine.isPlaceholderHtml && RecommendationEngine.isPlaceholderHtml(html)) return;
+
+        STATE.lastRecommendationHtml = html;
+        STATE.lastRecommendationMeta = {
+            schema: 'slf_manual_hint_render_v1',
+            savedAt: Date.now(),
+            gameId: snapshot?.gameId || MatchStateParser.getGameId(),
+            bucket: snapshot?.bucket || '',
+            minute: snapshot?.minute ?? null,
+            source: 'manual_hint_button'
+        };
     }
 
     function renderManualRecommendation() {
+        resetLiveOnlyRecommendationState();
+
         const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
         if (!snapshot) return;
 
-        snapshot.recommendationSource = 'manual';
+        snapshot.recommendationSource = 'manual_hint_button';
         snapshot.manualRecommendationRefresh = true;
-        SnapshotEngine.rememberLiveSnapshot(snapshot);
 
-        const el = document.getElementById('slf-parser-recommendation');
-        let html = '';
-        let source = 'manual_snapshot';
-
-        if (typeof CurrentActionHintEngine !== 'undefined') {
-            const result = CurrentActionHintEngine.run(snapshot, {});
-            html = buildCurrentHintHtml(result);
-            source = 'manual_snapshot_current_action_hint_engine';
-        } else {
-            html = RecommendationEngine.make(snapshot);
-            source = 'manual_snapshot_fallback_recommendation_engine';
-            UI.addParserLog('CurrentActionHintEngine недоступен, использован fallback');
+        if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.rememberLiveSnapshot) {
+            SnapshotEngine.rememberLiveSnapshot(snapshot);
         }
 
+        const el = document.getElementById('slf-parser-recommendation');
+        const html = buildManualRecommendationHtml(snapshot);
+
         if (el) el.innerHTML = html;
-        RecommendationEngine.persistRenderedRecommendation(html, snapshot, { source });
-        SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer, manualSnapshotAt: Date.now() });
-        UI.addParserLog('Ручной snapshot: подсказка обновлена');
-        UI.updateParserStatus('Ручной snapshot выполнен');
+        rememberManualRecommendation(html, snapshot);
+
+        UI.addParserLog('Подсказка обновлена по текущему snapshot');
+        UI.updateParserStatus('Подсказка обновлена вручную');
     }
 
     function mountManualButton() {
@@ -193,7 +209,7 @@
         btn.id = 'slf-manual-recommendation-btn';
         btn.type = 'button';
         btn.textContent = '↻ Подсказка';
-        btn.title = 'Сделать ручной snapshot и обновить подсказку по текущему состоянию';
+        btn.title = 'Собрать текущий snapshot и показать подсказку по текущему состоянию';
         btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
         btn.onclick = () => {
             btn.disabled = true;
@@ -201,7 +217,7 @@
                 renderManualRecommendation();
             } catch (error) {
                 console.error('[SLF] Manual recommendation refresh failed', error);
-                UI.addParserLog('Ручной snapshot: ошибка, см. console');
+                UI.addParserLog('Подсказка: ошибка, см. console');
             } finally {
                 btn.disabled = false;
             }
