@@ -82,6 +82,27 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
             .join('');
     };
 
+    TransferMarketAnalyzer.getPurchaseForecastSkill = function getPurchaseForecastSkill(event, player) {
+        const alterSummary = event?.enrichment?.slfAlterSummary || {};
+        const candidates = [
+            player?.finalSkill,
+            alterSummary.finalSkill,
+            player?.skill,
+            player?.scoutSkill,
+            player?.currentSkill,
+            event?.skill,
+            event?.scoutSkill,
+            event?.currentSkill
+        ];
+
+        for (const candidate of candidates) {
+            const value = Number(candidate);
+            if (Number.isFinite(value) && value > 0) return value;
+        }
+
+        return null;
+    };
+
     TransferMarketAnalyzer.extractPurchaseForecastRecord = function extractPurchaseForecastRecord(event) {
         if (!event || !(event.recordType === 'completed_transfer' || event.eventType === 'completed_transfer')) return null;
 
@@ -94,6 +115,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         const primaryPosition = this.normalizeMarketPosition?.(rawPosition) || String(rawPosition || '').toUpperCase().trim();
         const age = this.parseNumber(player.age ?? event.age);
         const talent = this.parseNumber(player.talent ?? event.talent);
+        const skill = this.getPurchaseForecastSkill(event, player);
         const price = Number(transfer.price || event.price || event.salePrice || 0);
 
         if (!Number.isFinite(price) || price <= 0) return null;
@@ -102,6 +124,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
             primaryPosition,
             age,
             talent,
+            skill,
             price
         };
     };
@@ -117,6 +140,8 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
                 if (Number.isFinite(filters.ageTo) && !(Number(record.age) <= filters.ageTo)) return false;
                 if (Number.isFinite(filters.talentFrom) && !(Number(record.talent) >= filters.talentFrom)) return false;
                 if (Number.isFinite(filters.talentTo) && !(Number(record.talent) <= filters.talentTo)) return false;
+                if (Number.isFinite(filters.skillFrom) && !(Number(record.skill) >= filters.skillFrom)) return false;
+                if (Number.isFinite(filters.skillTo) && !(Number(record.skill) <= filters.skillTo)) return false;
                 return true;
             })
             .map(record => Number(record.price || 0))
@@ -141,6 +166,8 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
             ageTo: readNumber('slf-purchase-forecast-age-to'),
             talentFrom: readNumber('slf-purchase-forecast-talent-from'),
             talentTo: readNumber('slf-purchase-forecast-talent-to'),
+            skillFrom: readNumber('slf-purchase-forecast-skill-from'),
+            skillTo: readNumber('slf-purchase-forecast-skill-to'),
             position: document.getElementById('slf-purchase-forecast-position')?.value || 'ST'
         };
     };
@@ -233,7 +260,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
                 SLF Прогноз покупки
             </div>
 
-            <div style="display:grid;grid-template-columns:52px 52px 52px 52px 72px 1fr;gap:6px;align-items:end;margin-bottom:10px;">
+            <div style="display:grid;grid-template-columns:52px 52px 52px 52px 72px 1fr;gap:6px;align-items:end;margin-bottom:7px;">
                 <label style="color:#bbb;font-size:11px;">
                     Возр. от
                     <input id="slf-purchase-forecast-age-from" value="21" style="display:block;width:100%;margin-top:2px;background:#333;color:#fff;border:1px solid #666;padding:3px 4px;font-size:13px;box-sizing:border-box;">
@@ -264,6 +291,22 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
                 <button id="slf-purchase-forecast-calc" style="height:28px;padding:3px 8px;font-size:13px;cursor:pointer;">
                     Посчитать
                 </button>
+            </div>
+
+            <div style="display:grid;grid-template-columns:52px 52px 1fr;gap:6px;align-items:end;margin-bottom:10px;">
+                <label style="color:#bbb;font-size:11px;">
+                    Скилл от
+                    <input id="slf-purchase-forecast-skill-from" value="145" style="display:block;width:100%;margin-top:2px;background:#333;color:#fff;border:1px solid #666;padding:3px 4px;font-size:13px;box-sizing:border-box;">
+                </label>
+
+                <label style="color:#bbb;font-size:11px;">
+                    до
+                    <input id="slf-purchase-forecast-skill-to" value="180" style="display:block;width:100%;margin-top:2px;background:#333;color:#fff;border:1px solid #666;padding:3px 4px;font-size:13px;box-sizing:border-box;">
+                </label>
+
+                <div style="color:#777;font-size:10px;line-height:1.2;padding-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    Скилл: finalSkill → skill → scoutSkill
+                </div>
             </div>
 
             <div style="display:grid;grid-template-columns:78px 1fr 1fr;gap:6px;">
