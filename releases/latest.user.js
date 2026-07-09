@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.185
+// @version      4.4.186
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.185',
-        scriptVersion: '4.4.185',
+        version: '4.4.186',
+        scriptVersion: '4.4.186',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.185',
+        scriptVersion: '4.4.186',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -17167,104 +17167,6 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         return this.historyVpsRowsPromise;
     };
 
-    TransferMarketAnalyzer.getHistoryDuplicateKey = function getHistoryDuplicateKey(record) {
-        const transfer = record?.transfer || {};
-        const player = record?.player || {};
-        const clubs = record?.clubs || {};
-        const norm = value => this.normalizeText(String(value ?? '')).toLowerCase();
-        return [
-            'completed_transfer',
-            norm(player.playerId || record.playerId || record.slfPlayerId),
-            norm(transfer.dateTs || transfer.dateText || record.dateText || record.transferDateText),
-            Number(transfer.price || record.price || record.salePrice || 0),
-            norm(clubs.fromName || transfer.fromName || record.fromClub),
-            norm(clubs.toName || transfer.toName || record.toClub)
-        ].join('|');
-    };
-
-    TransferMarketAnalyzer.buildHistoryDuplicateReport = function buildHistoryDuplicateReport(records) {
-        const groups = new Map();
-        (records || [])
-            .filter(record => record && (record.recordType === 'completed_transfer' || record.eventType === 'completed_transfer'))
-            .forEach(record => {
-                const key = this.getHistoryDuplicateKey(record);
-                if (!groups.has(key)) groups.set(key, []);
-                groups.get(key).push(record);
-            });
-
-        const duplicateGroups = [...groups.entries()]
-            .filter(([, items]) => items.length > 1)
-            .map(([key, items]) => {
-                const first = items[0] || {};
-                const transfer = first.transfer || {};
-                const player = first.player || {};
-                const clubs = first.clubs || {};
-                return {
-                    key,
-                    copies: items.length,
-                    duplicates: items.length - 1,
-                    playerId: player.playerId || first.playerId || first.slfPlayerId || '',
-                    name: player.name || first.playerName || first.name || '',
-                    date: transfer.dateText || first.dateText || first.transferDateText || '',
-                    price: transfer.price || first.price || first.salePrice || 0,
-                    from: clubs.fromName || transfer.fromName || first.fromClub || '',
-                    to: clubs.toName || transfer.toName || first.toClub || '',
-                    records: items
-                };
-            })
-            .sort((a, b) => b.copies - a.copies || Number(b.price || 0) - Number(a.price || 0));
-
-        const totalRecords = (records || []).length;
-        const duplicateRecords = duplicateGroups.reduce((sum, group) => sum + group.duplicates, 0);
-        return {
-            totalRecords,
-            uniqueTransfers: totalRecords - duplicateRecords,
-            duplicateRecords,
-            duplicateGroups: duplicateGroups.length,
-            groups: duplicateGroups
-        };
-    };
-
-    TransferMarketAnalyzer.runHistoryDuplicateDryRun = async function runHistoryDuplicateDryRun() {
-        const button = document.getElementById('slf-transfer-history-dup-dry-run');
-        const originalText = button?.textContent || 'Дубли dry-run';
-        if (button) {
-            button.disabled = true;
-            button.textContent = 'Считаю...';
-        }
-
-        try {
-            this.setStatus('VPS History duplicates dry-run: загружаю VPS History...');
-            const records = await this.loadHistoryVpsRows();
-            const report = this.buildHistoryDuplicateReport(records);
-            const preview = report.groups.slice(0, 50).map(group => ({
-                copies: group.copies,
-                duplicates: group.duplicates,
-                playerId: group.playerId,
-                name: group.name,
-                date: group.date,
-                price: group.price,
-                from: group.from,
-                to: group.to
-            }));
-
-            console.group('[SLF Transfer History] VPS duplicate dry-run');
-            console.log('summary', report);
-            console.table(preview);
-            console.groupEnd();
-
-            this.setStatus(`VPS duplicates dry-run: records ${report.totalRecords}, unique ${report.uniqueTransfers}, duplicate records ${report.duplicateRecords}, groups ${report.duplicateGroups}. Подробности в console.table.`);
-        } catch (error) {
-            console.warn('[SLF Transfer History] duplicate dry-run failed', error);
-            this.setStatus('VPS duplicates dry-run: ошибка загрузки/анализа VPS History.');
-        } finally {
-            if (button) {
-                button.disabled = false;
-                button.textContent = originalText;
-            }
-        }
-    };
-
     TransferMarketAnalyzer.isHistoryRowLocallySubmitted = function isHistoryRowLocallySubmitted(row, alreadySubmitted) {
         if (!row) return false;
         const keySource = this.buildHistoryEventKeySource(row);
@@ -17487,11 +17389,6 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         allButton.textContent = 'Собрать все страницы';
         allButton.title = 'Фоном пройти все страницы текущего wid и текущих фильтров. Первая страница идет без pid, дальше pid=1..N.';
 
-        const dryRunButton = document.createElement('button');
-        dryRunButton.id = 'slf-transfer-history-dup-dry-run';
-        dryRunButton.textContent = 'Дубли dry-run';
-        dryRunButton.title = 'Только посчитать дубли в VPS History. Без удаления и без изменения расчётов.';
-
         const stopButton = document.createElement('button');
         stopButton.id = 'slf-transfer-history-stop';
         stopButton.textContent = 'Стоп';
@@ -17499,10 +17396,8 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         stopButton.title = 'Остановить фоновый сбор после текущего запроса/строки.';
 
         analyzeButton.insertAdjacentElement('afterend', allButton);
-        allButton.insertAdjacentElement('afterend', dryRunButton);
-        dryRunButton.insertAdjacentElement('afterend', stopButton);
+        allButton.insertAdjacentElement('afterend', stopButton);
         allButton.onclick = () => this.analyzeHistoryAllPages();
-        dryRunButton.onclick = () => this.runHistoryDuplicateDryRun();
         stopButton.onclick = () => {
             this.historyFullSyncStopRequested = true;
             this.setStatus('История all pages: остановка после текущего запроса/строки...');
@@ -17513,10 +17408,8 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         const allButton = document.getElementById('slf-transfer-history-all-pages');
         const stopButton = document.getElementById('slf-transfer-history-stop');
         const visibleButton = document.getElementById('slf-transfer-analyze-visible');
-        const dryRunButton = document.getElementById('slf-transfer-history-dup-dry-run');
         if (allButton) allButton.disabled = !!running;
         if (visibleButton) visibleButton.disabled = !!running;
-        if (dryRunButton) dryRunButton.disabled = !!running;
         if (stopButton) stopButton.disabled = !running;
     };
 
@@ -19462,15 +19355,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.185',
-        scriptVersion: '4.4.185',
+        version: '4.4.186',
+        scriptVersion: '4.4.186',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.185',
+        scriptVersion: '4.4.186',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
