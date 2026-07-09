@@ -4,11 +4,13 @@
 const App = {
     mountUI() {
     UI.addMatchParserPanel();
-    SnapshotEngine.autoResumeIfNeeded();
+    // Manual-only Coach Hint mode:
+    // - no live parser auto-resume;
+    // - no manual tactic watcher freeze/status loop;
+    // - tactical blocks are rebuilt only when the user presses "Подсказка".
     DataInspector.addGlobalMenuButton();
     TrainingGuidePanel.mount();
     LoanLimitPanel.mount();
-    EventTracker.startManualTacticWatcher();
 
 
     if (!document.getElementById('slf-tactics-dropdown')) {
