@@ -3,6 +3,9 @@
 // Single runtime source for the active tactical preset set.
 // Henta is not a separate subsystem here: only Henta_LeftTrap_att3
 // remains as one normal preset in the common preset library.
+// build_temp means verticality of ball progression, not passing speed:
+// 1 = patient/horizontal, 2 = moderate, 3 = active verticality,
+// 4 = release/direct progression, 5 = emergency rush.
 
 (function activeTacticalPresetRegistry() {
     'use strict';
@@ -42,7 +45,7 @@
         Xabi_BoxMidfield_bal3: { def_line: '2', press_line: '2', def_width: '2', press_intense: '3', build_type: '2', build_temp: '2', build_long: '1', build_fast: '2', style: '3', pass_risk: '3', dribble: '2', cross: '1', corner: '1', shot: '2', priority: ['center'] },
         Xabi_VerticalBox_att3: { def_line: '2', press_line: '2', def_width: '2', press_intense: '3', build_type: '2', build_temp: '3', build_long: '2', build_fast: '3', style: '4', pass_risk: '4', dribble: '2', cross: '1', corner: '1', shot: '2', priority: ['center'] },
         DeZerbi_BaitPress_bal3: { def_line: '2', press_line: '2', def_width: '2', press_intense: '2', build_type: '1', build_temp: '1', build_long: '1', build_fast: '2', style: '3', pass_risk: '3', dribble: '2', cross: '1', corner: '1', shot: '2', priority: ['center'] },
-        DeZerbi_Release_att4: { def_line: '2', press_line: '3', def_width: '2', press_intense: '3', build_type: '1', build_temp: '2', build_long: '2', build_fast: '4', style: '4', pass_risk: '4', dribble: '3', cross: '2', corner: '1', shot: '3', priority: ['center', 'right'] },
+        DeZerbi_Release_att4: { def_line: '2', press_line: '3', def_width: '2', press_intense: '3', build_type: '1', build_temp: '4', build_long: '2', build_fast: '4', style: '4', pass_risk: '4', dribble: '3', cross: '2', corner: '1', shot: '3', priority: ['center', 'right'] },
         Conte_WingbackWidth_bal4: { def_line: '2', press_line: '2', def_width: '3', press_intense: '3', build_type: '2', build_temp: '2', build_long: '2', build_fast: '3', style: '3', pass_risk: '3', dribble: '3', cross: '4', corner: '1', shot: '2', priority: ['left', 'right'] },
         Compact_Counter_def3: { def_line: '1', press_line: '2', def_width: '2', press_intense: '3', build_type: '1', build_temp: '2', build_long: '3', build_fast: '4', style: '3', pass_risk: '2', dribble: '3', cross: '3', corner: '1', shot: '2', priority: ['left', 'right'] },
         Klopp_Gegenpress_att4: { def_line: '3', press_line: '4', def_width: '3', press_intense: '5', build_type: '3', build_temp: '4', build_long: '2', build_fast: '4', style: '5', pass_risk: '4', dribble: '4', cross: '3', corner: '1', shot: '3', priority: ['left', 'right'] },
@@ -84,12 +87,12 @@
         Xabi_BoxMidfield_bal3: { group: 'balance', rank: 3, title: 'Xabi Box Midfield', idea: 'перегруз центра и контроль переходов', use: 'центр доступен, брак низкий, нужна середина', risk: 'при закрытом центре игра упрётся в блок' },
         Xabi_VerticalBox_att3: { group: 'attack', rank: 3, title: 'Xabi Vertical Box', idea: 'вертикальный вход между линиями через центр', use: 'центр доступен и нужен более быстрый вход', risk: 'против прессинга и брака даст потери' },
         DeZerbi_BaitPress_bal3: { group: 'balance', rank: 3, title: 'De Zerbi Bait Press', idea: 'заманить высокий прессинг и раскрыть линии', use: 'соперник высоко прессингует, у нас есть качество паса', risk: 'слабая первая линия может привезти момент' },
-        DeZerbi_Release_att4: { group: 'attack', rank: 4, title: 'De Zerbi Release', idea: 'быстро выпускать атаку за прессинг', use: 'есть пространство за линией соперника', risk: 'если пространства нет, риск паса пустой' },
+        DeZerbi_Release_att4: { group: 'attack', rank: 4, title: 'De Zerbi Release', idea: 'вертикально выпускать атаку за прессинг', use: 'есть пространство за линией соперника', risk: 'если пространства нет, риск паса пустой' },
         Conte_WingbackWidth_bal4: { group: 'balance', rank: 4, title: 'Conte Wingback Width', idea: 'растянуть блок через фланги/wingbacks', use: 'центр закрыт, ширина доступна', risk: 'слабые фланги дадут навесной шум' },
         Compact_Counter_def3: { group: 'defensive', rank: 3, title: 'Compact Counter', idea: 'закрыть переходы и оставить быстрый выход', use: 'нас давят или опасны переходы', risk: 'можно потерять устойчивое давление' },
         Klopp_Gegenpress_att4: { group: 'attack', rank: 4, title: 'Klopp Gegenpress', idea: 'высокое давление и быстрый возврат мяча', use: 'нужен срочный прессинг, но ещё не all-in', risk: 'усталость, фолы, пространство за спиной' },
         Nagelsmann_WidePress_att4: { group: 'attack', rank: 4, title: 'Nagelsmann Wide Press', idea: 'широкий прессинг и атака через фланги', use: 'центр закрыт, но есть wide advantage', risk: 'без флангового качества станет предсказуемо' },
-        Bielsa_ChaosPress_att5: { group: 'attack', rank: 5, title: 'Bielsa Chaos Press', idea: 'максимальный темп и давление ради спасения', use: '80+ минута, проигрываем, нужна последняя попытка', risk: 'может развалить оборону' },
+        Bielsa_ChaosPress_att5: { group: 'attack', rank: 5, title: 'Bielsa Chaos Press', idea: 'максимальная вертикальность и давление ради спасения', use: '80+ минута, проигрываем, нужна последняя попытка', risk: 'может развалить оборону' },
         Henta_LeftTrap_att3: { group: 'henta', rank: 3, title: 'Henta Left Trap', idea: 'низкий блок, агрессивный отбор и левофланговая ловушка', use: 'слабый правый фланг соперника или сильный левый фланг у нас', risk: 'перекос влево может стать читаемым' }
     };
 
