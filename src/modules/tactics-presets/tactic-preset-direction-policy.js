@@ -50,6 +50,10 @@
             idea: 'позиционный контроль без принудительной атаки по центру; финальная треть сама подтягивает центр, поэтому стартовое направление нейтральное',
             risk: 'если нужен быстрый гол, может быть слишком нейтрально'
         },
+        Pep_StandardControl_bal3: {
+            idea: 'стандартный контроль без заданного центрального коридора: растягиваем поле, а вход в центр оставляем по ситуации',
+            risk: 'может быть слишком нейтрально, если соперник отдаёт явный слабый центр'
+        },
         Pep_BoxControl_bal2: {
             idea: 'снизить хаос и держать безопасный контроль без форсирования центральной воронки',
             risk: 'может стать стерильным, если нет флангового/полуфлангового выхода'
@@ -69,6 +73,14 @@
         DeZerbi_Release_att4: {
             idea: 'быстро выпускать атаку за прессинг, преимущественно через свободный фланг/полуфланг',
             risk: 'если пространства нет, риск паса пустой'
+        },
+        Xabi_BoxMidfield_bal3: {
+            idea: 'central-overload только при явной слабости центра соперника и низком браке; не использовать как default control',
+            risk: 'если центр не слабый, появится стерильное владение и обрезы в плотной зоне'
+        },
+        Xabi_VerticalBox_att3: {
+            idea: 'вертикальный central-overload как исключение: бить в слабый центр, а не просто держать мяч по центру',
+            risk: 'при закрытом центре или давлении соперника вертикальность даст брак'
         }
     };
 
@@ -110,8 +122,24 @@
         const centerClosed = hasTag(state, 'center_closed') || hasTag(state, 'opponent_low_block') || !!state.centerClosed;
         const underPressure = hasTag(state, 'under_pressure') || hasTag(state, 'transition_threat') || !!state.underPressure || !!state.transitionThreat;
         const highBadActions = hasTag(state, 'high_bad_actions') || !!state.highBadActions || myBad >= 20;
+        const sterileCenter = hasCenterOveruseSymptoms(state);
 
-        return (centerWeak || centerAvailable) && lowBadActions && !centerClosed && !underPressure && !highBadActions;
+        return (centerWeak || centerAvailable) && lowBadActions && !centerClosed && !underPressure && !highBadActions && !sterileCenter;
+    }
+
+    function hasCenterOveruseSymptoms(state = {}) {
+        const minute = number(state.minute, 0);
+        const myPossession = number(state.myPossession, 0);
+        const myXg = number(state.myXg, 0);
+        const oppXg = number(state.oppXg, 0);
+        const myXT = number(state.myXT, 0);
+        const oppXT = number(state.oppXT, 0);
+        const shotsGap = number(state.oppShots, 0) - number(state.myShots, 0);
+
+        if (minute >= 25 && myPossession >= 52 && myXg <= oppXg + 0.1) return true;
+        if (minute >= 35 && myXT < oppXT - 0.15) return true;
+        if (minute >= 45 && shotsGap >= 3 && myXg <= oppXg + 0.2) return true;
+        return false;
     }
 
     function isCenterOveruse(name, state = {}) {
@@ -136,6 +164,7 @@
         if (hasTag(state, 'center_closed') || hasTag(state, 'opponent_low_block') || hasTag(state, 'wide_quality')) return 'Conte_WingbackWidth_bal4';
         if (scoreState === 'losing' || hasTag(state, 'need_goal') || hasTag(state, 'attacking_momentum')) return 'Pep_ControlledPush_att3';
         if (state.strengthContext?.mode === 'disadvantage') return 'Mourinho_WeakSide_def3';
+        if (hasCenterOveruseSymptoms(state)) return 'Pep_ControlledPush_att3';
 
         return 'Arteta_Control433_bal3';
     }
@@ -207,6 +236,7 @@
             directionOverrides: Object.assign({}, DIRECTION_OVERRIDES),
             hasCenterDirection,
             hasCenterExceptionContext,
+            hasCenterOveruseSymptoms,
             isCenterOveruse,
             selectNonCenterAlternative,
             refresh() {
