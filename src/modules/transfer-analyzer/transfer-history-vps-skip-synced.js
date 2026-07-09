@@ -1,17 +1,14 @@
 // Transfer history VPS skip-synced guard + background page collector
 // ===================================================================
-// Prevents Analyze visible from reprocessing rows already marked as synced in VPS.
+// Prevents Analyze visible from reprocessing rows already confirmed in VPS.
 // Adds a safe sequential "all pages" collector for transfers.php?action=history.
 
 if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
     TransferMarketAnalyzer.historyFullSyncRunning = false;
     TransferMarketAnalyzer.historyFullSyncStopRequested = false;
 
-    TransferMarketAnalyzer.isHistoryRowSyncedInVps = function isHistoryRowSyncedInVps(row, alreadySubmitted) {
+    TransferMarketAnalyzer.isHistoryRowLocallySubmitted = function isHistoryRowLocallySubmitted(row, alreadySubmitted) {
         if (!row) return false;
-
-        const badgeText = this.normalizeText(row.rowEl?.querySelector('.slf-transfer-analysis-badge')?.innerText || '');
-        if (/✓\s*VPS/i.test(badgeText)) return true;
 
         const eventKeySource = this.buildHistoryEventKeySource(row);
         const eventKey = row.historyEventKey || '';
@@ -26,6 +23,12 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
             ) ||
             (eventKeySource && row.rowEl?.dataset?.slfHistoryEventKeySource === eventKeySource)
         );
+    };
+
+    TransferMarketAnalyzer.isHistoryRowSyncedInVps = function isHistoryRowSyncedInVps(row, alreadySubmitted) {
+        // Backward-compatible alias for old callers. This is local state only;
+        // real VPS confirmation must come from findHistoryVpsMatch(vpsIndex).
+        return this.isHistoryRowLocallySubmitted(row, alreadySubmitted);
     };
 
     TransferMarketAnalyzer.getCurrentHistoryPageIndex = function getCurrentHistoryPageIndex() {
@@ -169,17 +172,6 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         return new Promise(resolve => setTimeout(resolve, ms));
     };
 
-    TransferMarketAnalyzer.addEventsToHistoryVpsIndex = function addEventsToHistoryVpsIndex(events, index) {
-        if (!index || !events?.length) return;
-
-        events.forEach(event => {
-            this.buildHistoryVpsRecordKeys(event).forEach(key => {
-                if (!index.has(key)) index.set(key, []);
-                index.get(key).push(event);
-            });
-        });
-    };
-
     TransferMarketAnalyzer.applyHistoryEventSourceUrl = function applyHistoryEventSourceUrl(event, row) {
         if (!event || !row?.historySourceUrl) return event;
         event.source = event.source || {};
@@ -187,13 +179,20 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         return event;
     };
 
+    TransferMarketAnalyzer.renderHistoryLocalBadge = function renderHistoryLocalBadge(row) {
+        this.renderHistorySyncStatus(row, 'LOCAL', 'neutral');
+    };
+
     TransferMarketAnalyzer.processHistoryRowsForVps = async function processHistoryRowsForVps(rows, options = {}) {
         const renderRows = options.renderRows !== false;
         const alreadySubmitted = options.alreadySubmitted || this.loadHistorySyncedKeys();
         const vpsIndex = options.vpsIndex || null;
+        const hasRealVpsIndex = !!vpsIndex;
         const pageLabel = options.pageLabel || 'видимые строки';
         const eventsToSend = [];
-        let skipped = 0;
+        let vpsMatched = 0;
+        let localSkipped = 0;
+        let localPending = 0;
         let failed = 0;
         const pendingRows = [];
 
@@ -203,23 +202,36 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
             row.historyEventKey = eventKey;
             if (row.rowEl?.dataset) row.rowEl.dataset.slfHistoryEventKeySource = eventKeySource;
 
-            const vpsMatch = vpsIndex ? this.findHistoryVpsMatch(row, vpsIndex) : null;
+            const vpsMatch = hasRealVpsIndex ? this.findHistoryVpsMatch(row, vpsIndex) : null;
+            const localSubmitted = this.isHistoryRowLocallySubmitted(row, alreadySubmitted);
 
-            if (alreadySubmitted[eventKey] || vpsMatch || this.isHistoryRowSyncedInVps(row, alreadySubmitted)) {
-                skipped++;
-                if (renderRows) this.renderHistoryVpsBadge(row, vpsMatch || { confidence: 'local', key: eventKey, record: {} });
+            if (vpsMatch) {
+                vpsMatched++;
+                if (renderRows) this.renderHistoryVpsBadge(row, vpsMatch);
                 continue;
+            }
+
+            if (!hasRealVpsIndex && localSubmitted) {
+                localSkipped++;
+                if (renderRows) this.renderHistoryLocalBadge(row);
+                continue;
+            }
+
+            if (hasRealVpsIndex && localSubmitted) {
+                localPending++;
             }
 
             pendingRows.push(row);
         }
 
         if (!pendingRows.length) {
-            this.setStatus(`История ${pageLabel}: строк ${rows.length}, уже в VPS ${skipped}, новых к анализу 0.`);
-            return { rows: rows.length, prepared: 0, skipped, failed };
+            const localText = localSkipped || localPending ? `, local ${localSkipped + localPending}` : '';
+            this.setStatus(`История ${pageLabel}: строк ${rows.length}, реально в VPS ${vpsMatched}${localText}, новых к отправке 0.`);
+            return { rows: rows.length, prepared: 0, vpsMatched, localSkipped, localPending, failed };
         }
 
-        this.setStatus(`История ${pageLabel}: строк ${rows.length}, уже в VPS ${skipped}, к анализу ${pendingRows.length}.`);
+        const localText = localPending ? `, local pending ${localPending}` : '';
+        this.setStatus(`История ${pageLabel}: строк ${rows.length}, реально в VPS ${vpsMatched}${localText}, к отправке ${pendingRows.length}.`);
 
         for (let i = 0; i < pendingRows.length; i++) {
             if (this.historyFullSyncStopRequested) break;
@@ -253,7 +265,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
 
                 const event = this.applyHistoryEventSourceUrl(await this.buildTransferHistoryEvent(row, tmResult, slfAlter), row);
                 eventsToSend.push(event);
-                if (renderRows) this.renderHistoryVpsBadge(row, { confidence: 'queued', key: event.eventKey, record: event });
+                if (renderRows) this.renderHistorySyncStatus(row, 'QUEUED', 'pending');
             } catch (e) {
                 failed++;
                 console.error('[SLF Transfer History] row failed', row, e);
@@ -270,7 +282,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
                     fallbackEvent.analysisFailed = true;
                     fallbackEvent.analysisError = String(e?.message || e || 'unknown');
                     eventsToSend.push(fallbackEvent);
-                    if (renderRows) this.renderHistoryVpsBadge(row, { confidence: 'fallback', key: fallbackEvent.eventKey, record: fallbackEvent });
+                    if (renderRows) this.renderHistorySyncStatus(row, 'QUEUED', 'pending');
                 } catch (eventError) {
                     console.warn('[SLF Transfer History] fallback event build failed', row.playerId, eventError);
                 }
@@ -279,14 +291,15 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
 
         if (eventsToSend.length) {
             this.sendTransferHistoryEvents(eventsToSend);
-            this.addEventsToHistoryVpsIndex(eventsToSend, vpsIndex);
             Object.assign(alreadySubmitted, this.loadHistorySyncedKeys());
         }
 
         return {
             rows: rows.length,
             prepared: eventsToSend.length,
-            skipped,
+            vpsMatched,
+            localSkipped,
+            localPending,
             failed
         };
     };
@@ -314,8 +327,9 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
             renderRows: true
         });
 
+        const localText = stats.localSkipped || stats.localPending ? `, local ${stats.localSkipped + stats.localPending}` : '';
         this.setStatus(
-            `История готова: подготовлено к отправке ${stats.prepared}, уже в VPS ${stats.skipped}, ошибок ${stats.failed}.`
+            `История готова: отправлено в очередь ${stats.prepared}, реально в VPS ${stats.vpsMatched}${localText}, ошибок ${stats.failed}.`
         );
     };
 
@@ -373,7 +387,9 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
             pages: 0,
             rows: 0,
             prepared: 0,
-            skipped: 0,
+            vpsMatched: 0,
+            localSkipped: 0,
+            localPending: 0,
             failed: 0,
             pageErrors: 0
         };
@@ -423,11 +439,14 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
 
                     totals.rows += stats.rows;
                     totals.prepared += stats.prepared;
-                    totals.skipped += stats.skipped;
+                    totals.vpsMatched += stats.vpsMatched;
+                    totals.localSkipped += stats.localSkipped;
+                    totals.localPending += stats.localPending;
                     totals.failed += stats.failed;
 
+                    const localTotal = totals.localSkipped + totals.localPending;
                     this.setStatus(
-                        `История all pages: ${pageNo}/${pageCount} · строк ${totals.rows} · новых ${totals.prepared} · VPS ${totals.skipped} · ошибок ${totals.failed + totals.pageErrors}`
+                        `История all pages: ${pageNo}/${pageCount} · строк ${totals.rows} · queued ${totals.prepared} · VPS ${totals.vpsMatched} · local ${localTotal} · ошибок ${totals.failed + totals.pageErrors}`
                     );
                 } catch (pageError) {
                     totals.pageErrors++;
@@ -441,8 +460,9 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
             }
 
             const stopped = this.historyFullSyncStopRequested;
+            const localTotal = totals.localSkipped + totals.localPending;
             this.setStatus(
-                `${stopped ? 'История all pages остановлена' : 'История all pages готова'}: страниц ${totals.pages}, строк ${totals.rows}, новых ${totals.prepared}, уже в VPS ${totals.skipped}, ошибок ${totals.failed + totals.pageErrors}.`
+                `${stopped ? 'История all pages остановлена' : 'История all pages готова'}: страниц ${totals.pages}, строк ${totals.rows}, queued ${totals.prepared}, реально в VPS ${totals.vpsMatched}, local ${localTotal}, ошибок ${totals.failed + totals.pageErrors}.`
             );
         } finally {
             this.historyFullSyncRunning = false;
