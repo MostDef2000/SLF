@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.189
+// @version      4.4.190
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.189',
-        scriptVersion: '4.4.189',
+        version: '4.4.190',
+        scriptVersion: '4.4.190',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.189',
+        scriptVersion: '4.4.190',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -16318,6 +16318,65 @@ const TransferMarketAnalyzer = {
 // <<< src/modules/transfer-analyzer/transfer-market-analyzer.js
 
 
+// >>> src/modules/transfer-analyzer/transfer-history-money-parser-patch.js
+// Transfer history money parser patch
+// ===================================
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.slfHistoryMoneyParserPatchApplied = true;
+
+    TransferMarketAnalyzer.parseMoney = function parseMoney(value) {
+        const raw = String(value || '')
+            .replace(/\u00a0/g, ' ')
+            .trim();
+
+        if (!raw) return null;
+
+        const lower = raw.toLowerCase();
+        const numberMatches = lower.match(/\d{1,3}(?:[\s'’`]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?/g);
+
+        if (!numberMatches || !numberMatches.length) return null;
+
+        const token = numberMatches
+            .map(item => String(item || '').trim())
+            .filter(Boolean)
+            .sort((a, b) => {
+                const score = value => value.replace(/[^\d]/g, '').length;
+                return score(b) - score(a) || b.length - a.length;
+            })[0];
+
+        if (!token) return null;
+
+        let normalized = token
+            .replace(/[\s'’`]/g, '')
+            .replace(/,/g, '.');
+
+        const dotCount = (normalized.match(/\./g) || []).length;
+        if (dotCount > 1) {
+            const parts = normalized.split('.');
+            normalized = parts.slice(0, -1).join('') + '.' + parts[parts.length - 1];
+        }
+
+        const numeric = Number(normalized);
+        if (!Number.isFinite(numeric)) return null;
+
+        let multiplier = 1;
+
+        if (/[0-9]\s*[bб](?=$|[^a-zа-яё0-9])|\b(bn|billion)\b|млрд|миллиард/.test(lower)) {
+            multiplier = 1000000000;
+        } else if (/[0-9]\s*[mм](?=$|[^a-zа-яё0-9])|\b(mln|million)\b|млн|миллион/.test(lower)) {
+            multiplier = 1000000;
+        } else if (/[0-9]\s*[kк](?=$|[^a-zа-яё0-9])|\b(тыс|thousand)\b/.test(lower)) {
+            multiplier = 1000;
+        }
+
+        const valueNumber = Math.round(numeric * multiplier);
+        return Number.isFinite(valueNumber) && valueNumber > 0 ? valueNumber : null;
+    };
+}
+// <<< src/modules/transfer-analyzer/transfer-history-money-parser-patch.js
+
+
 // >>> src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js
 // Transfer Analyzer: compact MKT UI + zero-cache runtime
 // ============================================================
@@ -19610,15 +19669,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.189',
-        scriptVersion: '4.4.189',
+        version: '4.4.190',
+        scriptVersion: '4.4.190',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.189',
+        scriptVersion: '4.4.190',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
