@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.182
+// @version      4.4.183
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.182',
-        scriptVersion: '4.4.182',
+        version: '4.4.183',
+        scriptVersion: '4.4.183',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.182',
+        scriptVersion: '4.4.183',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -6060,7 +6060,8 @@ if (typeof window !== 'undefined') {
 // - in-memory only;
 // - no localStorage;
 // - no explanation layer;
-// - emergency/protect-lead states can override the hold window.
+// - emergency/protect-lead states can override the hold window;
+// - explicit manual hint clicks recompute immediately.
 
 (function momentDriftStabilizer() {
     'use strict';
@@ -6095,6 +6096,15 @@ if (typeof window !== 'undefined') {
 
     function getGameId(result) {
         return String(result?.moment?.gameId ?? getContext(result).gameId ?? 'unknown');
+    }
+
+    function isManualHint(result) {
+        const context = getContext(result);
+        return !!(
+            context.manualHintRequest ||
+            context.coachHintSnapshotContext?.active ||
+            result?.action?.snapshotContextBridge
+        );
     }
 
     function isHardOverride(result) {
@@ -6143,6 +6153,10 @@ if (typeof window !== 'undefined') {
 
     function stabilize(result) {
         if (!result?.action) return result;
+
+        if (isManualHint(result)) {
+            return remember(result);
+        }
 
         if (shouldReset(result) || isHardOverride(result)) {
             return remember(result);
@@ -6195,7 +6209,8 @@ if (typeof window !== 'undefined') {
     if (typeof window !== 'undefined') {
         window.SLFMomentDriftStabilizer = {
             holdMinutes: HOLD_MINUTES,
-            getState: () => stableState ? Object.assign({}, stableState) : null
+            getState: () => stableState ? Object.assign({}, stableState) : null,
+            reset: () => { stableState = null; }
         };
     }
 })();
@@ -16577,6 +16592,104 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         return this.historyVpsRowsPromise;
     };
 
+    TransferMarketAnalyzer.getHistoryDuplicateKey = function getHistoryDuplicateKey(record) {
+        const transfer = record?.transfer || {};
+        const player = record?.player || {};
+        const clubs = record?.clubs || {};
+        const norm = value => this.normalizeText(String(value ?? '')).toLowerCase();
+        return [
+            'completed_transfer',
+            norm(player.playerId || record.playerId || record.slfPlayerId),
+            norm(transfer.dateTs || transfer.dateText || record.dateText || record.transferDateText),
+            Number(transfer.price || record.price || record.salePrice || 0),
+            norm(clubs.fromName || transfer.fromName || record.fromClub),
+            norm(clubs.toName || transfer.toName || record.toClub)
+        ].join('|');
+    };
+
+    TransferMarketAnalyzer.buildHistoryDuplicateReport = function buildHistoryDuplicateReport(records) {
+        const groups = new Map();
+        (records || [])
+            .filter(record => record && (record.recordType === 'completed_transfer' || record.eventType === 'completed_transfer'))
+            .forEach(record => {
+                const key = this.getHistoryDuplicateKey(record);
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(record);
+            });
+
+        const duplicateGroups = [...groups.entries()]
+            .filter(([, items]) => items.length > 1)
+            .map(([key, items]) => {
+                const first = items[0] || {};
+                const transfer = first.transfer || {};
+                const player = first.player || {};
+                const clubs = first.clubs || {};
+                return {
+                    key,
+                    copies: items.length,
+                    duplicates: items.length - 1,
+                    playerId: player.playerId || first.playerId || first.slfPlayerId || '',
+                    name: player.name || first.playerName || first.name || '',
+                    date: transfer.dateText || first.dateText || first.transferDateText || '',
+                    price: transfer.price || first.price || first.salePrice || 0,
+                    from: clubs.fromName || transfer.fromName || first.fromClub || '',
+                    to: clubs.toName || transfer.toName || first.toClub || '',
+                    records: items
+                };
+            })
+            .sort((a, b) => b.copies - a.copies || Number(b.price || 0) - Number(a.price || 0));
+
+        const totalRecords = (records || []).length;
+        const duplicateRecords = duplicateGroups.reduce((sum, group) => sum + group.duplicates, 0);
+        return {
+            totalRecords,
+            uniqueTransfers: totalRecords - duplicateRecords,
+            duplicateRecords,
+            duplicateGroups: duplicateGroups.length,
+            groups: duplicateGroups
+        };
+    };
+
+    TransferMarketAnalyzer.runHistoryDuplicateDryRun = async function runHistoryDuplicateDryRun() {
+        const button = document.getElementById('slf-transfer-history-dup-dry-run');
+        const originalText = button?.textContent || 'Дубли dry-run';
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Считаю...';
+        }
+
+        try {
+            this.setStatus('VPS History duplicates dry-run: загружаю VPS History...');
+            const records = await this.loadHistoryVpsRows();
+            const report = this.buildHistoryDuplicateReport(records);
+            const preview = report.groups.slice(0, 50).map(group => ({
+                copies: group.copies,
+                duplicates: group.duplicates,
+                playerId: group.playerId,
+                name: group.name,
+                date: group.date,
+                price: group.price,
+                from: group.from,
+                to: group.to
+            }));
+
+            console.group('[SLF Transfer History] VPS duplicate dry-run');
+            console.log('summary', report);
+            console.table(preview);
+            console.groupEnd();
+
+            this.setStatus(`VPS duplicates dry-run: records ${report.totalRecords}, unique ${report.uniqueTransfers}, duplicate records ${report.duplicateRecords}, groups ${report.duplicateGroups}. Подробности в console.table.`);
+        } catch (error) {
+            console.warn('[SLF Transfer History] duplicate dry-run failed', error);
+            this.setStatus('VPS duplicates dry-run: ошибка загрузки/анализа VPS History.');
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.textContent = originalText;
+            }
+        }
+    };
+
     TransferMarketAnalyzer.isHistoryRowLocallySubmitted = function isHistoryRowLocallySubmitted(row, alreadySubmitted) {
         if (!row) return false;
         const keySource = this.buildHistoryEventKeySource(row);
@@ -16799,6 +16912,11 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         allButton.textContent = 'Собрать все страницы';
         allButton.title = 'Фоном пройти все страницы текущего wid и текущих фильтров. Первая страница идет без pid, дальше pid=1..N.';
 
+        const dryRunButton = document.createElement('button');
+        dryRunButton.id = 'slf-transfer-history-dup-dry-run';
+        dryRunButton.textContent = 'Дубли dry-run';
+        dryRunButton.title = 'Только посчитать дубли в VPS History. Без удаления и без изменения расчётов.';
+
         const stopButton = document.createElement('button');
         stopButton.id = 'slf-transfer-history-stop';
         stopButton.textContent = 'Стоп';
@@ -16806,8 +16924,10 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         stopButton.title = 'Остановить фоновый сбор после текущего запроса/строки.';
 
         analyzeButton.insertAdjacentElement('afterend', allButton);
-        allButton.insertAdjacentElement('afterend', stopButton);
+        allButton.insertAdjacentElement('afterend', dryRunButton);
+        dryRunButton.insertAdjacentElement('afterend', stopButton);
         allButton.onclick = () => this.analyzeHistoryAllPages();
+        dryRunButton.onclick = () => this.runHistoryDuplicateDryRun();
         stopButton.onclick = () => {
             this.historyFullSyncStopRequested = true;
             this.setStatus('История all pages: остановка после текущего запроса/строки...');
@@ -16818,8 +16938,10 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         const allButton = document.getElementById('slf-transfer-history-all-pages');
         const stopButton = document.getElementById('slf-transfer-history-stop');
         const visibleButton = document.getElementById('slf-transfer-analyze-visible');
+        const dryRunButton = document.getElementById('slf-transfer-history-dup-dry-run');
         if (allButton) allButton.disabled = !!running;
         if (visibleButton) visibleButton.disabled = !!running;
+        if (dryRunButton) dryRunButton.disabled = !!running;
         if (stopButton) stopButton.disabled = !running;
     };
 
@@ -18518,6 +18640,316 @@ App.start();
 // <<< src/modules/strategy-data-recommendations/adaptive-opponent-style-layer.js
 
 
+// >>> src/modules/strategy-data-recommendations/coach-hint-snapshot-context-layer.js
+// Coach Hint Snapshot Context Layer
+// ============================================================
+// Bridges raw SnapshotEngine output into CurrentActionHintEngine flat metrics.
+//
+// Contract:
+// - no UI explanation layer;
+// - no localStorage;
+// - no preset selection on its own;
+// - only enriches manual/current hint input with gameId, score state, xG/xT,
+//   team stats and derived tactical signals.
+
+(function coachHintSnapshotContextLayer() {
+    'use strict';
+
+    if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
+    if (CurrentActionHintEngine.__coachHintSnapshotContextApplied) return;
+
+    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
+
+    function num(value, fallback = 0) {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : fallback;
+    }
+
+    function hasValue(value) {
+        return value !== undefined && value !== null && value !== '';
+    }
+
+    function findStat(snapshot, teamId) {
+        const rows = Array.isArray(snapshot?.stats) ? snapshot.stats : [];
+        const id = Number(teamId);
+        return rows.find(row => Number(row?.teamId) === id)?.stats || null;
+    }
+
+    function getTeamContext(snapshot) {
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams.map(Number).filter(Boolean) : [];
+        const myTeam = Number(snapshot?.myTeam || 0) || null;
+        const myIndex = teams.findIndex(id => Number(id) === Number(myTeam));
+        const safeMyIndex = myIndex >= 0 ? myIndex : 0;
+        const oppIndex = safeMyIndex === 0 ? 1 : 0;
+        const myId = teams[safeMyIndex] || myTeam || null;
+        const oppId = teams[oppIndex] || null;
+
+        return {
+            teams,
+            myTeam: myId,
+            oppTeam: oppId,
+            mySide: safeMyIndex === 0 ? 'home' : 'away',
+            oppSide: safeMyIndex === 0 ? 'away' : 'home',
+            myStats: findStat(snapshot, myId),
+            oppStats: findStat(snapshot, oppId)
+        };
+    }
+
+    function deriveMinute(snapshot, context) {
+        const explicit = context?.minute ?? snapshot?.minute ?? snapshot?.baseMinute ?? snapshot?.effectiveMinute;
+        if (hasValue(explicit)) return num(explicit, 0);
+        if (snapshot?.status === 'finished') return 90;
+        return 0;
+    }
+
+    function deriveScoreState(snapshot, teamCtx) {
+        const score = snapshot?.score || {};
+        if (hasValue(score.diff)) {
+            const diff = num(score.diff, 0);
+            return {
+                diff,
+                state: diff > 0 ? 'winning' : diff < 0 ? 'losing' : 'draw'
+            };
+        }
+
+        if (!hasValue(score.home) || !hasValue(score.away)) {
+            return { diff: 0, state: 'unknown' };
+        }
+
+        const home = num(score.home, 0);
+        const away = num(score.away, 0);
+        const diff = teamCtx.mySide === 'away' ? away - home : home - away;
+
+        return {
+            diff,
+            state: diff > 0 ? 'winning' : diff < 0 ? 'losing' : 'draw'
+        };
+    }
+
+    function readXT(snapshot, side) {
+        const xT = snapshot?.xT || {};
+        return num(xT?.[side], 0);
+    }
+
+    function addSignal(signals, signal) {
+        if (signal && !signals.includes(signal)) signals.push(signal);
+    }
+
+    function hintTextList(snapshot) {
+        const hints = Array.isArray(snapshot?.developerHints) ? snapshot.developerHints : [];
+        return hints
+            .map(hint => String(hint?.text || hint || '').toLowerCase())
+            .filter(Boolean);
+    }
+
+    function deriveHintSignals(snapshot, signals) {
+        const texts = hintTextList(snapshot);
+        const has = pattern => texts.some(text => pattern.test(text));
+
+        if (has(/устал|требуются замены|замен/)) addSignal(signals, 'press_fatigue_risk');
+        if (has(/повысить интенсивность прессинга|высокий прессинг|прессинг/)) addSignal(signals, 'own_high_press');
+        if (has(/опустите прессинг|снизить прессинг/)) addSignal(signals, 'press_fatigue_risk');
+        if (has(/фланг|lw|rw|lm|rm|край/)) addSignal(signals, 'wide_quality');
+        if (has(/атака по центру|центр закрыт|отключите атаку по центру/)) addSignal(signals, 'center_closed');
+        if (has(/контратак|обрез|быстр/)) addSignal(signals, 'transition_threat');
+        if (has(/кросс|навес/)) addSignal(signals, 'wide_quality');
+        if (has(/ж[её]лт|карточ/)) addSignal(signals, 'opponent_cards_available');
+    }
+
+    function deriveSignals(snapshot, context, metrics) {
+        const signals = [];
+        const rawSignals = [];
+
+        if (Array.isArray(context?.signals)) rawSignals.push(...context.signals);
+        if (Array.isArray(snapshot?.signals)) rawSignals.push(...snapshot.signals);
+        rawSignals.forEach(signal => addSignal(signals, String(signal)));
+
+        if (metrics.needGoal) addSignal(signals, 'need_goal');
+        if (metrics.lateNeedGoal) addSignal(signals, 'late_need_goal');
+        if (metrics.protectLead) addSignal(signals, 'protect_lead');
+        if (metrics.underPressure) addSignal(signals, 'under_pressure');
+        if (metrics.attackingMomentum) addSignal(signals, 'attacking_momentum');
+        if (metrics.highBadActions) addSignal(signals, 'high_bad_actions');
+        if (metrics.myPress > 18) addSignal(signals, 'own_high_press');
+        if (metrics.oppPress > 18) addSignal(signals, 'opponent_high_press');
+        if (metrics.oppPress > metrics.myPress + 14) addSignal(signals, 'opponent_high_press');
+        if (metrics.oppXg > metrics.myXg + 0.65 && metrics.oppXT >= metrics.myXT) addSignal(signals, 'transition_threat');
+        if (metrics.oppDef < -15) addSignal(signals, 'opponent_low_block');
+        if (metrics.myXT > metrics.oppXT + 0.18) addSignal(signals, 'wide_quality');
+        if (metrics.myXg < 0.35 && metrics.oppXg < 0.35 && metrics.minute >= 25) addSignal(signals, 'center_closed');
+
+        deriveHintSignals(snapshot, signals);
+
+        return signals;
+    }
+
+    function deriveContext(snapshot, context = {}) {
+        const teamCtx = getTeamContext(snapshot || {});
+        const score = deriveScoreState(snapshot || {}, teamCtx);
+        const minute = deriveMinute(snapshot || {}, context || {});
+        const myStats = teamCtx.myStats || {};
+        const oppStats = teamCtx.oppStats || {};
+
+        const myXg = hasValue(context.myXg) ? num(context.myXg) : num(myStats.xG, 0);
+        const oppXg = hasValue(context.oppXg) ? num(context.oppXg) : num(oppStats.xG, 0);
+        const myXT = hasValue(context.myXT) ? num(context.myXT) : readXT(snapshot, teamCtx.mySide);
+        const oppXT = hasValue(context.oppXT) ? num(context.oppXT) : readXT(snapshot, teamCtx.oppSide);
+        const myBad = hasValue(context.myBad) ? num(context.myBad) : num(myStats.badActionsPct, 0);
+        const oppBad = num(oppStats.badActionsPct, 0);
+        const myPress = hasValue(context.myPress) ? num(context.myPress) : num(myStats.pressVector, 0);
+        const oppPress = hasValue(context.oppPress) ? num(context.oppPress) : num(oppStats.pressVector, 0);
+        const myDef = num(myStats.defVector, 0);
+        const oppDef = hasValue(context.oppDef) ? num(context.oppDef) : num(oppStats.defVector, 0);
+        const myPossession = num(myStats.possession, 0);
+        const oppPossession = num(oppStats.possession, 0);
+        const myShots = num(myStats.shots, 0);
+        const oppShots = num(oppStats.shots, 0);
+        const myPower = num(myStats.power, 0);
+        const oppPower = num(oppStats.power, 0);
+
+        const needGoal = score.state === 'losing' && minute >= 55;
+        const lateNeedGoal = score.state === 'losing' && minute >= 80;
+        const protectLead = score.state === 'winning' && minute >= 70;
+        const underPressure = oppXg > myXg + 0.4 || oppXT > myXT + 0.2 || oppShots > myShots + 4;
+        const attackingMomentum = myXg > oppXg + 0.3 || myXT > oppXT + 0.2 || myShots > oppShots + 4;
+        const highBadActions = myBad >= 20;
+
+        const metrics = {
+            minute,
+            scoreState: score.state,
+            myXg,
+            oppXg,
+            myXT,
+            oppXT,
+            myBad,
+            oppBad,
+            myPress,
+            oppPress,
+            myDef,
+            oppDef,
+            myPossession,
+            oppPossession,
+            myShots,
+            oppShots,
+            myPower,
+            oppPower,
+            needGoal,
+            lateNeedGoal,
+            protectLead,
+            underPressure,
+            attackingMomentum,
+            highBadActions
+        };
+
+        const signals = deriveSignals(snapshot || {}, context || {}, metrics);
+        const manualHintRequest = !!(
+            snapshot?.manualRecommendationRefresh ||
+            snapshot?.recommendationSource === 'manual' ||
+            context?.manualHintRequest
+        );
+
+        return Object.assign({}, context || {}, metrics, {
+            gameId: String(snapshot?.gameId || context?.gameId || 'unknown'),
+            matchStatus: snapshot?.status || context?.matchStatus || 'unknown',
+            scoreState: score.state,
+            score: Object.assign({}, snapshot?.score || {}, { diff: score.diff }),
+            teamSide: teamCtx.mySide,
+            myTeam: teamCtx.myTeam,
+            oppTeam: teamCtx.oppTeam,
+            signals,
+            manualHintRequest,
+            coachHintSnapshotContext: {
+                active: true,
+                source: 'snapshot_stats_bridge',
+                myTeam: teamCtx.myTeam,
+                oppTeam: teamCtx.oppTeam,
+                mySide: teamCtx.mySide,
+                scoreState: score.state,
+                signalCount: signals.length
+            }
+        });
+    }
+
+    function cloneSnapshot(snapshot, enrichedContext) {
+        if (!snapshot || typeof snapshot !== 'object') return snapshot;
+        const clone = Object.assign({}, snapshot);
+
+        clone.gameId = enrichedContext.gameId;
+        clone.minute = enrichedContext.minute;
+        clone.score = Object.assign({}, snapshot.score || {}, { diff: enrichedContext.score.diff });
+        clone.scoreState = enrichedContext.scoreState;
+        clone.signals = enrichedContext.signals.slice();
+        clone.myXg = enrichedContext.myXg;
+        clone.oppXg = enrichedContext.oppXg;
+        clone.myXT = enrichedContext.myXT;
+        clone.oppXT = enrichedContext.oppXT;
+        clone.myBad = enrichedContext.myBad;
+        clone.myPress = enrichedContext.myPress;
+        clone.oppPress = enrichedContext.oppPress;
+        clone.oppDef = enrichedContext.oppDef;
+        clone.manualHintRequest = enrichedContext.manualHintRequest;
+
+        return clone;
+    }
+
+    CurrentActionHintEngine.run = function runWithCoachHintSnapshotContext(snapshot, context = {}) {
+        const enrichedContext = deriveContext(snapshot, context || {});
+        const enrichedSnapshot = cloneSnapshot(snapshot, enrichedContext);
+        const result = originalRun(enrichedSnapshot, enrichedContext);
+
+        if (result?.moment) {
+            result.moment.gameId = enrichedContext.gameId;
+            result.moment.score = enrichedContext.scoreState;
+            result.moment.context = Object.assign({}, result.moment.context || {}, {
+                gameId: enrichedContext.gameId,
+                matchStatus: enrichedContext.matchStatus,
+                manualHintRequest: enrichedContext.manualHintRequest,
+                coachHintSnapshotContext: enrichedContext.coachHintSnapshotContext,
+                myPower: enrichedContext.myPower,
+                oppPower: enrichedContext.oppPower,
+                myPossession: enrichedContext.myPossession,
+                oppPossession: enrichedContext.oppPossession,
+                myShots: enrichedContext.myShots,
+                oppShots: enrichedContext.oppShots
+            });
+        }
+
+        if (result?.action) {
+            result.action.snapshotContextBridge = true;
+        }
+
+        if (typeof window !== 'undefined') {
+            window.SLFLastCoachHintContext = {
+                gameId: enrichedContext.gameId,
+                minute: enrichedContext.minute,
+                scoreState: enrichedContext.scoreState,
+                signals: enrichedContext.signals.slice(),
+                metrics: {
+                    myXg: enrichedContext.myXg,
+                    oppXg: enrichedContext.oppXg,
+                    myXT: enrichedContext.myXT,
+                    oppXT: enrichedContext.oppXT,
+                    myBad: enrichedContext.myBad,
+                    myPress: enrichedContext.myPress,
+                    oppPress: enrichedContext.oppPress
+                }
+            };
+        }
+
+        return result;
+    };
+
+    CurrentActionHintEngine.__coachHintSnapshotContextApplied = true;
+
+    if (typeof window !== 'undefined') {
+        window.SLFCoachHintSnapshotContextLayer = {
+            deriveContext
+        };
+    }
+})();
+// <<< src/modules/strategy-data-recommendations/coach-hint-snapshot-context-layer.js
+
+
 // >>> src/modules/strategy-data-recommendations/preset-fit-scoring.js
 // Strategy Data: preset fit scoring and decision fusion
 // ============================================================
@@ -19012,15 +19444,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.182',
-        scriptVersion: '4.4.182',
+        version: '4.4.183',
+        scriptVersion: '4.4.183',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.182',
+        scriptVersion: '4.4.183',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
