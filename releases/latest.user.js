@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.191
+// @version      4.4.192
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.191',
-        scriptVersion: '4.4.191',
+        version: '4.4.192',
+        scriptVersion: '4.4.192',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.191',
+        scriptVersion: '4.4.192',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -3855,6 +3855,233 @@ const TacticPresetLibrary = {
 
 // ============================================================
 // <<< src/modules/tactics-presets/tactic-preset-library.js
+
+
+// >>> src/modules/tactics-presets/tactic-preset-library-panel.js
+// Tactic Preset Library Panel
+// ============================================================
+
+const TacticPresetLibraryPanel = {
+    panelId: 'slf-tactic-preset-library-panel',
+    layoutId: 'slf-tactic-preset-layout',
+
+    isTacticPage() {
+        const params = new URLSearchParams(location.search || '');
+        return location.pathname.includes('/team4.php') && params.get('action') === 'tactic';
+    },
+
+    escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    },
+
+    getGroupColors() {
+        return {
+            defensive: '#9fd3ff',
+            balance: '#ffd76a',
+            attack: '#ff9f9f',
+            henta: '#c6a6ff'
+        };
+    },
+
+    getGroups() {
+        return [
+            {
+                id: 'defensive',
+                title: 'Defensive / удержание',
+                desc: 'Схемы для удержания счёта, снижения риска, компактности и игры против давления.'
+            },
+            {
+                id: 'balance',
+                title: 'Balance / контроль',
+                desc: 'Схемы для равного матча, контроля центра, снижения брака и аккуратного вскрытия блока.'
+            },
+            {
+                id: 'attack',
+                title: 'Attack / давление',
+                desc: 'Схемы для усиления давления, дожима, высокого прессинга и спасения матча.'
+            },
+            {
+                id: 'henta',
+                title: 'Henta Experimental',
+                desc: 'Низкий блок, агрессивные отборы и ловушки через фланги, центр или контру.'
+            }
+        ];
+    },
+
+    renderPresetCard(name, meta, existsInStorage) {
+        const groupColors = this.getGroupColors();
+        const color = groupColors[meta.group] || '#ddd';
+        const statusText = existsInStorage
+            ? 'есть в dropdown'
+            : 'описание есть, пресет не импортирован';
+        const statusColor = existsInStorage ? '#7cff7c' : '#ffb86c';
+
+        return `
+            <div style="
+                background:#181818;
+                border:1px solid #444;
+                border-left:4px solid ${color};
+                border-radius:6px;
+                padding:8px 9px;
+                margin:7px 0;
+            ">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                    <div style="min-width:0;">
+                        <div style="font-weight:bold;color:${color};font-size:13px;line-height:1.25;word-break:break-word;">
+                            ${this.escapeHtml(name)}
+                        </div>
+                        <div style="font-size:10px;color:#aaa;margin-top:2px;line-height:1.3;">
+                            ${this.escapeHtml(meta.title || '')}
+                            · group: ${this.escapeHtml(meta.group || '')}
+                            · rank: ${this.escapeHtml(meta.rank ?? '')}
+                        </div>
+                    </div>
+                    <div style="font-size:10px;color:${statusColor};border:1px solid ${statusColor};border-radius:10px;padding:1px 6px;white-space:nowrap;">
+                        ${this.escapeHtml(statusText)}
+                    </div>
+                </div>
+
+                <div style="margin-top:7px;line-height:1.35;font-size:11px;">
+                    <div><b style="color:#ddd;">Идея:</b> ${this.escapeHtml(meta.idea || '')}</div>
+                    <div style="margin-top:3px;"><b style="color:#ddd;">Использовать:</b> ${this.escapeHtml(meta.use || '')}</div>
+                    <div style="margin-top:3px;"><b style="color:#ddd;">Риск:</b> ${this.escapeHtml(meta.risk || '')}</div>
+                </div>
+            </div>
+        `;
+    },
+
+    buildHtml() {
+        const meta =
+            typeof TacticPresetLibrary !== 'undefined' && TacticPresetLibrary.meta
+                ? TacticPresetLibrary.meta
+                : {};
+
+        const presets =
+            typeof PresetStorage !== 'undefined' && PresetStorage.getAllPresets
+                ? PresetStorage.getAllPresets()
+                : {};
+
+        const names = Object.keys(meta);
+
+        if (!names.length) {
+            return `
+                <h3 style="margin:0 0 8px 0;color:#ffd76a;font-size:14px;">Preset Library</h3>
+                <div style="color:#f99;">TacticPresetLibrary пустой или не найден.</div>
+            `;
+        }
+
+        const groupHtml = this.getGroups().map(group => {
+            const groupNames = names
+                .filter(name => meta[name].group === group.id)
+                .sort((a, b) => {
+                    const ra = Number(meta[a].rank || 0);
+                    const rb = Number(meta[b].rank || 0);
+                    return rb - ra || a.localeCompare(b);
+                });
+
+            if (!groupNames.length) return '';
+
+            const cards = groupNames
+                .map(name => this.renderPresetCard(name, meta[name], !!presets[name]))
+                .join('');
+
+            return `
+                <div style="margin-bottom:12px;">
+                    <h4 style="margin:9px 0 3px 0;color:#ffd76a;font-size:13px;text-transform:uppercase;">
+                        ${this.escapeHtml(group.title)}
+                    </h4>
+                    <div style="color:#aaa;margin-bottom:7px;font-size:11px;line-height:1.3;">
+                        ${this.escapeHtml(group.desc)}
+                    </div>
+                    ${cards}
+                </div>
+            `;
+        }).join('');
+
+        const importedCount = names.filter(name => presets[name]).length;
+
+        return `
+            <h3 style="margin:0 0 8px 0;color:#fff;font-size:14px;font-variant:small-caps;letter-spacing:.3px;">
+                Preset Library
+            </h3>
+            <div style="
+                margin-bottom:9px;
+                padding:7px 8px;
+                background:#181818;
+                border:1px solid #444;
+                border-radius:6px;
+                color:#ddd;
+                line-height:1.35;
+                font-size:11px;
+            ">
+                Справочник авторских схем: что означает пресет, когда его использовать и какой риск.
+                <br>
+                Импортировано в dropdown: <b style="color:#7cff7c;">${this.escapeHtml(importedCount)}</b> из <b>${this.escapeHtml(names.length)}</b>.
+            </div>
+            ${groupHtml}
+        `;
+    },
+
+    ensureLayout(tacticWrap) {
+        let layout = document.getElementById(this.layoutId);
+        if (layout) return layout;
+
+        layout = document.createElement('div');
+        layout.id = this.layoutId;
+        layout.style.cssText = `
+            display:flex;
+            align-items:flex-start;
+            gap:12px;
+            width:max-content;
+            max-width:none;
+        `;
+
+        tacticWrap.parentNode.insertBefore(layout, tacticWrap);
+        layout.appendChild(tacticWrap);
+
+        return layout;
+    },
+
+    mount() {
+        if (!this.isTacticPage()) return;
+
+        const tacticWrap = document.querySelector('.ui-tactic__wrap');
+        if (!tacticWrap) return;
+
+        const layout = this.ensureLayout(tacticWrap);
+        let panel = document.getElementById(this.panelId);
+
+        if (!panel) {
+            panel = document.createElement('aside');
+            panel.id = this.panelId;
+            panel.style.cssText = `
+                width:430px;
+                max-height:720px;
+                overflow:auto;
+                padding:10px;
+                background:#111;
+                color:#fff;
+                border:1px solid #444;
+                border-radius:6px;
+                box-sizing:border-box;
+                font-family:Arial,sans-serif;
+                font-size:12px;
+            `;
+
+            layout.appendChild(panel);
+        }
+
+        panel.innerHTML = this.buildHtml();
+    }
+};
+
+// ============================================================
+// <<< src/modules/tactics-presets/tactic-preset-library-panel.js
 
 
 // >>> src/modules/strategy-data-recommendations/tactical-urgency-model.js
@@ -7952,365 +8179,6 @@ if (!isTacticPage) return;
 
 // ============================================================
 // <<< src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
-
-
-// >>> src/modules/uncategorized/021-data-inspector-page.js
-// 11.5 Data Inspector Page
-// ============================================================
-
-const DataInspector = {
-    tabId: 'slf-data-global-link',
-    pageId: 'slf-data-page',
-
-    addGlobalMenuButton() {
-        if (document.getElementById(this.tabId)) return;
-
-        const link = document.createElement('a');
-        link.id = this.tabId;
-        link.href = '#';
-        link.textContent = 'SLF Data';
-        link.style.cssText = `
-            display:inline-flex;
-            align-items:center;
-            justify-content:center;
-            height:22px;
-            margin-left:8px;
-            padding:0 10px;
-            border:1px solid #666;
-            border-radius:4px;
-            background:#2b2b2b;
-            color:#7cff7c;
-            font-weight:bold;
-            text-decoration:none;
-            cursor:pointer;
-            vertical-align:middle;
-        `;
-
-        link.addEventListener('click', e => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.show();
-        });
-
-        const searchForm = document.querySelector('.head-ui__search-form');
-
-        if (searchForm) {
-            searchForm.appendChild(link);
-        } else {
-            const searchMenu = [...document.querySelectorAll('a')]
-                .find(a => (a.innerText || '').trim() === 'Поиск');
-
-            if (!searchMenu || !searchMenu.parentNode) {
-                console.warn('[SLF Data] search form/menu not found');
-                return;
-            }
-
-            searchMenu.parentNode.insertBefore(link, searchMenu.nextSibling);
-        }
-
-        this.createPage();
-    },
-
-    createPage() {
-        if (document.getElementById(this.pageId)) return;
-
-        const page = document.createElement('div');
-        page.id = this.pageId;
-        page.style.cssText = `
-            display:none;
-            position:fixed;
-            top:70px;
-            left:50%;
-            transform:translateX(-50%);
-            width:980px;
-            max-height:82vh;
-            z-index:99999;
-            padding:12px;
-            background:#1f1f1f;
-            color:#fff;
-            border:1px solid #555;
-            border-radius:6px;
-            box-shadow:0 10px 30px rgba(0,0,0,0.7);
-            font-family:Arial,sans-serif;
-            font-size:13px;
-        `;
-
-        page.innerHTML = `
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-                <b style="font-size:15px;">SLF Data Inspector</b>
-                <button id="slf-data-overview-btn">Overview</button>
-                <button id="slf-data-players-btn">Players</button>
-                <button id="slf-data-presets-btn">Presets</button>
-                <button id="slf-data-close-btn">Закрыть</button>
-            </div>
-            <div id="slf-data-content" style="background:#111;border:1px solid #444;padding:10px;min-height:160px;max-height:66vh;overflow:auto;white-space:normal;">
-                Нажми Overview, Players или Presets.
-            </div>
-        `;
-
-        document.body.appendChild(page);
-
-        document.getElementById('slf-data-overview-btn').onclick = () => this.renderOverview();
-        document.getElementById('slf-data-players-btn').onclick = () => this.renderPlayers();
-        document.getElementById('slf-data-presets-btn').onclick = () => this.renderPresets();
-        document.getElementById('slf-data-close-btn').onclick = () => this.hide();
-    },
-
-    show() {
-        this.createPage();
-
-        const page = document.getElementById(this.pageId);
-        if (page) {
-            page.style.display = 'block';
-            this.renderOverview();
-        }
-    },
-
-    hide() {
-        const page = document.getElementById(this.pageId);
-        if (page) page.style.display = 'none';
-    },
-
-    setContent(html) {
-        const content = document.getElementById('slf-data-content');
-        if (content) content.innerHTML = html;
-    },
-
-    escapeHtml(value) {
-        return String(value ?? '')
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#039;');
-    },
-
-    renderOverview() {
-        this.setContent('Загрузка Overview v2...');
-
-        fetchCanonicalApiStatus()
-            .then(status => {
-                const c = status.collections || {};
-
-                this.setContent(`
-                    <h3>Overview v2</h3>
-                    <div style="margin-bottom:8px;color:#aaa;">
-                        Канонические исторические коллекции: <b>match_snapshots_v2</b>, <b>match_results_v2</b>, <b>preset_events_v2</b>, <b>preset_effects_v2</b>.
-                        Legacy-коллекции не учитываются.
-                    </div>
-                    <table style="width:100%;border-collapse:collapse;">
-                        <tr><td>Unique games in v2 history</td><td>${status.games ?? 0}</td></tr>
-                        <tr><td>Snapshots v2</td><td>${c.snapshots?.count ?? 0}</td></tr>
-                        <tr><td>Match results v2</td><td>${c.results?.count ?? 0}</td></tr>
-                        <tr><td>Preset events v2</td><td>${c.events?.count ?? 0}</td></tr>
-                        <tr><td>Preset effects v2</td><td>${c.effects?.count ?? 0}</td></tr>
-                        <tr><td>Player observations</td><td>${c.players?.count ?? 0}</td></tr>
-                        <tr><td>Transfer history</td><td>${c.transfers?.count ?? 0}</td></tr>
-                        <tr><td>Tactics</td><td>${c.tactics?.count ?? 0}</td></tr>
-                    </table>
-                `);
-            })
-            .catch(() => this.setContent('Ошибка загрузки Overview v2'));
-    },
-
-    renderPlayers() {
-        this.setContent('Загрузка Players...');
-
-        Api.get(
-            'player_observations',
-            data => {
-                const rows = Array.isArray(data) ? data.slice(-50).reverse() : [];
-
-                if (!rows.length) {
-                    this.setContent('player_observations пусто');
-                    return;
-                }
-
-                const htmlRows = rows.map(p => `
-                    <tr>
-                        <td>${p.playerId ?? ''}</td>
-                        <td>${p.name ?? ''}</td>
-                        <td>${p.teamId ?? ''}</td>
-                        <td>${p.currentPosition ?? ''}</td>
-                        <td>${Array.isArray(p.possiblePositions) ? p.possiblePositions.join('/') : ''}</td>
-                        <td>${p.skill ?? ''}</td>
-                        <td>${p.exactSlot ?? ''}</td>
-                        <td>${p.gameId ?? ''}</td>
-                        <td>${p.minute ?? ''}</td>
-                    </tr>
-                `).join('');
-
-                this.setContent(`
-                    <h3>Last 50 player observations</h3>
-                    <table style="width:100%;border-collapse:collapse;font-size:12px;">
-                        <thead>
-                            <tr style="color:#ffd76a;">
-                                <th>playerId</th>
-                                <th>name</th>
-                                <th>teamId</th>
-                                <th>pos</th>
-                                <th>possible</th>
-                                <th>skill</th>
-                                <th>slot</th>
-                                <th>game</th>
-                                <th>min</th>
-                            </tr>
-                        </thead>
-                        <tbody>${htmlRows}</tbody>
-                    </table>
-                `);
-            },
-            () => this.setContent('Ошибка загрузки Players')
-        );
-    },
-
-    renderPresetCard(name, meta, existsInStorage) {
-        const groupColors = {
-            defensive: '#9fd3ff',
-            balance: '#ffd76a',
-            attack: '#ff9f9f',
-            henta: '#c6a6ff'
-        };
-
-        const color = groupColors[meta.group] || '#ddd';
-
-        const statusText = existsInStorage
-            ? 'есть в dropdown'
-            : 'описание есть, пресет не импортирован';
-
-        const statusColor = existsInStorage ? '#7cff7c' : '#ffb86c';
-
-        return `
-            <div style="
-                background:#181818;
-                border:1px solid #444;
-                border-left:4px solid ${color};
-                border-radius:6px;
-                padding:9px 10px;
-                margin:8px 0;
-            ">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-                    <div>
-                        <div style="font-weight:bold;color:${color};font-size:14px;">
-                            ${this.escapeHtml(name)}
-                        </div>
-                        <div style="font-size:11px;color:#aaa;margin-top:2px;">
-                            ${this.escapeHtml(meta.title || '')}
-                            · group: ${this.escapeHtml(meta.group || '')}
-                            · rank: ${this.escapeHtml(meta.rank ?? '')}
-                        </div>
-                    </div>
-                    <div style="font-size:11px;color:${statusColor};border:1px solid ${statusColor};border-radius:10px;padding:2px 7px;">
-                        ${this.escapeHtml(statusText)}
-                    </div>
-                </div>
-
-                <div style="margin-top:8px;line-height:1.4;">
-                    <div><b style="color:#ddd;">Идея:</b> ${this.escapeHtml(meta.idea || '')}</div>
-                    <div style="margin-top:4px;"><b style="color:#ddd;">Использовать:</b> ${this.escapeHtml(meta.use || '')}</div>
-                    <div style="margin-top:4px;"><b style="color:#ddd;">Риск:</b> ${this.escapeHtml(meta.risk || '')}</div>
-                </div>
-            </div>
-        `;
-    },
-
-    renderPresets() {
-        const meta =
-            typeof TacticPresetLibrary !== 'undefined' && TacticPresetLibrary.meta
-                ? TacticPresetLibrary.meta
-                : {};
-
-        const presets =
-            typeof PresetStorage !== 'undefined' && PresetStorage.getAllPresets
-                ? PresetStorage.getAllPresets()
-                : {};
-
-        const names = Object.keys(meta);
-
-        if (!names.length) {
-            this.setContent(`
-                <h3>Preset Library</h3>
-                <div style="color:#f99;">TacticPresetLibrary пустой или не найден.</div>
-            `);
-            return;
-        }
-
-        const groups = [
-            {
-                id: 'defensive',
-                title: 'Defensive / удержание',
-                desc: 'Схемы для удержания счёта, снижения риска, компактности и игры против давления.'
-            },
-            {
-                id: 'balance',
-                title: 'Balance / контроль',
-                desc: 'Схемы для равного матча, контроля центра, снижения брака и аккуратного вскрытия блока.'
-            },
-            {
-                id: 'attack',
-                title: 'Attack / давление',
-                desc: 'Схемы для усиления давления, дожима, высокого прессинга и спасения матча.'
-            },
-            {
-                id: 'henta',
-                title: 'Henta Experimental',
-                desc: 'Низкий блок, агрессивные отборы и ловушки через фланги, центр или контру.'
-            }
-        ];
-
-        const groupHtml = groups.map(group => {
-            const groupNames = names
-                .filter(name => meta[name].group === group.id)
-                .sort((a, b) => {
-                    const ra = Number(meta[a].rank || 0);
-                    const rb = Number(meta[b].rank || 0);
-                    return rb - ra || a.localeCompare(b);
-                });
-
-            if (!groupNames.length) return '';
-
-            const cards = groupNames
-                .map(name => this.renderPresetCard(name, meta[name], !!presets[name]))
-                .join('');
-
-            return `
-                <div style="margin-bottom:14px;">
-                    <h3 style="margin:10px 0 4px 0;color:#ffd76a;">${this.escapeHtml(group.title)}</h3>
-                    <div style="color:#aaa;margin-bottom:8px;">${this.escapeHtml(group.desc)}</div>
-                    ${cards}
-                </div>
-            `;
-        }).join('');
-
-        const importedCount = names.filter(name => presets[name]).length;
-
-        this.setContent(`
-            <div>
-                <h3 style="margin-top:0;">Preset Library</h3>
-
-                <div style="
-                    margin-bottom:10px;
-                    padding:8px 10px;
-                    background:#181818;
-                    border:1px solid #444;
-                    border-radius:6px;
-                    color:#ddd;
-                    line-height:1.4;
-                ">
-                    Здесь справочник авторских схем: что означает пресет, когда его использовать и какой риск.
-                    <br>
-                    Импортировано в dropdown: <b style="color:#7cff7c;">${importedCount}</b> из <b>${names.length}</b>.
-                    Если у схемы статус “описание есть, пресет не импортирован”, значит она есть в справочнике рекомендаций, но её ещё нет в твоём JSON пресетов.
-                </div>
-
-                ${groupHtml}
-            </div>
-        `);
-    }
-};
-
-// ============================================================
-// <<< src/modules/uncategorized/021-data-inspector-page.js
 
 
 // >>> src/modules/transfer-analyzer/tm-enrichment-layer.js
@@ -17163,7 +17031,7 @@ const App = {
     // - no live parser auto-resume;
     // - no manual tactic watcher freeze/status loop;
     // - tactical blocks are rebuilt only when the user presses "Подсказка".
-    DataInspector.addGlobalMenuButton();
+    TacticPresetLibraryPanel.mount();
     TrainingGuidePanel.mount();
     LoanLimitPanel.mount();
 
@@ -17211,9 +17079,7 @@ const App = {
             SnapshotEngine,
             EventTracker,
             RecommendationEngine,
-            DataInspector,
-            YouthExternalMonitor,
-            YouthApplicationAutofill,
+            TacticPresetLibraryPanel,
             TMEnrichmentLayer,
             SLFAlterLayer,
             TransferMarketAnalyzer,
@@ -17312,9 +17178,7 @@ const App = {
 
             readTransferHistory(limit = 5) {
                 return this.readCollection('transfer_history', limit);
-            },
-
-            checkYouthPlayer: tmId => YouthExternalMonitor.checkSlfExists(tmId)
+            }
         };
 
         window.SLF_DEBUG = SLF_DEBUG_EXPORT;
@@ -17831,15 +17695,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.191',
-        scriptVersion: '4.4.191',
+        version: '4.4.192',
+        scriptVersion: '4.4.192',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.191',
+        scriptVersion: '4.4.192',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
