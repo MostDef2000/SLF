@@ -8,7 +8,7 @@ const App = {
     // - no live parser auto-resume;
     // - no manual tactic watcher freeze/status loop;
     // - tactical blocks are rebuilt only when the user presses "Подсказка".
-    DataInspector.addGlobalMenuButton();
+    TacticPresetLibraryPanel.mount();
     TrainingGuidePanel.mount();
     LoanLimitPanel.mount();
 
@@ -56,9 +56,7 @@ const App = {
             SnapshotEngine,
             EventTracker,
             RecommendationEngine,
-            DataInspector,
-            YouthExternalMonitor,
-            YouthApplicationAutofill,
+            TacticPresetLibraryPanel,
             TMEnrichmentLayer,
             SLFAlterLayer,
             TransferMarketAnalyzer,
@@ -157,9 +155,7 @@ const App = {
 
             readTransferHistory(limit = 5) {
                 return this.readCollection('transfer_history', limit);
-            },
-
-            checkYouthPlayer: tmId => YouthExternalMonitor.checkSlfExists(tmId)
+            }
         };
 
         window.SLF_DEBUG = SLF_DEBUG_EXPORT;
