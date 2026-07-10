@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.193
+// @version      4.4.194
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.193',
-        scriptVersion: '4.4.193',
+        version: '4.4.194',
+        scriptVersion: '4.4.194',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.193',
+        scriptVersion: '4.4.194',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -15451,6 +15451,32 @@ TransferMyBidsRank.start();
 // <<< src/modules/transfer-analyzer/transfer-my-bids-rank.js
 
 
+// >>> src/modules/transfer-analyzer/transfer-my-bids-cache-policy.js
+// Transfer Analyzer: bid cache page policy
+// ============================================================
+
+if (typeof TransferMyBidsRank !== 'undefined' && TransferMyBidsRank) {
+    const clearButtonId = 'slf-my-bids-rank-clear';
+    const originalAddToolbarButtons = TransferMyBidsRank.addToolbarButtons;
+
+    // A page reload starts a fresh bid-rank session. The short-lived cache still
+    // prevents duplicate requests while the current page remains open.
+    TransferMyBidsRank.clearCache();
+
+    TransferMyBidsRank.addToolbarButtons = function addToolbarButtonsWithoutCacheReset() {
+        originalAddToolbarButtons.call(this);
+        document.getElementById(clearButtonId)?.remove();
+    };
+
+    // Covers the case where the original module mounted synchronously before
+    // this policy module was evaluated.
+    document.getElementById(clearButtonId)?.remove();
+}
+
+// ============================================================
+// <<< src/modules/transfer-analyzer/transfer-my-bids-cache-policy.js
+
+
 // >>> src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
 // Transfer history VPS sync runtime
 // =================================
@@ -17741,15 +17767,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.193',
-        scriptVersion: '4.4.193',
+        version: '4.4.194',
+        scriptVersion: '4.4.194',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.193',
+        scriptVersion: '4.4.194',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
