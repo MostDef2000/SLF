@@ -11,8 +11,7 @@ const EXCLUDED_SOURCE_FILES = new Set([
 ]);
 const EXPECTED_POST_BOOTSTRAP = [
   'src/modules/strategy-data-recommendations/preset-fit-scoring.js',
-  'src/modules/tactics-presets/tactics-dropdown-ui-policy.js',
-  'src/modules/transfer-analyzer/transfer-min-badge-full-width-fix.js'
+  'src/modules/tactics-presets/tactics-dropdown-ui-policy.js'
 ];
 
 function absolute(rel) {
