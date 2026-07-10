@@ -41,6 +41,7 @@
     "src/modules/transfer-analyzer/transfer-market-analyzer.js",
     "src/modules/transfer-analyzer/transfer-history-money-parser-patch.js",
     "src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js",
+    "src/modules/transfer-analyzer/purchase-forecast-full-date-patch.js",
     "src/modules/transfer-analyzer/transfer-tm-profile-guard.js",
     "src/modules/transfer-analyzer/transfer-my-bids-rank.js",
     "src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js",
