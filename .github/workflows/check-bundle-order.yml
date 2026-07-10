@@ -1,0 +1,50 @@
+name: Check SLF bundle order
+
+on:
+  pull_request:
+    paths:
+      - src/**
+      - tools/check-bundle-order.mjs
+      - tools/build-latest-userscript.mjs
+      - .github/workflows/check-bundle-order.yml
+  push:
+    branches:
+      - main
+    paths:
+      - src/**
+      - tools/check-bundle-order.mjs
+      - tools/build-latest-userscript.mjs
+      - .github/workflows/check-bundle-order.yml
+
+permissions:
+  contents: read
+
+jobs:
+  bundle-order-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+
+      - name: Validate bundle manifest
+        id: bundle_check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node tools/check-bundle-order.mjs 2>&1 | tee bundle-order-report.txt
+
+      - name: Upload bundle-order report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-order-report
+          path: bundle-order-report.txt
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce bundle-order result
+        if: steps.bundle_check.outcome != 'success'
+        run: exit 1
