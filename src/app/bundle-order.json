@@ -50,6 +50,9 @@
     "src/modules/team-management/team-loan-limit-helper.js",
     "src/modules/team-management/team4-alter-current-season-minutes-fix.js",
     "src/modules/team-management/team4-form-saved-choice-notice.js",
-    "src/app/bootstrap.js"
+    "src/app/bootstrap.js",
+    "src/modules/strategy-data-recommendations/preset-fit-scoring.js",
+    "src/modules/tactics-presets/tactics-dropdown-ui-policy.js",
+    "src/modules/transfer-analyzer/transfer-min-badge-full-width-fix.js"
   ]
 }
