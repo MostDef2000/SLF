@@ -16,6 +16,12 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - name: Validate bundle manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/check-bundle-order.mjs
+
       - name: Build latest-only userscript
         shell: bash
         env:
