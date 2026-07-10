@@ -44,6 +44,7 @@
     "src/modules/transfer-analyzer/purchase-forecast-full-date-patch.js",
     "src/modules/transfer-analyzer/transfer-tm-profile-guard.js",
     "src/modules/transfer-analyzer/transfer-my-bids-rank.js",
+    "src/modules/transfer-analyzer/transfer-my-bids-cache-policy.js",
     "src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js",
     "src/modules/team-management/training-reference-guide.js",
     "src/modules/team-management/team-loan-limit-helper.js",
