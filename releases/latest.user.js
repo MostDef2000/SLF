@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.192
+// @version      4.4.193
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.192',
-        scriptVersion: '4.4.192',
+        version: '4.4.193',
+        scriptVersion: '4.4.193',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.192',
+        scriptVersion: '4.4.193',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -14872,6 +14872,52 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
 // <<< src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js
 
 
+// >>> src/modules/transfer-analyzer/purchase-forecast-full-date-patch.js
+// Purchase Forecast: full date column
+// ============================================================
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.renderPurchaseForecastRows = function renderPurchaseForecastRows(records) {
+        const box = document.getElementById('slf-purchase-forecast-list');
+        if (!box) return;
+
+        const rows = (records || []).slice(0, 80);
+        if (!rows.length) {
+            box.innerHTML = '<div style="color:#888;padding:6px 0;">Нет трансферов в текущей выборке.</div>';
+            return;
+        }
+
+        const columns = '68px minmax(0,1fr) 22px 22px 30px 66px';
+
+        box.innerHTML = `
+            <div style="display:grid;grid-template-columns:${columns};gap:4px;color:#888;font-size:10px;border-bottom:1px solid #333;padding:4px 0;">
+                <span>дата</span><span>игрок</span><span>в</span><span>т</span><span>ск</span><span>цена</span>
+            </div>
+            ${rows.map(record => {
+                const title = this.escapeForecastHtml([record.fromClub, record.toClub].filter(Boolean).join(' → '));
+                const name = this.escapeForecastHtml(record.playerName || record.playerId || 'Игрок');
+                const url = this.escapeForecastHtml(record.playerUrl || '#');
+
+                return `
+                    <div title="${title}" style="display:grid;grid-template-columns:${columns};gap:4px;align-items:center;border-bottom:1px solid #282828;padding:4px 0;">
+                        <span style="color:#aaa;white-space:nowrap;overflow:visible;text-overflow:clip;">${this.escapeForecastHtml(record.dateText || '')}</span>
+                        <a href="${url}" style="min-width:0;color:#d8e9ff;text-decoration:underline;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</a>
+                        <span>${record.age ?? '—'}</span>
+                        <span>${record.talent ?? '—'}</span>
+                        <span>${record.skill ?? '—'}</span>
+                        <span style="color:#fff;white-space:nowrap;">${this.formatPurchaseForecastPrice(record.price)}</span>
+                    </div>
+                `;
+            }).join('')}
+            ${(records || []).length > rows.length ? `<div style="color:#888;padding-top:5px;">Показано ${rows.length} из ${(records || []).length}.</div>` : ''}
+        `;
+    };
+}
+
+// ============================================================
+// <<< src/modules/transfer-analyzer/purchase-forecast-full-date-patch.js
+
+
 // >>> src/modules/transfer-analyzer/transfer-tm-profile-guard.js
 // Transfer Analyzer: TM profile value guard
 // ============================================================
@@ -17695,15 +17741,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.192',
-        scriptVersion: '4.4.192',
+        version: '4.4.193',
+        scriptVersion: '4.4.193',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.192',
+        scriptVersion: '4.4.193',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
