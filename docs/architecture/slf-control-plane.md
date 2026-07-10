@@ -1,127 +1,224 @@
 # SLF Control Plane Architecture
 
-Version: 1.0.0
+Version: 2.0.0
 Status: Active
-Applies to: all SLF agents, runtime, and release workflows
+Applies to: all SLF agents, runtime, integration, release, and Tampermonkey handoff workflows
 Source of truth: GitHub repository contracts
 
 ## 1. Overview
 
-SLF is a multi-agent system for building, analyzing, and releasing a browser-based automation layer (Tampermonkey userscript) with controlled release flow.
+SLF is a controlled multi-agent delivery system for a Tampermonkey userscript.
 
-The system is not a linear script pipeline. It is a controlled execution graph with runtime state, validation gates, and release integration.
+The system is a stateful execution graph with approval boundaries, branch isolation, CI gates, automatic release, and explicit user handoff.
 
 ## 2. Core layers
 
 ### 2.1 Governance Layer
 
-Defines global invariants and constraints:
+Defines global invariants:
 
-- main is source of truth
-- releases are build artifacts
-- module branches are disposable
-- COMMIT APPROVED is required for implementation
-- no direct editing of release artifacts
+- `main` is source of truth;
+- generated release files are artifacts;
+- module branches are disposable;
+- `COMMIT APPROVED` is required before repository writes;
+- automatic release is the default after approved runtime changes reach `main`;
+- manual Actions execution is fallback-only.
 
-File:
-- `contracts/SLF_GOVERNANCE.md`
+Contracts:
 
-## 2.2 Runtime Layer
+- `contracts/SLF_GOVERNANCE.md`;
+- `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`.
 
-Defines task lifecycle state machine:
+### 2.2 Runtime Layer
 
-- DISCUSSION → COMPLETE / BLOCKED / FAILED
-- enforces state transitions
-- prevents false completion claims
+Defines task lifecycle and completion semantics.
 
-File:
-- `contracts/runtime/SLF_TASK_RUNTIME.md`
+Normal runtime flow:
 
-## 2.3 Release Gate Layer
+```text
+DISCUSSION
+→ READY_FOR_IMPLEMENTATION
+→ IMPLEMENTING
+→ MODULE_COMMITTED
+→ HANDOFF_VALIDATED
+→ CORE_RELEASE_INTEGRATING
+→ SOURCE_INTEGRATED
+→ ACTIONS_RUNNING
+→ ACTIONS_COMPLETED
+→ BROWSER_ACCEPTANCE or COMPLETE
+```
 
-Validates readiness for GitHub Actions execution:
+`ACTIONS_REQUIRED` exists only for manual fallback.
 
-- checks main integration
-- checks changed files
-- checks build relevance
-- controls RUN ACTIONS permission
+Contract:
 
-File:
-- `contracts/runtime/RELEASE_READINESS_GATE.md`
+- `contracts/runtime/SLF_TASK_RUNTIME.md`.
 
-## 2.4 Orchestration Layer
+### 2.3 Release Gate Layer
+
+Validates:
+
+- exact source integration on `main`;
+- changed-file scope;
+- release applicability;
+- automatic workflow execution;
+- release commit and version;
+- Tampermonkey update decision.
+
+Contract:
+
+- `contracts/runtime/RELEASE_READINESS_GATE.md`.
+
+### 2.4 Orchestration Layer
 
 Project Manager Agent:
 
-- routes tasks to correct domain agent
-- manages lifecycle coordination
-- enforces runtime and release gates
+- classifies tasks;
+- routes work to the responsible domain agent;
+- owns approval-state progression;
+- validates handoffs;
+- creates PRs;
+- monitors CI;
+- merges safe approved changes;
+- monitors automatic release;
+- reports Tampermonkey action.
 
-File:
-- `contracts/branches/project-manager.md`
+Contract:
 
-## 2.5 Domain Agents
+- `contracts/branches/project-manager.md`.
 
-Specialized implementation agents:
+### 2.5 Domain Agent Layer
 
-- Transfer Analyzer (transfers, TM, alter, MKT)
-- Team Management (team, youth, training)
-- Strategy Data (live parser, tactics, recommendations)
+Specialized implementation contexts:
 
-Each agent owns a bounded context in `src/modules/*`.
+- Transfer Analyzer;
+- Team Management;
+- Strategy Data Recommendations.
 
-## 2.6 Release Controller Layer
+Domain agents implement only inside approved scope and do not publish final release artifacts.
 
-Core Release Agent:
+### 2.6 Core Release Layer
 
-- integrates approved module changes into main
-- validates scope and safety
-- decides release readiness state
+Core Release:
 
-## 2.7 Build Layer
+- verifies approved commits/ranges;
+- reconciles against current `main`;
+- integrates approved source/tool changes;
+- validates PR and branch freshness;
+- merges when safe;
+- verifies automatic release output;
+- returns the final Tampermonkey update decision.
 
-GitHub Actions pipeline:
+Contract:
 
-- builds latest userscript
-- updates version metadata
-- produces release artifacts
+- `contracts/branches/core-release.md`.
 
-## 2.8 User Boundary Layer
+### 2.7 Build and Release Layer
 
-User only interacts via:
+Canonical workflow:
 
-- COMMIT APPROVED
-- GitHub Actions run
-- browser acceptance check
+```text
+SLF Validate and Release
+```
 
-## 3. Execution flow
+Pull request mode:
+
+- validate source and bundle manifest;
+- publish nothing.
+
+Eligible `main` push mode:
+
+- validate;
+- build latest-only userscript;
+- validate artifacts;
+- commit release outputs to `main`.
+
+Manual dispatch remains available only for fallback/recovery.
+
+### 2.8 User Boundary Layer
+
+The user normally performs only:
+
+- task definition;
+- one repository-write approval (`COMMIT APPROVED` or equivalent);
+- browser acceptance when requested;
+- Tampermonkey update when explicitly instructed.
+
+The user does not normally:
+
+- choose internal agents;
+- copy handoffs;
+- merge PRs;
+- run GitHub Actions manually;
+- decide whether a script update is required.
+
+## 3. End-to-end execution flow
 
 ```text
 User request
-→ Project Manager classification
-→ Domain agent implementation
-→ Module branch commit
-→ Core Release validation
-→ main integration
-→ Release Readiness Gate
-→ GitHub Actions build
-→ browser acceptance
+→ PM scope and readiness
+→ COMMIT APPROVED
+→ Domain implementation
+→ Branch commit
+→ Pull Request
+→ CI validation
+→ Merge into main
+→ Automatic SLF Validate and Release
+→ Release commit/version verification
+→ Tampermonkey update instruction
+→ Browser acceptance when required
 → COMPLETE
 ```
 
-## 4. Runtime enforcement
+## 4. Approval semantics
 
-All tasks must maintain runtime state from start to completion.
+`COMMIT APPROVED` authorizes all deterministic safe steps inside the approved scope:
 
-No step may skip state validation.
+- implementation;
+- branch commits;
+- PR creation;
+- CI wait;
+- merge;
+- automatic release;
+- release verification.
 
-## 5. Failure modes
+A new confirmation is required only for scope expansion, destructive action, protected-file permission, secrets, or behavior redesign.
 
-- BLOCKED: cannot proceed safely or verify state
-- FAILED: execution failed or invalid state transition
+## 5. Release trigger boundary
 
-## 6. Key principle
+Automatic release is triggered only by runtime/build-affecting changes:
 
-SLF is a controlled state machine system, not a free-form assistant pipeline.
+- `src/**`;
+- `tools/check-bundle-order.mjs`;
+- `tools/build-latest-userscript.mjs`;
+- `.github/workflows/build-latest-release.yml`.
 
-Correctness is defined by state transitions, not by textual completion claims.
+Contracts, architecture documents, decision records, and other documentation-only changes do not publish userscript versions.
+
+## 6. Final user handoff
+
+Every completed task must state:
+
+```text
+GitHub Actions
+- Mode: AUTOMATIC / NOT REQUIRED / MANUAL FALLBACK
+- Status:
+- User action:
+
+Tampermonkey update
+- Required: YES / NO / NOT YET
+- Published version:
+- User action:
+```
+
+The user must never infer whether updating the installed script is necessary.
+
+## 7. Failure modes
+
+- `BLOCKED`: a required safe transition cannot be completed; exact fallback is provided.
+- `FAILED`: implementation, integration, CI, build, or artifact verification failed.
+- Manual Actions is used only when automatic execution cannot be completed or safely retried by the agent.
+
+## 8. Key principle
+
+SLF correctness is defined by verified state transitions and release evidence, not by conversational claims.

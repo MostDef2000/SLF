@@ -1,53 +1,83 @@
 # SLF Governance
 
-Version: 1.1.3
+Version: 2.0.0
 Status: Active
-Applies to: all SLF agents and release workflows
+Applies to: all SLF agents, implementation workflows, release workflows, and user handoffs
 Source of truth: GitHub repository contracts
 
-## 1. Main source of truth
+## 1. Contract priority
 
-`main` is the only long-term source of truth after a release.
+All agents must follow:
 
-For new implementation work, the editable implementation source of truth is:
+- `contracts/SLF_GOVERNANCE.md`;
+- `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`;
+- the relevant branch contract;
+- runtime and release-gate contracts.
+
+`contracts/SLF_AUTOMATIC_RELEASE_POLICY.md` overrides older wording that requires routine manual GitHub Actions execution.
+
+## 2. Main source of truth
+
+`main` is the only long-term source of truth after integration.
+
+Editable implementation source is:
 
 1. `main/src/**`; or
-2. a module branch freshly reset or recreated from current `main` and verified.
+2. a fresh task branch created from current `main` and verified.
 
-`releases/latest.user.js` is not an editable implementation source. It is a built Tampermonkey artifact.
+`releases/latest.user.js` and `releases/latest.meta.js` are generated Tampermonkey artifacts, not editable implementation source.
 
-Agents must not use memory, stale module branch contents, or `releases/latest.user.js` as the source for implementation work.
+Agents must not implement from memory, stale branches, or generated release files.
 
-## 2. Disposable module branches
+## 3. Approval boundary
 
-Module branches are disposable working branches, not long-term source-of-truth branches.
+Repository writes require explicit approval through one of:
 
-This applies to:
+- `COMMIT APPROVED`;
+- `commit approved`;
+- `делай`;
+- `внедряй`;
+- `готовь ветку`;
+- `делай реализацию`.
 
-- `team-management`
-- `transfer-analyzer`
-- `strategy-data-recommendations`
-
-After all of the following are true:
-
-1. Core Release integrated approved module changes into `main`;
-2. GitHub Actions `Build latest SLF release` succeeded;
-3. browser acceptance check is done;
-
-then the module branch may be deleted and recreated from current `main`, or reset to current `main`.
-
-Old module branch history should not be preserved just in case when everything needed is already in `main`.
-
-Archive old branches only when unreleased work exists or the user explicitly asks for an archive.
-
-## 3. Branch Freshness Check
-
-Before any module agent starts implementation, it must perform a Branch Freshness Check.
-
-Required output:
+Before implementation writes, the responsible agent must emit:
 
 ```text
-Branch Freshness Check:
+Implementation Scope Check
+```
+
+After approval, the PM is authorized to execute the full deterministic safe lifecycle inside the approved scope:
+
+```text
+implementation
+→ branch commit
+→ pull request
+→ CI validation
+→ merge into main
+→ automatic release
+→ release verification
+→ Tampermonkey update instruction
+```
+
+No separate confirmation is required before PR creation, merge, or automatic release.
+
+A new confirmation is required only for:
+
+- scope expansion;
+- destructive action;
+- protected-file permission not already granted;
+- secrets or credentials;
+- behavior redesign after validation failure;
+- non-recoverable ambiguous conflict.
+
+## 4. Disposable task branches
+
+Task/module branches are disposable working branches, not long-term storage.
+
+Before implementation, perform a Branch Freshness Check:
+
+```text
+Branch Freshness Check
 - Current main SHA:
 - Module branch:
 - Module branch HEAD SHA:
@@ -59,223 +89,138 @@ Branch Freshness Check:
 
 Rules:
 
-- If the module branch is not fresh from current `main`, do not implement.
-- If the module branch has unreleased diff vs `main`, do not implement until the diff is explicitly classified as approved active work.
-- If the task is new and no active unreleased work exists, reset or recreate the module branch from current `main` first.
-- Agents must read target source files from `main/src/**` or from the verified fresh module branch.
-- Agents must not use old module branch contents as source of truth after those changes have been integrated into `main`.
+- Do not implement from a stale branch.
+- If no approved active diff exists, recreate the branch from current `main`.
+- Before merge, verify the branch is not behind `main`.
+- After integration and release, the branch may be deleted or recreated.
 
-## 4. Core Release handoff safety
+## 5. Domain branch boundaries
 
-Core Release must not accept a module handoff from a stale branch unless the handoff explicitly provides an approved active diff or approved range and the changed files match that diff/range.
+Domain agents must:
 
-Before integrating a module handoff, Core Release must verify:
+- edit only approved files inside their branch scope;
+- not edit release artifacts;
+- not bump version;
+- not publish the common userscript;
+- not add secrets, tokens, passwords, or credentials;
+- provide an internal handoff for PM/Core Release validation.
 
-- approved commit or approved range exists;
-- declared changed files match actual changed files;
-- source branch freshness or approved active diff/range is clear;
-- release artifacts were not modified by the module branch;
-- version was not bumped by the module branch;
-- only approved files are integrated.
+The PM may operationally switch into domain-agent and Core Release roles in the same chat, while obeying each contract.
 
-If branch freshness is unclear and no approved active diff/range is provided, Core Release must return BLOCKED or FAILED rather than integrating.
+## 6. Same-chat orchestration
 
-## 5. Reset/recreate policy
-
-Preferred simple lifecycle:
-
-```text
-module task starts
-→ module branch is fresh from current main
-→ agent commits approved change in module branch
-→ Core Release integrates approved files into main
-→ GitHub Actions builds latest release
-→ browser acceptance check passes
-→ module branch may be reset/recreated from current main
-```
-
-Do not store long-term work in module branches. Use GitHub issues, approved commits/ranges, copy-ready handoffs, and `main` as durable records.
-
-## 6. Actions and version rule
-
-Governance-only contract changes do not require GitHub Actions.
-
-Run Actions when a verified source/tooling integration on `main` affects runtime source, release tooling, or the latest release build inputs.
-
-For any runtime or user-visible source change that affects the Tampermonkey userscript, the latest release build must produce a new script version. This is required even when the source change is already present on `main`, because Tampermonkey update detection depends on a changed userscript `@version`.
-
-This applies to changes in:
-
-- `src/**`
-- `src/app/bundle-order.json`
-- `src/app/module-registry.json`
-- `tools/build-latest-userscript.mjs`
-- `tools/smoke-latest-userscript.mjs`
-- `.github/workflows/build-latest-release.yml`
-
-Core Release must return `RUN ACTIONS: YES` when:
-
-- a verified runtime/tooling change is present on `main`; and
-- the browser-installed userscript may still be stale; or
-- `releases/latest.user.js`, `releases/latest.meta.js`, `data/version.json`, or runtime `SLF.scriptVersion` has not been rebuilt with a newer version for that change.
-
-Core Release must not return `RUN ACTIONS: NO` solely because no new commit was created in the current turn if a verified runtime/tooling change on `main` still needs a latest-release build and version bump.
-
-When returning `RUN ACTIONS: YES`, Core Release must provide the Actions input block and either:
-
-- `Optional explicit target version: leave empty`, if the workflow can safely calculate the next patch version; or
-- an explicit next patch version, if Tampermonkey update detection or browser acceptance requires forcing a new visible script version.
-
-A release is not complete until GitHub Actions has produced and committed release artifacts with the new version and the browser can update to that version.
-
-## 7. Permanent decision records
-
-Permanent project decisions must be documented in `docs/decision_records/` when they change future agent behavior.
-
-Use a decision record for durable rules such as:
-
-- source-of-truth priority;
-- release model;
-- branch lifecycle;
-- cross-module ownership;
-- security/secret handling;
-- release gate policy.
-
-Do not create decision records for routine implementation details, one-off fixes, or temporary debugging notes.
-
-Every decision record must include:
-
-```text
-Status:
-Date:
-Decision:
-Scope:
-Consequences:
-Related contracts:
-```
-
-When a decision conflicts with older chat context, the repository decision record and active contracts win.
-
-## 8. Standard module handoff block
-
-After a completed module implementation task, the module agent must return a handoff block that Core Release can copy without interpretation.
-
-Required format:
-
-```text
-COPY-READY MESSAGE FOR CORE RELEASE AGENT
-
-Module:
-Source branch:
-Approved commit:
-Changed files:
-- ...
-Summary:
-- ...
-Integration notes:
-- ...
-Acceptance checks:
-- ...
-Safety checks:
-- Release files changed by module: NO
-- Version bumped by module: NO
-- Out-of-scope files changed: NO
-- Secrets/tokens committed: NO
-Knowledge/API sources used:
-- ... / NONE
-Cache/schema/storage impact:
-- ... / NONE
-Bundle-order/module-registry impact:
-- ... / NONE
-Core Release instruction:
-- Integrate only the approved files listed above.
-- Do not invent or rewrite business logic.
-- Do not use releases/latest.user.js as source.
-```
-
-If a field is not relevant, use `NONE`. Do not omit required fields.
-
-## 9. Review gate verdict standard
-
-Review and release gate agents must end with exactly one verdict:
-
-```text
-APPROVED FOR RELEASE
-CHANGES REQUIRED
-BLOCKED
-```
-
-### APPROVED FOR RELEASE
-
-Use only when:
-
-- approved scope matches the implementation;
-- changed files are in scope;
-- no secrets/tokens are introduced;
-- release artifacts and version files were not modified by module agents;
-- required checks passed or the missing checks are explicitly non-blocking.
-
-### CHANGES REQUIRED
-
-Use when:
-
-- the implementation is generally in scope but needs correction before release;
-- tests/checks fail due to fixable implementation issues;
-- output format, handoff, or acceptance evidence is incomplete but recoverable.
-
-### BLOCKED
-
-Use when:
-
-- required source/API/context is unavailable;
-- branch freshness or approved commit cannot be verified;
-- the requested change would violate branch contracts;
-- the operation requires credentials/secrets that are not safely available;
-- a tool/platform limitation prevents safe completion.
-
-A review verdict must include:
-
-```text
-Verdict:
-Reason:
-Scope checked:
-Changed files checked:
-Checks/evidence:
-Required next action:
-```
-
-Do not use ambiguous final states such as `looks good`, `probably okay`, `not complete`, or `waiting`.
-
-## 10. Single-chat multi-role workflow
-
-When the user is working in one SLF project chat and the current environment has the required tools, agents should operate as a single-chat multi-role workflow instead of asking the user to copy handoffs between separate agent chats.
-
-Default sequence:
+Default flow:
 
 ```text
 Project Manager triage
-→ responsible module agent implementation after required approval
-→ module handoff produced as an internal control artifact
-→ Project Manager validates the handoff in the same chat
-→ Core Release performs source integration in the same chat
-→ final user-facing state is either COMPLETE + RUN ACTIONS, BLOCKED, or FAILED
+→ domain implementation after approval
+→ internal handoff
+→ PM validation
+→ Core Release integration
+→ PR and CI
+→ merge
+→ automatic release
+→ release verification
+→ final user handoff
 ```
 
-Rules:
+The user must not be asked to copy handoffs, choose agents, merge PRs, or manually run Actions when the system can continue safely.
 
-- The Project Manager Agent remains the default coordinator and may switch operationally into the responsible branch-agent role when the task clearly matches that branch contract.
-- The module agent must still obey its branch contract, Branch Freshness Check, allowed file scope, and `COMMIT APPROVED` requirement before repository writes.
-- A `COPY-READY MESSAGE FOR CORE RELEASE AGENT` is required as a handoff artifact, but it is not a final user-facing stopping point when the same chat can continue into Core Release.
-- After a valid module handoff, the workflow must continue to Core Release automatically in the same chat unless the user explicitly asks to stop, a required tool is unavailable, or a contract/safety gate blocks continuation.
-- The assistant must not tell the user to run GitHub Actions until source integration into `main` is complete and the Core Release / PM validation gates say `RUN ACTIONS: YES`.
-- If GitHub tool safety, permissions, or platform limitations block automated source integration, return `BLOCKED` with the exact manual GitHub UI fallback and do not claim release readiness.
-- This rule does not bypass Core Release validation, review gates, branch freshness, scope boundaries, release artifact restrictions, or the Actions/version rule.
+## 7. Core Release handoff safety
 
-## 11. Task Runtime Model
+Before integration, verify:
 
-For every implementation, release, governance, or manual fallback task, the active agent must maintain a concise runtime state. The purpose is to prevent ambiguous claims such as `готово` when only an intermediate step is complete.
+- approved commit/range exists;
+- changed files match the handoff;
+- branch freshness or approved active diff is clear;
+- all changed files are in scope;
+- release artifacts were not modified by the module branch;
+- version was not bumped by the module branch;
+- no secrets were introduced;
+- required bundle-order/module-registry changes are included.
 
-Allowed task phases:
+If verification fails, return `BLOCKED` or `FAILED` and do not partially integrate.
+
+## 8. Automatic release rule
+
+Automatic release is required after approved changes reach `main` when they affect:
+
+- `src/**`;
+- `tools/check-bundle-order.mjs`;
+- `tools/build-latest-userscript.mjs`;
+- `.github/workflows/build-latest-release.yml`.
+
+The canonical workflow is:
+
+```text
+SLF Validate and Release
+```
+
+On Pull Request:
+
+- validate only;
+- do not publish.
+
+On eligible push/merge to `main`:
+
+- validate source;
+- build latest-only userscript;
+- validate outputs;
+- commit generated release artifacts to `main`.
+
+The PM/Core Release must monitor and verify this process automatically.
+
+## 9. Documentation-only rule
+
+Contracts, governance, architecture documents, decision records, issues, and documentation-only changes do not require a userscript release unless the release workflow itself changes in the same task.
+
+Documentation-only changes must not produce empty userscript versions.
+
+## 10. Version and artifact rule
+
+A runtime-visible change is not released until GitHub Actions has produced and committed a newer userscript version.
+
+Canonical release artifacts:
+
+- `releases/latest.user.js`;
+- `releases/latest.meta.js`;
+- `data/version.json`;
+- `CHANGELOG.md`.
+
+Forbidden:
+
+- manual editing of generated release artifacts;
+- version-specific archive userscripts such as `releases/SLF_<version>.user.js`;
+- using generated userscript as source;
+- claiming publication before the release commit exists.
+
+## 11. Manual Actions fallback
+
+Manual `workflow_dispatch` is fallback-only.
+
+It may be requested only when:
+
+- automatic workflow did not start;
+- automatic workflow failed for a recoverable infrastructure reason;
+- the agent cannot safely rerun or dispatch it;
+- the user explicitly requests a manual rerun.
+
+Required fallback block:
+
+```text
+Manual fallback
+- Reason:
+- Workflow: SLF Validate and Release
+- Required branch: main
+- Exact GitHub UI path:
+- Expected result:
+```
+
+Normal successful work must not instruct the user to press `Run workflow`.
+
+## 12. Runtime model
+
+Allowed phases:
 
 ```text
 DISCUSSION
@@ -294,51 +239,88 @@ BLOCKED
 FAILED
 ```
 
-Required runtime block when the task is implementation/release related:
+Normal automatic path:
 
 ```text
-SLF Task Runtime
-- Task:
-- Responsible agent:
-- Current phase:
-- Branch:
-- Approved commit/range:
-- Changed files:
-- Module implementation:
-- Core Release integration:
-- main updated:
-- Actions needed:
-- Safe user action:
-- Final state:
+SOURCE_INTEGRATED
+→ ACTIONS_RUNNING
+→ ACTIONS_COMPLETED
+→ BROWSER_ACCEPTANCE or COMPLETE
 ```
 
-Rules:
+`ACTIONS_REQUIRED` is reserved for manual fallback only.
 
-- `MODULE_COMMITTED` is not a release-ready state.
-- `SOURCE_INTEGRATED` means approved source/tool files are verified on `main`.
-- `ACTIONS_REQUIRED` means the user may run GitHub Actions because source integration is complete and runtime/build-affecting files need release artifacts.
-- `COMPLETE` means the implementation, source integration, required Actions/release artifacts, and any required acceptance gate are complete.
-- If any required transition is blocked, the phase must be `BLOCKED` and the agent must provide the exact next safe action.
-- Agents must not use generic final wording such as `ready`, `done`, or `released` unless the runtime state supports it.
+`COMPLETE` for runtime work requires implementation, merge, automatic release, release version verification, and final Tampermonkey instruction.
 
-## 12. Release Readiness Gate
+## 13. Tampermonkey handoff
 
-Before instructing the user to run GitHub Actions, the agent must emit or internally satisfy this gate:
+Every final implementation/release/governance response must include:
 
 ```text
-Release Readiness Gate
-- Source files committed to main: YES/NO
-- Changed files verified on main: YES/NO
-- Runtime/build-affecting files changed: YES/NO
-- Release artifacts already rebuilt for this change: YES/NO
-- RUN ACTIONS: YES/NO
-- Safe to run now: YES/NO
+GitHub Actions
+- Mode: AUTOMATIC / NOT REQUIRED / MANUAL FALLBACK
+- Status: NOT STARTED / RUNNING / SUCCESS / FAILED / NOT APPLICABLE
+- User action: NONE / exact fallback action
+
+Tampermonkey update
+- Required: YES / NO / NOT YET
+- Published version: <version> / NOT APPLICABLE / UNKNOWN
+- User action: update/reinstall/check for updates / none / wait
 ```
 
-Rules:
+Decision rules:
 
-- `RUN ACTIONS: YES` is allowed only when source files are committed to `main`, changed files are verified on `main`, runtime/build-affecting files changed, and release artifacts have not yet been rebuilt for the change.
-- If source integration is incomplete, `RUN ACTIONS` must be `NO`.
-- If the change is governance-only or documentation-only and does not affect runtime/build tooling, `RUN ACTIONS` must be `NO`.
-- If GitHub Actions are already running, the task phase should be `ACTIONS_RUNNING` and the safe user action should be to wait for completion.
-- If GitHub Actions completed successfully and artifacts are committed, the phase may move to `ACTIONS_COMPLETED` or `COMPLETE` depending on whether browser acceptance is required.
+- New runtime release verified: `Required: YES` and state the exact version.
+- Governance/docs-only change: `Required: NO`.
+- Release pending or failed: `Required: NOT YET`.
+- Never make the user infer whether the installed script must be updated.
+
+## 14. Permanent decisions
+
+Durable changes to future agent behavior must be recorded in `docs/decision_records/`.
+
+Decision records must include:
+
+```text
+Status:
+Date:
+Decision:
+Scope:
+Consequences:
+Related contracts:
+```
+
+Repository contracts and active decision records override stale chat context.
+
+## 15. Review verdicts
+
+Review/release gate agents must end with exactly one verdict:
+
+```text
+APPROVED FOR RELEASE
+CHANGES REQUIRED
+BLOCKED
+```
+
+A release may be approved only when scope, changed files, safety, and required checks are verified.
+
+## 16. Security and system invariants
+
+- Never commit secrets, tokens, passwords, or credentials.
+- VPS is source of truth for live/exported data.
+- Google Drive is a mirror only.
+- RAG artifacts are derived and rebuildable.
+- Userscript runtime may use only approved sanitized runtime data.
+- Transfer Analyzer must not regain persistent player memory/cache without explicit architecture approval.
+
+## 17. Final-state rule
+
+Valid terminal states are:
+
+- `COMPLETE`;
+- `BLOCKED`;
+- `FAILED`.
+
+Do not use ambiguous final wording such as `almost done`, `probably ready`, or `waiting`.
+
+Evidence, not narrative, determines completion.

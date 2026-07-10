@@ -1,6 +1,6 @@
 # SLF Task Runtime Contract
 
-Version: 1.0.0
+Version: 1.1.0
 Status: Active
 Applies to: all SLF implementation, release, governance, fallback, and acceptance workflows
 Source of truth: GitHub repository contracts
@@ -18,6 +18,8 @@ COMPLETE
 BLOCKED
 FAILED
 ```
+
+The automatic release lifecycle is defined by `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md` and takes priority over older manual-Actions wording.
 
 ## 2. Runtime phases
 
@@ -74,17 +76,23 @@ Approved source/tooling files are verified on `main`.
 
 This does not mean the Tampermonkey release artifact is updated.
 
+For runtime/build-affecting changes, the normal next phase is `ACTIONS_RUNNING` because the unified workflow starts automatically after the change reaches `main`.
+
 ### ACTIONS_REQUIRED
 
-The user may run GitHub Actions because source integration is complete and runtime/build-affecting files require a latest-release build.
+Manual GitHub Actions execution is required from the user.
+
+This is a fallback-only phase. It may be used only when automatic execution did not start or cannot be safely re-run by the agent.
 
 ### ACTIONS_RUNNING
 
-GitHub Actions are running. The safe action is to wait for completion.
+The automatic or fallback GitHub Actions workflow is running. The safe user action is to wait.
 
 ### ACTIONS_COMPLETED
 
-GitHub Actions completed and release artifacts were produced/committed.
+GitHub Actions completed and release artifacts were produced and committed.
+
+The agent must verify the release commit and published version before moving forward.
 
 ### BROWSER_ACCEPTANCE
 
@@ -92,7 +100,9 @@ The change needs browser/Tampermonkey validation after Actions completed.
 
 ### COMPLETE
 
-The task lifecycle is complete. Required implementation, source integration, release build, and acceptance gates are complete or explicitly not required.
+The task lifecycle is complete. Required implementation, source integration, automatic release build, release verification, and acceptance gates are complete or explicitly not required.
+
+The final response must state whether the user needs to update the Tampermonkey script.
 
 ### BLOCKED
 
@@ -126,7 +136,8 @@ SLF Task Runtime
 
 - `MODULE_COMMITTED` must not be treated as release-ready.
 - `SOURCE_INTEGRATED` must not be treated as released.
-- `ACTIONS_REQUIRED` is the earliest phase where the user may be told to run GitHub Actions.
+- After approved runtime/build changes reach `main`, transition to `ACTIONS_RUNNING` automatically when the unified workflow starts.
+- `ACTIONS_REQUIRED` is reserved for manual fallback only.
 - `COMPLETE` requires all required gates to be complete or explicitly not applicable.
 - Any blocked transition must move the task to `BLOCKED` and include a precise safe manual fallback.
 - Any failed transition must move the task to `FAILED` and include evidence and recovery guidance.
@@ -135,12 +146,37 @@ SLF Task Runtime
 
 The agent must not tell the user to:
 
-- run GitHub Actions before `ACTIONS_REQUIRED`;
+- manually run GitHub Actions during the normal automatic path;
 - treat a module branch commit as released;
 - manually copy handoffs between agents when same-chat continuation is available;
 - trust unstated assumptions instead of runtime evidence.
 
-## 7. Status wording rule
+After `COMMIT APPROVED`, the PM must continue through branch, PR, CI, merge, automatic release, and release verification unless blocked by a defined safety condition.
+
+## 7. Tampermonkey handoff
+
+Every completed implementation/release response must include:
+
+```text
+GitHub Actions
+- Mode: AUTOMATIC / NOT REQUIRED / MANUAL FALLBACK
+- Status: NOT STARTED / RUNNING / SUCCESS / FAILED / NOT APPLICABLE
+- User action: NONE / exact fallback action
+
+Tampermonkey update
+- Required: YES / NO / NOT YET
+- Published version: <version> / NOT APPLICABLE / UNKNOWN
+- User action: update/reinstall/check for updates / none / wait
+```
+
+Rules:
+
+- A newer runtime release published successfully: `Required: YES`.
+- Governance/docs-only task: `Required: NO`.
+- Release running or failed: `Required: NOT YET`.
+- Never tell the user to update before the release commit and version are verified.
+
+## 8. Status wording rule
 
 The agent must not use broad completion wording such as `готово`, `done`, `release-ready`, or `released` unless the runtime state supports it.
 
@@ -148,24 +184,25 @@ Preferred wording:
 
 ```text
 Phase: MODULE_COMMITTED
-Safe user action: DO NOT RUN ACTIONS YET
-Next action: Core Release integration
+Safe user action: none
+Next action: Core Release integration by the PM
 ```
 
 ```text
-Phase: ACTIONS_REQUIRED
-Safe user action: Run GitHub Actions on main
+Phase: ACTIONS_RUNNING
+Safe user action: wait
 ```
 
 ```text
 Phase: COMPLETE
-Safe user action: none
+Safe user action: follow the explicit Tampermonkey update instruction
 ```
 
-## 8. Relationship to other contracts
+## 9. Relationship to other contracts
 
 This contract is referenced by:
 
+- `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`
 - `contracts/SLF_GOVERNANCE.md`
 - `contracts/branches/project-manager.md`
 - `contracts/branches/core-release.md`

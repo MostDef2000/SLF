@@ -10,11 +10,11 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - releases/latest.user.js
-      - releases/latest.meta.js
-      - data/version.json
-      - CHANGELOG.md
+    paths:
+      - src/**
+      - tools/check-bundle-order.mjs
+      - tools/build-latest-userscript.mjs
+      - .github/workflows/build-latest-release.yml
   workflow_dispatch:
 
 jobs:
