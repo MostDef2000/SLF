@@ -1,19 +1,21 @@
 # SLF Release Readiness Gate
 
-Version: 1.0.0
+Version: 1.1.0
 Status: Active
 Applies to: all SLF release workflows
 Source of truth: GitHub repository contracts
 
 ## 1. Purpose
 
-The Release Readiness Gate defines the final validation layer before a user is allowed to run GitHub Actions for SLF release builds.
+The Release Readiness Gate defines the final validation layer before SLF enters automatic release execution.
 
-Its purpose is to prevent premature or unsafe release execution when source integration or build state is incomplete.
+Its purpose is to prevent premature or unsafe publication when source integration or build state is incomplete.
+
+The automatic lifecycle is governed by `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`.
 
 ## 2. Gate definition
 
-A release is eligible for Actions only if ALL conditions are satisfied:
+A runtime/build-affecting change is eligible for automatic release only if all conditions are satisfied:
 
 ```text
 Release Readiness Gate
@@ -21,80 +23,116 @@ Release Readiness Gate
 - Changed files verified on main: YES
 - Runtime/build-affecting files changed: YES
 - Release artifacts already rebuilt for this change: NO
-- RUN ACTIONS: YES
-- Safe to run now: YES
+- AUTOMATIC RELEASE: YES
+- Safe to continue now: YES
 ```
 
 ## 3. Conditions
 
 ### Source files committed to main
 
-All approved changes must be present in `main` branch.
+All approved changes must be present in `main`.
 
 ### Changed files verified on main
 
-The exact files from the approved module handoff must exist in `main`.
+The exact approved files must exist in `main` and match the validated implementation.
 
 ### Runtime/build-affecting files changed
 
 At least one of the following must be impacted:
 
-- `src/**`
-- `src/app/bundle-order.json`
-- `src/app/module-registry.json`
-- build tooling or release workflow
+- `src/**`;
+- `tools/check-bundle-order.mjs`;
+- `tools/build-latest-userscript.mjs`;
+- `.github/workflows/build-latest-release.yml`.
 
-If only documentation or governance changes are made, Actions are not required.
+Governance, contracts, architecture documents, and decision records alone do not require a userscript release.
 
 ### Release artifacts already rebuilt
 
-If latest release artifacts already reflect the change, Actions must NOT be triggered again.
+If latest release artifacts already reflect the approved change, a second release must not be triggered.
 
 ## 4. Decision rules
 
-### RUN ACTIONS = YES
+### AUTOMATIC RELEASE = YES
 
 Only when:
 
-- source is fully integrated into `main`
-- runtime/build-affecting changes exist
-- release artifacts are not yet updated for this change
+- source is fully integrated into `main`;
+- runtime/build-affecting changes exist;
+- release artifacts are not yet updated for the change;
+- unified workflow execution is available.
 
-### RUN ACTIONS = NO
+The PM/Core Release must continue without asking the user to press `Run workflow`.
 
-If any of the above is false.
+### AUTOMATIC RELEASE = NO
+
+If any required condition is false.
+
+### MANUAL FALLBACK = YES
+
+Only when:
+
+- automatic workflow did not start;
+- automatic workflow failed for a recoverable infrastructure reason;
+- the agent cannot safely dispatch or rerun it;
+- exact manual steps are provided.
 
 ## 5. Evidence requirement
 
-The agent must not rely on assumptions.
+The agent must verify:
 
-It must verify:
+- commit presence on `main`;
+- changed-file list match;
+- build relevance;
+- automatic workflow start;
+- workflow result;
+- release commit;
+- published version.
 
-- commit presence on `main`
-- changed file list match
-- build relevance
+A green PR validation alone is not evidence that the release was published.
 
 ## 6. Safe user instruction rule
 
-The system must not instruct the user to run GitHub Actions unless:
+Normal successful path:
 
-- `RUN ACTIONS = YES`
-- `Safe to run now = YES`
+```text
+User action: NONE
+```
 
-## 7. Failure modes
+The user may be instructed to run GitHub Actions only in manual fallback state.
 
-If verification is impossible:
+## 7. Tampermonkey decision gate
+
+After release execution, report:
+
+```text
+Tampermonkey update
+- Required: YES / NO / NOT YET
+- Published version: <version> / NOT APPLICABLE / UNKNOWN
+- User action: update/reinstall/check for updates / none / wait
+```
+
+Rules:
+
+- New runtime release verified: `YES`.
+- Docs/contracts-only task: `NO`.
+- Release pending or failed: `NOT YET`.
+
+## 8. Failure modes
+
+If automatic release readiness or result cannot be verified:
 
 ```text
 BLOCKED
-Reason: Cannot verify release readiness
-Next action: manual GitHub check required
+Reason: Cannot verify automatic release lifecycle
+Next action: exact manual fallback or recovery step
 ```
 
-## 8. Relationship to other contracts
+## 9. Relationship to other contracts
 
-This contract is referenced by:
-
+- `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`
 - `contracts/SLF_GOVERNANCE.md`
 - `contracts/branches/project-manager.md`
+- `contracts/branches/core-release.md`
 - `contracts/runtime/SLF_TASK_RUNTIME.md`
