@@ -1,26 +1,68 @@
-name: Build latest SLF release
+name: SLF Validate and Release
 
 on:
+  pull_request:
+    paths:
+      - src/**
+      - tools/check-bundle-order.mjs
+      - tools/build-latest-userscript.mjs
+      - .github/workflows/build-latest-release.yml
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - releases/latest.user.js
+      - releases/latest.meta.js
+      - data/version.json
+      - CHANGELOG.md
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  build-latest:
+  validate:
+    name: Validate SLF source
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+
+      - name: Validate bundle manifest
+        id: bundle_check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node tools/check-bundle-order.mjs 2>&1 | tee bundle-order-report.txt
+
+      - name: Upload bundle-order report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-order-report
+          path: bundle-order-report.txt
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce bundle-order result
+        if: steps.bundle_check.outcome != 'success'
+        run: exit 1
+
+  release:
+    name: Build and publish latest SLF
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-
-      - name: Validate bundle manifest
-        shell: bash
-        run: |
-          set -euo pipefail
-          node tools/check-bundle-order.mjs
 
       - name: Build latest-only userscript
         shell: bash
