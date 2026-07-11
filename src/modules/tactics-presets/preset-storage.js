@@ -1,6 +1,21 @@
     // 3. Preset Storage
     // ============================================================
 
+    const ALLOWED_HENTA_PRESET = 'Henta_LeftTrap_att3';
+
+    function isDeprecatedHentaPreset(name) {
+        const key = String(name || '');
+        return key.startsWith('Henta_') && key !== ALLOWED_HENTA_PRESET;
+    }
+
+    function filterDeprecatedPresetMap(map) {
+        const result = {};
+        Object.entries(map || {}).forEach(([key, value]) => {
+            if (!isDeprecatedHentaPreset(key)) result[key] = value;
+        });
+        return result;
+    }
+
     function unwrapServerData(data) {
         if (data && typeof data === 'object') {
             if (data.data && typeof data.data === 'object') return data.data;
@@ -51,14 +66,23 @@
             }
         }
 
-        return result;
+        return filterDeprecatedPresetMap(result);
     }
 
     const PresetStorage = {
         loadLocalRaw() {
             try {
                 const data = localStorage.getItem(CONFIG.STORAGE_KEY);
-                return data ? normalizePresets(JSON.parse(data)) : null;
+                if (!data) return null;
+
+                const parsed = JSON.parse(data);
+                const normalized = normalizePresets(parsed);
+                const before = Object.keys(parsed || {}).sort().join('|');
+                const after = Object.keys(normalized || {}).sort().join('|');
+                if (before !== after) {
+                    localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(normalized));
+                }
+                return normalized;
             } catch (e) {
                 debugWarn('[SLF] Ошибка чтения localStorage', e);
                 return null;
@@ -77,7 +101,7 @@
 
             if (!local) {
                 this.saveLocalOnly(DEFAULT_CUSTOM_PRESETS);
-                return Object.assign({}, DEFAULT_CUSTOM_PRESETS);
+                return normalizePresets(DEFAULT_CUSTOM_PRESETS);
             }
 
             return local;
@@ -108,7 +132,7 @@
         getAllPresets() {
             // Built-in canonical library wins over older locally/server-saved copies with the same names.
             // User custom presets with unique names are still preserved.
-            return Object.assign({}, this.loadCustom(), BASE_PRESETS);
+            return filterDeprecatedPresetMap(Object.assign({}, this.loadCustom(), BASE_PRESETS));
         },
 
         getAllLabels() {
@@ -119,7 +143,7 @@
                 labels[key] = BASE_LABELS[key] || key;
             }
 
-            return labels;
+            return filterDeprecatedPresetMap(labels);
         }
     };
 
