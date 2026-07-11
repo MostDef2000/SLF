@@ -9,9 +9,7 @@ const EXCLUDED_SOURCE_FILES = new Set([
   'src/app/userscript-header.js',
   'src/modules/team-management/team4-alter-minutes-strict-link-hotfix.js'
 ]);
-const EXPECTED_POST_BOOTSTRAP = [
-  'src/modules/strategy-data-recommendations/preset-fit-scoring.js'
-];
+const EXPECTED_POST_BOOTSTRAP = [];
 
 function absolute(rel) {
   return path.join(ROOT, rel);
@@ -66,7 +64,7 @@ if (bootstrapIndex < 0) fail('bootstrap is not registered');
 const postBootstrap = files.slice(bootstrapIndex + 1);
 if (JSON.stringify(postBootstrap) !== JSON.stringify(EXPECTED_POST_BOOTSTRAP)) {
   fail('post-bootstrap runtime tail changed', [
-    `expected: ${EXPECTED_POST_BOOTSTRAP.join(' -> ')}`,
+    `expected: ${EXPECTED_POST_BOOTSTRAP.join(' -> ') || '(empty)'}`,
     `actual: ${postBootstrap.join(' -> ') || '(empty)'}`
   ]);
 }
