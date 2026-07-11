@@ -1,6 +1,6 @@
 # SLF Automatic Release Policy
 
-Version: 1.0.0
+Version: 1.1.0
 Status: Active
 Applies to: Project Manager, domain agents, Core Release, runtime state, release gate, GitHub Actions, and Tampermonkey user handoff
 Source of truth: GitHub repository contracts and `.github/workflows/build-latest-release.yml`
@@ -40,6 +40,7 @@ The approved lifecycle is:
 ```text
 implementation
 → branch commit
+→ post-write integrity verification
 → pull request
 → CI validation
 → merge into main
@@ -57,22 +58,64 @@ Separate confirmation is required only when:
 - validation fails and the fix changes approved behavior;
 - a non-recoverable platform or permission blocker remains.
 
-## 3. Automatic release rule
+## 3. Automatic continuation rule
+
+After approval, the PM must execute the lifecycle as a continuation loop until one terminal state is reached:
+
+```text
+COMPLETE
+BLOCKED
+FAILED
+```
+
+The PM must not stop and wait for another user message after a deterministic safe step.
+
+Waiting for CI, mergeability calculation, an automatic workflow trigger, or release publication is not `BLOCKED`.
+
+Intermediate status updates are allowed, but they do not end the task and must be followed by continued execution.
+
+## 4. Post-write integrity rule
+
+Before a pull request may be created or updated, every written file must pass the following gate:
+
+1. fetch the complete file from the branch;
+2. verify that it is not truncated;
+3. verify expected structural markers and ending;
+4. run syntax validation for changed executable files;
+5. compare the branch against `main`;
+6. verify that changed files remain inside the approved scope.
+
+A failed integrity check returns the task to implementation. It is not a review-ready or blocked state unless recovery itself requires a new approval or unavailable permission.
+
+## 5. Automatic release rule
 
 For approved runtime/build-affecting changes, the PM/Core Release must:
 
 1. create or refresh a branch from current `main`;
 2. implement only the approved scope;
-3. create a pull request;
-4. wait for required validation;
-5. merge when checks pass and branch freshness remains safe;
-6. verify that `SLF Validate and Release` starts automatically on `main`;
-7. verify the release commit and published version;
-8. report the final Tampermonkey action.
+3. complete the post-write integrity gate;
+4. create a pull request;
+5. wait for required validation;
+6. merge when checks pass and branch freshness remains safe;
+7. verify that `SLF Validate and Release` starts automatically on `main`;
+8. verify the release commit and published version;
+9. report the final Tampermonkey action.
 
 The user must not be told to manually press `Run workflow` during the normal successful path.
 
-## 4. Manual fallback
+## 6. Release verification hierarchy
+
+Post-merge release verification must use this order of evidence:
+
+1. `data/version.json` on `main`;
+2. expected `scriptVersion`;
+3. `build.approvedCommit` matching the merged source commit;
+4. the same version in `releases/latest.user.js`;
+5. a release commit for that version.
+
+Workflow-run lookup is supplemental. An empty workflow lookup must not be treated as proof that no push-triggered workflow ran.
+
+## 7. Manual fallback
 
 Manual GitHub Actions execution is fallback-only.
 
@@ -85,7 +128,7 @@ It is permitted only when:
 
 Fallback state must be `BLOCKED` or `MANUAL FALLBACK`, with an exact UI path and reason.
 
-## 5. Workflow trigger scope
+## 8. Workflow trigger scope
 
 Automatic release on `main` must be limited to runtime/build-affecting files:
 
@@ -98,7 +141,7 @@ Contracts, architecture documents, decision records, issues, and other documenta
 
 Generated release-only commits must not recursively start another release.
 
-## 6. Runtime semantics
+## 9. Runtime semantics
 
 `ACTIONS_REQUIRED` is no longer the normal user action after source integration.
 
@@ -113,7 +156,21 @@ SOURCE_INTEGRATED
 
 `ACTIONS_REQUIRED` is reserved for manual fallback when automatic execution is unavailable and user action is genuinely required.
 
-## 7. Mandatory final user handoff
+## 10. Terminal response rule
+
+After repository-write approval, the PM must not send a final response while the task is in a non-terminal phase.
+
+Allowed final states are only:
+
+```text
+COMPLETE
+BLOCKED
+FAILED
+```
+
+A progress update such as `ACTIONS_RUNNING`, `SOURCE_INTEGRATED`, or `HANDOFF_VALIDATED` is not a final handoff.
+
+## 11. Mandatory final user handoff
 
 Every completed SLF implementation/release response must explicitly state both release automation status and Tampermonkey action.
 
@@ -147,20 +204,21 @@ Decision rules:
 - Release artifacts already contained the approved change before the task:
   - `Required: NO`, unless a newer version must still be installed in the browser.
 
-## 8. Completion rule
+## 12. Completion rule
 
 An approved runtime task is not `COMPLETE` until all applicable steps are verified:
 
 - implementation committed;
+- post-write integrity gate passed;
 - PR validated;
 - merged into `main`;
 - automatic release succeeded;
 - release commit/version verified;
 - Tampermonkey update instruction returned.
 
-Governance/docs-only tasks may complete without a userscript release.
+Governance/docs-only tasks may complete without a userscript release after CI and merge are verified.
 
-## 9. Related contracts
+## 13. Related contracts
 
 - `contracts/SLF_GOVERNANCE.md`
 - `contracts/branches/project-manager.md`

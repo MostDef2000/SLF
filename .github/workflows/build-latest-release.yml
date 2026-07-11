@@ -29,6 +29,15 @@ jobs:
         with:
           show-progress: false
 
+      - name: Validate assembled JavaScript syntax
+        shell: bash
+        env:
+          APPROVED_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          node tools/build-latest-userscript.mjs
+          node --check releases/latest.user.js
+
       - name: Validate bundle manifest
         id: bundle_check
         continue-on-error: true
