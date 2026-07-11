@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.203
+// @version      4.4.204
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.203',
-        scriptVersion: '4.4.203',
+        version: '4.4.204',
+        scriptVersion: '4.4.204',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.203',
+        scriptVersion: '4.4.204',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -15171,12 +15171,14 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
 
 // >>> src/modules/transfer-analyzer/transfer-candidate-scanner.js
 // Transfer Candidate Scanner
-// Manual full-market crawler and candidate ranking for transfers.php
+// Manual full-market crawler and unified Top 20 ranking for transfers.php
 // ============================================================
 
 const TransferCandidateScanner = {
-    storageKey: 'slf_transfer_candidate_scanner_v1',
-    schema: 'slf_transfer_candidate_scanner_v1',
+    storageKey: 'slf_transfer_candidate_scanner_v2',
+    schema: 'slf_transfer_candidate_scanner_v2',
+    enrichmentPoolSize: 200,
+    resultLimit: 20,
     state: null,
     running: false,
     stopRequested: false,
@@ -15185,20 +15187,22 @@ const TransferCandidateScanner = {
         return {
             schema: this.schema,
             baseUrl: '',
+            totalPlayers: 0,
+            pageSize: 0,
             totalPages: 0,
             nextPage: 0,
             scannedPages: 0,
+            maxPrice: 0,
+            phase: 'idle',
             rows: [],
-            activePreset: 'young_growth',
-            enrichmentLimit: 100,
             updatedAt: Date.now()
         };
     },
 
     isPage() {
         if (location.pathname !== '/transfers.php') return false;
-        const p = new URLSearchParams(location.search);
-        return p.get('action') !== 'view' && p.get('action') !== 'history';
+        const params = new URLSearchParams(location.search);
+        return params.get('action') !== 'view' && params.get('action') !== 'history';
     },
 
     start() {
@@ -15215,9 +15219,11 @@ const TransferCandidateScanner = {
     load() {
         try {
             const value = JSON.parse(localStorage.getItem(this.storageKey) || 'null');
-            if (value?.schema === this.schema && Array.isArray(value.rows)) return Object.assign(this.defaults(), value);
-        } catch (e) {
-            console.warn('[SLF Candidate Scanner] state load failed', e);
+            if (value?.schema === this.schema && Array.isArray(value.rows)) {
+                return Object.assign(this.defaults(), value);
+            }
+        } catch (error) {
+            console.warn('[SLF Candidate Scanner] state load failed', error);
         }
         return this.defaults();
     },
@@ -15226,8 +15232,8 @@ const TransferCandidateScanner = {
         this.state.updatedAt = Date.now();
         try {
             localStorage.setItem(this.storageKey, JSON.stringify(this.state));
-        } catch (e) {
-            console.warn('[SLF Candidate Scanner] state save failed', e);
+        } catch (error) {
+            console.warn('[SLF Candidate Scanner] state save failed', error);
             this.status('Не удалось сохранить прогресс: localStorage переполнен.');
         }
     },
@@ -15236,25 +15242,19 @@ const TransferCandidateScanner = {
         if (!this.isPage() || document.getElementById('slf-transfer-candidate-panel')) return;
         const table = this.findTable(document);
         if (!table?.parentNode) return;
+
         const panel = document.createElement('section');
         panel.id = 'slf-transfer-candidate-panel';
         panel.style.cssText = 'margin:8px 0 12px;padding:10px;background:#14181d;border:1px solid #3f5668;border-radius:6px;color:#ddd;font:12px Arial,sans-serif;';
         panel.innerHTML = `
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 <b style="color:#7cc8ff;font-size:14px;">SLF Transfer Candidate Scanner</b>
-                <button id="slf-candidate-scan">Сканировать все страницы</button>
+                <label style="display:flex;gap:5px;align-items:center;">Максимальная цена
+                    <input id="slf-candidate-max-price" type="text" placeholder="например 300M" style="width:110px;">
+                </label>
+                <button id="slf-candidate-scan">Найти Top 20</button>
                 <button id="slf-candidate-stop" disabled>Остановить</button>
                 <button id="slf-candidate-resume">Продолжить</button>
-                <button id="slf-candidate-enrich">Обогатить Top</button>
-                <label>Top <input id="slf-candidate-limit" type="number" min="10" max="300" step="10" value="100" style="width:58px;"></label>
-                <select id="slf-candidate-preset">
-                    <option value="young_growth">На вырост</option>
-                    <option value="cheap_160">Cheap 160+</option>
-                    <option value="ready_starter">Здесь и сейчас</option>
-                    <option value="contract_opportunity">Контрактные возможности</option>
-                    <option value="hidden_upgrade">Hidden Upgrade</option>
-                </select>
-                <button id="slf-candidate-export">CSV</button>
                 <button id="slf-candidate-reset">Сбросить</button>
                 <span id="slf-candidate-status" style="color:#aaa;"></span>
             </div>
@@ -15262,20 +15262,23 @@ const TransferCandidateScanner = {
             <div id="slf-candidate-results" style="margin-top:8px;max-height:560px;overflow:auto;"></div>
         `;
         table.parentNode.insertBefore(panel, table);
-        document.getElementById('slf-candidate-scan').onclick = () => this.scan(false);
-        document.getElementById('slf-candidate-resume').onclick = () => this.scan(true);
-        document.getElementById('slf-candidate-stop').onclick = () => { this.stopRequested = true; this.status('Остановка после текущего запроса...'); };
-        document.getElementById('slf-candidate-enrich').onclick = () => this.enrich();
-        document.getElementById('slf-candidate-export').onclick = () => this.exportCsv();
-        document.getElementById('slf-candidate-reset').onclick = () => this.reset();
-        document.getElementById('slf-candidate-preset').onchange = e => { this.state.activePreset = e.target.value; this.save(); this.render(); };
-        document.getElementById('slf-candidate-limit').onchange = e => {
-            this.state.enrichmentLimit = this.clamp(Number(e.target.value || 100), 10, 300);
-            e.target.value = String(this.state.enrichmentLimit);
+
+        const priceInput = document.getElementById('slf-candidate-max-price');
+        priceInput.value = this.state.maxPrice ? this.moneyText(this.state.maxPrice) : '';
+        priceInput.onchange = () => {
+            this.state.maxPrice = this.money(priceInput.value) || 0;
+            priceInput.value = this.state.maxPrice ? this.moneyText(this.state.maxPrice) : '';
             this.save();
+            this.render();
         };
-        document.getElementById('slf-candidate-preset').value = this.state.activePreset;
-        document.getElementById('slf-candidate-limit').value = String(this.state.enrichmentLimit);
+
+        document.getElementById('slf-candidate-scan').onclick = () => this.run(false);
+        document.getElementById('slf-candidate-resume').onclick = () => this.run(true);
+        document.getElementById('slf-candidate-stop').onclick = () => {
+            this.stopRequested = true;
+            this.status('Остановка после текущего запроса...');
+        };
+        document.getElementById('slf-candidate-reset').onclick = () => this.reset();
         this.render();
     },
 
@@ -15283,53 +15286,61 @@ const TransferCandidateScanner = {
         if (this.running) return;
         localStorage.removeItem(this.storageKey);
         this.state = this.defaults();
+        const input = document.getElementById('slf-candidate-max-price');
+        if (input) input.value = '';
         this.render();
         this.status('Сканер сброшен.');
     },
 
     setRunning(value) {
         this.running = value;
-        ['slf-candidate-scan', 'slf-candidate-resume', 'slf-candidate-enrich'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.disabled = value;
+        ['slf-candidate-scan', 'slf-candidate-resume', 'slf-candidate-reset'].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) element.disabled = value;
         });
         const stop = document.getElementById('slf-candidate-stop');
         if (stop) stop.disabled = !value;
     },
 
     status(text) {
-        const el = document.getElementById('slf-candidate-status');
-        if (el) el.textContent = text || '';
+        const element = document.getElementById('slf-candidate-status');
+        if (element) element.textContent = text || '';
     },
 
-    clamp(v, min, max) { return Math.max(min, Math.min(max, Number(v || 0))); },
     delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); },
-    text(v) { return String(v || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim(); },
-    number(v) {
-        const m = String(v || '').replace(',', '.').match(/-?\d+(?:\.\d+)?/);
-        const n = m ? Number(m[0]) : null;
-        return Number.isFinite(n) ? n : null;
+    text(value) { return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim(); },
+    number(value) {
+        const match = String(value || '').replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+        const number = match ? Number(match[0]) : null;
+        return Number.isFinite(number) ? number : null;
     },
-    money(v) {
-        const text = this.text(v).replace(',', '.');
-        const m = text.match(/(\d+(?:\.\d+)?)/);
-        if (!m) return null;
-        const n = Number(m[1]);
-        if (!Number.isFinite(n)) return null;
-        if (/млрд|billion|\b[bб]\b/i.test(text)) return Math.round(n * 1e9);
-        if (/млн|million|\b[mм]\b/i.test(text)) return Math.round(n * 1e6);
-        if (/тыс|thousand|\b[kк]\b/i.test(text)) return Math.round(n * 1e3);
-        return n;
+    money(value) {
+        if (typeof TransferCandidateScannerMoneyParser !== 'undefined') {
+            return TransferCandidateScannerMoneyParser.parse(value);
+        }
+        const text = this.text(value).replace(/\s+/g, '').replace(',', '.');
+        const match = text.match(/(\d+(?:\.\d+)?)/);
+        if (!match) return null;
+        const number = Number(match[1]);
+        if (!Number.isFinite(number)) return null;
+        if (/млрд|billion|bn|[bб]$/i.test(text)) return Math.round(number * 1e9);
+        if (/млн|million|mln|[mм]$/i.test(text)) return Math.round(number * 1e6);
+        if (/тыс|thousand|[kк]$/i.test(text)) return Math.round(number * 1e3);
+        return Math.round(number);
     },
-    moneyText(v) {
-        const n = Number(v || 0);
-        if (!n) return '—';
-        if (n >= 1e9) return `${(n / 1e9).toFixed(2).replace(/\.00$/, '')}B`;
-        if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M`;
-        if (n >= 1e3) return `${Math.round(n / 1e3)}K`;
-        return String(Math.round(n));
+    moneyText(value) {
+        const number = Number(value || 0);
+        if (!number) return '';
+        if (number >= 1e9) return `${(number / 1e9).toFixed(2).replace(/\.00$/, '')}B`;
+        if (number >= 1e6) return `${(number / 1e6).toFixed(1).replace(/\.0$/, '')}M`;
+        if (number >= 1e3) return `${Math.round(number / 1e3)}K`;
+        return String(Math.round(number));
     },
-    escape(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
+    escape(value) {
+        return String(value ?? '').replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[character]));
+    },
 
     baseUrl() {
         const url = new URL(location.href);
@@ -15350,52 +15361,88 @@ const TransferCandidateScanner = {
         }) || null;
     },
 
-    totalPages(doc) {
-        const pages = [...doc.querySelectorAll('a[href*="page="]')]
-            .map(a => Number((a.getAttribute('href') || '').match(/[?&]page=(\d+)/)?.[1]))
+    extractTotalPlayers(doc) {
+        const candidates = [...doc.querySelectorAll('h1,h2,h3,div,span,a')];
+        for (const element of candidates) {
+            const text = this.text(element.textContent);
+            const match = text.match(/Все\s+игроки\s*\((\d[\d\s]*)\)/i);
+            if (match) return Number(match[1].replace(/\s/g, '')) || 0;
+        }
+        const bodyMatch = this.text(doc.body?.textContent || '').match(/Все\s+игроки\s*\((\d[\d\s]*)\)/i);
+        return bodyMatch ? Number(bodyMatch[1].replace(/\s/g, '')) || 0 : 0;
+    },
+
+    detectTotalPages(doc, pageRows) {
+        const linkPages = [...doc.querySelectorAll('a[href*="page="]')]
+            .map(anchor => Number((anchor.getAttribute('href') || '').match(/[?&]page=(\d+)/)?.[1]))
             .filter(Number.isFinite);
-        return pages.length ? Math.max(...pages) + 1 : 1;
+        const fromLinks = linkPages.length ? Math.max(...linkPages) + 1 : 0;
+        const totalPlayers = this.extractTotalPlayers(doc);
+        const pageSize = pageRows.length;
+        const fromCount = totalPlayers > 0 && pageSize > 0 ? Math.ceil(totalPlayers / pageSize) : 0;
+        this.state.totalPlayers = totalPlayers || this.state.totalPlayers || 0;
+        this.state.pageSize = pageSize || this.state.pageSize || 0;
+        return Math.max(fromLinks, fromCount, 1);
     },
 
     headerMap(table) {
-        const header = [...table.querySelectorAll('tr')].find(tr => {
-            const text = this.text(tr.textContent).toLowerCase();
+        const header = [...table.querySelectorAll('tr')].find(row => {
+            const text = this.text(row.textContent).toLowerCase();
             return text.includes('амплуа') && (text.includes('фамилия') || text.includes('имя'));
         });
-        const cells = header ? [...header.querySelectorAll('td,th')].map(c => this.text(c.textContent).toLowerCase()) : [];
-        const find = (...terms) => { const i = cells.findIndex(t => terms.some(term => t.includes(term))); return i >= 0 ? i : null; };
-        return { pos: find('амплуа'), club: find('команда', 'клуб'), age: find('воз'), talent: find('тал'), potential: find('пот'), skill: find('скилл', 'ск'), price: find('цена', 'сумма'), end: find('дата окончания', 'оконч'), bids: find('предл', 'став') };
+        const cells = header ? [...header.querySelectorAll('td,th')].map(cell => this.text(cell.textContent).toLowerCase()) : [];
+        const find = (...terms) => {
+            const index = cells.findIndex(text => terms.some(term => text.includes(term)));
+            return index >= 0 ? index : null;
+        };
+        return {
+            pos: find('амплуа'), club: find('команда', 'клуб'), age: find('воз'), talent: find('тал'),
+            potential: find('пот'), skill: find('скилл', 'ск'), price: find('цена', 'сумма'),
+            end: find('дата окончания', 'оконч'), bids: find('предл', 'став')
+        };
     },
 
     parsePage(doc, page, pageUrl) {
         const table = this.findTable(doc);
         if (!table) return [];
         const map = this.headerMap(table);
-        return [...table.querySelectorAll('tr')].map((tr, index) => {
-            const player = tr.querySelector('a[href*="player.php"][href*="id="]');
+        return [...table.querySelectorAll('tr')].map((rowElement, index) => {
+            const player = rowElement.querySelector('a[href*="player.php"][href*="id="]');
             if (!player) return null;
-            const cells = [...tr.querySelectorAll('td')];
-            const cell = i => i == null ? null : cells[i] || null;
-            const value = i => this.text(cell(i)?.textContent || '');
+            const cells = [...rowElement.querySelectorAll('td')];
+            const cell = cellIndex => cellIndex == null ? null : cells[cellIndex] || null;
+            const value = cellIndex => this.text(cell(cellIndex)?.textContent || '');
             const playerId = (player.getAttribute('href') || '').match(/[?&]id=(\d+)/)?.[1];
             if (!playerId) return null;
-            const transferId = (tr.id || '').match(/tl-(\d+)/)?.[1] || this.text(cells[0]?.textContent || '').match(/\d{4,}/)?.[0] || '';
+            const transferId = (rowElement.id || '').match(/tl-(\d+)/)?.[1] || this.text(cells[0]?.textContent || '').match(/\d{4,}/)?.[0] || '';
             const potentialCell = cell(map.potential);
             const potentialLevel = Number((potentialCell?.querySelector('img[src*="/potencial/"]')?.getAttribute('src') || '').match(/potencial\/(\d+)/)?.[1]) || null;
             const priceCell = cell(map.price)?.cloneNode(true);
             priceCell?.querySelectorAll('[title*="номинал"], img').forEach(node => node.remove());
-            const tm = tr.querySelector('.tm_field a[href*="transfermarkt"]');
+            const tm = rowElement.querySelector('.tm_field a[href*="transfermarkt"]');
             const positions = value(map.pos).toUpperCase().match(/\b(GK|LD|CD|RD|DM|CM|AM|LM|RM|LW|RW|ST)\b/g) || [];
             const row = {
                 key: transferId ? `transfer:${transferId}` : `player:${playerId}`,
-                transferId, playerId, page, pageUrl, originalIndex: index,
+                transferId,
+                playerId,
+                page,
+                pageUrl,
+                originalIndex: index,
                 name: this.text(player.textContent),
                 playerUrl: new URL(player.getAttribute('href'), location.origin).toString(),
                 positions: [...new Set(positions)],
-                club: value(map.club), age: this.number(value(map.age)), talent: this.number(value(map.talent)),
-                potentialLevel, potentialText: this.text(potentialCell?.querySelector('[title]')?.getAttribute('title') || ''),
-                scoutSkill: this.number(value(map.skill)), price: this.money(priceCell?.textContent || value(map.price)),
-                bids: this.number(value(map.bids)), endDateText: value(map.end), tmUrl: tm?.href || '', tmDisplayedValueEur: this.money(tm?.textContent || ''), enrichment: null
+                club: value(map.club),
+                age: this.number(value(map.age)),
+                talent: this.number(value(map.talent)),
+                potentialLevel,
+                potentialText: this.text(potentialCell?.querySelector('[title]')?.getAttribute('title') || ''),
+                scoutSkill: this.number(value(map.skill)),
+                price: this.money(priceCell?.textContent || value(map.price)),
+                bids: this.number(value(map.bids)),
+                endDateText: value(map.end),
+                tmUrl: tm?.href || '',
+                tmDisplayedValueEur: this.money(tm?.textContent || ''),
+                enrichment: null
             };
             row.preScore = this.preScore(row);
             return row;
@@ -15403,18 +15450,27 @@ const TransferCandidateScanner = {
     },
 
     preScore(row) {
-        const age = Number(row.age || 99), skill = Number(row.scoutSkill || 0), talent = Number(row.talent || 0), potential = Number(row.potentialLevel || 0), priceM = Number(row.price || 0) / 1e6;
-        let score = age <= 22 ? 25 : age <= 25 ? 15 : age <= 29 ? 7 : 0;
-        score += Math.max(0, skill - 140) * 0.8 + talent * 2 + (potential >= 4 ? 14 : potential === 3 ? 5 : potential <= 2 ? -12 : 0);
-        if (priceM > 0) score += Math.max(-20, 25 - priceM / 20);
+        const age = Number(row.age || 99);
+        const skill = Number(row.scoutSkill || 0);
+        const talent = Number(row.talent || 0);
+        const potential = Number(row.potentialLevel || 0);
+        const priceM = Number(row.price || 0) / 1e6;
+        let score = age <= 22 ? 22 : age <= 25 ? 14 : age <= 29 ? 7 : 0;
+        score += Math.max(0, skill - 140) * 0.9;
+        score += talent * 2;
+        score += potential >= 4 ? 12 : potential === 3 ? 5 : potential <= 2 ? -10 : 0;
+        if (priceM > 0) score += Math.max(-20, 24 - priceM / 18);
         if (!Number(row.bids || 0)) score += 3;
         return Number(score.toFixed(2));
     },
 
     merge(rows) {
-        const map = new Map((this.state.rows || []).map(row => [row.key, row]));
-        rows.forEach(row => { const old = map.get(row.key); map.set(row.key, old?.enrichment ? { ...row, enrichment: old.enrichment } : row); });
-        this.state.rows = [...map.values()];
+        const existing = new Map((this.state.rows || []).map(row => [row.key, row]));
+        rows.forEach(row => {
+            const old = existing.get(row.key);
+            existing.set(row.key, old?.enrichment ? { ...row, enrichment: old.enrichment } : row);
+        });
+        this.state.rows = [...existing.values()];
     },
 
     async fetchPage(page) {
@@ -15425,87 +15481,35 @@ const TransferCandidateScanner = {
         return { doc, pageUrl };
     },
 
-    async scan(resume) {
+    readMaxPrice() {
+        const input = document.getElementById('slf-candidate-max-price');
+        const maxPrice = this.money(input?.value || '') || 0;
+        this.state.maxPrice = maxPrice;
+        if (input) input.value = maxPrice ? this.moneyText(maxPrice) : '';
+        return maxPrice;
+    },
+
+    async run(resume) {
         if (this.running) return;
         this.stopRequested = false;
         this.setRunning(true);
         try {
+            const maxPrice = this.readMaxPrice();
             if (!resume || !this.state.baseUrl) {
-                const preset = document.getElementById('slf-candidate-preset')?.value || 'young_growth';
-                const limit = this.clamp(Number(document.getElementById('slf-candidate-limit')?.value || 100), 10, 300);
                 this.state = this.defaults();
                 this.state.baseUrl = this.baseUrl();
-                this.state.activePreset = preset;
-                this.state.enrichmentLimit = limit;
+                this.state.maxPrice = maxPrice;
             }
-            let page = resume ? Number(this.state.nextPage || 0) : 0;
-            for (; !this.stopRequested; page++) {
-                const result = await this.fetchPage(page);
-                if (!this.state.totalPages) this.state.totalPages = this.totalPages(result.doc);
-                if (page >= this.state.totalPages) break;
-                this.status(`Страница ${page + 1}/${this.state.totalPages}...`);
-                this.merge(this.parsePage(result.doc, page, result.pageUrl));
-                this.state.scannedPages = Math.max(this.state.scannedPages, page + 1);
-                this.state.nextPage = page + 1;
-                this.save();
-                this.renderProgress();
-                if (page + 1 >= this.state.totalPages) break;
-                await this.delay(250);
+            await this.scanAllPages(resume);
+            if (this.stopRequested) return;
+            await this.enrichCandidates();
+            if (!this.stopRequested) {
+                this.state.phase = 'complete';
+                this.status(`Готово: Top ${this.resultLimit} по всему рынку.`);
             }
-            this.status(this.stopRequested ? 'Сканирование остановлено. Прогресс сохранён.' : `Индекс готов: ${this.state.rows.length} лотов.`);
-            this.render();
-        } catch (e) {
-            console.error('[SLF Candidate Scanner] scan failed', e);
-            this.status(`Ошибка сканирования: ${e.message || e}`);
-        } finally {
-            this.stopRequested = false;
-            this.setRunning(false);
-        }
-    },
-
-    prefiltered() {
-        const preset = this.state.activePreset;
-        return (this.state.rows || []).filter(row => {
-            const age = Number(row.age || 99), skill = Number(row.scoutSkill || 0), potential = Number(row.potentialLevel || 0);
-            if (!row.playerId || !row.price) return false;
-            if (preset === 'young_growth') return age <= 23 && skill >= 145 && potential >= 3;
-            if (preset === 'cheap_160') return age <= 28 && skill >= 150;
-            if (preset === 'ready_starter') return age >= 22 && age <= 30 && skill >= 165;
-            if (preset === 'contract_opportunity') return age <= 29 && skill >= 150;
-            if (preset === 'hidden_upgrade') return age <= 28 && skill >= 145 && skill < 180;
-            return true;
-        }).sort((a, b) => Number(b.preScore || 0) - Number(a.preScore || 0));
-    },
-
-    async enrich() {
-        if (this.running) return;
-        const limit = this.clamp(Number(document.getElementById('slf-candidate-limit')?.value || this.state.enrichmentLimit || 100), 10, 300);
-        this.state.enrichmentLimit = limit;
-        const rows = this.prefiltered().slice(0, limit);
-        if (!rows.length) return this.status('Нет кандидатов. Сначала просканируй рынок.');
-        this.stopRequested = false;
-        this.setRunning(true);
-        let done = 0;
-        try {
-            for (const row of rows) {
-                if (this.stopRequested) break;
-                if (row.enrichment?.completedAt) { done++; continue; }
-                this.status(`Обогащение ${done + 1}/${rows.length}: ${row.name}`);
-                try {
-                    const alter = await SLFAlterLayer.getByPlayerId(row.playerId);
-                    let tm = null;
-                    try { tm = await TMEnrichmentLayer.getBySlfPlayerId(row.playerId); }
-                    catch (e) { console.warn('[SLF Candidate Scanner] TM failed', row.playerId, e); }
-                    row.enrichment = this.buildEnrichment(row, alter, tm);
-                } catch (e) {
-                    row.enrichment = { completedAt: Date.now(), error: String(e?.message || e || 'enrichment_failed') };
-                }
-                done++;
-                this.save();
-                if (done % 3 === 0 || done === rows.length) this.render();
-                await this.delay(120);
-            }
-            this.status(this.stopRequested ? 'Обогащение остановлено. Прогресс сохранён.' : `Обогащено: ${done}/${rows.length}.`);
+        } catch (error) {
+            console.error('[SLF Candidate Scanner] run failed', error);
+            this.status(`Ошибка: ${error.message || error}`);
         } finally {
             this.stopRequested = false;
             this.setRunning(false);
@@ -15514,14 +15518,101 @@ const TransferCandidateScanner = {
         }
     },
 
+    async scanAllPages(resume) {
+        this.state.phase = 'scan';
+        let page = resume ? Number(this.state.nextPage || 0) : 0;
+        let previousSignature = '';
+        let consecutiveEmpty = 0;
+
+        for (; !this.stopRequested; page++) {
+            const result = await this.fetchPage(page);
+            const pageRows = this.parsePage(result.doc, page, result.pageUrl);
+            if (!this.state.totalPages) this.state.totalPages = this.detectTotalPages(result.doc, pageRows);
+
+            const signature = pageRows.slice(0, 10).map(row => row.key).join('|');
+            if (!pageRows.length) consecutiveEmpty++;
+            else consecutiveEmpty = 0;
+            if (page > 0 && signature && signature === previousSignature) break;
+            if (consecutiveEmpty >= 1) break;
+
+            this.status(`Сканирование страницы ${page + 1}/${this.state.totalPages || '?'}...`);
+            this.merge(pageRows);
+            this.state.scannedPages = Math.max(this.state.scannedPages, page + 1);
+            this.state.nextPage = page + 1;
+            this.save();
+            this.renderProgress();
+
+            previousSignature = signature;
+            if (this.state.totalPages && page + 1 >= this.state.totalPages) break;
+            await this.delay(250);
+        }
+
+        if (this.stopRequested) {
+            this.status('Сканирование остановлено. Прогресс сохранён.');
+            return;
+        }
+        this.state.phase = 'enrich';
+        this.status(`Все страницы собраны: ${this.state.rows.length} игроков. Запускаю анализ...`);
+        this.save();
+        this.renderProgress();
+    },
+
+    eligibleRows() {
+        const maxPrice = Number(this.state.maxPrice || 0);
+        return (this.state.rows || []).filter(row => {
+            if (!row.playerId || !Number(row.price || 0)) return false;
+            if (maxPrice > 0 && Number(row.price) > maxPrice) return false;
+            return Number(row.scoutSkill || 0) >= 140 && Number(row.age || 99) <= 32;
+        }).sort((a, b) => Number(b.preScore || 0) - Number(a.preScore || 0));
+    },
+
+    async enrichCandidates() {
+        const rows = this.eligibleRows().slice(0, this.enrichmentPoolSize);
+        if (!rows.length) {
+            this.status('Нет игроков в выбранном ценовом диапазоне.');
+            return;
+        }
+
+        this.state.phase = 'enrich';
+        let done = rows.filter(row => row.enrichment?.completedAt).length;
+        for (const row of rows) {
+            if (this.stopRequested) break;
+            if (row.enrichment?.completedAt) continue;
+            this.status(`Анализ ${done + 1}/${rows.length}: ${row.name}`);
+            try {
+                const alter = await SLFAlterLayer.getByPlayerId(row.playerId);
+                let tm = null;
+                try {
+                    tm = await TMEnrichmentLayer.getBySlfPlayerId(row.playerId);
+                } catch (error) {
+                    console.warn('[SLF Candidate Scanner] TM failed', row.playerId, error);
+                }
+                row.enrichment = this.buildEnrichment(row, alter, tm);
+            } catch (error) {
+                row.enrichment = {
+                    completedAt: Date.now(),
+                    error: String(error?.message || error || 'enrichment_failed')
+                };
+            }
+            done++;
+            this.save();
+            if (done % 3 === 0 || done === rows.length) this.render();
+            await this.delay(120);
+        }
+
+        if (this.stopRequested) this.status('Анализ остановлен. Прогресс сохранён.');
+    },
+
     buildEnrichment(row, alter, tm) {
         const profile = tm?.tmProfile || null;
         const current = alter?.currentRow || alter?.currentEligibleRow || null;
         const finalSkill = Number(alter?.finalSkill || 0) || null;
         const currentSkill = Number(alter?.currentSkill || row.scoutSkill || 0) || null;
         const contract = this.contract(profile?.contractExpires || '');
-        const e = {
-            completedAt: Date.now(), finalSkill, currentSkill,
+        const enrichment = {
+            completedAt: Date.now(),
+            finalSkill,
+            currentSkill,
             skillDelta: finalSkill != null && currentSkill != null ? finalSkill - currentSkill : null,
             minutesPct: Number(current?.minutesPct ?? profile?.activity?.minutesPct ?? 0) || 0,
             currentSeasonMinutes: Number(alter?.currentSeasonMinutes || 0),
@@ -15531,106 +15622,135 @@ const TransferCandidateScanner = {
             talentUpgradeEligible: alter?.talentUpgradeEligible === true,
             staleActivity: alter?.staleActivity === true,
             tmValueEur: Number(profile?.marketValueEur || profile?.lastKnownMarketValueEur || row.tmDisplayedValueEur || 0) || null,
-            contractExpires: profile?.contractExpires || '', contractMonths: contract.months, contractStatus: contract.status,
-            currentClub: profile?.currentClub || '', isRetired: profile?.isRetired === true, isFreeAgent: profile?.isFreeAgent === true,
-            scoreByPreset: {}
+            contractExpires: profile?.contractExpires || '',
+            contractMonths: contract.months,
+            contractStatus: contract.status,
+            currentClub: profile?.currentClub || '',
+            isRetired: profile?.isRetired === true,
+            isFreeAgent: profile?.isFreeAgent === true
         };
-        ['young_growth', 'cheap_160', 'ready_starter', 'contract_opportunity', 'hidden_upgrade'].forEach(name => { e.scoreByPreset[name] = this.score(row, e, name); });
-        return e;
+        enrichment.score = this.score(row, enrichment);
+        return enrichment;
     },
 
     contract(value) {
         const raw = this.text(value);
         if (!raw) return { months: null, status: 'unknown' };
-        const m = raw.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{4})/);
-        let date = m ? new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])) : null;
-        if (!date) { const year = raw.match(/\b(20\d{2})\b/)?.[1]; if (year) date = new Date(Number(year), 5, 30); }
+        const match = raw.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{4})/);
+        let date = match ? new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1])) : null;
+        if (!date) {
+            const year = raw.match(/\b(20\d{2})\b/)?.[1];
+            if (year) date = new Date(Number(year), 5, 30);
+        }
         if (!date || Number.isNaN(date.getTime())) return { months: null, status: 'unknown' };
         const months = Math.round((date.getTime() - Date.now()) / 2629800000);
-        return { months, status: months <= 6 ? 'expiring' : months <= 12 ? 'opportunity' : months <= 24 ? 'medium' : 'stable' };
+        return {
+            months,
+            status: months <= 6 ? 'expiring' : months <= 12 ? 'opportunity' : months <= 24 ? 'medium' : 'stable'
+        };
     },
 
-    score(row, e, preset) {
-        if (!e || e.error || e.isRetired) return -999;
-        const age = Number(row.age || 99), finalSkill = Number(e.finalSkill || row.scoutSkill || 0), delta = Number(e.skillDelta || 0), minutes = Number(e.minutesPct || 0), leagueSkill = Number(e.leagueSkill || 0), potential = Number(row.potentialLevel || 0), priceM = Number(row.price || 0) / 1e6;
+    score(row, enrichment) {
+        if (!enrichment || enrichment.error || enrichment.isRetired) return -999;
+        const age = Number(row.age || 99);
+        const finalSkill = Number(enrichment.finalSkill || row.scoutSkill || 0);
+        const delta = Number(enrichment.skillDelta || 0);
+        const minutes = Number(enrichment.minutesPct || 0);
+        const leagueSkill = Number(enrichment.leagueSkill || 0);
+        const leagueLevel = Number(enrichment.leagueLevel || 0);
+        const talent = Number(row.talent || 0);
+        const potential = Number(row.potentialLevel || 0);
+        const priceM = Number(row.price || 0) / 1e6;
         const efficiency = priceM > 0 ? finalSkill / Math.sqrt(priceM) : 0;
+
         let score = 0;
-        if (preset === 'young_growth') {
-            score = delta * 2.2 + minutes * 0.22 + Math.max(0, 24 - age) * 3 + potential * 4 + Math.max(0, leagueSkill - finalSkill) * 0.35 + efficiency;
-            if (age > 23 || finalSkill < 150 || minutes < 35 || potential < 3 || e.staleActivity) score -= 45;
-        } else if (preset === 'cheap_160') {
-            score = finalSkill * 0.7 + minutes * 0.25 + delta * 1.2 + efficiency * 2 + Math.max(0, 29 - age) * 1.5;
-            if (finalSkill < 160 || age > 28 || minutes < 40 || e.staleActivity) score -= 50;
-        } else if (preset === 'ready_starter') {
-            score = finalSkill + minutes * 0.45 + leagueSkill * 0.25 + efficiency;
-            if (finalSkill < 175 || age < 22 || age > 30 || minutes < 55 || e.staleActivity) score -= 55;
-        } else if (preset === 'contract_opportunity') {
-            score = finalSkill * 0.55 + minutes * 0.25 + efficiency + (e.contractMonths != null && e.contractMonths <= 12 ? 35 : 0) + (e.contractMonths != null && e.contractMonths <= 6 ? 15 : 0);
-            if (age > 29 || minutes < 35 || e.contractMonths == null || e.contractMonths > 18) score -= 45;
-        } else {
-            score = delta * 3.4 + finalSkill * 0.45 + minutes * 0.2 + efficiency * 1.5;
-            if (delta < 8 || finalSkill < 170 || minutes < 35 || e.staleActivity) score -= 55;
-        }
-        if (e.isFreeAgent && minutes < 35) score -= 25;
+        score += finalSkill * 0.55;
+        score += delta * 2.4;
+        score += minutes * 0.28;
+        score += Math.max(0, leagueSkill - 130) * 0.18;
+        score += Math.max(0, leagueLevel - 2) * 2.5;
+        score += age <= 21 ? 24 : age <= 24 ? 16 : age <= 27 ? 9 : age <= 30 ? 3 : -8;
+        score += talent * 2;
+        score += potential >= 4 ? 10 : potential === 3 ? 4 : potential <= 2 ? -8 : 0;
+        score += efficiency * 1.8;
+        if (enrichment.hasCurrent40) score += 10;
+        if (enrichment.talentUpgradeEligible) score += 8;
+        if (enrichment.contractMonths != null && enrichment.contractMonths <= 12 && enrichment.contractMonths >= 0) score += 6;
+        if (enrichment.staleActivity) score -= 35;
+        if (minutes < 25) score -= 20;
+        if (finalSkill < 150) score -= 25;
+        if (enrichment.isFreeAgent && minutes < 35) score -= 20;
         return Number(score.toFixed(2));
     },
 
     ranked() {
-        const preset = this.state.activePreset;
-        return (this.state.rows || []).filter(row => row.enrichment?.completedAt && !row.enrichment.error)
-            .map(row => ({ ...row, score: Number(row.enrichment.scoreByPreset?.[preset] ?? -999) }))
-            .filter(row => row.score > -100).sort((a, b) => b.score - a.score);
+        const maxPrice = Number(this.state.maxPrice || 0);
+        return (this.state.rows || [])
+            .filter(row => row.enrichment?.completedAt && !row.enrichment.error)
+            .filter(row => !maxPrice || Number(row.price || 0) <= maxPrice)
+            .map(row => ({ ...row, score: Number(row.enrichment.score ?? -999) }))
+            .filter(row => row.score > -100)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, this.resultLimit);
     },
 
     renderProgress() {
-        const el = document.getElementById('slf-candidate-progress');
-        if (!el) return;
+        const element = document.getElementById('slf-candidate-progress');
+        if (!element) return;
+        const eligible = this.eligibleRows().length;
         const enriched = (this.state.rows || []).filter(row => row.enrichment?.completedAt).length;
-        el.textContent = `Страницы: ${this.state.scannedPages || 0}/${this.state.totalPages || '?'} · Игроков: ${(this.state.rows || []).length} · Быстрый фильтр: ${this.prefiltered().length} · Обогащено: ${enriched}`;
+        const price = this.state.maxPrice ? this.moneyText(this.state.maxPrice) : 'без лимита';
+        element.textContent = `Этап: ${this.state.phase} · Страницы: ${this.state.scannedPages || 0}/${this.state.totalPages || '?'} · Игроков: ${(this.state.rows || []).length} · В бюджете: ${eligible} · Проанализировано: ${enriched} · Лимит: ${price}`;
     },
 
     render() {
         this.renderProgress();
         const box = document.getElementById('slf-candidate-results');
         if (!box) return;
-        const rows = this.ranked().slice(0, 150);
+        const rows = this.ranked();
         if (!rows.length) {
-            box.innerHTML = (this.state.rows || []).length ? '<div style="color:#888;padding:6px 0;">Индекс собран. Нажми «Обогатить Top».</div>' : '<div style="color:#888;padding:6px 0;">Запусти ручное сканирование всех страниц.</div>';
+            const message = (this.state.rows || []).length
+                ? 'Идёт анализ кандидатов. Итоговый Top 20 появится автоматически.'
+                : 'Укажи максимальную цену и нажми «Найти Top 20».';
+            box.innerHTML = `<div style="color:#888;padding:6px 0;">${message}</div>`;
             return;
         }
-        const cols = '46px 44px minmax(150px,1fr) 42px 42px 48px 48px 50px 62px 58px 65px 110px';
-        box.innerHTML = `<div style="display:grid;grid-template-columns:${cols};gap:5px;padding:5px 4px;border-bottom:1px solid #445;font-weight:bold;color:#9aaebe;position:sticky;top:0;background:#14181d;z-index:2;"><span>Score</span><span>Стр.</span><span>Игрок</span><span>Возр.</span><span>Тал.</span><span>Скилл</span><span>Δ</span><span>Мин%</span><span>Лига</span><span>Цена</span><span>TM</span><span>Контракт</span></div>${rows.map(row => this.rowHtml(row, cols)).join('')}`;
+
+        const columns = '38px 54px minmax(150px,1fr) 42px 42px 52px 48px 50px 62px 62px 72px 110px';
+        box.innerHTML = `
+            <div style="display:grid;grid-template-columns:${columns};gap:5px;padding:5px 4px;border-bottom:1px solid #445;font-weight:bold;color:#9aaebe;position:sticky;top:0;background:#14181d;z-index:2;">
+                <span>#</span><span>Score</span><span>Игрок</span><span>Стр.</span><span>Возр.</span><span>Скилл</span><span>Δ</span><span>Мин%</span><span>Лига</span><span>Цена</span><span>TM</span><span>Контракт</span>
+            </div>
+            ${rows.map((row, index) => this.rowHtml(row, columns, index + 1)).join('')}
+        `;
     },
 
-    rowHtml(row, cols) {
-        const e = row.enrichment || {};
-        const league = e.leagueLevel || e.leagueSkill ? `${e.leagueLevel || '?'} / ${e.leagueSkill || '?'}` : '—';
-        const color = row.score >= 150 ? '#7cff7c' : row.score >= 110 ? '#ffda72' : '#ddd';
-        return `<div style="display:grid;grid-template-columns:${cols};gap:5px;align-items:center;padding:5px 4px;border-bottom:1px solid #2c343b;"><span style="color:${color};font-weight:bold;">${row.score.toFixed(1)}</span><a href="${this.escape(row.pageUrl)}" style="color:#8dcfff;">${Number(row.page || 0) + 1}</a><a href="${this.escape(row.playerUrl)}" style="color:#d8e9ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${this.escape(row.club)}">${this.escape(row.name || row.playerId)}</a><span>${row.age ?? '—'}</span><span>${row.talent ?? '—'}</span><span>${e.finalSkill != null ? Number(e.finalSkill).toFixed(1) : row.scoutSkill ?? '—'}</span><span style="color:${Number(e.skillDelta || 0) >= 8 ? '#7cff7c' : '#ccc'};">${e.skillDelta != null ? `${e.skillDelta >= 0 ? '+' : ''}${Number(e.skillDelta).toFixed(1)}` : '—'}</span><span>${e.minutesPct ?? '—'}</span><span>${league}</span><span>${this.moneyText(row.price)}</span><span>${this.moneyText(e.tmValueEur)}</span><span title="${this.escape(e.currentClub)}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${this.escape(e.contractExpires || e.contractStatus || '—')}</span></div>`;
-    },
-
-    exportCsv() {
-        const rows = this.ranked();
-        if (!rows.length) return this.status('Нет обогащённых кандидатов для экспорта.');
-        const preset = this.state.activePreset;
-        const header = ['score','preset','page','transferId','playerId','name','positions','age','talent','potential','scoutSkill','finalSkill','skillDelta','minutesPct','leagueLevel','leagueSkill','price','tmValueEur','contractExpires','contractMonths','club','playerUrl','pageUrl'];
-        const quote = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-        const lines = [header.join(',')].concat(rows.map(row => {
-            const e = row.enrichment || {};
-            return [row.score,preset,Number(row.page || 0)+1,row.transferId,row.playerId,row.name,(row.positions||[]).join('/'),row.age,row.talent,row.potentialLevel,row.scoutSkill,e.finalSkill,e.skillDelta,e.minutesPct,e.leagueLevel,e.leagueSkill,row.price,e.tmValueEur,e.contractExpires,e.contractMonths,row.club,row.playerUrl,row.pageUrl].map(quote).join(',');
-        }));
-        const url = URL.createObjectURL(new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `slf-transfer-candidates-${preset}-${new Date().toISOString().slice(0,10)}.csv`;
-        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-        this.status(`CSV экспортирован: ${rows.length} кандидатов.`);
+    rowHtml(row, columns, rank) {
+        const enrichment = row.enrichment || {};
+        const league = enrichment.leagueLevel || enrichment.leagueSkill
+            ? `${enrichment.leagueLevel || '?'} / ${enrichment.leagueSkill || '?'}`
+            : '—';
+        const color = rank <= 5 ? '#7cff7c' : rank <= 10 ? '#ffda72' : '#ddd';
+        return `
+            <div style="display:grid;grid-template-columns:${columns};gap:5px;align-items:center;padding:5px 4px;border-bottom:1px solid #2c343b;">
+                <span style="color:${color};font-weight:bold;">${rank}</span>
+                <span style="font-weight:bold;">${row.score.toFixed(1)}</span>
+                <a href="${this.escape(row.playerUrl)}" style="color:#d8e9ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${this.escape(row.club)}">${this.escape(row.name || row.playerId)}</a>
+                <a href="${this.escape(row.pageUrl)}" style="color:#8dcfff;">${Number(row.page || 0) + 1}</a>
+                <span>${row.age ?? '—'}</span>
+                <span>${enrichment.finalSkill != null ? Number(enrichment.finalSkill).toFixed(1) : row.scoutSkill ?? '—'}</span>
+                <span style="color:${Number(enrichment.skillDelta || 0) >= 8 ? '#7cff7c' : '#ccc'};">${enrichment.skillDelta != null ? `${enrichment.skillDelta >= 0 ? '+' : ''}${Number(enrichment.skillDelta).toFixed(1)}` : '—'}</span>
+                <span>${enrichment.minutesPct ?? '—'}</span>
+                <span>${league}</span>
+                <span>${this.moneyText(row.price) || '—'}</span>
+                <span>${this.moneyText(enrichment.tmValueEur) || '—'}</span>
+                <span title="${this.escape(enrichment.contractExpires || '')}">${this.escape(enrichment.contractStatus || 'unknown')}</span>
+            </div>
+        `;
     }
 };
 
 TransferCandidateScanner.start();
-
-// ============================================================
 // <<< src/modules/transfer-analyzer/transfer-candidate-scanner.js
 
 
@@ -18153,15 +18273,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.203',
-        scriptVersion: '4.4.203',
+        version: '4.4.204',
+        scriptVersion: '4.4.204',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.203',
+        scriptVersion: '4.4.204',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
