@@ -1,6 +1,6 @@
 # SLF Task Runtime Contract
 
-Version: 1.1.0
+Version: 1.2.0
 Status: Active
 Applies to: all SLF implementation, release, governance, fallback, and acceptance workflows
 Source of truth: GitHub repository contracts
@@ -153,7 +153,65 @@ The agent must not tell the user to:
 
 After `COMMIT APPROVED`, the PM must continue through branch, PR, CI, merge, automatic release, and release verification unless blocked by a defined safety condition.
 
-## 7. Tampermonkey handoff
+## 7. Terminal response gate
+
+After repository-write approval, the agent must not send a final response while the task is in a non-terminal phase.
+
+Allowed final states are only:
+
+```text
+COMPLETE
+BLOCKED
+FAILED
+```
+
+Intermediate phases may be reported only as progress updates. After such an update, execution must continue automatically in the same task lifecycle.
+
+Waiting for CI, mergeability calculation, an automatic release trigger, or release publication is not itself a blocker.
+
+## 8. Automatic continuation loop
+
+After repository-write approval, the responsible agent must repeatedly perform the next deterministic safe transition until a terminal state is reached.
+
+The agent must not wait for another user message between:
+
+- branch creation;
+- implementation;
+- post-write verification;
+- pull request creation;
+- CI completion;
+- merge;
+- automatic release;
+- release verification.
+
+A new confirmation is required only for scope expansion, destructive action, secrets, protected-file changes, behavior redesign, or a non-recoverable permission/platform blocker.
+
+## 9. Post-write integrity gate
+
+After every repository file write and before opening or updating a pull request, the agent must:
+
+1. fetch the complete written file from the branch;
+2. verify that it is not truncated;
+3. verify required structural markers and expected ending;
+4. validate syntax for changed executable files;
+5. compare the branch against `main`;
+6. confirm that changed files match the approved scope.
+
+A failed integrity check returns the task to `IMPLEMENTING`. It must not advance to `HANDOFF_VALIDATED`.
+
+## 10. Release verification hierarchy
+
+Post-merge release verification must use this priority:
+
+1. `data/version.json` exists on `main`;
+2. `scriptVersion` is the expected new version;
+3. `build.approvedCommit` matches the merged source commit;
+4. `releases/latest.user.js` contains the same version;
+5. a release commit exists for that version.
+
+Workflow-run lookup is supplemental and must not be the sole source of truth because connector queries may omit push-triggered runs.
+
+## 11. Tampermonkey handoff
 
 Every completed implementation/release response must include:
 
@@ -176,7 +234,7 @@ Rules:
 - Release running or failed: `Required: NOT YET`.
 - Never tell the user to update before the release commit and version are verified.
 
-## 8. Status wording rule
+## 12. Status wording rule
 
 The agent must not use broad completion wording such as `готово`, `done`, `release-ready`, or `released` unless the runtime state supports it.
 
@@ -198,7 +256,7 @@ Phase: COMPLETE
 Safe user action: follow the explicit Tampermonkey update instruction
 ```
 
-## 9. Relationship to other contracts
+## 13. Relationship to other contracts
 
 This contract is referenced by:
 
