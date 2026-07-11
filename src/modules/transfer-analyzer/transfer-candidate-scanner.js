@@ -1,13 +1,21 @@
 // Transfer Candidate Scanner
-// Manual full-market crawler and unified Top 20 ranking for transfers.php
+// VPS-backed full-market crawler and unified Top 20 ranking for transfers.php
 // ============================================================
 
 const TransferCandidateScanner = {
-    storageKey: 'slf_transfer_candidate_scanner_v2',
-    schema: 'slf_transfer_candidate_scanner_v2',
+    storageKey: 'slf_transfer_candidate_scanner_v3_meta',
+    legacyStorageKeys: [
+        'slf_transfer_candidate_scanner_v1',
+        'slf_transfer_candidate_scanner_v2'
+    ],
+    schema: 'slf_transfer_candidate_scanner_v3_meta',
+    indexCollection: 'transfer_candidate_scan_index_tmp',
+    enrichedCollection: 'transfer_candidate_scan_enriched_tmp',
     enrichmentPoolSize: 200,
     resultLimit: 20,
     state: null,
+    rows: [],
+    finalRows: [],
     running: false,
     stopRequested: false,
 
@@ -20,9 +28,10 @@ const TransferCandidateScanner = {
             totalPages: 0,
             nextPage: 0,
             scannedPages: 0,
+            indexedPlayers: 0,
+            enrichedPlayers: 0,
             maxPrice: 0,
             phase: 'idle',
-            rows: [],
             updatedAt: Date.now()
         };
     },
@@ -35,7 +44,14 @@ const TransferCandidateScanner = {
 
     start() {
         if (!this.isPage()) return;
-        this.state = this.load();
+        this.cleanupLegacyBrowserStorage();
+        this.state = this.loadMeta();
+        if (this.state.phase === 'complete') {
+            const maxPrice = this.state.maxPrice;
+            this.state = this.defaults();
+            this.state.maxPrice = maxPrice;
+            this.saveMeta();
+        }
         const mount = () => this.mount();
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true });
         else mount();
@@ -44,26 +60,58 @@ const TransferCandidateScanner = {
         setTimeout(mount, 2000);
     },
 
-    load() {
+    cleanupLegacyBrowserStorage() {
+        this.legacyStorageKeys.forEach(key => localStorage.removeItem(key));
+    },
+
+    loadMeta() {
         try {
             const value = JSON.parse(localStorage.getItem(this.storageKey) || 'null');
-            if (value?.schema === this.schema && Array.isArray(value.rows)) {
-                return Object.assign(this.defaults(), value);
-            }
+            if (value?.schema === this.schema) return Object.assign(this.defaults(), value);
         } catch (error) {
-            console.warn('[SLF Candidate Scanner] state load failed', error);
+            console.warn('[SLF Candidate Scanner] meta load failed', error);
         }
         return this.defaults();
     },
 
-    save() {
+    saveMeta() {
         this.state.updatedAt = Date.now();
         try {
             localStorage.setItem(this.storageKey, JSON.stringify(this.state));
         } catch (error) {
-            console.warn('[SLF Candidate Scanner] state save failed', error);
-            this.status('Не удалось сохранить прогресс: localStorage переполнен.');
+            console.warn('[SLF Candidate Scanner] meta save failed', error);
+            this.status('Не удалось сохранить краткий прогресс сканирования.');
         }
+    },
+
+    normalizeServerRows(data) {
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.data)) return data.data;
+        if (Array.isArray(data?.items)) return data.items;
+        return [];
+    },
+
+    async readCollection(name) {
+        const result = await Api.getPromise(name);
+        return this.normalizeServerRows(result?.data);
+    },
+
+    async appendCollection(name, rows, label) {
+        if (!rows?.length) return;
+        const result = await Api.postAppend(name, rows, label);
+        if (Number(result?.status || 0) >= 400) throw new Error(`${name}_append_http_${result.status}`);
+    },
+
+    async clearCollection(name, label) {
+        const result = await Api.clearCollection(name, label);
+        if (Number(result?.status || 0) >= 400) throw new Error(`${name}_clear_http_${result.status}`);
+    },
+
+    async clearRemoteSession() {
+        await Promise.all([
+            this.clearCollection(this.indexCollection, 'temporary candidate index cleared'),
+            this.clearCollection(this.enrichedCollection, 'temporary candidate enrichment cleared')
+        ]);
     },
 
     mount() {
@@ -96,7 +144,7 @@ const TransferCandidateScanner = {
         priceInput.onchange = () => {
             this.state.maxPrice = this.money(priceInput.value) || 0;
             priceInput.value = this.state.maxPrice ? this.moneyText(this.state.maxPrice) : '';
-            this.save();
+            this.saveMeta();
             this.render();
         };
 
@@ -110,14 +158,25 @@ const TransferCandidateScanner = {
         this.render();
     },
 
-    reset() {
+    async reset() {
         if (this.running) return;
-        localStorage.removeItem(this.storageKey);
-        this.state = this.defaults();
-        const input = document.getElementById('slf-candidate-max-price');
-        if (input) input.value = '';
-        this.render();
-        this.status('Сканер сброшен.');
+        this.setRunning(true);
+        try {
+            await this.clearRemoteSession();
+            localStorage.removeItem(this.storageKey);
+            this.rows = [];
+            this.finalRows = [];
+            this.state = this.defaults();
+            const input = document.getElementById('slf-candidate-max-price');
+            if (input) input.value = '';
+            this.status('Временные данные на VPS удалены.');
+        } catch (error) {
+            console.error('[SLF Candidate Scanner] reset failed', error);
+            this.status(`Ошибка удаления временных данных: ${error.message || error}`);
+        } finally {
+            this.setRunning(false);
+            this.render();
+        }
     },
 
     setRunning(value) {
@@ -143,9 +202,7 @@ const TransferCandidateScanner = {
         return Number.isFinite(number) ? number : null;
     },
     money(value) {
-        if (typeof TransferCandidateScannerMoneyParser !== 'undefined') {
-            return TransferCandidateScannerMoneyParser.parse(value);
-        }
+        if (typeof TransferCandidateScannerMoneyParser !== 'undefined') return TransferCandidateScannerMoneyParser.parse(value);
         const text = this.text(value).replace(/\s+/g, '').replace(',', '.');
         const match = text.match(/(\d+(?:\.\d+)?)/);
         if (!match) return null;
@@ -269,8 +326,7 @@ const TransferCandidateScanner = {
                 bids: this.number(value(map.bids)),
                 endDateText: value(map.end),
                 tmUrl: tm?.href || '',
-                tmDisplayedValueEur: this.money(tm?.textContent || ''),
-                enrichment: null
+                tmDisplayedValueEur: this.money(tm?.textContent || '')
             };
             row.preScore = this.preScore(row);
             return row;
@@ -292,13 +348,13 @@ const TransferCandidateScanner = {
         return Number(score.toFixed(2));
     },
 
-    merge(rows) {
-        const existing = new Map((this.state.rows || []).map(row => [row.key, row]));
-        rows.forEach(row => {
-            const old = existing.get(row.key);
-            existing.set(row.key, old?.enrichment ? { ...row, enrichment: old.enrichment } : row);
+    dedupeRows(rows) {
+        const map = new Map();
+        (rows || []).forEach(row => {
+            if (!row?.key) return;
+            map.set(row.key, row);
         });
-        this.state.rows = [...existing.values()];
+        return [...map.values()];
     },
 
     async fetchPage(page) {
@@ -324,24 +380,37 @@ const TransferCandidateScanner = {
         try {
             const maxPrice = this.readMaxPrice();
             if (!resume || !this.state.baseUrl) {
+                await this.clearRemoteSession();
                 this.state = this.defaults();
                 this.state.baseUrl = this.baseUrl();
                 this.state.maxPrice = maxPrice;
+                this.rows = [];
+                this.finalRows = [];
+                this.saveMeta();
             }
-            await this.scanAllPages(resume);
+
+            if (this.state.phase === 'idle' || this.state.phase === 'scan') {
+                await this.scanAllPages(resume);
+            }
             if (this.stopRequested) return;
+
+            this.rows = this.dedupeRows(await this.readCollection(this.indexCollection));
+            this.state.indexedPlayers = this.rows.length;
             await this.enrichCandidates();
-            if (!this.stopRequested) {
-                this.state.phase = 'complete';
-                this.status(`Готово: Top ${this.resultLimit} по всему рынку.`);
-            }
+            if (this.stopRequested) return;
+
+            this.state.phase = 'complete';
+            this.finalRows = this.ranked();
+            this.status(`Готово: Top ${this.resultLimit} по всему рынку.`);
+            await this.clearRemoteSession();
+            this.saveMeta();
         } catch (error) {
             console.error('[SLF Candidate Scanner] run failed', error);
             this.status(`Ошибка: ${error.message || error}`);
         } finally {
             this.stopRequested = false;
             this.setRunning(false);
-            this.save();
+            this.saveMeta();
             this.render();
         }
     },
@@ -350,7 +419,6 @@ const TransferCandidateScanner = {
         this.state.phase = 'scan';
         let page = resume ? Number(this.state.nextPage || 0) : 0;
         let previousSignature = '';
-        let consecutiveEmpty = 0;
 
         for (; !this.stopRequested; page++) {
             const result = await this.fetchPage(page);
@@ -358,16 +426,15 @@ const TransferCandidateScanner = {
             if (!this.state.totalPages) this.state.totalPages = this.detectTotalPages(result.doc, pageRows);
 
             const signature = pageRows.slice(0, 10).map(row => row.key).join('|');
-            if (!pageRows.length) consecutiveEmpty++;
-            else consecutiveEmpty = 0;
+            if (!pageRows.length) break;
             if (page > 0 && signature && signature === previousSignature) break;
-            if (consecutiveEmpty >= 1) break;
 
             this.status(`Сканирование страницы ${page + 1}/${this.state.totalPages || '?'}...`);
-            this.merge(pageRows);
+            await this.appendCollection(this.indexCollection, pageRows, `candidate page ${page + 1}`);
             this.state.scannedPages = Math.max(this.state.scannedPages, page + 1);
             this.state.nextPage = page + 1;
-            this.save();
+            this.state.indexedPlayers += pageRows.length;
+            this.saveMeta();
             this.renderProgress();
 
             previousSignature = signature;
@@ -376,18 +443,18 @@ const TransferCandidateScanner = {
         }
 
         if (this.stopRequested) {
-            this.status('Сканирование остановлено. Прогресс сохранён.');
+            this.status('Сканирование остановлено. Прогресс сохранён на VPS.');
             return;
         }
         this.state.phase = 'enrich';
-        this.status(`Все страницы собраны: ${this.state.rows.length} игроков. Запускаю анализ...`);
-        this.save();
+        this.status('Все страницы собраны. Загружаю временный индекс с VPS...');
+        this.saveMeta();
         this.renderProgress();
     },
 
     eligibleRows() {
         const maxPrice = Number(this.state.maxPrice || 0);
-        return (this.state.rows || []).filter(row => {
+        return (this.rows || []).filter(row => {
             if (!row.playerId || !Number(row.price || 0)) return false;
             if (maxPrice > 0 && Number(row.price) > maxPrice) return false;
             return Number(row.scoutSkill || 0) >= 140 && Number(row.age || 99) <= 32;
@@ -395,18 +462,24 @@ const TransferCandidateScanner = {
     },
 
     async enrichCandidates() {
-        const rows = this.eligibleRows().slice(0, this.enrichmentPoolSize);
-        if (!rows.length) {
+        const candidates = this.eligibleRows().slice(0, this.enrichmentPoolSize);
+        if (!candidates.length) {
             this.status('Нет игроков в выбранном ценовом диапазоне.');
             return;
         }
 
         this.state.phase = 'enrich';
-        let done = rows.filter(row => row.enrichment?.completedAt).length;
-        for (const row of rows) {
+        const existing = this.dedupeRows(await this.readCollection(this.enrichedCollection));
+        const enrichedByKey = new Map(existing.map(row => [row.key, row]));
+        let done = enrichedByKey.size;
+        this.state.enrichedPlayers = done;
+
+        for (const row of candidates) {
             if (this.stopRequested) break;
-            if (row.enrichment?.completedAt) continue;
-            this.status(`Анализ ${done + 1}/${rows.length}: ${row.name}`);
+            if (enrichedByKey.has(row.key)) continue;
+
+            this.status(`Анализ ${done + 1}/${candidates.length}: ${row.name}`);
+            let enrichedRow;
             try {
                 const alter = await SLFAlterLayer.getByPlayerId(row.playerId);
                 let tm = null;
@@ -415,20 +488,31 @@ const TransferCandidateScanner = {
                 } catch (error) {
                     console.warn('[SLF Candidate Scanner] TM failed', row.playerId, error);
                 }
-                row.enrichment = this.buildEnrichment(row, alter, tm);
+                enrichedRow = { ...row, enrichment: this.buildEnrichment(row, alter, tm) };
             } catch (error) {
-                row.enrichment = {
-                    completedAt: Date.now(),
-                    error: String(error?.message || error || 'enrichment_failed')
+                enrichedRow = {
+                    ...row,
+                    enrichment: {
+                        completedAt: Date.now(),
+                        error: String(error?.message || error || 'enrichment_failed')
+                    }
                 };
             }
+
+            await this.appendCollection(this.enrichedCollection, [enrichedRow], `candidate enriched ${row.playerId}`);
+            enrichedByKey.set(row.key, enrichedRow);
             done++;
-            this.save();
-            if (done % 3 === 0 || done === rows.length) this.render();
+            this.state.enrichedPlayers = done;
+            this.saveMeta();
+            if (done % 3 === 0 || done === candidates.length) {
+                this.finalRows = this.rankRows([...enrichedByKey.values()]);
+                this.render();
+            }
             await this.delay(120);
         }
 
-        if (this.stopRequested) this.status('Анализ остановлен. Прогресс сохранён.');
+        this.finalRows = this.rankRows([...enrichedByKey.values()]);
+        if (this.stopRequested) this.status('Анализ остановлен. Прогресс сохранён на VPS.');
     },
 
     buildEnrichment(row, alter, tm) {
@@ -511,9 +595,9 @@ const TransferCandidateScanner = {
         return Number(score.toFixed(2));
     },
 
-    ranked() {
+    rankRows(rows) {
         const maxPrice = Number(this.state.maxPrice || 0);
-        return (this.state.rows || [])
+        return (rows || [])
             .filter(row => row.enrichment?.completedAt && !row.enrichment.error)
             .filter(row => !maxPrice || Number(row.price || 0) <= maxPrice)
             .map(row => ({ ...row, score: Number(row.enrichment.score ?? -999) }))
@@ -522,13 +606,15 @@ const TransferCandidateScanner = {
             .slice(0, this.resultLimit);
     },
 
+    ranked() {
+        return this.finalRows || [];
+    },
+
     renderProgress() {
         const element = document.getElementById('slf-candidate-progress');
         if (!element) return;
-        const eligible = this.eligibleRows().length;
-        const enriched = (this.state.rows || []).filter(row => row.enrichment?.completedAt).length;
         const price = this.state.maxPrice ? this.moneyText(this.state.maxPrice) : 'без лимита';
-        element.textContent = `Этап: ${this.state.phase} · Страницы: ${this.state.scannedPages || 0}/${this.state.totalPages || '?'} · Игроков: ${(this.state.rows || []).length} · В бюджете: ${eligible} · Проанализировано: ${enriched} · Лимит: ${price}`;
+        element.textContent = `Этап: ${this.state.phase} · Страницы: ${this.state.scannedPages || 0}/${this.state.totalPages || '?'} · На VPS: ${this.state.indexedPlayers || 0} · Проанализировано: ${this.state.enrichedPlayers || 0} · Лимит: ${price}`;
     },
 
     render() {
@@ -537,9 +623,9 @@ const TransferCandidateScanner = {
         if (!box) return;
         const rows = this.ranked();
         if (!rows.length) {
-            const message = (this.state.rows || []).length
-                ? 'Идёт анализ кандидатов. Итоговый Top 20 появится автоматически.'
-                : 'Укажи максимальную цену и нажми «Найти Top 20».';
+            const message = this.state.phase === 'idle'
+                ? 'Укажи максимальную цену и нажми «Найти Top 20».'
+                : 'Идёт сбор и анализ кандидатов. Итоговый Top 20 появится автоматически.';
             box.innerHTML = `<div style="color:#888;padding:6px 0;">${message}</div>`;
             return;
         }
