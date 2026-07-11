@@ -1,5 +1,5 @@
-// Purchase Forecast: full date column
-// ============================================================
+// Purchase Forecast: full date column policy
+// ==========================================
 
 if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
     TransferMarketAnalyzer.renderPurchaseForecastRows = function renderPurchaseForecastRows(records) {
@@ -38,5 +38,3 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         `;
     };
 }
-
-// ============================================================

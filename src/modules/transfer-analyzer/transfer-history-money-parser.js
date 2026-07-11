@@ -1,8 +1,8 @@
-// Transfer history money parser patch
-// ===================================
+// Transfer history money parser
+// =============================
 
 if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
-    TransferMarketAnalyzer.slfHistoryMoneyParserPatchApplied = true;
+    TransferMarketAnalyzer.slfHistoryMoneyParserApplied = true;
 
     TransferMarketAnalyzer.parseMoney = function parseMoney(value) {
         const raw = String(value || '')
