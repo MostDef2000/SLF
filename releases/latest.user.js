@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.201
+// @version      4.4.202
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.201',
-        scriptVersion: '4.4.201',
+        version: '4.4.202',
+        scriptVersion: '4.4.202',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.201',
+        scriptVersion: '4.4.202',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -14601,12 +14601,12 @@ const TransferMarketAnalyzer = {
 // <<< src/modules/transfer-analyzer/transfer-market-analyzer.js
 
 
-// >>> src/modules/transfer-analyzer/transfer-history-money-parser-patch.js
-// Transfer history money parser patch
-// ===================================
+// >>> src/modules/transfer-analyzer/transfer-history-money-parser.js
+// Transfer history money parser
+// =============================
 
 if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
-    TransferMarketAnalyzer.slfHistoryMoneyParserPatchApplied = true;
+    TransferMarketAnalyzer.slfHistoryMoneyParserApplied = true;
 
     TransferMarketAnalyzer.parseMoney = function parseMoney(value) {
         const raw = String(value || '')
@@ -14657,7 +14657,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         return Number.isFinite(valueNumber) && valueNumber > 0 ? valueNumber : null;
     };
 }
-// <<< src/modules/transfer-analyzer/transfer-history-money-parser-patch.js
+// <<< src/modules/transfer-analyzer/transfer-history-money-parser.js
 
 
 // >>> src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js
@@ -15169,9 +15169,9 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
 // <<< src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js
 
 
-// >>> src/modules/transfer-analyzer/purchase-forecast-full-date-patch.js
-// Purchase Forecast: full date column
-// ============================================================
+// >>> src/modules/transfer-analyzer/purchase-forecast-full-date-policy.js
+// Purchase Forecast: full date column policy
+// ==========================================
 
 if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
     TransferMarketAnalyzer.renderPurchaseForecastRows = function renderPurchaseForecastRows(records) {
@@ -15210,9 +15210,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         `;
     };
 }
-
-// ============================================================
-// <<< src/modules/transfer-analyzer/purchase-forecast-full-date-patch.js
+// <<< src/modules/transfer-analyzer/purchase-forecast-full-date-policy.js
 
 
 // >>> src/modules/transfer-analyzer/transfer-tm-profile-guard.js
@@ -17665,15 +17663,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.201',
-        scriptVersion: '4.4.201',
+        version: '4.4.202',
+        scriptVersion: '4.4.202',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.201',
+        scriptVersion: '4.4.202',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
