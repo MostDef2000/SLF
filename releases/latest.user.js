@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.205
+// @version      4.4.206
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.205',
-        scriptVersion: '4.4.205',
+        version: '4.4.206',
+        scriptVersion: '4.4.206',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.205',
+        scriptVersion: '4.4.206',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -15865,6 +15865,49 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner)
 // <<< src/modules/transfer-analyzer/transfer-candidate-scanner-money-parser.js
 
 
+// >>> src/modules/transfer-analyzer/transfer-candidate-pagination-policy.js
+// Transfer Candidate Scanner pagination policy
+// ============================================================
+
+if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner && !TransferCandidateScanner.paginationPolicyApplied) {
+    TransferCandidateScanner.paginationPolicyApplied = true;
+
+    TransferCandidateScanner.extractLastPaginationPage = function extractLastPaginationPage(doc) {
+        const numbers = [];
+        doc.querySelectorAll('a').forEach(anchor => {
+            const text = this.text(anchor.textContent);
+            const href = anchor.getAttribute('href') || '';
+            const hrefMatch = href.match(/[?&]page=(\d+)/);
+            const textMatch = text.match(/^\d+$/);
+            const value = hrefMatch ? Number(hrefMatch[1]) : (textMatch ? Number(text) : null);
+            if (Number.isFinite(value)) numbers.push(value);
+        });
+        return numbers.length ? Math.max(...numbers) : 0;
+    };
+
+    TransferCandidateScanner.detectTotalPagesOriginal = TransferCandidateScanner.detectTotalPages;
+
+    TransferCandidateScanner.detectTotalPages = function detectTotalPagesWithPaginationPolicy(doc, pageRows) {
+        const fromPagination = this.extractLastPaginationPage(doc);
+        const fallback = this.detectTotalPagesOriginal(doc, pageRows);
+        const total = fromPagination > 0 ? fromPagination + 1 : fallback;
+        const totalPlayers = this.extractTotalPlayers(doc);
+
+        this.state.totalPlayers = totalPlayers || this.state.totalPlayers || 0;
+        this.state.pageSize = pageRows.length || this.state.pageSize || 0;
+
+        return Math.max(total, 1);
+    };
+
+    TransferCandidateScanner.scanAllPagesOriginal = TransferCandidateScanner.scanAllPages;
+
+    TransferCandidateScanner.scanAllPages = async function scanAllPagesWithPaginationGuard(resume) {
+        await this.scanAllPagesOriginal(resume);
+    };
+}
+// <<< src/modules/transfer-analyzer/transfer-candidate-pagination-policy.js
+
+
 // >>> src/modules/transfer-analyzer/purchase-forecast-full-date-policy.js
 // Purchase Forecast: full date column policy
 // ==========================================
@@ -18359,15 +18402,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.205',
-        scriptVersion: '4.4.205',
+        version: '4.4.206',
+        scriptVersion: '4.4.206',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.205',
+        scriptVersion: '4.4.206',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
