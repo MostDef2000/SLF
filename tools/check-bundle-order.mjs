@@ -10,8 +10,7 @@ const EXCLUDED_SOURCE_FILES = new Set([
   'src/modules/team-management/team4-alter-minutes-strict-link-hotfix.js'
 ]);
 const EXPECTED_POST_BOOTSTRAP = [
-  'src/modules/strategy-data-recommendations/preset-fit-scoring.js',
-  'src/modules/tactics-presets/tactics-dropdown-ui-policy.js'
+  'src/modules/strategy-data-recommendations/preset-fit-scoring.js'
 ];
 
 function absolute(rel) {
