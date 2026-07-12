@@ -134,6 +134,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         if (Number(this.state.scannedPages || 0) < Number(this.state.totalPages || 0)) {
             this.state.phase = 'scan';
             this.state.nextPage = Number(this.state.scannedPages || 0);
+            this.stopRequested = true;
             this.status(`Сканирование неполное: ${this.state.scannedPages}/${this.state.totalPages}.`);
             this.saveMeta();
             this.renderProgress();
