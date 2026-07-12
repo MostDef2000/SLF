@@ -50,6 +50,7 @@
     "src/modules/transfer-analyzer/transfer-my-bids-rank.js",
     "src/modules/transfer-analyzer/transfer-my-bids-cache-policy.js",
     "src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js",
+    "src/modules/transfer-analyzer/transfer-history-visible-analysis-cleanup.js",
     "src/modules/team-management/training-reference-guide.js",
     "src/modules/team-management/team-loan-limit-helper.js",
     "src/modules/team-management/team4-alter-current-season-minutes-fix.js",
