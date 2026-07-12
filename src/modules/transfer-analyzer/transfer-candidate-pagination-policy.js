@@ -5,13 +5,14 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
     TransferCandidateScanner.paginationPolicyApplied = true;
 
     const previousStorageKey = TransferCandidateScanner.storageKey;
-    TransferCandidateScanner.storageKey = 'slf_transfer_candidate_scanner_v5_meta';
-    TransferCandidateScanner.schema = 'slf_transfer_candidate_scanner_v5_meta';
+    TransferCandidateScanner.storageKey = 'slf_transfer_candidate_scanner_v6_meta';
+    TransferCandidateScanner.schema = 'slf_transfer_candidate_scanner_v6_meta';
     TransferCandidateScanner.legacyStorageKeys = [...new Set([
         ...(TransferCandidateScanner.legacyStorageKeys || []),
         previousStorageKey,
         'slf_transfer_candidate_scanner_v3_meta',
-        'slf_transfer_candidate_scanner_v4_meta'
+        'slf_transfer_candidate_scanner_v4_meta',
+        'slf_transfer_candidate_scanner_v5_meta'
     ])];
 
     TransferCandidateScanner.legacyStorageKeys.forEach(key => {
@@ -60,17 +61,14 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         return numbers.length ? Math.max(...numbers) : -1;
     };
 
-    TransferCandidateScanner.canonicalMarketUrl = function canonicalMarketUrl(doc) {
-        const paginationLink = [...doc.querySelectorAll('.transfers-ui__pages a[href*="page="], a[href*="transfers.php"][href*="page="]')]
-            .map(anchor => anchor.getAttribute('href') || '')
-            .find(Boolean);
-        const url = new URL(paginationLink || location.href, location.origin);
+    TransferCandidateScanner.canonicalMarketUrl = function canonicalMarketUrl() {
+        const url = new URL(location.href);
         url.searchParams.delete('page');
         return url.toString();
     };
 
     TransferCandidateScanner.baseUrl = function baseUrlWithCurrentMarketQuery() {
-        return this.canonicalMarketUrl(document);
+        return this.canonicalMarketUrl();
     };
 
     TransferCandidateScanner.detectTotalPagesOriginal = TransferCandidateScanner.detectTotalPages;
@@ -90,8 +88,9 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
     TransferCandidateScanner.runOriginal = TransferCandidateScanner.run;
 
     TransferCandidateScanner.run = async function runWithSessionRevalidation(resume) {
-        this.expectedUiTotalPages = this.detectTotalPages(document, this.parsePage(document, 0, location.href));
-        this.expectedCanonicalBaseUrl = this.canonicalMarketUrl(document);
+        const uiRows = this.parsePage(document, 0, location.href);
+        this.expectedUiTotalPages = this.detectTotalPages(document, uiRows);
+        this.expectedCanonicalBaseUrl = this.canonicalMarketUrl();
 
         if (resume && this.state?.baseUrl) {
             try {
@@ -105,19 +104,11 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
                     return;
                 }
 
-                const probe = await this.fetchPage(0);
-                const probeRows = this.parsePage(probe.doc, 0, probe.pageUrl);
-                const currentTotalPages = this.detectTotalPages(probe.doc, probeRows);
                 const savedTotalPages = Number(this.state.totalPages || 0);
                 const scannedPages = Number(this.state.scannedPages || 0);
+                this.state.totalPages = Math.max(savedTotalPages, this.expectedUiTotalPages);
 
-                if (this.expectedUiTotalPages && currentTotalPages !== this.expectedUiTotalPages) {
-                    this.status(`Ошибка пагинации: в интерфейсе ${this.expectedUiTotalPages}, в сканере ${currentTotalPages}.`);
-                    return;
-                }
-
-                this.state.totalPages = Math.max(savedTotalPages, currentTotalPages);
-                if (currentTotalPages > scannedPages && this.state.phase !== 'scan') {
+                if (this.expectedUiTotalPages > scannedPages && this.state.phase !== 'scan') {
                     this.state.phase = 'scan';
                     this.state.nextPage = scannedPages;
                     this.saveMeta();
@@ -127,6 +118,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
                 return;
             }
         }
+
         return this.runOriginal(resume);
     };
 
@@ -136,7 +128,9 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         let previousSignature = '';
 
         for (; !this.stopRequested; page++) {
-            const result = await this.fetchPage(page);
+            const result = page === 0
+                ? { doc: document, pageUrl: location.href }
+                : await this.fetchPage(page);
             const pageRows = this.parsePage(result.doc, page, result.pageUrl);
             const detectedTotalPages = this.detectTotalPages(result.doc, pageRows);
 
