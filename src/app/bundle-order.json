@@ -45,6 +45,7 @@
     "src/modules/transfer-analyzer/transfer-candidate-scanner.js",
     "src/modules/transfer-analyzer/transfer-candidate-scanner-money-parser.js",
     "src/modules/transfer-analyzer/transfer-candidate-pagination-policy.js",
+    "src/modules/transfer-analyzer/transfer-candidate-full-market-policy.js",
     "src/modules/transfer-analyzer/purchase-forecast-full-date-policy.js",
     "src/modules/transfer-analyzer/transfer-tm-profile-guard.js",
     "src/modules/transfer-analyzer/transfer-my-bids-rank.js",
