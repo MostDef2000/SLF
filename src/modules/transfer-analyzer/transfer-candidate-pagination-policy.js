@@ -1,16 +1,17 @@
-// Transfer Candidate Scanner pagination and session policy
+// Transfer Candidate Scanner pagination, URL and session policy
 // ============================================================
 
 if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner && !TransferCandidateScanner.paginationPolicyApplied) {
     TransferCandidateScanner.paginationPolicyApplied = true;
 
     const previousStorageKey = TransferCandidateScanner.storageKey;
-    TransferCandidateScanner.storageKey = 'slf_transfer_candidate_scanner_v4_meta';
-    TransferCandidateScanner.schema = 'slf_transfer_candidate_scanner_v4_meta';
+    TransferCandidateScanner.storageKey = 'slf_transfer_candidate_scanner_v5_meta';
+    TransferCandidateScanner.schema = 'slf_transfer_candidate_scanner_v5_meta';
     TransferCandidateScanner.legacyStorageKeys = [...new Set([
         ...(TransferCandidateScanner.legacyStorageKeys || []),
         previousStorageKey,
-        'slf_transfer_candidate_scanner_v3_meta'
+        'slf_transfer_candidate_scanner_v3_meta',
+        'slf_transfer_candidate_scanner_v4_meta'
     ])];
 
     TransferCandidateScanner.legacyStorageKeys.forEach(key => {
@@ -59,6 +60,19 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         return numbers.length ? Math.max(...numbers) : -1;
     };
 
+    TransferCandidateScanner.canonicalMarketUrl = function canonicalMarketUrl(doc) {
+        const paginationLink = [...doc.querySelectorAll('.transfers-ui__pages a[href*="page="], a[href*="transfers.php"][href*="page="]')]
+            .map(anchor => anchor.getAttribute('href') || '')
+            .find(Boolean);
+        const url = new URL(paginationLink || location.href, location.origin);
+        url.searchParams.delete('page');
+        return url.toString();
+    };
+
+    TransferCandidateScanner.baseUrl = function baseUrlWithCurrentMarketQuery() {
+        return this.canonicalMarketUrl(document);
+    };
+
     TransferCandidateScanner.detectTotalPagesOriginal = TransferCandidateScanner.detectTotalPages;
 
     TransferCandidateScanner.detectTotalPages = function detectTotalPagesWithPaginationPolicy(doc, pageRows) {
@@ -76,13 +90,31 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
     TransferCandidateScanner.runOriginal = TransferCandidateScanner.run;
 
     TransferCandidateScanner.run = async function runWithSessionRevalidation(resume) {
+        this.expectedUiTotalPages = this.detectTotalPages(document, this.parsePage(document, 0, location.href));
+        this.expectedCanonicalBaseUrl = this.canonicalMarketUrl(document);
+
         if (resume && this.state?.baseUrl) {
             try {
+                const savedBase = new URL(this.state.baseUrl, location.origin);
+                const currentBase = new URL(this.expectedCanonicalBaseUrl, location.origin);
+                savedBase.searchParams.delete('page');
+                currentBase.searchParams.delete('page');
+
+                if (savedBase.toString() !== currentBase.toString()) {
+                    this.status('Выдача рынка изменилась. Нажми «Сбросить» и запусти новый поиск.');
+                    return;
+                }
+
                 const probe = await this.fetchPage(0);
                 const probeRows = this.parsePage(probe.doc, 0, probe.pageUrl);
                 const currentTotalPages = this.detectTotalPages(probe.doc, probeRows);
                 const savedTotalPages = Number(this.state.totalPages || 0);
                 const scannedPages = Number(this.state.scannedPages || 0);
+
+                if (this.expectedUiTotalPages && currentTotalPages !== this.expectedUiTotalPages) {
+                    this.status(`Ошибка пагинации: в интерфейсе ${this.expectedUiTotalPages}, в сканере ${currentTotalPages}.`);
+                    return;
+                }
 
                 this.state.totalPages = Math.max(savedTotalPages, currentTotalPages);
                 if (currentTotalPages > scannedPages && this.state.phase !== 'scan') {
@@ -107,6 +139,11 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
             const result = await this.fetchPage(page);
             const pageRows = this.parsePage(result.doc, page, result.pageUrl);
             const detectedTotalPages = this.detectTotalPages(result.doc, pageRows);
+
+            if (page === 0 && this.expectedUiTotalPages && detectedTotalPages !== this.expectedUiTotalPages) {
+                throw new Error(`pagination_mismatch_ui_${this.expectedUiTotalPages}_scan_${detectedTotalPages}`);
+            }
+
             this.state.totalPages = Math.max(Number(this.state.totalPages || 0), detectedTotalPages);
 
             const signature = pageRows.slice(0, 10).map(row => row.key).join('|');
