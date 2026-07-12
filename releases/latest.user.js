@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.210
+// @version      4.4.211
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.210',
-        scriptVersion: '4.4.210',
+        version: '4.4.211',
+        scriptVersion: '4.4.211',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.210',
+        scriptVersion: '4.4.211',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -17087,6 +17087,28 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
 // <<< src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
 
 
+// >>> src/modules/transfer-analyzer/transfer-history-visible-analysis-cleanup.js
+// Transfer history visible-analysis cleanup
+// =========================================
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    const addToolbarWithHistoryControls = TransferMarketAnalyzer.addToolbar;
+
+    TransferMarketAnalyzer.addToolbar = function addToolbarWithoutHistoryVisibleAnalysis() {
+        const result = addToolbarWithHistoryControls.apply(this, arguments);
+
+        if (this.isHistoryPage()) {
+            document.getElementById('slf-transfer-analyze-visible')?.remove();
+        }
+
+        return result;
+    };
+
+    delete TransferMarketAnalyzer.analyzeHistoryVisibleRows;
+}
+// <<< src/modules/transfer-analyzer/transfer-history-visible-analysis-cleanup.js
+
+
 // >>> src/modules/team-management/training-reference-guide.js
 // 14.5 Training Reference Guide
 // ============================================================
@@ -18543,15 +18565,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.210',
-        scriptVersion: '4.4.210',
+        version: '4.4.211',
+        scriptVersion: '4.4.211',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.210',
+        scriptVersion: '4.4.211',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
