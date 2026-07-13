@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.213
+// @version      4.4.214
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.213',
-        scriptVersion: '4.4.213',
+        version: '4.4.214',
+        scriptVersion: '4.4.214',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.213',
+        scriptVersion: '4.4.214',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -15873,14 +15873,17 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
     TransferCandidateScanner.paginationPolicyApplied = true;
 
     const previousStorageKey = TransferCandidateScanner.storageKey;
-    TransferCandidateScanner.storageKey = 'slf_transfer_candidate_scanner_v6_meta';
-    TransferCandidateScanner.schema = 'slf_transfer_candidate_scanner_v6_meta';
+    TransferCandidateScanner.storageKey = 'slf_transfer_candidate_scanner_v9_meta';
+    TransferCandidateScanner.schema = 'slf_transfer_candidate_scanner_v9_meta';
     TransferCandidateScanner.legacyStorageKeys = [...new Set([
         ...(TransferCandidateScanner.legacyStorageKeys || []),
         previousStorageKey,
         'slf_transfer_candidate_scanner_v3_meta',
         'slf_transfer_candidate_scanner_v4_meta',
-        'slf_transfer_candidate_scanner_v5_meta'
+        'slf_transfer_candidate_scanner_v5_meta',
+        'slf_transfer_candidate_scanner_v6_meta',
+        'slf_transfer_candidate_scanner_v7_meta',
+        'slf_transfer_candidate_scanner_v8_meta'
     ])];
 
     TransferCandidateScanner.legacyStorageKeys.forEach(key => {
@@ -15916,17 +15919,34 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         };
     });
 
+    TransferCandidateScanner.findPaginationContainer = function findPaginationContainer(doc) {
+        const explicit = [...doc.querySelectorAll('.transfers-ui__pages')]
+            .filter(element => element.querySelector('a[href*="page="]'));
+        if (explicit.length) return explicit[0];
+
+        return [...doc.querySelectorAll('div,nav,td,p,span')]
+            .filter(element => {
+                const text = this.text(element.textContent);
+                return /^Страницы\s*:/i.test(text) && text.length < 500 && element.querySelector('a[href*="page="]');
+            })
+            .sort((a, b) => this.text(a.textContent).length - this.text(b.textContent).length)[0] || null;
+    };
+
     TransferCandidateScanner.extractLastPaginationPage = function extractLastPaginationPage(doc) {
-        const numbers = [];
-        doc.querySelectorAll('.transfers-ui__pages a, .transfers-ui__pages span, a[href*="page="]').forEach(element => {
+        const container = this.findPaginationContainer(doc);
+        if (!container) return -1;
+
+        const pageIndexes = [];
+        container.querySelectorAll('a[href*="page="], span').forEach(element => {
             const text = this.text(element.textContent);
             const href = element.getAttribute?.('href') || '';
             const hrefMatch = href.match(/[?&]page=(\d+)/);
             const textMatch = text.match(/^\d+$/);
             const value = hrefMatch ? Number(hrefMatch[1]) : (textMatch ? Number(text) - 1 : null);
-            if (Number.isFinite(value) && value >= 0) numbers.push(value);
+            if (Number.isFinite(value) && value >= 0) pageIndexes.push(value);
         });
-        return numbers.length ? Math.max(...numbers) : -1;
+
+        return pageIndexes.length ? Math.max(...pageIndexes) : -1;
     };
 
     TransferCandidateScanner.canonicalMarketUrl = function canonicalMarketUrl() {
@@ -15939,26 +15959,27 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         return this.canonicalMarketUrl();
     };
 
-    TransferCandidateScanner.detectTotalPagesOriginal = TransferCandidateScanner.detectTotalPages;
-
-    TransferCandidateScanner.detectTotalPages = function detectTotalPagesWithPaginationPolicy(doc, pageRows) {
+    TransferCandidateScanner.detectInitialTotalPages = function detectInitialTotalPages(doc, pageRows) {
         const lastPageIndex = this.extractLastPaginationPage(doc);
-        const fallback = this.detectTotalPagesOriginal(doc, pageRows);
-        const total = lastPageIndex >= 0 ? lastPageIndex + 1 : fallback;
+        if (lastPageIndex >= 0) return lastPageIndex + 1;
+
         const totalPlayers = this.extractTotalPlayers(doc);
+        const firstPageSize = Number(pageRows?.length || 0);
+        if (totalPlayers > 0 && firstPageSize > 0) return Math.ceil(totalPlayers / firstPageSize);
+        return 1;
+    };
 
-        this.state.totalPlayers = totalPlayers || this.state.totalPlayers || 0;
-        this.state.pageSize = pageRows.length || this.state.pageSize || 0;
-
-        return Math.max(total, fallback, 1);
+    TransferCandidateScanner.detectTotalPages = function detectStableTotalPages() {
+        return Math.max(1, Number(this.fixedTotalPages || this.state.totalPages || 1));
     };
 
     TransferCandidateScanner.runOriginal = TransferCandidateScanner.run;
 
-    TransferCandidateScanner.run = async function runWithSessionRevalidation(resume) {
+    TransferCandidateScanner.run = async function runWithStablePagination(resume) {
         const uiRows = this.parsePage(document, 0, location.href);
-        this.expectedUiTotalPages = this.detectTotalPages(document, uiRows);
+        const uiTotalPages = this.detectInitialTotalPages(document, uiRows);
         this.expectedCanonicalBaseUrl = this.canonicalMarketUrl();
+        this.fixedTotalPages = uiTotalPages;
 
         if (resume && this.state?.baseUrl) {
             try {
@@ -15973,13 +15994,9 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
                 }
 
                 const savedTotalPages = Number(this.state.totalPages || 0);
-                const scannedPages = Number(this.state.scannedPages || 0);
-                this.state.totalPages = Math.max(savedTotalPages, this.expectedUiTotalPages);
-
-                if (this.expectedUiTotalPages > scannedPages && this.state.phase !== 'scan') {
-                    this.state.phase = 'scan';
-                    this.state.nextPage = scannedPages;
-                    this.saveMeta();
+                if (savedTotalPages > 0 && savedTotalPages !== uiTotalPages) {
+                    this.status(`Количество страниц изменилось: было ${savedTotalPages}, стало ${uiTotalPages}. Нажми «Сбросить».`);
+                    return;
                 }
             } catch (error) {
                 this.status(`Ошибка проверки сессии: ${this.errorText(error)}`);
@@ -15987,32 +16004,43 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
             }
         }
 
+        this.state.totalPages = uiTotalPages;
+        this.state.totalPlayers = this.extractTotalPlayers(document) || this.state.totalPlayers || 0;
+        this.state.pageSize = uiRows.length || this.state.pageSize || 0;
+        this.saveMeta();
         return this.runOriginal(resume);
     };
 
-    TransferCandidateScanner.scanAllPages = async function scanAllPagesWithPaginationGuard(resume) {
+    TransferCandidateScanner.scanAllPages = async function scanAllPagesWithStableLimit(resume) {
         this.state.phase = 'scan';
+        const totalPages = Math.max(1, Number(this.fixedTotalPages || this.state.totalPages || 1));
+        this.state.totalPages = totalPages;
         let page = resume ? Number(this.state.nextPage || 0) : 0;
         let previousSignature = '';
 
-        for (; !this.stopRequested; page++) {
+        if (page >= totalPages) {
+            this.state.phase = 'enrich';
+            this.status('Все страницы уже собраны. Загружаю временный индекс с VPS...');
+            this.saveMeta();
+            this.renderProgress();
+            return;
+        }
+
+        for (; !this.stopRequested && page < totalPages; page++) {
             const result = page === 0
                 ? { doc: document, pageUrl: location.href }
                 : await this.fetchPage(page);
             const pageRows = this.parsePage(result.doc, page, result.pageUrl);
-            const detectedTotalPages = this.detectTotalPages(result.doc, pageRows);
-
-            if (page === 0 && this.expectedUiTotalPages && detectedTotalPages !== this.expectedUiTotalPages) {
-                throw new Error(`pagination_mismatch_ui_${this.expectedUiTotalPages}_scan_${detectedTotalPages}`);
-            }
-
-            this.state.totalPages = Math.max(Number(this.state.totalPages || 0), detectedTotalPages);
 
             const signature = pageRows.slice(0, 10).map(row => row.key).join('|');
-            if (!pageRows.length) break;
-            if (page > 0 && signature && signature === previousSignature) break;
+            if (!pageRows.length) {
+                throw new Error(`empty_transfer_page_${page + 1}_of_${totalPages}`);
+            }
+            if (page > 0 && signature && signature === previousSignature) {
+                throw new Error(`duplicate_transfer_page_${page + 1}_of_${totalPages}`);
+            }
 
-            this.status(`Сканирование страницы ${page + 1}/${this.state.totalPages || '?'}...`);
+            this.status(`Сканирование страницы ${page + 1}/${totalPages}...`);
             await this.appendCollection(this.indexCollection, pageRows, `candidate page ${page + 1}`);
             this.state.scannedPages = Math.max(this.state.scannedPages, page + 1);
             this.state.nextPage = page + 1;
@@ -16021,7 +16049,6 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
             this.renderProgress();
 
             previousSignature = signature;
-            if (this.state.totalPages && page + 1 >= this.state.totalPages) break;
             await this.delay(250);
         }
 
@@ -16030,14 +16057,8 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
             return;
         }
 
-        if (Number(this.state.scannedPages || 0) < Number(this.state.totalPages || 0)) {
-            this.state.phase = 'scan';
-            this.state.nextPage = Number(this.state.scannedPages || 0);
-            this.stopRequested = true;
-            this.status(`Сканирование неполное: ${this.state.scannedPages}/${this.state.totalPages}.`);
-            this.saveMeta();
-            this.renderProgress();
-            return;
+        if (Number(this.state.scannedPages || 0) !== totalPages) {
+            throw new Error(`incomplete_transfer_scan_${this.state.scannedPages}_of_${totalPages}`);
         }
 
         this.state.phase = 'enrich';
@@ -18953,15 +18974,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.213',
-        scriptVersion: '4.4.213',
+        version: '4.4.214',
+        scriptVersion: '4.4.214',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.213',
+        scriptVersion: '4.4.214',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
