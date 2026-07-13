@@ -5,17 +5,77 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
     TransferCandidateScanner.fourRankingPolicyApplied = true;
 
     const previousStorageKey = TransferCandidateScanner.storageKey;
-    TransferCandidateScanner.storageKey = 'slf_transfer_candidate_scanner_v8_meta';
-    TransferCandidateScanner.schema = 'slf_transfer_candidate_scanner_v8_meta';
+    TransferCandidateScanner.storageKey = 'slf_transfer_candidate_scanner_v10_meta';
+    TransferCandidateScanner.schema = 'slf_transfer_candidate_scanner_v10_meta';
     TransferCandidateScanner.legacyStorageKeys = [...new Set([
         ...(TransferCandidateScanner.legacyStorageKeys || []),
         previousStorageKey,
-        'slf_transfer_candidate_scanner_v7_meta'
+        'slf_transfer_candidate_scanner_v7_meta',
+        'slf_transfer_candidate_scanner_v8_meta',
+        'slf_transfer_candidate_scanner_v9_meta'
     ])];
 
     TransferCandidateScanner.legacyStorageKeys.forEach(key => {
         if (key && key !== TransferCandidateScanner.storageKey) localStorage.removeItem(key);
     });
+
+    if (!TransferCandidateScanner.state || TransferCandidateScanner.state.schema !== TransferCandidateScanner.schema) {
+        TransferCandidateScanner.state = TransferCandidateScanner.defaults();
+        TransferCandidateScanner.saveMeta();
+    }
+
+    TransferCandidateScanner.cleanCandidateName = function cleanCandidateName(value) {
+        const text = this.text(value);
+        if (!text) return '';
+        const half = Math.floor(text.length / 2);
+        if (text.length % 2 === 0 && text.slice(0, half) === text.slice(half)) return text.slice(0, half).trim();
+        for (let split = 1; split < text.length; split++) {
+            const left = text.slice(0, split).trim();
+            const right = text.slice(split).trim();
+            if (left && right && (right === left || right.endsWith(left))) return left;
+        }
+        return text;
+    };
+
+    TransferCandidateScanner.extractCandidateName = function extractCandidateName(playerLink) {
+        if (!playerLink) return '';
+        const directText = [...playerLink.childNodes]
+            .filter(node => node.nodeType === Node.TEXT_NODE)
+            .map(node => node.textContent || '')
+            .join(' ');
+        return this.cleanCandidateName(directText || playerLink.getAttribute('title') || playerLink.textContent || '');
+    };
+
+    TransferCandidateScanner.extractCandidateFlags = function extractCandidateFlags(playerLink) {
+        const cell = playerLink?.closest('td');
+        if (!cell) return [];
+        return [...cell.querySelectorAll('img')]
+            .map(image => ({
+                src: image.getAttribute('src') || '',
+                alt: image.getAttribute('alt') || '',
+                title: image.getAttribute('title') || ''
+            }))
+            .filter(flag => flag.src && !/potencial|arrow|star|eye|today|icon/i.test(flag.src))
+            .map(flag => ({
+                src: new URL(flag.src, location.origin).toString(),
+                alt: this.text(flag.alt),
+                title: this.text(flag.title)
+            }));
+    };
+
+    const parsePageOriginal = TransferCandidateScanner.parsePage;
+    TransferCandidateScanner.parsePage = function parsePageWithPlayerPresentation(doc, page, pageUrl) {
+        const rows = parsePageOriginal.call(this, doc, page, pageUrl);
+        return rows.map(row => {
+            const playerLink = doc.querySelector(`a[href*="player.php"][href*="id=${row.playerId}"]`);
+            const cleanName = this.extractCandidateName(playerLink);
+            return {
+                ...row,
+                name: cleanName || this.cleanCandidateName(row.name) || row.playerId,
+                flags: this.extractCandidateFlags(playerLink)
+            };
+        });
+    };
 
     TransferCandidateScanner.rankingMode = 'young';
     TransferCandidateScanner.rankingSourceRows = [];
@@ -65,7 +125,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         const currentSkillScore = this.clampScore(((currentSkill - 100) / 100) * 100);
         const deltaScore = this.clampScore(((delta + 5) / 25) * 100);
         const youngAgeScore = age == null ? 0 : age <= 21 ? 100 : age === 22 ? 90 : age === 23 ? 80 : age === 24 ? 70 : age === 25 ? 60 : 0;
-        const nowAgeScore = age == null ? 0 : age <= 22 ? 80 : age <= 27 ? 100 : age <= 30 ? 85 : age <= 33 ? 55 : 25;
+        const nowAgeScore = age == null ? 0 : age <= 22 ? 80 : age <= 27 ? 100 : age === 28 ? 85 : 0;
         const talentScore = this.clampScore(talent * 20);
         const potentialScore = potential >= 5 ? 100 : potential === 4 ? 80 : potential === 3 ? 60 : potential === 2 ? 35 : potential === 1 ? 15 : 0;
         const priceValueScore = slfPrice > 0 ? 100 - this.logScore(slfPrice, 10000, 500000000) : 0;
@@ -114,7 +174,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         }
 
         if (mode === 'now') {
-            if (m.retired) return null;
+            if (m.retired || m.age == null || m.age > 28) return null;
             return Number((
                 m.finalSkillScore * 0.27 +
                 m.minutesScore * 0.23 +
@@ -127,7 +187,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         }
 
         if (mode === 'veteran') {
-            const eligible = (m.age != null && m.age >= 30) || m.retired || m.stale;
+            const eligible = m.age != null && m.age >= 29;
             if (!eligible || m.finalSkill <= 0) return null;
             return Number((
                 m.finalSkillScore * 0.38 +
@@ -179,6 +239,10 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         ).join('')}</div>`;
     };
 
+    TransferCandidateScanner.renderCandidateFlags = function renderCandidateFlags(flags) {
+        return (flags || []).map(flag => `<img src="${this.escape(flag.src)}" alt="${this.escape(flag.alt)}" title="${this.escape(flag.title || flag.alt)}" style="width:18px;height:12px;object-fit:cover;vertical-align:middle;margin-right:3px;">`).join('');
+    };
+
     TransferCandidateScanner.render = function renderFourRankings() {
         this.renderProgress();
         const box = document.getElementById('slf-candidate-results');
@@ -193,10 +257,10 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
                 : 'Идёт анализ всех игроков. Рейтинги обновляются автоматически.';
             box.innerHTML = `${tabs}<div style="color:#888;padding:6px 0;">${message}</div>`;
         } else {
-            const columns = '32px 52px minmax(160px,1fr) 40px 42px 46px 52px 52px 58px 58px 62px 62px 74px minmax(110px,1fr)';
+            const columns = '32px 52px 70px minmax(190px,1fr) 40px 42px 46px 52px 52px 58px 58px 62px 62px 74px minmax(110px,1fr)';
             box.innerHTML = `${tabs}
                 <div style="display:grid;grid-template-columns:${columns};gap:5px;padding:5px 4px;border-bottom:1px solid #445;font-weight:bold;color:#9aaebe;position:sticky;top:0;background:#14181d;z-index:2;">
-                    <span>#</span><span>Score</span><span>Игрок</span><span>Возр.</span><span>Тал.</span><span>Скилл</span><span>Финал</span><span>Δ</span><span>Мин.</span><span>Мин%</span><span>Лига</span><span>Цена</span><span>TM</span><span>Данные / риск</span>
+                    <span>#</span><span>Score</span><span>Поз.</span><span>Игрок</span><span>Возр.</span><span>Тал.</span><span>Скилл</span><span>Финал</span><span>Δ</span><span>Мин.</span><span>Мин%</span><span>Лига</span><span>Цена</span><span>TM</span><span>Данные / риск</span>
                 </div>
                 ${rows.map((row, index) => this.fourRankingRowHtml(row, columns, index + 1)).join('')}`;
         }
@@ -212,10 +276,13 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         const league = m.leagueSkill ? `${m.leagueLevel || '?'} / ${Math.round(m.leagueSkill)}` : '—';
         const warningText = m.warnings.length ? m.warnings.join(', ') : 'OK';
         const score = this.rankingMode === 'delta' ? `+${row.categoryScore.toFixed(1)}` : row.categoryScore.toFixed(1);
+        const positions = (row.positions || []).join(' ') || '—';
+        const flags = this.renderCandidateFlags(row.flags);
         return `<div style="display:grid;grid-template-columns:${columns};gap:5px;align-items:center;padding:5px 4px;border-bottom:1px solid #2c343b;">
             <span style="color:${color};font-weight:bold;">${rank}</span>
             <span style="font-weight:bold;">${score}</span>
-            <a href="${this.escape(row.playerUrl)}" style="color:#d8e9ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${this.escape(row.name || row.playerId)}</a>
+            <span>${this.escape(positions)}</span>
+            <a href="${this.escape(row.playerUrl)}" style="color:#d8e9ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${flags}${this.escape(row.name || row.playerId)}</a>
             <span>${m.age ?? '—'}</span>
             <span>${m.talent || '—'}</span>
             <span>${m.currentSkill ? m.currentSkill.toFixed(1) : '—'}</span>
