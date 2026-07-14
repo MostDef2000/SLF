@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.215
+// @version      4.4.216
 // @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.215',
-        scriptVersion: '4.4.215',
+        version: '4.4.216',
+        scriptVersion: '4.4.216',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.215',
+        scriptVersion: '4.4.216',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -16662,9 +16662,10 @@ if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer && !TMEnrichme
 
 const TransferMyBidsRank = {
     cacheKey: 'slf_my_bid_rank_cache_v1',
-    cacheTtlMs: 1000 * 60,
+    cacheTtlMs: 1000 * 60 * 30,
     cacheMaxEntries: 300,
     concurrency: 3,
+    isRunning: false,
 
     teams: {
         '23698': 'ЛУЧ',
@@ -16705,8 +16706,9 @@ const TransferMyBidsRank = {
         if (!this.isPage()) return;
 
         this.injectStyles();
-        this.wrapAnalyzerBadgeRenderer();
+        this.wrapAnalyzerBadgeRenderers();
         this.addToolbarButtons();
+        this.restoreAllVisibleBidChips();
     },
 
     injectStyles() {
@@ -16751,26 +16753,49 @@ const TransferMyBidsRank = {
                 background:#181818;
                 color:#aaa;
             }
+            .slf-my-bids-rank-wrap[data-status="error"] {
+                opacity:0.72;
+            }
         `;
         document.head.appendChild(style);
     },
 
-    wrapAnalyzerBadgeRenderer() {
+    wrapAnalyzerBadgeRenderers() {
         if (typeof TransferMarketAnalyzer === 'undefined' || !TransferMarketAnalyzer) return;
-        if (typeof TransferMarketAnalyzer.renderRowBadge !== 'function') return;
-        if (TransferMarketAnalyzer.renderRowBadge.__slfMyBidsRankWrapped) return;
 
-        const originalRenderRowBadge = TransferMarketAnalyzer.renderRowBadge;
         const self = this;
+        const rowMethods = ['renderLoadingBadge', 'renderErrorBadge', 'renderRowBadge'];
 
-        const wrappedRenderRowBadge = function renderRowBadgeWithMyBidRanks(row, enriched, slfAlter) {
-            const result = originalRenderRowBadge.call(this, row, enriched, slfAlter);
-            self.restoreBidChips(row);
-            return result;
-        };
+        rowMethods.forEach(methodName => {
+            const original = TransferMarketAnalyzer[methodName];
+            if (typeof original !== 'function' || original.__slfMyBidsRankWrapped) return;
 
-        wrappedRenderRowBadge.__slfMyBidsRankWrapped = true;
-        TransferMarketAnalyzer.renderRowBadge = wrappedRenderRowBadge;
+            const wrapped = function renderWithMyBidRanks(row, ...args) {
+                const result = original.call(this, row, ...args);
+                self.restoreBidChips(row);
+                return result;
+            };
+
+            wrapped.__slfMyBidsRankWrapped = true;
+            wrapped.__slfMyBidsRankOriginal = original;
+            TransferMarketAnalyzer[methodName] = wrapped;
+        });
+
+        const originalRenderCachedRows = TransferMarketAnalyzer.renderCachedRows;
+        if (
+            typeof originalRenderCachedRows === 'function' &&
+            !originalRenderCachedRows.__slfMyBidsRankWrapped
+        ) {
+            const wrappedRenderCachedRows = function renderCachedRowsWithMyBidRanks(...args) {
+                const result = originalRenderCachedRows.apply(this, args);
+                self.restoreAllVisibleBidChips();
+                return result;
+            };
+
+            wrappedRenderCachedRows.__slfMyBidsRankWrapped = true;
+            wrappedRenderCachedRows.__slfMyBidsRankOriginal = originalRenderCachedRows;
+            TransferMarketAnalyzer.renderCachedRows = wrappedRenderCachedRows;
+        }
     },
 
     addToolbarButtons() {
@@ -16786,28 +16811,39 @@ const TransferMyBidsRank = {
             }
         };
 
-        if (!document.getElementById('slf-my-bids-rank-check')) {
-            const btn = document.createElement('button');
+        let btn = document.getElementById('slf-my-bids-rank-check');
+        if (!btn) {
+            btn = document.createElement('button');
             btn.id = 'slf-my-bids-rank-check';
             btn.type = 'button';
-            btn.textContent = 'Проверить ставки';
             btn.title = 'Проверить места ставок моих клубов на этой странице';
             btn.onclick = () => this.checkVisibleRows();
             insert(btn);
         }
+        this.setCheckButtonRunning(this.isRunning);
 
         if (!document.getElementById('slf-my-bids-rank-clear')) {
             const clearBtn = document.createElement('button');
             clearBtn.id = 'slf-my-bids-rank-clear';
             clearBtn.type = 'button';
             clearBtn.textContent = 'Сброс bid cache';
-            clearBtn.title = 'Очистить короткий cache мест ставок';
+            clearBtn.title = 'Очистить cache мест ставок';
             clearBtn.onclick = () => {
                 this.clearCache();
+                this.restoreAllVisibleBidChips();
                 this.setStatus('Bid cache очищен.');
             };
             insert(clearBtn);
         }
+    },
+
+    setCheckButtonRunning(running) {
+        const btn = document.getElementById('slf-my-bids-rank-check');
+        if (!btn) return;
+
+        btn.disabled = !!running;
+        btn.textContent = running ? 'Проверка ставок...' : 'Проверить ставки';
+        btn.setAttribute('aria-busy', running ? 'true' : 'false');
     },
 
     setStatus(text) {
@@ -16832,14 +16868,6 @@ const TransferMyBidsRank = {
     },
 
     parseVisibleRows() {
-        if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer?.parseVisibleRows) {
-            return TransferMarketAnalyzer.parseVisibleRows()
-                .filter(row => row?.rowEl && this.parseTransferIdFromRow(row.rowEl))
-                .map(row => Object.assign(row, {
-                    transferId: this.parseTransferIdFromRow(row.rowEl)
-                }));
-        }
-
         const table = this.findTransferTable();
         if (!table) return [];
 
@@ -16873,6 +16901,11 @@ const TransferMyBidsRank = {
     },
 
     async checkVisibleRows() {
+        if (this.isRunning) {
+            this.setStatus('Ставки: проверка уже выполняется.');
+            return;
+        }
+
         const rows = this.parseVisibleRows();
 
         if (!rows.length) {
@@ -16880,41 +16913,61 @@ const TransferMyBidsRank = {
             return;
         }
 
+        this.isRunning = true;
+        this.setCheckButtonRunning(true);
+        this.restoreAllVisibleBidChips();
+
         let completed = 0;
         let failed = 0;
         let matched = 0;
 
         const tasks = rows.map(row => async () => {
             const transferId = row.transferId || this.parseTransferIdFromRow(row.rowEl);
-
             if (!transferId) return;
 
-            try {
-                const cached = this.getCached(transferId);
-                const items = cached || await this.loadBidRanks(transferId);
+            let state = null;
 
-                if (items.length) matched++;
-                this.renderBidChips(row, items);
+            try {
+                state = await this.loadBidState(transferId);
             } catch (error) {
                 failed++;
+                state = this.recordErrorState(transferId, error);
                 console.warn('[SLF My Bids Rank] failed', transferId, error);
             } finally {
+                if (state?.items?.length) matched++;
+                if (state) this.renderBidState(row, state);
                 completed++;
                 this.setStatus(`Ставки: ${completed}/${rows.length} · найдено ${matched} · ошибок ${failed}`);
             }
         });
 
-        this.setStatus(`Ставки: 0/${rows.length}`);
-        await this.runLimited(tasks, this.concurrency);
-        this.setStatus(`Ставки проверены: ${completed}/${rows.length} · найдено ${matched} · ошибок ${failed}`);
+        try {
+            this.setStatus(`Ставки: 0/${rows.length}`);
+            await this.runLimited(tasks, this.concurrency);
+            this.restoreAllVisibleBidChips();
+            this.setStatus(`Ставки проверены: ${completed}/${rows.length} · найдено ${matched} · ошибок ${failed}`);
+        } finally {
+            this.isRunning = false;
+            this.setCheckButtonRunning(false);
+            this.restoreAllVisibleBidChips();
+        }
     },
 
-    async loadBidRanks(transferId) {
+    async loadBidState(transferId) {
         const html = await this.fetchDetailHtml(transferId);
-        const items = this.parseMyBidRanks(html);
+        const parsed = this.parseMyBidRanks(html);
+        const checkedAt = Date.now();
+        const state = {
+            status: parsed.status,
+            items: parsed.items,
+            checkedAt,
+            savedAt: checkedAt,
+            error: ''
+        };
 
-        this.setCached(transferId, items);
-        return items;
+        if (state.status === 'success') state.lastSuccessAt = checkedAt;
+        this.setCachedState(transferId, state);
+        return state;
     },
 
     async fetchDetailHtml(transferId) {
@@ -16928,16 +16981,33 @@ const TransferMyBidsRank = {
             throw new Error(`HTTP ${response.status}`);
         }
 
-        return response.text();
+        const html = await response.text();
+        if (!html || html.length < 200) {
+            throw new Error('bid_detail_html_incomplete');
+        }
+
+        return html;
     },
 
     parseMyBidRanks(htmlText) {
-        const doc = new DOMParser().parseFromString(String(htmlText || ''), 'text/html');
-        const rows = [...doc.querySelectorAll('table.bet_table tr.betline')];
+        const text = String(htmlText || '');
+        if (!text.trim()) throw new Error('bid_detail_html_empty');
+
+        const doc = new DOMParser().parseFromString(text, 'text/html');
+        if (!doc?.documentElement || doc.querySelector('parsererror')) {
+            throw new Error('bid_detail_html_parse_failed');
+        }
+
+        const table = doc.querySelector('table.bet_table');
+        if (!table) {
+            throw new Error('bid_table_not_found');
+        }
+
+        const rows = [...table.querySelectorAll('tr.betline')];
         const items = [];
+        let recognizedRows = 0;
 
         rows.forEach((tr, index) => {
-            const rank = index + 1;
             const rosterLink = [...tr.querySelectorAll('a[href]')].find(a => {
                 const href = a.getAttribute('href') || '';
                 return /roster\.php\?id=\d+/i.test(href);
@@ -16945,17 +17015,26 @@ const TransferMyBidsRank = {
 
             const href = rosterLink?.getAttribute('href') || '';
             const teamId = (href.match(/roster\.php\?id=(\d+)/i) || [])[1];
+            if (!teamId) return;
 
-            if (!teamId || !this.teams[teamId]) return;
+            recognizedRows++;
+            if (!this.teams[teamId]) return;
 
             items.push({
                 teamId,
                 label: this.teams[teamId],
-                rank
+                rank: index + 1
             });
         });
 
-        return items;
+        if (rows.length && recognizedRows !== rows.length) {
+            throw new Error('bid_table_incomplete');
+        }
+
+        return {
+            status: items.length ? 'success' : 'confirmed_empty',
+            items
+        };
     },
 
     getOrCreateBidCell(row) {
@@ -16990,31 +17069,79 @@ const TransferMyBidsRank = {
         return cell;
     },
 
-    restoreBidChips(row) {
-        if (!row?.rowEl?.dataset?.slfMyBidsRankItems) return;
+    normalizeState(value) {
+        if (!value || typeof value !== 'object') return null;
 
-        try {
-            const items = JSON.parse(row.rowEl.dataset.slfMyBidsRankItems || '[]');
-            this.renderBidChips(row, items);
-        } catch (e) {
-            delete row.rowEl.dataset.slfMyBidsRankItems;
+        const items = Array.isArray(value.items) ? value.items : [];
+        const checkedAt = Number(value.checkedAt || value.savedAt || 0);
+        const savedAt = Number(value.savedAt || checkedAt || 0);
+        let status = String(value.status || '');
+
+        if (!['success', 'confirmed_empty', 'error'].includes(status)) {
+            status = items.length ? 'success' : 'confirmed_empty';
         }
+
+        return {
+            status,
+            items,
+            checkedAt,
+            savedAt,
+            lastSuccessAt: Number(value.lastSuccessAt || (status === 'success' ? checkedAt : 0)),
+            error: String(value.error || '')
+        };
     },
 
-    renderBidChips(row, items) {
+    restoreBidChips(row) {
+        const transferId = row?.transferId || this.parseTransferIdFromRow(row?.rowEl);
+        let state = transferId ? this.getCachedState(transferId) : null;
+
+        if (!state && row?.rowEl?.dataset?.slfMyBidsRankState) {
+            try {
+                state = this.normalizeState(JSON.parse(row.rowEl.dataset.slfMyBidsRankState));
+            } catch (e) {
+                delete row.rowEl.dataset.slfMyBidsRankState;
+            }
+        }
+
+        if (!state && row?.rowEl?.dataset?.slfMyBidsRankItems) {
+            try {
+                state = this.normalizeState({
+                    status: 'success',
+                    items: JSON.parse(row.rowEl.dataset.slfMyBidsRankItems || '[]'),
+                    checkedAt: Date.now(),
+                    savedAt: Date.now()
+                });
+            } catch (e) {
+                delete row.rowEl.dataset.slfMyBidsRankItems;
+            }
+        }
+
+        if (state) this.renderBidState(row, state);
+    },
+
+    restoreAllVisibleBidChips() {
+        if (!this.isPage()) return;
+
+        this.parseVisibleRows().forEach(row => this.restoreBidChips(row));
+    },
+
+    renderBidState(row, value) {
+        const state = this.normalizeState(value);
+        if (!state) return;
+
         const cell = this.getOrCreateBidCell(row);
         if (!cell) return;
 
         let wrap = cell.querySelector('.slf-my-bids-rank-wrap');
 
-        if (!Array.isArray(items) || !items.length) {
-            if (wrap) wrap.remove();
-            if (row?.rowEl?.dataset) delete row.rowEl.dataset.slfMyBidsRankItems;
-            return;
+        if (row?.rowEl?.dataset) {
+            row.rowEl.dataset.slfMyBidsRankState = JSON.stringify(state);
+            delete row.rowEl.dataset.slfMyBidsRankItems;
         }
 
-        if (row?.rowEl?.dataset) {
-            row.rowEl.dataset.slfMyBidsRankItems = JSON.stringify(items);
+        if (!state.items.length) {
+            if (wrap) wrap.remove();
+            return;
         }
 
         if (!wrap) {
@@ -17023,9 +17150,13 @@ const TransferMyBidsRank = {
             cell.insertBefore(wrap, cell.firstChild);
         }
 
+        wrap.dataset.status = state.status;
+        wrap.title = state.status === 'error'
+            ? `Последний успешный результат сохранён; обновление не удалось${state.error ? `: ${state.error}` : ''}`
+            : `Проверено ${state.checkedAt ? new Date(state.checkedAt).toLocaleTimeString() : ''}`.trim();
         wrap.innerHTML = '';
 
-        items.forEach(item => {
+        state.items.forEach(item => {
             const chip = document.createElement('span');
             const rank = Number(item.rank || 0);
             const level = rank === 1 ? 'lead' : rank <= 3 ? 'near' : 'far';
@@ -17033,6 +17164,16 @@ const TransferMyBidsRank = {
             chip.className = `slf-my-bids-rank-chip slf-my-bids-rank-chip--${level}`;
             chip.textContent = `${item.label} #${rank || '?'}`;
             wrap.appendChild(chip);
+        });
+    },
+
+    renderBidChips(row, items) {
+        const now = Date.now();
+        this.renderBidState(row, {
+            status: Array.isArray(items) && items.length ? 'success' : 'confirmed_empty',
+            items: Array.isArray(items) ? items : [],
+            checkedAt: now,
+            savedAt: now
         });
     },
 
@@ -17047,7 +17188,8 @@ const TransferMyBidsRank = {
     saveCache(cache) {
         try {
             const entries = Object.entries(cache || {})
-                .filter(([, value]) => value && Number(value.savedAt || 0))
+                .map(([key, value]) => [key, this.normalizeState(value)])
+                .filter(([, value]) => value && Number(value.savedAt || value.checkedAt || 0))
                 .sort((a, b) => Number(b[1].savedAt || 0) - Number(a[1].savedAt || 0))
                 .slice(0, this.cacheMaxEntries);
 
@@ -17057,31 +17199,77 @@ const TransferMyBidsRank = {
         }
     },
 
-    getCached(transferId) {
+    getCachedState(transferId, options = {}) {
         const cache = this.loadCache();
-        const item = cache[String(transferId || '')];
+        const state = this.normalizeState(cache[String(transferId || '')]);
+        if (!state) return null;
 
-        if (!item) return null;
+        const timestamp = Number(state.savedAt || state.checkedAt || 0);
+        if (!options.allowExpired && (!timestamp || Date.now() - timestamp > this.cacheTtlMs)) {
+            return null;
+        }
 
-        const savedAt = Number(item.savedAt || 0);
-        if (!savedAt || Date.now() - savedAt > this.cacheTtlMs) return null;
+        return state;
+    },
 
-        return Array.isArray(item.items) ? item.items : [];
+    setCachedState(transferId, value) {
+        const key = String(transferId || '');
+        if (!key) return;
+
+        const cache = this.loadCache();
+        const state = this.normalizeState(value);
+        if (!state) return;
+
+        state.savedAt = Date.now();
+        if (!state.checkedAt) state.checkedAt = state.savedAt;
+        cache[key] = state;
+        this.saveCache(cache);
+    },
+
+    recordErrorState(transferId, error) {
+        const previous = this.getCachedState(transferId, { allowExpired: true });
+        const checkedAt = Date.now();
+        const items = Array.isArray(previous?.items) ? previous.items : [];
+        const state = {
+            status: 'error',
+            items,
+            checkedAt,
+            savedAt: checkedAt,
+            lastSuccessAt: Number(previous?.lastSuccessAt || (previous?.status === 'success' ? previous.checkedAt : 0)),
+            error: String(error?.message || error || 'unknown')
+        };
+
+        this.setCachedState(transferId, state);
+        return state;
+    },
+
+    getCached(transferId) {
+        const state = this.getCachedState(transferId);
+        return state ? state.items : null;
     },
 
     setCached(transferId, items) {
-        const cache = this.loadCache();
-
-        cache[String(transferId || '')] = {
-            savedAt: Date.now(),
-            items: Array.isArray(items) ? items : []
-        };
-
-        this.saveCache(cache);
+        const now = Date.now();
+        this.setCachedState(transferId, {
+            status: Array.isArray(items) && items.length ? 'success' : 'confirmed_empty',
+            items: Array.isArray(items) ? items : [],
+            checkedAt: now,
+            savedAt: now,
+            lastSuccessAt: Array.isArray(items) && items.length ? now : 0,
+            error: ''
+        });
     },
 
     clearCache() {
         localStorage.removeItem(this.cacheKey);
+        this.parseVisibleRows().forEach(row => {
+            const wrap = row?.rowEl?.querySelector('.slf-my-bids-rank-wrap');
+            if (wrap) wrap.remove();
+            if (row?.rowEl?.dataset) {
+                delete row.rowEl.dataset.slfMyBidsRankState;
+                delete row.rowEl.dataset.slfMyBidsRankItems;
+            }
+        });
     },
 
     async runLimited(tasks, limit) {
@@ -17110,11 +17298,9 @@ if (typeof TransferMyBidsRank !== 'undefined' && TransferMyBidsRank) {
     const clearButtonId = 'slf-my-bids-rank-clear';
     const originalAddToolbarButtons = TransferMyBidsRank.addToolbarButtons;
 
-    // A page reload starts a fresh bid-rank session. The short-lived cache still
-    // prevents duplicate requests while the current page remains open.
-    TransferMyBidsRank.clearCache();
-
-    TransferMyBidsRank.addToolbarButtons = function addToolbarButtonsWithoutCacheReset() {
+    // Keep the last-known bid-rank cache across page reloads. The main module
+    // owns TTL, bounded storage, explicit force refresh and manual clearing.
+    TransferMyBidsRank.addToolbarButtons = function addToolbarButtonsWithoutClearButton() {
         originalAddToolbarButtons.call(this);
         document.getElementById(clearButtonId)?.remove();
     };
@@ -19041,15 +19227,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.215',
-        scriptVersion: '4.4.215',
+        version: '4.4.216',
+        scriptVersion: '4.4.216',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.215',
+        scriptVersion: '4.4.216',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
