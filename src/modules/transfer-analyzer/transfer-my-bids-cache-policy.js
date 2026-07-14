@@ -5,11 +5,9 @@ if (typeof TransferMyBidsRank !== 'undefined' && TransferMyBidsRank) {
     const clearButtonId = 'slf-my-bids-rank-clear';
     const originalAddToolbarButtons = TransferMyBidsRank.addToolbarButtons;
 
-    // A page reload starts a fresh bid-rank session. The short-lived cache still
-    // prevents duplicate requests while the current page remains open.
-    TransferMyBidsRank.clearCache();
-
-    TransferMyBidsRank.addToolbarButtons = function addToolbarButtonsWithoutCacheReset() {
+    // Keep the last-known bid-rank cache across page reloads. The main module
+    // owns TTL, bounded storage, explicit force refresh and manual clearing.
+    TransferMyBidsRank.addToolbarButtons = function addToolbarButtonsWithoutClearButton() {
         originalAddToolbarButtons.call(this);
         document.getElementById(clearButtonId)?.remove();
     };
