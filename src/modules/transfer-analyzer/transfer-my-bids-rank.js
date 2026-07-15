@@ -16,6 +16,7 @@ const TransferMyBidsRank = {
         '18280': 'ПРШ',
         '22962': 'БОА',
         '79252': 'ЧЕС',
+        '19703': 'ЭЙР',
         '105995': 'НОРТ'
     },
 
@@ -437,7 +438,6 @@ const TransferMyBidsRank = {
     restoreBidChips(row) {
         const transferId = row?.transferId || this.parseTransferIdFromRow(row?.rowEl);
         let state = transferId ? this.getCachedState(transferId) : null;
-
         if (!state && row?.rowEl?.dataset?.slfMyBidsRankState) {
             try {
                 state = this.normalizeState(JSON.parse(row.rowEl.dataset.slfMyBidsRankState));
