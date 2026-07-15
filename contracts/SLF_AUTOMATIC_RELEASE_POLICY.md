@@ -1,6 +1,6 @@
 # SLF Automatic Release Policy
 
-Version: 1.1.0
+Version: 1.2.0
 Status: Active
 Applies to: Project Manager, domain agents, Core Release, runtime state, release gate, GitHub Actions, and Tampermonkey user handoff
 Source of truth: GitHub repository contracts and `.github/workflows/build-latest-release.yml`
@@ -227,3 +227,103 @@ Governance/docs-only tasks may complete without a userscript release after CI an
 - `contracts/runtime/RELEASE_READINESS_GATE.md`
 - `docs/architecture/slf-control-plane.md`
 - `docs/decision_records/DR-002-latest-only-release-model.md`
+
+## 14. Capability-aware execution amendment
+
+This section extends the approved lifecycle and has priority where earlier
+sections do not define execution-method fallback.
+
+### 14.1 End-to-End Capability Preflight
+
+Before the first repository write, the PM must verify that it has a safe path
+for:
+
+- every approved file write;
+- complete post-write validation;
+- PR creation;
+- CI inspection;
+- merge;
+- release verification when applicable.
+
+For a required multi-file change, partial writes must not begin until a safe
+strategy exists for the complete file set.
+
+### 14.2 Approval Persistence
+
+Approval remains valid for the exact approved scope through the complete
+lifecycle.
+
+Approval is preserved across:
+
+- tool failures;
+- connector changes;
+- retry attempts;
+- GitHub Contents API;
+- Git Data API;
+- local git;
+- `gh`;
+- GitHub UI fallback;
+- continuation in a later user message.
+
+A new approval is required only when the scope or behavior changes.
+
+### 14.3 Repository Write Fallback Ladder
+
+For an approved repository write, use the first safe available method:
+
+1. GitHub Contents API;
+2. Git Data API using blob, tree, commit, and branch-ref operations;
+3. local git and authenticated push;
+4. authenticated `gh`;
+5. one consolidated GitHub UI manual step;
+6. `BLOCKED` only when no safe method remains.
+
+Failure of one method is not evidence that the repository task is blocked.
+
+For protected or secret-bearing files:
+
+- existing secrets must never be displayed;
+- unrelated secret-bearing ranges must remain unchanged;
+- incomplete or truncated file content must never be used for replacement;
+- verification may use hashes, redacted comparisons, or unchanged-range checks.
+
+### 14.4 Single-Shot Manual Repository Fallback
+
+When user action is unavoidable, all known manual repository changes must be
+delivered in one package containing:
+
+- branch;
+- file list;
+- exact content or replacements;
+- commit message;
+- PR title and description;
+- verification criteria.
+
+After the manual commit or PR is created, the PM must resume validation,
+merge, and completion automatically where tools permit.
+
+### 14.5 Push Workflow Observability
+
+An empty workflow-run lookup must never be treated as proof that a push-triggered
+workflow did not run.
+
+Post-merge release verification must immediately use this hierarchy:
+
+1. `data/version.json`;
+2. expected `scriptVersion`;
+3. `build.approvedCommit`;
+4. `releases/latest.user.js`;
+5. release commit.
+
+Workflow-run metadata is supplemental only.
+
+### 14.6 Blocker Threshold
+
+The task may be declared `BLOCKED` only after:
+
+- the required operation failed;
+- the primary execution method was attempted;
+- safe fallback methods were evaluated;
+- no agent-executable path remains;
+- no narrow manual step can recover the lifecycle;
+- exact error evidence and recovery action are available.
