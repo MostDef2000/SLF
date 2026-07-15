@@ -1,6 +1,6 @@
 # SLF Task Runtime Contract
 
-Version: 1.2.0
+Version: 1.3.0
 Status: Active
 Applies to: all SLF implementation, release, governance, fallback, and acceptance workflows
 Source of truth: GitHub repository contracts
@@ -33,6 +33,7 @@ MODULE_COMMITTED
 HANDOFF_VALIDATED
 CORE_RELEASE_INTEGRATING
 SOURCE_INTEGRATED
+MANUAL_STEP_REQUIRED
 ACTIONS_REQUIRED
 ACTIONS_RUNNING
 ACTIONS_COMPLETED
@@ -265,3 +266,102 @@ This contract is referenced by:
 - `contracts/branches/project-manager.md`
 - `contracts/branches/core-release.md`
 - `contracts/runtime/RELEASE_READINESS_GATE.md`
+
+- ## 14. Capability-aware continuation
+
+This section extends the runtime state model and has priority where earlier
+wording is incomplete.
+
+### 14.1 MANUAL_STEP_REQUIRED
+
+`MANUAL_STEP_REQUIRED` is a non-terminal phase used when one narrowly defined
+user action is required because no available agent execution method can safely
+perform that exact operation.
+
+It must not be used for:
+
+- routine approval;
+- PR creation;
+- CI waiting;
+- mergeability calculation;
+- normal merge;
+- automatic release waiting;
+- release verification that the agent can perform.
+
+A valid manual-step instruction must include:
+
+- exact branch;
+- exact file paths;
+- exact edit or operation;
+- expected commit destination;
+- verification criteria.
+
+All known required manual edits must be consolidated into one instruction.
+
+After the user reports completion, the responsible agent must:
+
+1. verify the repository state;
+2. confirm the changed-file scope;
+3. resume from the next deterministic phase;
+4. continue until a terminal state;
+5. not request repository approval again for the unchanged scope.
+
+### 14.2 Approval Persistence
+
+Approval remains attached to the runtime task and exact approved scope until a
+terminal state is reached.
+
+Changing the execution mechanism does not invalidate approval.
+
+This includes transitions between:
+
+- connector writes;
+- Git Data API writes;
+- local git;
+- `gh`;
+- GitHub UI manual steps.
+
+### 14.3 Blocker Evidence Gate
+
+The runtime may enter `BLOCKED` only when all conditions below are satisfied:
+
+1. the failed operation is required;
+2. the failure is reproducible or supported by concrete error evidence;
+3. the primary execution method was attempted;
+4. at least one safe fallback was attempted when available;
+5. no deterministic agent-executable path remains;
+6. the issue cannot be represented as `MANUAL_STEP_REQUIRED`;
+7. the response contains the exact minimum recovery action.
+
+The following are not blockers:
+
+- waiting for CI;
+- waiting for mergeability calculation;
+- waiting for an automatic workflow trigger;
+- waiting for release artifacts;
+- one unavailable connector method when another safe method exists;
+- an empty push-workflow lookup when artifact verification remains available.
+
+### 14.4 Automatic Continuation After Manual Steps
+
+A manual step pauses only the unavailable operation. It does not terminate the
+task lifecycle.
+
+The next user message confirming completion must be treated as a continuation
+signal, not a new task or new approval request.
+
+### 14.5 Status Emission
+
+The full runtime block must be maintained internally.
+
+Intermediate user-facing messages should be omitted when the user requests
+terminal-only reporting.
+
+When intermediate reporting is necessary, it must be concise and execution must
+continue immediately afterward.
+
+After repository approval, a final response is permitted only for:
+
+- `COMPLETE`;
+- `BLOCKED` after passing the Blocker Evidence Gate;
+- `FAILED`.
