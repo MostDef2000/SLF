@@ -267,7 +267,7 @@ This contract is referenced by:
 - `contracts/branches/core-release.md`
 - `contracts/runtime/RELEASE_READINESS_GATE.md`
 
-- ## 14. Capability-aware continuation
+## 14. Capability-aware continuation
 
 This section extends the runtime state model and has priority where earlier
 wording is incomplete.

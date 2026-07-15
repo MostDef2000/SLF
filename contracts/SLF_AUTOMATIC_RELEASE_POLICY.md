@@ -126,7 +126,7 @@ It is permitted only when:
 - the agent cannot safely re-run or dispatch the workflow with available tools;
 - the user explicitly asks for a manual rerun.
 
-Fallback state must be `BLOCKED` or `MANUAL FALLBACK`, with an exact UI path and reason.
+Fallback state must be `BLOCKED` or `MANUAL_STEP_REQUIRED`, with an exact UI path and reason.
 
 ## 8. Workflow trigger scope
 
