@@ -1,6 +1,6 @@
 # SLF Governance
 
-Version: 2.0.0
+Version: 2.1.0
 Status: Active
 Applies to: all SLF agents, implementation workflows, release workflows, and user handoffs
 Source of truth: GitHub repository contracts
@@ -324,3 +324,101 @@ Valid terminal states are:
 Do not use ambiguous final wording such as `almost done`, `probably ready`, or `waiting`.
 
 Evidence, not narrative, determines completion.
+
+## 18. Capability-aware execution governance
+
+These rules are permanent governance requirements for all SLF agents.
+
+### 18.1 Approval Persistence
+
+Repository-write approval is attached to the exact task scope, file set, and
+intended behavior.
+
+It remains valid until:
+
+- `COMPLETE`;
+- `BLOCKED`;
+- `FAILED`;
+- explicit user cancellation;
+- approved scope expansion requiring new consent.
+
+Approval is not invalidated by interruptions, tool changes, retries, manual
+fallback steps, or continuation in a later message.
+
+### 18.2 Protected-File Permission Persistence
+
+Permission granted for a protected file remains valid for:
+
+- the exact task;
+- the exact file path;
+- the declared modification;
+- the complete approved lifecycle.
+
+Existing secrets or credentials inside that file do not require the user to
+reveal them when the approved operation preserves them unchanged.
+
+Agents must not display secret values and must not replace protected files from
+partial or truncated content.
+
+### 18.3 Capability Gate
+
+Before the first repository write, the responsible agent must verify an
+end-to-end path for the complete approved lifecycle.
+
+For multi-file work, the agent must know how every required file will be safely
+written before the first partial write.
+
+### 18.4 Execution Method Governance
+
+Approved execution methods, in priority order, are:
+
+1. connector-native repository operations;
+2. Git Data API;
+3. local git;
+4. authenticated `gh`;
+5. one consolidated GitHub UI manual step.
+
+A lower-priority method may be used immediately when a higher-priority method is
+unsafe or unavailable.
+
+### 18.5 Manual Step Governance
+
+`MANUAL_STEP_REQUIRED` is a non-terminal recovery phase.
+
+A manual instruction must be:
+
+- narrow;
+- exact;
+- consolidated;
+- inside the approved scope;
+- independently verifiable.
+
+After completion, the responsible agent must verify and resume the lifecycle
+without a new approval.
+
+### 18.6 Blocker Evidence Governance
+
+An agent may declare `BLOCKED` only when:
+
+- a required operation cannot be completed;
+- the failure has evidence;
+- primary and safe fallback methods were evaluated;
+- no agent-executable method remains;
+- a narrow manual step cannot recover the lifecycle;
+- an exact recovery action is provided.
+
+A limitation of one tool is not a project blocker.
+
+### 18.7 User Communication Governance
+
+The user should normally receive:
+
+1. one scope/approval boundary;
+2. one manual package only when unavoidable;
+3. one terminal result.
+
+Intermediate operational messages must be omitted when the user requests
+terminal-only reporting.
+
+Internal runtime tracking must continue even when intermediate status is not
+shown.
