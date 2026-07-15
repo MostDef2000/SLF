@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.216
-// @description  Modular SLF helper: tactics, live parser, youth monitor, TM + SLF transfer analyzer
+// @version      4.4.217
+// @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
 // @match        https://slf.fm/*
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.216',
-        scriptVersion: '4.4.216',
+        version: '4.4.217',
+        scriptVersion: '4.4.217',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.216',
+        scriptVersion: '4.4.217',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -125,12 +125,13 @@ const CONFIG = {
 
     STORAGE_KEY: "slf_custom_presets",
 
-    MY_TEAMS: {
+        MY_TEAMS: {
         luch: 23698,
         carrarese: 21473,
         pribram: 18280,
         boa: 22962,
         chester: 79252,
+        airbus: 19703,
         northDistrict: 105995
     },
 
@@ -140,59 +141,9 @@ const CONFIG = {
         pribram: ['пршибрам', 'příbram', 'pribram', 'fk pribram', '1 fk pribram'],
         boa: ['боа', 'boa'],
         chester: ['честер', 'chester', 'fc chester'],
+        airbus: ['эйрбас', 'airbus'],
         northDistrict: ['норт дистрикт', 'north district']
-    },
-
-    YOUTH_TM_SOURCES: [
-        {
-            team: 'Каррарезе',
-            label: 'Carrarese Giovanili',
-            slug: 'carrarese-giovanili',
-            clubId: 54823
-        },
-        {
-            team: 'Каррарезе',
-            label: 'Carrarese Under-17',
-            slug: 'carrarese-under-17',
-            clubId: 120491
-        },
-        {
-            team: 'Пршибрам',
-            label: 'FK Pribram Youth',
-            slug: 'fk-pribram-youth',
-            clubId: 125130
-        },
-        {
-            team: 'Пршибрам',
-            label: 'FK Pribram U19',
-            slug: '1-fk-pribram-u19',
-            clubId: 18986
-        },
-        {
-            team: 'Пршибрам',
-            label: 'FK Pribram U17',
-            slug: '1-fk-pribram-u17',
-            clubId: 32695
-        },
-        {
-            team: 'Честер',
-            label: 'FC Chester U18',
-            slug: 'fc-chester-u19',
-            clubId: 43684
-        },
-        {
-            team: 'Норт Дистрикт',
-            label: 'North District Youth',
-            slug: 'north-district-jugend',
-            clubId: 87571
-        },
-        {
-            team: 'Норт Дистрикт',
-            label: 'North District U22',
-            slug: 'north-district-u22',
-            clubId: 122576
-        }
-    ]
+    }
 };
 
 function getTeamName(snapshot, teamId) {
@@ -16673,6 +16624,7 @@ const TransferMyBidsRank = {
         '18280': 'ПРШ',
         '22962': 'БОА',
         '79252': 'ЧЕС',
+        '19703': 'ЭЙР',
         '105995': 'НОРТ'
     },
 
@@ -17094,7 +17046,7 @@ const TransferMyBidsRank = {
     restoreBidChips(row) {
         const transferId = row?.transferId || this.parseTransferIdFromRow(row?.rowEl);
         let state = transferId ? this.getCachedState(transferId) : null;
-
+        
         if (!state && row?.rowEl?.dataset?.slfMyBidsRankState) {
             try {
                 state = this.normalizeState(JSON.parse(row.rowEl.dataset.slfMyBidsRankState));
@@ -19227,15 +19179,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.216',
-        scriptVersion: '4.4.216',
+        version: '4.4.217',
+        scriptVersion: '4.4.217',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.216',
+        scriptVersion: '4.4.217',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
