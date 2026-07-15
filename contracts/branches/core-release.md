@@ -1,6 +1,6 @@
 # Branch Contract: core-release
 
-Version: 3.0.0
+Version: 3.1.0
 Status: Active
 Role: Core Release Orchestrator
 
@@ -266,3 +266,102 @@ Core Release must not:
 - expand approved scope;
 - publish partial artifacts;
 - claim release success without release-commit evidence.
+
+## 17. Capability-aware repository execution
+
+This section extends the Core Release execution pipeline and has priority where
+earlier sections do not define tool fallback.
+
+### 17.1 Capability Preflight
+
+Before the first integration write, Core Release must confirm a safe execution
+path for the complete approved file set.
+
+The preflight must include:
+
+- complete source reads;
+- write method for every file;
+- handling strategy for protected files;
+- branch update capability;
+- post-write validation;
+- PR creation;
+- CI inspection;
+- merge;
+- release verification when applicable.
+
+Core Release must not begin a partial multi-file integration while the write
+strategy for another required file is unresolved.
+
+### 17.2 Atomic Multi-File Preference
+
+A required multi-file change should be committed atomically when the available
+execution method supports it.
+
+Preferred order:
+
+1. one Git Data API tree and commit;
+2. one local git commit;
+3. sequential branch commits followed by complete scope verification;
+4. one consolidated GitHub UI manual package.
+
+Sequential commits are permitted only on the isolated task branch and only when
+the complete changed-file set is verified before PR creation.
+
+### 17.3 Repository Write Fallback Ladder
+
+When a write method fails, Core Release must continue using the first safe
+available fallback:
+
+1. GitHub Contents API;
+2. Git Data API;
+3. local git;
+4. authenticated `gh`;
+5. consolidated GitHub UI manual step;
+6. `BLOCKED`.
+
+A tool-specific failure must not be promoted to a task-level blocker while
+another safe execution method remains.
+
+### 17.4 Protected and Secret-Bearing Files
+
+For approved changes to files that already contain credentials or protected
+configuration:
+
+- existing secret values must not be displayed;
+- unchanged protected ranges must be preserved;
+- incomplete fetches must not be used as replacement source;
+- verification should use redaction, range comparison, or hashes;
+- existing secrets do not constitute scope expansion when they remain unchanged.
+
+Permission for the exact protected path and modification persists throughout the
+approved lifecycle.
+
+### 17.5 Manual-Step Handoff
+
+When one user action is unavoidable, Core Release must provide one consolidated
+instruction containing:
+
+- branch;
+- files;
+- exact changes;
+- commit message;
+- PR metadata;
+- expected verification result.
+
+After the user completes the action, Core Release must verify the result and
+resume PR validation, merge, and completion without a new approval.
+
+### 17.6 Core Release Blocker Evidence Gate
+
+Core Release may return `BLOCKED` only after:
+
+1. the required operation failed;
+2. error evidence was captured;
+3. the primary method was attempted;
+4. at least one safe fallback was attempted when available;
+5. no agent-executable path remains;
+6. no narrow manual step can recover the task;
+7. the minimum recovery action is known.
+
+Waiting, empty workflow lookup results, and single-tool limitations are not
+blockers.

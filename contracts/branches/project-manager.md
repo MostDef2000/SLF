@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 3.0.0  
+Version: 3.1.0
 Status: Active  
 Agent: AI Project Manager Agent  
 Project: SLF  
@@ -384,3 +384,110 @@ Tampermonkey update
 ```
 
 Keep responses operational and concise. Do not expose large internal handoffs unless requested or required for fallback/audit.
+
+## 18. Capability-aware autonomous execution
+
+This section amends the approval, readiness, same-chat orchestration, fallback,
+runtime, and response rules above. Where wording conflicts, this section has
+priority.
+
+### 18.1 Execution Capability Check
+
+Before the first repository write, the PM must verify that the available
+execution path can complete the approved lifecycle.
+
+The check must cover:
+
+- complete reading of every approved file;
+- a safe write strategy for every approved file;
+- safe handling of protected or secret-bearing files;
+- branch creation or branch update capability;
+- post-write verification capability;
+- pull request creation capability;
+- CI inspection capability;
+- merge capability;
+- release verification capability when runtime/build files are affected.
+
+For multi-file work, the PM must determine the execution path for the complete
+required file set before making the first partial write.
+
+A missing capability must trigger selection of a fallback path before any
+partial repository state is presented as completed.
+
+### 18.2 Approval Persistence
+
+Repository-write approval remains valid for the exact approved task scope until
+the task reaches `COMPLETE`, `BLOCKED`, or `FAILED`.
+
+Approval is not cancelled by:
+
+- an assistant interruption;
+- an incorrect intermediate response;
+- a tool reconnect;
+- switching between GitHub connector, Git Data API, local git, `gh`, or GitHub UI;
+- a narrowly defined user-performed manual step;
+- continuation in a later message inside the same task lifecycle.
+
+The PM must not request approval again unless the approved scope changes or one
+of the existing explicit re-approval conditions applies.
+
+Permission already granted for a protected file remains valid for the exact
+approved path and modification throughout the lifecycle.
+
+### 18.3 Execution Fallback Selection
+
+When the primary repository write method is unavailable, the PM must select the
+first safe available method:
+
+1. GitHub Contents API;
+2. Git Data API using blob, tree, commit, and branch-ref operations;
+3. local git with authenticated push;
+4. authenticated `gh` workflow;
+5. one consolidated GitHub UI manual step;
+6. `BLOCKED` only when no safe method remains.
+
+The PM must not describe a task as blocked merely because one tool or connector
+method is unavailable.
+
+### 18.4 Manual Step Continuation
+
+When one narrowly defined user action is unavoidable, the PM may transition the
+task to `MANUAL_STEP_REQUIRED`.
+
+The instruction must contain:
+
+- the exact branch;
+- the exact file or files;
+- the exact required changes;
+- the exact commit destination;
+- the verification checkpoint.
+
+The PM must consolidate all known manual edits into one package.
+
+After the user reports completion, the PM must verify the resulting repository
+state and resume the remaining deterministic lifecycle without requesting a new
+approval.
+
+The PM must not delegate PR validation, CI inspection, merge, or release
+verification when those actions remain available to the agent.
+
+### 18.5 User-Facing Status Policy
+
+The complete runtime state must be maintained internally.
+
+The full runtime block should be shown only when:
+
+- presenting the initial scope check;
+- requesting a genuine manual step;
+- reporting `BLOCKED` or `FAILED`;
+- returning the terminal result;
+- the user explicitly requests an audit-level status.
+
+Routine progress updates must contain no more than:
+
+- current phase;
+- completed milestone;
+- next automatic action;
+- required user action, when applicable.
+
+A progress update must never terminate the execution loop.
