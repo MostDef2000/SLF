@@ -40,23 +40,35 @@ jobs:
           SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
-          SOURCE_COMMIT=$(git rev-parse HEAD)
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            BASE_COMMIT="$PR_BASE_SHA"
+          TARGET_VERSION=''
+          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
+            SOURCE_COMMIT=$(node -e "const fs=require('fs'); const v=JSON.parse(fs.readFileSync('data/version.json','utf8')); process.stdout.write(v.build.approvedCommit)")
+            BASE_COMMIT=$(node -e "const fs=require('fs'); const v=JSON.parse(fs.readFileSync('data/version.json','utf8')); process.stdout.write(v.build.approvedBaseCommit)")
+            SOURCE_BRANCH=$(node -e "const fs=require('fs'); const v=JSON.parse(fs.readFileSync('data/version.json','utf8')); process.stdout.write(v.build.sourceBranch || 'main')")
+            TARGET_VERSION=$(node -e "const fs=require('fs'); const v=JSON.parse(fs.readFileSync('data/version.json','utf8')); process.stdout.write(v.scriptVersion)")
+            mapfile -t APPROVED_FILES < <(node -e "const fs=require('fs'); const v=JSON.parse(fs.readFileSync('data/version.json','utf8')); process.stdout.write(v.build.approvedFiles.join('\\n'))")
           else
-            BASE_COMMIT=$(git log -1 --format=%H "$SOURCE_COMMIT" -- data/version.json)
+            SOURCE_COMMIT=$(git rev-parse HEAD)
+            if [ "$EVENT_NAME" = 'pull_request' ]; then
+              BASE_COMMIT="$PR_BASE_SHA"
+            else
+              BASE_COMMIT=$(git log -1 --format=%H "$SOURCE_COMMIT" -- data/version.json)
+            fi
+            mapfile -t APPROVED_FILES < <(git diff --name-only "$BASE_COMMIT" "$SOURCE_COMMIT" | sed '/^$/d')
           fi
+          test -n "$SOURCE_COMMIT"
           test -n "$BASE_COMMIT"
+          git cat-file -e "${SOURCE_COMMIT}^{commit}"
           git cat-file -e "${BASE_COMMIT}^{commit}"
-          mapfile -t APPROVED_FILES < <(git diff --name-only "$BASE_COMMIT" "$SOURCE_COMMIT" | sed '/^$/d')
           if [ "${#APPROVED_FILES[@]}" -eq 0 ]; then
-            echo 'No source changes found for validation provenance.' >&2
+            echo 'No approved files found for validation provenance.' >&2
             exit 1
           fi
           {
             echo "source_commit=$SOURCE_COMMIT"
             echo "base_commit=$BASE_COMMIT"
             echo "source_branch=$SOURCE_BRANCH"
+            echo "target_version=$TARGET_VERSION"
             echo 'approved_files<<EOF'
             printf '%s\n' "${APPROVED_FILES[@]}"
             echo 'EOF'
@@ -69,6 +81,7 @@ jobs:
           APPROVED_COMMIT: ${{ steps.provenance.outputs.source_commit }}
           APPROVED_FILES: ${{ steps.provenance.outputs.approved_files }}
           SOURCE_BRANCH: ${{ steps.provenance.outputs.source_branch }}
+          TARGET_VERSION: ${{ steps.provenance.outputs.target_version }}
         run: |
           set -euo pipefail
           node tools/build-latest-userscript.mjs
@@ -93,7 +106,7 @@ jobs:
           node tools/check-bundle-order.mjs 2>&1 | tee bundle-order-report.txt
 
       - name: Upload bundle-order report
-        if: always()
+        if: always() && hashFiles('bundle-order-report.txt') != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bundle-order-report
@@ -118,7 +131,7 @@ jobs:
 
   release:
     name: Build and publish latest SLF
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-latest
     concurrency:
