@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.4.219
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+
+Approved base commit:
+- e8f5706eedef45a9469d94ba653c34a11681cb92
+
+Approved commit:
+- 17c1e7cd7e8677531d4e65b8c13dc2f6af745ea1
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order/module-registry changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.218
 
 ### Automatic latest-only build
