@@ -3,18 +3,19 @@ name: SLF Validate and Release
 on:
   pull_request:
     paths:
-      - src/**
-      - tools/check-bundle-order.mjs
-      - tools/build-latest-userscript.mjs
-      - .github/workflows/build-latest-release.yml
+      - 'src/**'
+      - 'tools/check-bundle-order.mjs'
+      - 'tools/build-latest-userscript.mjs'
+      - 'tools/validate-team-management.mjs'
+      - 'tools/validate-release-provenance.mjs'
+      - '.github/workflows/build-latest-release.yml'
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
-      - src/**
-      - tools/check-bundle-order.mjs
-      - tools/build-latest-userscript.mjs
-      - .github/workflows/build-latest-release.yml
+      - 'src/**'
+      - 'tools/check-bundle-order.mjs'
+      - 'tools/build-latest-userscript.mjs'
+      - '.github/workflows/build-latest-release.yml'
   workflow_dispatch:
 
 jobs:
@@ -25,18 +26,63 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
+          fetch-depth: 0
           show-progress: false
 
-      - name: Validate assembled JavaScript syntax
+      - name: Resolve validation provenance
+        id: provenance
         shell: bash
         env:
-          APPROVED_COMMIT: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          SOURCE_COMMIT=$(git rev-parse HEAD)
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            BASE_COMMIT="$PR_BASE_SHA"
+          else
+            BASE_COMMIT=$(git log -1 --format=%H "$SOURCE_COMMIT" -- data/version.json)
+          fi
+          test -n "$BASE_COMMIT"
+          git cat-file -e "${BASE_COMMIT}^{commit}"
+          mapfile -t APPROVED_FILES < <(git diff --name-only "$BASE_COMMIT" "$SOURCE_COMMIT" | sed '/^$/d')
+          if [ "${#APPROVED_FILES[@]}" -eq 0 ]; then
+            echo 'No source changes found for validation provenance.' >&2
+            exit 1
+          fi
+          {
+            echo "source_commit=$SOURCE_COMMIT"
+            echo "base_commit=$BASE_COMMIT"
+            echo "source_branch=$SOURCE_BRANCH"
+            echo 'approved_files<<EOF'
+            printf '%s\n' "${APPROVED_FILES[@]}"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build deterministic validation artifacts
+        shell: bash
+        env:
+          APPROVED_BASE_COMMIT: ${{ steps.provenance.outputs.base_commit }}
+          APPROVED_COMMIT: ${{ steps.provenance.outputs.source_commit }}
+          APPROVED_FILES: ${{ steps.provenance.outputs.approved_files }}
+          SOURCE_BRANCH: ${{ steps.provenance.outputs.source_branch }}
         run: |
           set -euo pipefail
           node tools/build-latest-userscript.mjs
-          node --check releases/latest.user.js
+          VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync('data/version.json','utf8')).scriptVersion)")
+          sha256sum releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md > "$RUNNER_TEMP/slf-release.sha256"
+          TARGET_VERSION="$VERSION" node tools/build-latest-userscript.mjs
+          sha256sum --check "$RUNNER_TEMP/slf-release.sha256"
+          mapfile -t GENERATED < <(git diff --name-only | sed '/^$/d')
+          for file in "${GENERATED[@]}"; do
+            case "$file" in
+              releases/latest.user.js|releases/latest.meta.js|data/version.json|CHANGELOG.md) ;;
+              *) echo "Unexpected generated file: $file" >&2; exit 1 ;;
+            esac
+          done
 
       - name: Validate bundle manifest
         id: bundle_check
@@ -48,7 +94,7 @@ jobs:
 
       - name: Upload bundle-order report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bundle-order-report
           path: bundle-order-report.txt
@@ -59,63 +105,103 @@ jobs:
         if: steps.bundle_check.outcome != 'success'
         run: exit 1
 
+      - name: Validate domain and release invariants
+        shell: bash
+        env:
+          EXPECTED_APPROVED_BASE_COMMIT: ${{ steps.provenance.outputs.base_commit }}
+          EXPECTED_APPROVED_COMMIT: ${{ steps.provenance.outputs.source_commit }}
+          EXPECTED_APPROVED_FILES: ${{ steps.provenance.outputs.approved_files }}
+        run: |
+          set -euo pipefail
+          node tools/validate-team-management.mjs
+          node tools/validate-release-provenance.mjs
+
   release:
     name: Build and publish latest SLF
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-latest
+    concurrency:
+      group: slf-main-release
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
+      - name: Checkout exact source commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
+          show-progress: false
 
-      - name: Build latest-only userscript
+      - name: Resolve release provenance
+        id: provenance
         shell: bash
         env:
-          APPROVED_COMMIT: ${{ github.sha }}
+          EVENT_SHA: ${{ github.sha }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          SOURCE_COMMIT=$(git rev-parse HEAD)
+          if [ "$SOURCE_COMMIT" != "$EVENT_SHA" ]; then
+            echo "Checked-out source $SOURCE_COMMIT does not match event SHA $EVENT_SHA" >&2
+            exit 1
+          fi
+          BASE_COMMIT=$(git log -1 --format=%H "$SOURCE_COMMIT" -- data/version.json)
+          test -n "$BASE_COMMIT"
+          mapfile -t APPROVED_FILES < <(git diff --name-only "$BASE_COMMIT" "$SOURCE_COMMIT" | sed '/^$/d')
+          if [ "${#APPROVED_FILES[@]}" -eq 0 ]; then
+            echo 'No source changes found since the latest published release.' >&2
+            exit 1
+          fi
+          {
+            echo "source_commit=$SOURCE_COMMIT"
+            echo "base_commit=$BASE_COMMIT"
+            echo "source_branch=$SOURCE_BRANCH"
+            echo 'approved_files<<EOF'
+            printf '%s\n' "${APPROVED_FILES[@]}"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build deterministic latest-only userscript
+        shell: bash
+        env:
+          APPROVED_BASE_COMMIT: ${{ steps.provenance.outputs.base_commit }}
+          APPROVED_COMMIT: ${{ steps.provenance.outputs.source_commit }}
+          APPROVED_FILES: ${{ steps.provenance.outputs.approved_files }}
+          SOURCE_BRANCH: ${{ steps.provenance.outputs.source_branch }}
         run: |
           set -euo pipefail
           node tools/build-latest-userscript.mjs
+          VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync('data/version.json','utf8')).scriptVersion)")
+          sha256sum releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md > "$RUNNER_TEMP/slf-release.sha256"
+          TARGET_VERSION="$VERSION" node tools/build-latest-userscript.mjs
+          sha256sum --check "$RUNNER_TEMP/slf-release.sha256"
 
       - name: Validate latest-only release
         shell: bash
+        env:
+          EXPECTED_APPROVED_BASE_COMMIT: ${{ steps.provenance.outputs.base_commit }}
+          EXPECTED_APPROVED_COMMIT: ${{ steps.provenance.outputs.source_commit }}
+          EXPECTED_APPROVED_FILES: ${{ steps.provenance.outputs.approved_files }}
         run: |
           set -euo pipefail
-          VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync('data/version.json','utf8')).scriptVersion)")
-          TEAM4_SCHEMA=$(node -e "const fs=require('fs'); const v=JSON.parse(fs.readFileSync('data/version.json','utf8')); const s=v.build && v.build.team4AlterMinutesSchema; if (!s) process.exit(1); console.log(s)")
-          grep -q "@version      $VERSION" releases/latest.user.js
-          grep -q "@version      $VERSION" releases/latest.meta.js
-          grep -q "@updateURL    https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js" releases/latest.user.js
-          grep -q "@downloadURL  https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js" releases/latest.user.js
-          grep -q "scriptVersion: '$VERSION'" releases/latest.user.js
-          grep -q "BEGIN SLF FINAL RUNTIME VERSION EXPORT" releases/latest.user.js
-          grep -q "Team4AlterCurrentSeasonMinutesBridge" releases/latest.user.js
-          grep -q "$TEAM4_SCHEMA" releases/latest.user.js
-          ! grep -q "Team4AlterMinutesStrictLinkHotfix" releases/latest.user.js
-          ! grep -q "team4-alter-minutes-strict-link-hotfix.js" releases/latest.user.js
-          grep -q '"archiveCreated": false' data/version.json
-          if [ -e "releases/SLF_${VERSION//./_}.user.js" ]; then
-            echo "Forbidden archive file exists: releases/SLF_${VERSION//./_}.user.js"
-            exit 1
-          fi
-          if grep -q "Updated latest-only Tampermonkey artifacts from src/\*\*" CHANGELOG.md; then
-            echo "CHANGELOG contains obsolete generic build boilerplate"
-            exit 1
-          fi
-          if grep -q "Preserved Tampermonkey update/download URLs" CHANGELOG.md; then
-            echo "CHANGELOG contains obsolete release-policy boilerplate"
-            exit 1
-          fi
-          node --check releases/latest.user.js
+          node tools/check-bundle-order.mjs
+          node tools/validate-team-management.mjs
+          node tools/validate-release-provenance.mjs
 
       - name: Commit latest-only release outputs
         shell: bash
+        env:
+          SOURCE_COMMIT: ${{ steps.provenance.outputs.source_commit }}
         run: |
           set -euo pipefail
+          git fetch origin main
+          CURRENT_MAIN=$(git rev-parse origin/main)
+          if [ "$CURRENT_MAIN" != "$SOURCE_COMMIT" ]; then
+            echo "main advanced from $SOURCE_COMMIT to $CURRENT_MAIN; refusing stale artifact push" >&2
+            exit 1
+          fi
           VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync('data/version.json','utf8')).scriptVersion)")
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
