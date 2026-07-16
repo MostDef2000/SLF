@@ -1,21 +1,36 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.217",
+  "scriptVersion": "4.4.218",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_217_published",
+  "status": "release_4_4_218_published",
   "build": {
     "source": "src/**",
+    "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
-    "approvedCommit": "977b09533f5b4a374d374052b54a0be85cf50cce",
+    "bundleManifestSha256": "82bb3b045a030f45aae4acb75cc1013cdb972e2682034610b22ed19d52c7a366",
+    "bundleFileCount": 54,
+    "approvedBaseCommit": "0d20e96520bcc67395303d7d96bd918caabbee67",
+    "approvedCommit": "f17a2d2524280a81f09c9462ca13360660e1918d",
     "approvedFiles": [
-      "src/**"
+      ".github/workflows/build-latest-release.yml",
+      "contracts/SLF_AUTOMATIC_RELEASE_POLICY.md",
+      "contracts/SLF_GOVERNANCE.md",
+      "contracts/branches/core-release.md",
+      "contracts/branches/project-manager.md",
+      "contracts/runtime/SLF_TASK_RUNTIME.md",
+      "docs/decision_records/DR-003-capability-aware-autonomous-execution.md",
+      "docs/decision_records/DR-004-loop-engineering-release-hardening.md",
+      "tools/build-latest-userscript.mjs",
+      "tools/check-bundle-order.mjs",
+      "tools/validate-release-provenance.mjs",
+      "tools/validate-team-management.mjs"
     ],
+    "sourceBranch": "main",
     "releaseNotesProvided": false,
-    "releaseNotesModule": "Automatic latest-only build",
-    "team4AlterMinutesSchema": "slf_team4_current_season_minutes"
+    "releaseNotesModule": "Automatic latest-only build"
   }
 }

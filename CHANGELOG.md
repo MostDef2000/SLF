@@ -1,5 +1,37 @@
 # Changelog
 
+## 4.4.218
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- contracts/SLF_AUTOMATIC_RELEASE_POLICY.md
+- contracts/SLF_GOVERNANCE.md
+- contracts/branches/core-release.md
+- contracts/branches/project-manager.md
+- contracts/runtime/SLF_TASK_RUNTIME.md
+- docs/decision_records/DR-003-capability-aware-autonomous-execution.md
+- docs/decision_records/DR-004-loop-engineering-release-hardening.md
+- tools/build-latest-userscript.mjs
+- tools/check-bundle-order.mjs
+- tools/validate-release-provenance.mjs
+- tools/validate-team-management.mjs
+
+Approved base commit:
+- 0d20e96520bcc67395303d7d96bd918caabbee67
+
+Approved commit:
+- f17a2d2524280a81f09c9462ca13360660e1918d
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order/module-registry changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.217
 
 ### Automatic latest-only build
