@@ -1,43 +1,133 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
 const ROOT = process.cwd();
+const MANIFEST_PATH = 'src/app/bundle-order.json';
 const UPDATE_URL = 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js';
 const DOWNLOAD_URL = 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js';
-const TEAM4_ALTER_MINUTES_SOURCE = 'src/modules/team-management/team4-alter-current-season-minutes-fix.js';
 
-function p(rel) { return path.join(ROOT, rel); }
-function read(rel) { return fs.readFileSync(p(rel), 'utf8'); }
+const p = rel => path.join(ROOT, rel);
+const read = rel => fs.readFileSync(p(rel), 'utf8');
+const sha256 = text => createHash('sha256').update(text, 'utf8').digest('hex');
+const clean = value => String(value ?? '').replace(/\r/g, '').trim();
+
 function write(rel, text) {
   fs.mkdirSync(path.dirname(p(rel)), { recursive: true });
-  fs.writeFileSync(p(rel), text.endsWith('\n') ? text : text + '\n', 'utf8');
+  fs.writeFileSync(p(rel), text.endsWith('\n') ? text : `${text}\n`, 'utf8');
 }
+
+function git(...args) {
+  return clean(execFileSync('git', args, { encoding: 'utf8' }));
+}
+
 function parseVersion(text) {
-  const match = text.match(/@version\s+([0-9]+\.[0-9]+\.[0-9]+)/) || text.match(/"scriptVersion"\s*:\s*"([0-9]+\.[0-9]+\.[0-9]+)"/);
-  return match ? match[1] : '4.4.75';
+  const match = text.match(/@version\s+([0-9]+\.[0-9]+\.[0-9]+)/)
+    || text.match(/"scriptVersion"\s*:\s*"([0-9]+\.[0-9]+\.[0-9]+)"/);
+  if (!match) throw new Error('Unable to resolve current script version');
+  return match[1];
 }
+
 function bumpPatch(version) {
   const parts = version.split('.').map(Number);
+  if (parts.length !== 3 || parts.some(Number.isNaN)) throw new Error(`Invalid version: ${version}`);
   parts[2] += 1;
   return parts.join('.');
 }
-function jsFiles(dir) {
-  if (!fs.existsSync(dir)) return [];
-  const out = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...jsFiles(full));
-    if (entry.isFile() && entry.name.endsWith('.js')) out.push(path.relative(ROOT, full).replace(/\\/g, '/'));
-  }
-  return out.sort();
+
+function asArray(value) {
+  if (Array.isArray(value)) return value.map(clean).filter(Boolean);
+  return clean(value).split(/[\n,]+/).map(item => item.replace(/^[-*]\s*/, '').trim()).filter(Boolean);
 }
+
+function assertSha(name, value) {
+  if (!/^[0-9a-f]{40}$/i.test(value)) throw new Error(`${name} must be a full commit SHA`);
+  return value.toLowerCase();
+}
+
+function assertExactPaths(name, values) {
+  if (!values.length) throw new Error(`${name} must not be empty`);
+  if (new Set(values).size !== values.length) throw new Error(`${name} contains duplicate paths`);
+  for (const rel of values) {
+    if (!rel || rel.includes('*') || rel.includes('\\') || path.isAbsolute(rel) || rel.split('/').includes('..')) {
+      throw new Error(`${name} contains an unsafe or non-exact path: ${rel}`);
+    }
+  }
+  return values;
+}
+
+function resolveProvenance() {
+  const approvedCommit = assertSha('APPROVED_COMMIT', clean(process.env.APPROVED_COMMIT) || git('rev-parse', 'HEAD'));
+  const approvedBaseCommit = assertSha(
+    'APPROVED_BASE_COMMIT',
+    clean(process.env.APPROVED_BASE_COMMIT) || git('rev-parse', `${approvedCommit}^`)
+  );
+  const fallback = git('diff', '--name-only', approvedBaseCommit, approvedCommit);
+  const approvedFiles = assertExactPaths('APPROVED_FILES', asArray(process.env.APPROVED_FILES || fallback));
+  return { approvedCommit, approvedBaseCommit, approvedFiles };
+}
+
+function loadReleaseNotes(provenance) {
+  const raw = clean(process.env.RELEASE_NOTES_JSON);
+  if (!raw) {
+    return {
+      provided: false,
+      moduleName: 'Automatic latest-only build',
+      behaviorChanges: ['Built deterministic latest-only artifacts from the approved source commit.'],
+      cacheSchemaStorageKeysChanged: 'NO',
+      existingKeysPreserved: [],
+      bundleOrderModuleRegistryChangesNeeded: 'NO',
+      safetyNotes: ['Generated artifacts are workflow outputs and must not be edited manually.']
+    };
+  }
+  let notes;
+  try { notes = JSON.parse(raw); } catch (error) { throw new Error(`RELEASE_NOTES_JSON is invalid: ${error.message}`); }
+  if (notes.approvedCommit && clean(notes.approvedCommit).toLowerCase() !== provenance.approvedCommit) {
+    throw new Error('Release notes approvedCommit does not match APPROVED_COMMIT');
+  }
+  if (notes.approvedBaseCommit && clean(notes.approvedBaseCommit).toLowerCase() !== provenance.approvedBaseCommit) {
+    throw new Error('Release notes approvedBaseCommit does not match APPROVED_BASE_COMMIT');
+  }
+  if (notes.changedFiles) {
+    const noted = asArray(notes.changedFiles).sort();
+    const actual = [...provenance.approvedFiles].sort();
+    if (JSON.stringify(noted) !== JSON.stringify(actual)) throw new Error('Release notes changedFiles do not match APPROVED_FILES');
+  }
+  const behaviorChanges = [
+    ...asArray(notes.userVisibleChanges),
+    ...asArray(notes.runtimeBehaviorChanges),
+    ...asArray(notes.behaviorChanges),
+    ...asArray(notes.summary)
+  ];
+  return {
+    provided: true,
+    moduleName: clean(notes.moduleName || notes.module || 'Module change'),
+    behaviorChanges: behaviorChanges.length ? behaviorChanges : ['Built deterministic latest-only artifacts.'],
+    cacheSchemaStorageKeysChanged: clean(notes.cacheSchemaStorageKeysChanged || notes.cacheSchemaStorageChanged || 'NO'),
+    existingKeysPreserved: asArray(notes.existingKeysPreserved || notes.existingKeys || notes.storageKeysPreserved),
+    bundleOrderModuleRegistryChangesNeeded: clean(notes.bundleOrderModuleRegistryChangesNeeded || notes.bundleOrderChangesNeeded || 'NO'),
+    safetyNotes: asArray(notes.safetyNotes)
+  };
+}
+
+function loadBundleManifest() {
+  const raw = read(MANIFEST_PATH);
+  const manifest = JSON.parse(raw);
+  if (manifest.schema !== 'slf_bundle_order_v1') throw new Error(`Unsupported bundle manifest schema: ${manifest.schema}`);
+  const files = assertExactPaths('bundle manifest files', Array.isArray(manifest.files) ? manifest.files : []);
+  for (const rel of files) {
+    if (!rel.startsWith('src/') || !rel.endsWith('.js')) throw new Error(`Invalid runtime path: ${rel}`);
+    if (!fs.existsSync(p(rel))) throw new Error(`Bundle source is missing: ${rel}`);
+  }
+  return { files, hash: sha256(raw) };
+}
+
 function runtimeBlock(version, final = false) {
-  const begin = final ? 'BEGIN SLF FINAL RUNTIME VERSION EXPORT' : 'BEGIN SLF RUNTIME VERSION EXPORT';
-  const end = final ? 'END SLF FINAL RUNTIME VERSION EXPORT' : 'END SLF RUNTIME VERSION EXPORT';
+  const marker = final ? 'FINAL ' : '';
   return `
-    // ${begin}
+    // BEGIN SLF ${marker}RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
         version: '${version}',
         scriptVersion: '${version}',
@@ -50,88 +140,27 @@ function runtimeBlock(version, final = false) {
         scriptVersion: '${version}',
         versionInfo: SLF_VERSION_INFO
     });
-    // ${end}
+    // END SLF ${marker}RUNTIME VERSION EXPORT
 `;
 }
+
 function sourceForBundle(rel) {
   let text = read(rel).trimEnd();
-  if (rel === 'src/app/bootstrap.js') {
-    text = text.replace(/\n\s*\}\)\(\);\s*$/u, '');
-  }
+  if (rel === 'src/app/bootstrap.js') text = text.replace(/\n\s*\}\)\(\);\s*$/u, '');
   return text;
 }
-function detectTeam4AlterMinutesSchema() {
-  const source = read(TEAM4_ALTER_MINUTES_SOURCE);
-  const match = source.match(/schema:\s*[^\n]*['"](slf_team4_current_season_minutes(?:_v\d+)?)['"]/);
-  if (!match) throw new Error('Team4 alter minutes source schema marker missing');
-  return match[1];
-}
-function cleanText(value) {
-  return String(value == null ? '' : value).replace(/\r/g, '').trim();
-}
-function asArray(value) {
-  if (Array.isArray(value)) return value.map(cleanText).filter(Boolean);
-  const text = cleanText(value);
-  if (!text) return [];
-  return text.split(/\n+/).map(line => line.replace(/^[-*]\s*/, '').trim()).filter(Boolean);
-}
-function parseReleaseNotes() {
-  const raw = cleanText(process.env.RELEASE_NOTES_JSON || '');
-  if (!raw) {
-    return {
-      provided: false,
-      moduleName: 'Automatic latest-only build',
-      sourceBranch: 'main',
-      approvedCommit: process.env.APPROVED_COMMIT || '',
-      changedFiles: ['src/**'],
-      behaviorChanges: ['Built the latest Tampermonkey userscript from the current main branch.'],
-      cacheSchemaStorageKeysChanged: 'NO',
-      existingKeysPreserved: [],
-      bundleOrderModuleRegistryChangesNeeded: 'NO',
-      safetyNotes: ['No manual release-note input was provided; this entry was generated by the latest-only build workflow.']
-    };
-  }
-  let notes;
-  try {
-    notes = JSON.parse(raw);
-  } catch (error) {
-    throw new Error(`RELEASE_NOTES_JSON is not valid JSON: ${error.message}`);
-  }
-  const behaviorChanges = [
-    ...asArray(notes.userVisibleChanges),
-    ...asArray(notes.runtimeBehaviorChanges),
-    ...asArray(notes.behaviorChanges),
-    ...asArray(notes.summary)
-  ];
-  return {
-    provided: true,
-    moduleName: cleanText(notes.moduleName || notes.module || 'Module change'),
-    sourceBranch: cleanText(notes.sourceBranch || ''),
-    approvedCommit: cleanText(notes.approvedCommit || process.env.APPROVED_COMMIT || ''),
-    changedFiles: asArray(notes.changedFiles).length ? asArray(notes.changedFiles) : (process.env.APPROVED_FILES || '').split(',').map(s => s.trim()).filter(Boolean),
-    behaviorChanges: behaviorChanges.length ? behaviorChanges : ['Built the latest Tampermonkey userscript from the current main branch.'],
-    cacheSchemaStorageKeysChanged: cleanText(notes.cacheSchemaStorageKeysChanged || notes.cacheSchemaStorageChanged || 'NO'),
-    existingKeysPreserved: asArray(notes.existingKeysPreserved || notes.existingKeys || notes.storageKeysPreserved),
-    bundleOrderModuleRegistryChangesNeeded: cleanText(notes.bundleOrderModuleRegistryChangesNeeded || notes.bundleOrderChangesNeeded || 'NO'),
-    safetyNotes: asArray(notes.safetyNotes)
-  };
-}
-function formatChangelogEntry(version, notes) {
-  const lines = [`# Changelog`, '', `## ${version}`, '', `### ${notes.moduleName || 'Module change'}`];
+
+function formatChangelog(version, provenance, notes) {
+  const lines = ['# Changelog', '', `## ${version}`, '', `### ${notes.moduleName}`];
   notes.behaviorChanges.forEach(item => lines.push(`- ${item}`));
   lines.push('', 'Changed files:');
-  if (notes.changedFiles.length) notes.changedFiles.forEach(file => lines.push(`- ${file}`));
-  else lines.push('- No explicit changed files provided.');
-  lines.push('', 'Approved commit:');
-  lines.push(`- ${notes.approvedCommit || 'Current workflow commit.'}`);
-  if (notes.sourceBranch) {
-    lines.push('', 'Source branch:');
-    lines.push(`- ${notes.sourceBranch}`);
-  }
+  provenance.approvedFiles.forEach(file => lines.push(`- ${file}`));
+  lines.push('', 'Approved base commit:', `- ${provenance.approvedBaseCommit}`);
+  lines.push('', 'Approved commit:', `- ${provenance.approvedCommit}`);
   lines.push('', 'Compatibility / storage:');
-  lines.push(`- Cache/schema/storage keys changed: ${notes.cacheSchemaStorageKeysChanged || 'NO'}`);
+  lines.push(`- Cache/schema/storage keys changed: ${notes.cacheSchemaStorageKeysChanged}`);
   if (notes.existingKeysPreserved.length) lines.push(`- Existing keys preserved: ${notes.existingKeysPreserved.join(', ')}`);
-  lines.push(`- Bundle-order/module-registry changes needed: ${notes.bundleOrderModuleRegistryChangesNeeded || 'NO'}`);
+  lines.push(`- Bundle-order/module-registry changes needed: ${notes.bundleOrderModuleRegistryChangesNeeded}`);
   if (notes.safetyNotes.length) {
     lines.push('', 'Safety notes:');
     notes.safetyNotes.forEach(note => lines.push(`- ${note}`));
@@ -140,31 +169,24 @@ function formatChangelogEntry(version, notes) {
   return lines.join('\n');
 }
 
-const latestExisting = fs.existsSync(p('releases/latest.user.js')) ? read('releases/latest.user.js') : '';
-const version = process.env.TARGET_VERSION || bumpPatch(parseVersion(latestExisting || read('src/app/userscript-header.js')));
-const team4AlterMinutesSchema = detectTeam4AlterMinutesSchema();
-const releaseNotes = parseReleaseNotes();
+const provenance = resolveProvenance();
+const notes = loadReleaseNotes(provenance);
+const bundle = loadBundleManifest();
+const latestExisting = fs.existsSync(p('releases/latest.user.js')) ? read('releases/latest.user.js') : read('src/app/userscript-header.js');
+const version = clean(process.env.TARGET_VERSION) || bumpPatch(parseVersion(latestExisting));
 let header = read('src/app/userscript-header.js').replace(/(@version\s+)[0-9]+\.[0-9]+\.[0-9]+/, `$1${version}`);
 if (!header.includes(`@updateURL    ${UPDATE_URL}`)) throw new Error('updateURL mismatch');
 if (!header.includes(`@downloadURL  ${DOWNLOAD_URL}`)) throw new Error('downloadURL mismatch');
 
-const order = JSON.parse(read('src/app/bundle-order.json')).files || [];
-const files = [];
-const seen = new Set();
-for (const rel of order) if (fs.existsSync(p(rel))) { files.push(rel); seen.add(rel); }
-const teamExtras = jsFiles(p('src/modules/team-management')).filter(rel => !seen.has(rel) && !rel.includes('team4-alter-minutes-strict-link-hotfix.js'));
-const idx = files.indexOf('src/modules/team-management/team4-player-status-helper.js');
-if (idx >= 0) files.splice(idx + 1, 0, ...teamExtras); else files.push(...teamExtras);
-teamExtras.forEach(rel => seen.add(rel));
-for (const rel of jsFiles(p('src/modules'))) if (!seen.has(rel) && !rel.includes('team4-alter-minutes-strict-link-hotfix.js')) files.push(rel);
-
-let body = "\n(function () {\n    'use strict';\n" + runtimeBlock(version, false);
-for (const rel of files) body += `\n\n// >>> ${rel}\n${sourceForBundle(rel)}\n// <<< ${rel}\n`;
+let body = "\n(function () {\n    'use strict';\n" + runtimeBlock(version);
+for (const rel of bundle.files) body += `\n\n// >>> ${rel}\n${sourceForBundle(rel)}\n// <<< ${rel}\n`;
 body += runtimeBlock(version, true) + '\n})();\n';
 const userscript = `${header.trimEnd()}\n${body}`;
+const metadataEnd = userscript.indexOf('// ==/UserScript==') + '// ==/UserScript=='.length;
+if (metadataEnd < '// ==/UserScript=='.length) throw new Error('Userscript metadata terminator missing');
 
 write('releases/latest.user.js', userscript);
-write('releases/latest.meta.js', userscript.slice(0, userscript.indexOf('// ==/UserScript==') + '// ==/UserScript=='.length));
+write('releases/latest.meta.js', userscript.slice(0, metadataEnd));
 write('data/version.json', JSON.stringify({
   schema: 'slf_version_manifest_v3_latest_only_build_from_src',
   scriptVersion: version,
@@ -176,30 +198,31 @@ write('data/version.json', JSON.stringify({
   status: `release_${version.replace(/\./g, '_')}_published`,
   build: {
     source: 'src/**',
-    bundleOrder: 'src/app/bundle-order.json',
-    approvedCommit: releaseNotes.approvedCommit || process.env.APPROVED_COMMIT || '',
-    approvedFiles: releaseNotes.changedFiles,
-    releaseNotesProvided: releaseNotes.provided,
-    releaseNotesModule: releaseNotes.moduleName,
-    team4AlterMinutesSchema
+    assembly: 'manifest-only',
+    bundleOrder: MANIFEST_PATH,
+    bundleManifestSha256: bundle.hash,
+    bundleFileCount: bundle.files.length,
+    approvedBaseCommit: provenance.approvedBaseCommit,
+    approvedCommit: provenance.approvedCommit,
+    approvedFiles: provenance.approvedFiles,
+    sourceBranch: clean(process.env.SOURCE_BRANCH || ''),
+    releaseNotesProvided: notes.provided,
+    releaseNotesModule: notes.moduleName
   }
 }, null, 2));
 
 let changelog = fs.existsSync(p('CHANGELOG.md')) ? read('CHANGELOG.md') : '# Changelog\n';
 if (!changelog.includes(`## ${version}`)) {
-  const entry = formatChangelogEntry(version, releaseNotes);
-  changelog = changelog.startsWith('# Changelog\n') ? entry + changelog.slice('# Changelog\n'.length).replace(/^\n+/, '') : entry + '\n' + changelog;
+  const entry = formatChangelog(version, provenance, notes);
+  changelog = changelog.startsWith('# Changelog\n')
+    ? entry + changelog.slice('# Changelog\n'.length).replace(/^\n+/, '')
+    : `${entry}\n${changelog}`;
   write('CHANGELOG.md', changelog);
 }
 
-if (userscript.includes('Team4AlterMinutesStrictLinkHotfix')) throw new Error('obsolete strict hotfix module still bundled');
-if (userscript.includes('team4-alter-minutes-strict-link-hotfix.js')) throw new Error('obsolete strict hotfix bundle reference remains');
-if (!userscript.includes('Team4AlterCurrentSeasonMinutesBridge')) throw new Error('Team4 alter minutes bridge missing');
-if (!userscript.includes(team4AlterMinutesSchema)) throw new Error(`Team4 schema ${team4AlterMinutesSchema} missing`);
-if (read(TEAM4_ALTER_MINUTES_SOURCE).includes('refreshTeam4AlterMinutes') && !userscript.includes('refreshTeam4AlterMinutes')) throw new Error('Team4 refresh workflow missing');
 if (!userscript.includes(`scriptVersion: '${version}'`)) throw new Error('runtime version missing');
 if (!userscript.includes('BEGIN SLF FINAL RUNTIME VERSION EXPORT')) throw new Error('final runtime export missing');
-if (!userscript.includes(`@version      ${version}`)) throw new Error('version mismatch');
-if (fs.existsSync(p(`releases/SLF_${version.replace(/\./g, '_')}.user.js`))) throw new Error('forbidden archive exists');
+if (!userscript.includes(`@version      ${version}`)) throw new Error('userscript version mismatch');
+if (fs.existsSync(p(`releases/SLF_${version.replace(/\./g, '_')}.user.js`))) throw new Error('forbidden version archive exists');
 execFileSync('node', ['--check', 'releases/latest.user.js'], { stdio: 'inherit' });
-console.log(`Built SLF ${version} latest-only from ${files.length} source files; Team4 schema ${team4AlterMinutesSchema}; release notes ${releaseNotes.provided ? 'provided' : 'automatic fallback'}.`);
+console.log(`Built SLF ${version} latest-only from ${bundle.files.length} manifest-registered source files.`);
