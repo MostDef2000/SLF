@@ -153,7 +153,7 @@ body:
   - type: dropdown
     id: bundle-order-impact
     attributes:
-      label: Bundle-order/module-registry impact
+      label: Bundle-order impact
       options:
         - Unknown
         - NO

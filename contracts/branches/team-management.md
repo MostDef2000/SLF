@@ -91,7 +91,7 @@ After every completed in-scope implementation task, return exactly two sections:
 - Acceptance checks
 - Safety checks
 - Cache/schema/storage keys changed: YES/NO
-- Bundle-order/module-registry changes needed: YES/NO
+- Bundle-order changes needed: YES/NO
 - Core Release Authorization
 
 ## COPY-READY MESSAGE requirements
@@ -107,7 +107,7 @@ Every implementation handoff must include a Core Release Authorization section s
 
 The copy-ready handoff must explicitly state whether cache/schema/storage keys changed. Do not introduce new cache/schema/storage key versions unless explicitly required and approved.
 
-The copy-ready handoff must explicitly state whether bundle-order or module-registry changes are needed.
+The copy-ready handoff must explicitly state whether bundle-order changes are needed.
 
 ## Integration
 

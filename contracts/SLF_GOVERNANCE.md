@@ -1,6 +1,6 @@
 # SLF Governance
 
-Version: 2.2.0
+Version: 2.3.0
 Status: Active
 Applies to: all SLF agents, implementation workflows, release workflows, and user handoffs
 Source of truth: GitHub repository contracts
@@ -143,7 +143,7 @@ Before integration, verify:
 - release artifacts were not modified by the module branch;
 - version was not bumped by the module branch;
 - no secrets were introduced;
-- required bundle-order/module-registry changes are included.
+- required bundle-order changes are included.
 
 If verification fails, return `BLOCKED` or `FAILED` and do not partially integrate.
 

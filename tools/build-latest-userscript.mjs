@@ -82,7 +82,7 @@ function loadReleaseNotes(provenance) {
       behaviorChanges: ['Built deterministic latest-only artifacts from the approved source commit.'],
       cacheSchemaStorageKeysChanged: 'NO',
       existingKeysPreserved: [],
-      bundleOrderModuleRegistryChangesNeeded: 'NO',
+      bundleOrderChangesNeeded: 'NO',
       safetyNotes: ['Generated artifacts are workflow outputs and must not be edited manually.']
     };
   }
@@ -111,7 +111,7 @@ function loadReleaseNotes(provenance) {
     behaviorChanges: behaviorChanges.length ? behaviorChanges : ['Built deterministic latest-only artifacts.'],
     cacheSchemaStorageKeysChanged: clean(notes.cacheSchemaStorageKeysChanged || notes.cacheSchemaStorageChanged || 'NO'),
     existingKeysPreserved: asArray(notes.existingKeysPreserved || notes.existingKeys || notes.storageKeysPreserved),
-    bundleOrderModuleRegistryChangesNeeded: clean(notes.bundleOrderModuleRegistryChangesNeeded || notes.bundleOrderChangesNeeded || 'NO'),
+    bundleOrderChangesNeeded: clean(notes.bundleOrderChangesNeeded || notes.bundleOrderModuleRegistryChangesNeeded || 'NO'),
     safetyNotes: asArray(notes.safetyNotes)
   };
 }
@@ -168,7 +168,7 @@ function formatChangelog(version, provenance, notes) {
   lines.push('', 'Compatibility / storage:');
   lines.push(`- Cache/schema/storage keys changed: ${notes.cacheSchemaStorageKeysChanged}`);
   if (notes.existingKeysPreserved.length) lines.push(`- Existing keys preserved: ${notes.existingKeysPreserved.join(', ')}`);
-  lines.push(`- Bundle-order/module-registry changes needed: ${notes.bundleOrderModuleRegistryChangesNeeded}`);
+  lines.push(`- Bundle-order changes needed: ${notes.bundleOrderChangesNeeded}`);
   if (notes.safetyNotes.length) {
     lines.push('', 'Safety notes:');
     notes.safetyNotes.forEach(note => lines.push(`- ${note}`));

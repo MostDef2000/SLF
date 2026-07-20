@@ -1,6 +1,6 @@
 # Branch Contract: core-release
 
-Version: 3.1.0
+Version: 3.2.0
 Status: Active
 Role: Core Release Orchestrator
 
@@ -72,7 +72,7 @@ Before integration verify:
 - module branch did not modify generated release files;
 - module branch did not bump version;
 - no secrets/tokens were introduced;
-- required bundle-order/module-registry changes are included.
+- required bundle-order changes are included.
 
 If intake fails, stop with `BLOCKED` or `FAILED` and do not partially integrate.
 

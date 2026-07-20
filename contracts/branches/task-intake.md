@@ -1,6 +1,6 @@
 # SLF Task Intake Agent Contract
 
-Version: 1.0.0
+Version: 1.1.0
 Status: Active
 Agent: SLF Task Intake Agent
 Project: SLF only
@@ -86,7 +86,7 @@ Task Brief
 - Complexity:
 - Risk:
 - Storage/cache/schema impact:
-- Bundle-order/module-registry impact:
+- Bundle-order impact:
 - Knowledge/data dependencies:
 - Release required:
 - Browser acceptance required:
