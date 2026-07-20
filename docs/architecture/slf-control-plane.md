@@ -1,6 +1,6 @@
 # SLF Control Plane Architecture
 
-Version: 2.0.0
+Version: 2.1.0
 Status: Active
 Applies to: all SLF agents, runtime, integration, release, and Tampermonkey handoff workflows
 Source of truth: GitHub repository contracts
@@ -69,7 +69,27 @@ Contract:
 
 - `contracts/runtime/RELEASE_READINESS_GATE.md`.
 
-### 2.4 Orchestration Layer
+### 2.4 Task Intake Layer
+
+Task Intake is the first project-specific SLF interaction stage.
+
+It:
+
+- accepts free-form user dialogue;
+- preserves the original request;
+- separates facts, assumptions, and open questions;
+- asks only materially blocking questions;
+- produces a canonical Task Brief;
+- uses existing `DISCUSSION` and `READY_FOR_IMPLEMENTATION` phases;
+- hands the brief to the Project Manager internally in the same chat.
+
+Task Intake cannot create Issues, write repository files, implement code, or treat discussion wording as approval.
+
+Contract:
+
+- `contracts/branches/task-intake.md`.
+
+### 2.5 Orchestration Layer
 
 Project Manager Agent:
 
@@ -87,7 +107,7 @@ Contract:
 
 - `contracts/branches/project-manager.md`.
 
-### 2.5 Domain Agent Layer
+### 2.6 Domain Agent Layer
 
 Specialized implementation contexts:
 
@@ -97,7 +117,7 @@ Specialized implementation contexts:
 
 Domain agents implement only inside approved scope and do not publish final release artifacts.
 
-### 2.6 Core Release Layer
+### 2.7 Core Release Layer
 
 Core Release:
 
@@ -113,7 +133,7 @@ Contract:
 
 - `contracts/branches/core-release.md`.
 
-### 2.7 Build and Release Layer
+### 2.8 Build and Release Layer
 
 Canonical workflow:
 
@@ -135,11 +155,12 @@ Eligible `main` push mode:
 
 Manual dispatch remains available only for fallback/recovery.
 
-### 2.8 User Boundary Layer
+### 2.9 User Boundary Layer
 
 The user normally performs only:
 
-- task definition;
+- task definition in any convenient free-form wording;
+- review of the short normalized understanding when needed;
 - one repository-write approval (`COMMIT APPROVED` or equivalent);
 - browser acceptance when requested;
 - Tampermonkey update when explicitly instructed.
@@ -156,6 +177,8 @@ The user does not normally:
 
 ```text
 User request
+→ Task Intake normalization
+→ canonical Task Brief
 → PM scope and readiness
 → COMMIT APPROVED
 → Domain implementation
