@@ -1,5 +1,33 @@
 # Changelog
 
+## 4.4.224
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- docs/architecture/slf-system-contract.md
+- src/app/ui-layer.js
+- src/core/api.js
+- src/modules/live-parser/event-tracker.js
+- src/modules/live-parser/snapshot-engine.js
+- src/modules/tactics-presets/preset-storage.js
+- src/modules/transfer-analyzer/transfer-market-analyzer.js
+- tools/check-bundle-order.mjs
+
+Approved base commit:
+- e8f8b61068bb7f65f0441ff048026d1594d5bdf9
+
+Approved commit:
+- 5f4c4d708b95d280e84e7b4b28c3138743651b00
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.223
 
 ### Automatic latest-only build

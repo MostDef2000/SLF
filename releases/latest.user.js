@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.223
+// @version      4.4.224
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.223',
-        scriptVersion: '4.4.223',
+        version: '4.4.224',
+        scriptVersion: '4.4.224',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.223',
+        scriptVersion: '4.4.224',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -845,80 +845,154 @@ const DomUtils = {
         return "Bearer " + token;
     }
 
-    const Api = {
-        postPromise(collection, data, label) {
+    const Api = (() => {
+        const API_REQUEST_TIMEOUT_MS = 15000;
+
+        function redactApiText(value) {
+            const text = String(value || '');
+            const token = String(getApiToken() || '');
+            return token ? text.split(token).join('[redacted]') : text;
+        }
+    
+        function safeApiResponseMetadata(response) {
+            const numericStatus = Number(response?.status || 0);
+            return {
+                status: Number.isFinite(numericStatus) ? numericStatus : 0,
+                statusText: redactApiText(response?.statusText),
+                finalUrl: redactApiText(response?.finalUrl || response?.responseURL)
+            };
+        }
+    
+        function createApiError(kind, context, response) {
+            const metadata = safeApiResponseMetadata(response);
+            const operation = redactApiText(context.operation || context.collection);
+            const statusSuffix = metadata.status ? ` (HTTP ${metadata.status})` : '';
+            const error = new Error(`SLF API ${kind} error during ${operation}${statusSuffix}`);
+    
+            error.name = 'SLFApiError';
+            error.kind = kind;
+            error.method = context.method;
+            error.collection = redactApiText(context.collection);
+            error.operation = operation;
+            error.status = metadata.status;
+            error.statusText = metadata.statusText;
+            error.response = metadata;
+    
+            return error;
+        }
+    
+        function requestApi({ method, collection, data, label, parseJson }) {
+            const context = {
+                method,
+                collection: String(collection || ''),
+                operation: String(label || `${method} ${collection || ''}`)
+            };
+    
             return new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: "POST",
-                    url: `${CONFIG.SERVER_URL}/api/${collection}`,
-                    headers: {
-                        "Authorization": buildApiAuthorizationHeader(),
-                        "Content-Type": "application/json"
-                    },
-                    data: JSON.stringify(data),
-                    onload: r => resolve({ response: r, status: r.status, data }),
-                    onerror: e => reject(e)
-                });
-            });
-        },
-
-        post(collection, data, label) {
-            return this.postPromise(collection, data, label)
-                .then(result => {
-                    debugLog(`[SLF] ${label || collection} saved:`, result.status, data);
-                    return result;
-                })
-                .catch(error => {
-                    debugWarn(`[SLF] ${label || collection} save error:`, error);
-                    throw error;
-                });
-        },
-
-        postAppend(collection, data, label) {
-            const payload = Array.isArray(data) ? data : [data];
-            return this.post(`${collection}?mode=append`, payload, label || `${collection} append`);
-        },
-
-        clearCollection(collection, label) {
-            return this.post(collection, [], label || `${collection} clear`);
-        },
-
-        getPromise(collection) {
-            return new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: "GET",
+                const request = {
+                    method,
                     url: `${CONFIG.SERVER_URL}/api/${collection}`,
                     headers: {
                         "Authorization": buildApiAuthorizationHeader()
                     },
-                    onload: r => {
+                    timeout: API_REQUEST_TIMEOUT_MS,
+                    onload: response => {
+                        const metadata = safeApiResponseMetadata(response);
+    
+                        if (metadata.status < 200 || metadata.status >= 300) {
+                            reject(createApiError('http', context, response));
+                            return;
+                        }
+    
+                        if (!parseJson) {
+                            resolve({ response: metadata, status: metadata.status, data });
+                            return;
+                        }
+    
                         try {
-                            resolve({ data: JSON.parse(r.responseText), response: r, status: r.status });
-                        } catch (e) {
-                            reject({ error: e, response: r });
+                            resolve({
+                                data: JSON.parse(response.responseText),
+                                response: metadata,
+                                status: metadata.status
+                            });
+                        } catch (_) {
+                            reject(createApiError('parse', context, response));
                         }
                     },
-                    onerror: e => reject({ error: e })
-                });
+                    onerror: response => reject(createApiError('network', context, response)),
+                    ontimeout: response => reject(createApiError('timeout', context, response)),
+                    onabort: response => reject(createApiError('abort', context, response))
+                };
+    
+                if (method === 'POST') {
+                    request.headers["Content-Type"] = "application/json";
+                    request.data = JSON.stringify(data);
+                }
+    
+                GM_xmlhttpRequest(request);
             });
-        },
-
-        get(collection, onSuccess, onError) {
-            return this.getPromise(collection)
-                .then(({ data, response }) => {
-                    if (onSuccess) onSuccess(data, response);
-                    return data;
-                })
-                .catch(payload => {
-                    if (onError) onError(payload.error || payload, payload.response);
-                    throw payload.error || payload;
-                });
-        },
-
-        getAnalysis(onSuccess, onError) {
-            return this.get("analysis", onSuccess, onError);
         }
-    };
+
+        const api = {
+            postPromise(collection, data, label) {
+                return requestApi({
+                    method: 'POST',
+                    collection,
+                    data,
+                    label: label || collection,
+                    parseJson: false
+                });
+            },
+    
+            post(collection, data, label) {
+                return this.postPromise(collection, data, label)
+                    .then(result => {
+                        debugLog(`[SLF] ${label || collection} saved:`, result.status);
+                        return result;
+                    })
+                    .catch(error => {
+                        debugWarn(`[SLF] ${label || collection} save error:`, error);
+                        throw error;
+                    });
+            },
+    
+            postAppend(collection, data, label) {
+                const payload = Array.isArray(data) ? data : [data];
+                return this.post(`${collection}?mode=append`, payload, label || `${collection} append`);
+            },
+    
+            clearCollection(collection, label) {
+                return this.post(collection, [], label || `${collection} clear`);
+            },
+    
+            getPromise(collection, label) {
+                return requestApi({
+                    method: 'GET',
+                    collection,
+                    label: label || collection,
+                    parseJson: true
+                });
+            },
+    
+            get(collection, onSuccess, onError) {
+                return this.getPromise(collection)
+                    .then(({ data, response }) => {
+                        if (onSuccess) onSuccess(data, response);
+                        return data;
+                    })
+                    .catch(error => {
+                        if (onError) onError(error, error.response);
+                        throw error;
+                    });
+            },
+    
+            getAnalysis(onSuccess, onError) {
+                return this.get("analysis", onSuccess, onError);
+            }
+        };
+
+        return api;
+    })();
 
     function normalizeServerRows(data) {
         if (Array.isArray(data)) return data;
@@ -1112,11 +1186,11 @@ const DomUtils = {
         saveCustom(customPresets) {
             const normalized = normalizePresets(customPresets);
             this.saveLocalOnly(normalized);
-            Api.post(CONFIG.COLLECTIONS.TACTICS, normalized, 'tactics');
+            void Api.post(CONFIG.COLLECTIONS.TACTICS, normalized, 'tactics').catch(() => {});
         },
 
         loadFromServerAndMerge(callback) {
-            Api.get(
+            return Api.get(
                 CONFIG.COLLECTIONS.TACTICS,
                 data => {
                     const serverData = normalizePresets(data);
@@ -1128,7 +1202,7 @@ const DomUtils = {
                 () => {
                     if (callback) callback();
                 }
-            );
+            ).catch(() => undefined);
         },
 
         getAllPresets() {
@@ -1934,13 +2008,14 @@ const SnapshotEngine = {
 
         const record = this.buildSnapshotRecord(snapshot);
 
-        Api.postAppend(
+        const request = Api.postAppend(
             CONFIG.COLLECTIONS.MATCH_SNAPSHOTS,
             record,
             'snapshot history'
         );
 
-        this.sendPlayerObservations(snapshot);
+        void this.sendPlayerObservations(snapshot).catch(() => {});
+        return request;
     },
 
     getLiveStorageKey(gameId = MatchStateParser.getGameId()) {
@@ -2271,9 +2346,9 @@ const SnapshotEngine = {
                 };
             });
 
-        if (!observations.length) return;
+        if (!observations.length) return Promise.resolve(null);
 
-        Api.post(
+        return Api.post(
             CONFIG.COLLECTIONS.PLAYER_OBSERVATIONS + '?mode=append',
             observations,
             'player observations'
@@ -2296,13 +2371,14 @@ const SnapshotEngine = {
             }
         });
 
-        Api.postAppend(
+        const request = Api.postAppend(
             CONFIG.COLLECTIONS.MATCH_RESULTS,
             result,
             'match result history'
         );
 
-        this.sendPlayerObservations(snapshot);
+        void this.sendPlayerObservations(snapshot).catch(() => {});
+        return request;
     },
 
     startLive(options = {}) {
@@ -2368,14 +2444,16 @@ const SnapshotEngine = {
             if (snapshot.bucket && snapshot.bucket !== STATE.lastSavedBucket) {
                 STATE.lastSavedBucket = snapshot.bucket;
 
-                this.sendSnapshot(snapshot);
-                UI.addParserLog(`Сохранён generation snapshot: ${snapshot.bucket}`);
+                void this.sendSnapshot(snapshot)
+                    .then(() => UI.addParserLog(`Сохранён generation snapshot: ${snapshot.bucket}`))
+                    .catch(error => UI.addParserLog(`Ошибка сохранения snapshot: ${error?.kind || 'unknown'}`));
 
                 const effect = EventTracker.buildPresetEffect(snapshot);
 
                 if (effect) {
-                    Api.postAppend(CONFIG.COLLECTIONS.PRESET_EFFECTS, effect, 'preset effect history');
-                    UI.addParserLog(`Эффект тактики сохранён: ${effect.presetName}`);
+                    void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EFFECTS, effect, 'preset effect history')
+                        .then(() => UI.addParserLog(`Эффект тактики сохранён: ${effect.presetName}`))
+                        .catch(error => UI.addParserLog(`Ошибка сохранения эффекта: ${error?.kind || 'unknown'}`));
                 }
             }
 
@@ -2455,7 +2533,7 @@ const SnapshotEngine = {
             });
 
             SnapshotEngine.freezeRecommendationsAfterTacticChange(name, beforeSnapshot);
-            Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, event, 'preset event history');
+            void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, event, 'preset event history').catch(() => {});
             UI.addParserLog(`Пресет применён: ${PresetStorage.getAllLabels()[name] || TacticPresetLibrary?.meta?.[name]?.title || name}`);
         },
 
@@ -2680,8 +2758,9 @@ const SnapshotEngine = {
 
                     STATE.pendingPresetEvent = event;
                     SnapshotEngine.freezeRecommendationsAfterTacticChange('manual_change', snapshot);
-                    Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, event, 'manual tactic event history');
-                    UI.addParserLog('Ручное изменение тактики сохранено');
+                    void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, event, 'manual tactic event history')
+                        .then(() => UI.addParserLog('Ручное изменение тактики сохранено'))
+                        .catch(error => UI.addParserLog(`Ошибка сохранения изменения тактики: ${error?.kind || 'unknown'}`));
 
                     STATE.lastManualTactic = current;
                 }, 500);
@@ -7509,9 +7588,13 @@ if (typeof window !== 'undefined') {
             parseBtn.style.cssText = 'padding:5px 8px;background:#444;color:#fff;border:1px solid #777;border-radius:3px;cursor:pointer;';
             parseBtn.onclick = () => {
                 const snapshot = SnapshotEngine.build();
-                SnapshotEngine.sendMatchResult(snapshot);
+                void SnapshotEngine.sendMatchResult(snapshot)
+                    .then(() => this.addParserLog('Финальный результат отправлен'))
+                    .catch(error => {
+                        this.addParserLog(`Ошибка отправки результата: ${error?.kind || 'unknown'}`);
+                        console.warn('[SLF API] final result send error', error);
+                    });
                 RecommendationEngine.update(snapshot);
-                this.addParserLog('Финальный результат отправлен');
             };
 
             const statsBtn = document.createElement('button');
@@ -7530,7 +7613,7 @@ if (typeof window !== 'undefined') {
                         console.log('[SLF API v2 canonical]', status);
                     })
                     .catch(error => {
-                        this.addParserLog('API v2 connection/parse error');
+                        this.addParserLog(`API v2 error: ${error?.kind || 'unknown'}`);
                         console.warn('[SLF API v2 canonical error]', error);
                     });
             };
@@ -11943,15 +12026,16 @@ const TransferMarketAnalyzer = {
     },
 
     sendTransferHistoryEvents(events) {
-        if (!Array.isArray(events) || !events.length) return;
+        if (!Array.isArray(events) || !events.length) return Promise.resolve(null);
 
-        Api.post(
+        return Api.post(
             CONFIG.COLLECTIONS.TRANSFER_HISTORY + '?mode=append',
             events,
             'transfer history events'
-        );
-
-        this.markHistoryEventsSubmitted(events);
+        ).then(result => {
+            this.markHistoryEventsSubmitted(events);
+            return result;
+        });
     },
 
     async analyzeHistoryVisibleRows() {
@@ -12034,11 +12118,18 @@ const TransferMarketAnalyzer = {
         }
 
         if (eventsToSend.length) {
-            this.sendTransferHistoryEvents(eventsToSend);
+            try {
+                await this.sendTransferHistoryEvents(eventsToSend);
+            } catch (error) {
+                this.setStatus(
+                    `История: ошибка отправки ${eventsToSend.length} записей (${error?.kind || 'unknown'}).`
+                );
+                return;
+            }
         }
 
         this.setStatus(
-            `История готова: подготовлено к отправке ${eventsToSend.length}, пропущено дублей ${skipped}, ошибок ${failed}.`
+            `История готова: отправлено ${eventsToSend.length}, пропущено дублей ${skipped}, ошибок ${failed}.`
         );
     },
 
@@ -19045,15 +19136,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.223',
-        scriptVersion: '4.4.223',
+        version: '4.4.224',
+        scriptVersion: '4.4.224',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.223',
+        scriptVersion: '4.4.224',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
