@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const ROOT = process.cwd();
 const MANIFEST_PATH = 'src/app/bundle-order.json';
+const OBSOLETE_MODULE_REGISTRY = 'src/app/module-registry.json';
 const EXCLUDED_SOURCE_FILES = new Set([
   'src/app/bootstrap-preamble.js',
   'src/app/userscript-header.js',
@@ -32,6 +33,7 @@ function listJavaScriptFiles(dir) {
 }
 
 if (!fs.existsSync(absolute(MANIFEST_PATH))) fail(`manifest not found: ${MANIFEST_PATH}`);
+if (fs.existsSync(absolute(OBSOLETE_MODULE_REGISTRY))) fail(`obsolete module registry must not exist: ${OBSOLETE_MODULE_REGISTRY}`);
 let manifest;
 try { manifest = JSON.parse(fs.readFileSync(absolute(MANIFEST_PATH), 'utf8')); }
 catch (error) { fail(`manifest is invalid JSON: ${error.message}`); }

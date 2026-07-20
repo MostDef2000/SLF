@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 3.2.0
+Version: 3.3.0
 Status: Active  
 Agent: AI Project Manager Agent  
 Project: SLF  
@@ -170,7 +170,7 @@ Specification readiness requires:
 - in-scope and out-of-scope boundaries;
 - likely changed files;
 - cache/schema/storage expectation;
-- bundle-order/module-registry expectation;
+- bundle-order expectation;
 - acceptance checks;
 - explicit facts, assumptions, open questions, and risks.
 
@@ -237,7 +237,7 @@ Acceptance checks:
 Safety checks:
 Knowledge/API sources used:
 Cache/schema/storage impact:
-Bundle-order/module-registry impact:
+Bundle-order impact:
 Core Release instruction:
 ```
 
@@ -528,7 +528,7 @@ Task Brief
 - Complexity:
 - Risk:
 - Storage/cache/schema impact:
-- Bundle-order/module-registry impact:
+- Bundle-order impact:
 - Release required:
 - Browser acceptance required:
 ```

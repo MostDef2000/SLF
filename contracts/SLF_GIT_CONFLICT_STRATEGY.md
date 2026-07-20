@@ -77,7 +77,6 @@ Governance changes normally do not require userscript release build.
 | `contracts/**` | Project Manager Agent | Governance only |
 | `src/modules/**` | Module Implementation Agent | Approved module scope only |
 | `src/app/bundle-order.json` | Module Agent / Core Release | Only when required for runtime wiring |
-| `src/app/module-registry.json` | Module Agent / Core Release | Only when required for runtime wiring |
 | `tools/**` | Project Manager / Core Release tooling task | Explicit approval required |
 | `.github/workflows/**` | Project Manager / Core Release tooling task | Explicit approval required |
 | `releases/latest.user.js` | Build Workflow / Core Release | Build output only |
@@ -122,7 +121,6 @@ Typical allowed paths:
 ```text
 src/modules/<module>/**
 src/app/bundle-order.json        # only if explicitly required
-src/app/module-registry.json     # only if explicitly required
 ```
 
 Must not write:
@@ -219,7 +217,6 @@ A repeat-safe patch means:
 - no duplicate imports;
 - no duplicate bundle-order entries;
 - no duplicate bootstrap mounts;
-- no duplicate module-registry entries;
 - no duplicate changelog entry for the same release;
 - no repeated deletion errors treated as fatal when the intended file is already absent.
 
@@ -332,7 +329,6 @@ Shared files include:
 
 ```text
 src/app/bundle-order.json
-src/app/module-registry.json
 src/bootstrap.js
 releases/latest.user.js
 releases/latest.meta.js

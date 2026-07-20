@@ -25,7 +25,7 @@ The handoff must include:
 - safety checks;
 - knowledge/API sources used;
 - cache/schema/storage impact;
-- bundle-order/module-registry impact;
+- bundle-order impact;
 - instruction to integrate only approved files.
 
 If a field is not relevant, the agent must write `NONE` instead of omitting it.

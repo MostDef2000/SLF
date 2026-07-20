@@ -185,7 +185,6 @@ Typical writable paths:
 ```text
 src/modules/<module>/**
 src/app/bundle-order.json        # only if explicitly required
-src/app/module-registry.json     # only if explicitly required
 ```
 
 Forbidden paths:
@@ -209,7 +208,7 @@ Changed files:
 Summary:
 User-visible/runtime behavior changes:
 Technical changes:
-Bundle-order/module-registry impact:
+Bundle-order impact:
 Cache/schema/storage impact:
 Validation performed:
 Known risks:
@@ -298,7 +297,7 @@ Allowed:
 
 - perform intake review;
 - integrate approved files into `main`;
-- validate bundle-order/bootstrap/module-registry consistency;
+- validate bundle-order/bootstrap consistency;
 - prepare release notes JSON;
 - provide Manual Build Action block;
 - confirm latest userscript artifact readiness after GitHub Actions build.
@@ -318,7 +317,6 @@ Writable paths during source integration:
 ```text
 approved source files from handoff
 src/app/bundle-order.json        # if required by approved handoff
-src/app/module-registry.json     # if required by approved handoff
 ```
 
 Writable paths during release artifact flow:
@@ -454,7 +452,6 @@ release artifact validation
 | `contracts/**` | Project Manager Agent | Governance only |
 | `src/modules/**` | Module Implementation Agent | Only approved module scope |
 | `src/app/bundle-order.json` | Module Agent + Core Release | Only when required for runtime wiring |
-| `src/app/module-registry.json` | Module Agent + Core Release | Only when required for runtime wiring |
 | `releases/latest.user.js` | Build Workflow / Core Release | Build artifact only |
 | `releases/latest.meta.js` | Build Workflow / Core Release | Build artifact only |
 | `data/version.json` | Build Workflow / Core Release | Version metadata only |
@@ -561,7 +558,7 @@ Changed files:
 Summary:
 User-visible/runtime behavior changes:
 Technical changes:
-Bundle-order/module-registry impact:
+Bundle-order impact:
 Cache/schema/storage impact:
 Validation performed:
 Known risks:
@@ -649,7 +646,6 @@ Runtime source changes usually include:
 ```text
 src/**
 src/app/bundle-order.json
-src/app/module-registry.json
 tools/build-latest-userscript.mjs
 tools/smoke-latest-userscript.mjs
 .github/workflows/build-latest-release.yml

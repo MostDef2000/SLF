@@ -1,6 +1,6 @@
 # SLF Backlog Intake Process
 
-Version: 1.0.0
+Version: 1.1.0
 Status: Active
 Owner: User
 Primary role: SLF Project Manager Agent
@@ -158,7 +158,7 @@ DISCUSSION ONLY first.
 
 Unknown / NO / YES.
 
-## Bundle-order/module-registry impact
+## Bundle-order impact
 
 Unknown / NO / YES.
 
