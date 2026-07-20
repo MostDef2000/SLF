@@ -130,9 +130,9 @@ const App = {
             }
         });
         const SLF_DEBUG_EXPORT = {
-            scriptVersion: '4.4.72',
+            scriptVersion: SLF_VERSION_INFO.scriptVersion,
             versionInfo: {
-                scriptVersion: '4.4.72',
+                scriptVersion: SLF_VERSION_INFO.scriptVersion,
                 canonicalCollections: CONFIG.COLLECTIONS,
                 legacyCollections: CONFIG.LEGACY_COLLECTIONS,
                 aliases: CONFIG.COLLECTION_ALIASES

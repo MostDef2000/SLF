@@ -1,6 +1,6 @@
 {
   "schema": "slf_bundle_order_v1",
-  "baseline": "4.4.72",
+  "structuralBaselineRelease": "4.4.72",
   "source": "releases/latest.user.js",
   "note": "Structural split only. Do not infer business logic changes from file boundaries.",
   "files": [
