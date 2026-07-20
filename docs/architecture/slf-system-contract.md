@@ -1,6 +1,6 @@
 # SLF System Contract v1
 
-Version: 1.1.0  
+Version: 1.2.0  
 Status: Active  
 Owner: SLF Project Manager Agent  
 Scope: VPS export, RAG build, Google Drive mirror, runtime knowledge boundaries  
@@ -134,7 +134,18 @@ Separate real authentication and authorization become mandatory before an endpoi
 
 Plain HTTP is a separate confidentiality and integrity risk because traffic can be observed or modified in transit. That transport risk is currently accepted and must be tracked independently from token handling. HTTPS is not a prerequisite for continued use of the current public-client-key model.
 
-Production debug capabilities are also a separate hardening concern tracked by GitHub Issue #68. They must not be described as public-client-key compromise remediation.
+Production builds must not export userscript API closures, internal engines, or mutation methods to page globals through `window` or `unsafeWindow`. Legacy collection cleanup must not be callable from the page context.
+
+The only permitted production page-global diagnostic surface is build-generated read-only version metadata:
+
+```text
+SLF.scriptVersion
+SLF.versionInfo
+```
+
+It must contain no API methods, collection readers, cleanup entrypoints, or internal module references. Source validation must reject any return of privileged debug exports. Browser acceptance must verify that `SLF_DEBUG`, lowercase `slf`, and mutating methods are absent from production page globals.
+
+This debug-surface boundary is independent from public client-key handling. Removing privileged page capabilities does not rotate or conceal the client key.
 
 ## 5. Static export contract
 
