@@ -1,5 +1,31 @@
 # Changelog
 
+## 4.4.223
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- contracts/SLF_GOVERNANCE.md
+- docs/architecture/slf-system-contract.md
+- docs/decision_records/DR-007-public-api-client-key-boundary.md
+- docs/decision_records/INDEX.md
+- src/app/bootstrap.js
+- tools/check-bundle-order.mjs
+
+Approved base commit:
+- 48fd0497192dd5ee4c7bcdd48aa6244a97903f43
+
+Approved commit:
+- ea50b0ac51536617eff4fdc06ec6e9e500a5e072
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.222
 
 ### Automatic latest-only build

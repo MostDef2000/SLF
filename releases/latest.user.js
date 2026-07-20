@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.222
+// @version      4.4.223
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.222',
-        scriptVersion: '4.4.222',
+        version: '4.4.223',
+        scriptVersion: '4.4.223',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.222',
+        scriptVersion: '4.4.223',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -19035,142 +19035,8 @@ const App = {
                 DomUtils.installObserver(() => this.mountUI());
             }
         });
-        const SLF_DEBUG_EXPORT = {
-            scriptVersion: SLF_VERSION_INFO.scriptVersion,
-            versionInfo: {
-                scriptVersion: SLF_VERSION_INFO.scriptVersion,
-                canonicalCollections: CONFIG.COLLECTIONS,
-                legacyCollections: CONFIG.LEGACY_COLLECTIONS,
-                aliases: CONFIG.COLLECTION_ALIASES
-            },
-            buildMatchSnapshot: () => SnapshotEngine.build(),
-            readFormation: () => SquadParser.readFormation(),
-            readLineupRows: () => SquadParser.readLineupRows(),
-            getCurrentTactic,
-            parsePlayerText: text => SquadParser.parsePlayerText(text),
-
-            MatchStateParser,
-            MatchTimingModel,
-            MatchStatsParser,
-            SquadParser,
-            SnapshotEngine,
-            EventTracker,
-            RecommendationEngine,
-            TacticPresetLibraryPanel,
-            TMEnrichmentLayer,
-            SLFAlterLayer,
-            TransferMarketAnalyzer,
-            TrainingGuidePanel,
-
-            readCollection(collection = 'transfer_history', limit = 5) {
-                const requestedCollection = collection;
-                const actualCollection = CONFIG.COLLECTION_ALIASES?.[collection] || collection;
-
-                if (requestedCollection !== actualCollection) {
-                    console.log(`[SLF DEBUG] ${requestedCollection} redirected to ${actualCollection}`);
-                }
-
-                return new Promise((resolve, reject) => {
-                    Api.get(
-                        actualCollection,
-                        data => {
-                            const count = Array.isArray(data) ? data.length : null;
-                            const tail = Array.isArray(data) ? data.slice(-limit) : data;
-
-                            console.log(`[SLF DEBUG] ${actualCollection} count:`, count ?? data);
-                            console.log(`[SLF DEBUG] ${actualCollection} last ${limit}:`, tail);
-
-                            resolve(data);
-                        },
-                        error => {
-                            console.warn(`[SLF DEBUG] ${actualCollection} read error:`, error);
-                            reject(error);
-                        }
-                    );
-                });
-            },
-
-            readLegacyCollection(collection, limit = 5) {
-                return new Promise((resolve, reject) => {
-                    Api.get(
-                        collection,
-                        data => {
-                            const count = Array.isArray(data) ? data.length : null;
-                            const tail = Array.isArray(data) ? data.slice(-limit) : data;
-
-                            console.log(`[SLF DEBUG LEGACY] ${collection} count:`, count ?? data);
-                            console.log(`[SLF DEBUG LEGACY] ${collection} last ${limit}:`, tail);
-
-                            resolve(data);
-                        },
-                        error => {
-                            console.warn(`[SLF DEBUG LEGACY] ${collection} read error:`, error);
-                            reject(error);
-                        }
-                    );
-                });
-            },
-
-            getCanonicalApiStatus() {
-                return fetchCanonicalApiStatus().then(status => {
-                    console.log('[SLF DEBUG] canonical API status:', status);
-                    return status;
-                });
-            },
-
-            clearLegacyCollections(confirmText = '') {
-                if (confirmText !== 'DELETE LEGACY') {
-                    console.warn('[SLF DEBUG] Legacy cleanup blocked. Run: SLF_DEBUG.clearLegacyCollections("DELETE LEGACY")');
-                    return Promise.resolve({ ok: false, reason: 'confirmation_required' });
-                }
-
-                const names = legacyCollectionNames();
-                console.warn('[SLF DEBUG] Clearing legacy collections:', names);
-
-                return Promise.all(names.map(name => {
-                    return Api.clearCollection(name, `legacy ${name} cleared`)
-                        .then(result => ({ collection: name, ok: true, status: result.status }))
-                        .catch(error => ({ collection: name, ok: false, error }));
-                })).then(results => {
-                    console.log('[SLF DEBUG] legacy cleanup results:', results);
-                    return results;
-                });
-            },
-
-            clearLegacy(confirmText = '') {
-                return this.clearLegacyCollections(confirmText);
-            },
-
-            deleteLegacyCollections(confirmText = '') {
-                return this.clearLegacyCollections(confirmText);
-            },
-
-            resetLegacyCollections(confirmText = '') {
-                return this.clearLegacyCollections(confirmText);
-            },
-
-            clearLegacyMatchCollections(confirmText = '') {
-                return this.clearLegacyCollections(confirmText);
-            },
-
-            readTransferHistory(limit = 5) {
-                return this.readCollection('transfer_history', limit);
-            }
-        };
-
-        window.SLF_DEBUG = SLF_DEBUG_EXPORT;
-        window.SLF = SLF_DEBUG_EXPORT;
-        window.slf = SLF_DEBUG_EXPORT;
-
-        try {
-            if (typeof unsafeWindow !== 'undefined') {
-                unsafeWindow.SLF_DEBUG = SLF_DEBUG_EXPORT;
-                unsafeWindow.SLF = SLF_DEBUG_EXPORT;
-                unsafeWindow.slf = SLF_DEBUG_EXPORT;
-            }
-        } catch (e) {
-            console.warn('[SLF DEBUG] unsafeWindow export failed', e);
-        }
+        // Production exports no page-global API or debug capability.
+        // The release builder adds read-only version metadata after App starts.
     }
 };
 
@@ -19179,15 +19045,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.222',
-        scriptVersion: '4.4.222',
+        version: '4.4.223',
+        scriptVersion: '4.4.223',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.222',
+        scriptVersion: '4.4.223',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
