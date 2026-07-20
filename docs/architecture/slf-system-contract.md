@@ -1,6 +1,6 @@
 # SLF System Contract v1
 
-Version: 1.2.0  
+Version: 1.3.0  
 Status: Active  
 Owner: SLF Project Manager Agent  
 Scope: VPS export, RAG build, Google Drive mirror, runtime knowledge boundaries  
@@ -146,6 +146,34 @@ SLF.versionInfo
 It must contain no API methods, collection readers, cleanup entrypoints, or internal module references. Source validation must reject any return of privileged debug exports. Browser acceptance must verify that `SLF_DEBUG`, lowercase `slf`, and mutating methods are absent from production page globals.
 
 This debug-surface boundary is independent from public client-key handling. Removing privileged page capabilities does not rotate or conceal the client key.
+
+### 4.2 API transport error contract
+
+All userscript API requests use one normalized transport contract:
+
+- only HTTP `2xx` responses resolve;
+- HTTP `4xx` and `5xx` responses reject before response-body parsing;
+- successful GET responses with invalid JSON reject as `parse`;
+- network, timeout, and abort failures reject as `network`, `timeout`, and `abort`;
+- request timeout is `15000 ms`;
+- rejected writes must never be logged or displayed as saved;
+- callers must handle rejected background writes so they do not create unhandled promise rejections;
+- server-side submission markers may advance only after confirmed write success.
+
+Normalized errors expose only:
+
+```text
+name: SLFApiError
+kind: http | parse | network | timeout | abort
+method
+collection
+operation
+status
+statusText
+response: safe status metadata
+```
+
+Errors and logs must not contain the Authorization header, the public client key, raw request objects, or raw response bodies. This is log/data minimization and is independent from whether the client key is classified as secret.
 
 ## 5. Static export contract
 
