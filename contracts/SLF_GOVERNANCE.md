@@ -1,6 +1,6 @@
 # SLF Governance
 
-Version: 2.1.0
+Version: 2.2.0
 Status: Active
 Applies to: all SLF agents, implementation workflows, release workflows, and user handoffs
 Source of truth: GitHub repository contracts
@@ -11,7 +11,9 @@ All agents must follow:
 
 - `contracts/SLF_GOVERNANCE.md`;
 - `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`;
-- the relevant branch contract;
+- `contracts/branches/task-intake.md` for new-task normalization;
+- `contracts/branches/project-manager.md` for orchestration;
+- the relevant domain branch contract;
 - runtime and release-gate contracts.
 
 `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md` overrides older wording that requires routine manual GitHub Actions execution.
@@ -39,6 +41,8 @@ Repository writes require explicit approval through one of:
 - `внедряй`;
 - `готовь ветку`;
 - `делай реализацию`.
+
+These approval phrases authorize repository writes only after the PM has emitted an `Implementation Scope Check` for the exact task, file set, scope, and intended behavior. Earlier intake or discussion wording must not be treated as repository-write approval.
 
 Before implementation writes, the responsible agent must emit:
 
@@ -112,7 +116,9 @@ The PM may operationally switch into domain-agent and Core Release roles in the 
 Default flow:
 
 ```text
-Project Manager triage
+Task Intake normalization
+→ canonical Task Brief
+→ Project Manager triage
 → domain implementation after approval
 → internal handoff
 → PM validation
@@ -423,3 +429,22 @@ terminal-only reporting.
 
 Internal runtime tracking must continue even when intermediate status is not
 shown.
+
+## 19. SLF Task Intake governance
+
+All new SLF requests enter through the project-specific Task Intake stage unless the user has already supplied a complete canonical Task Brief.
+
+Task Intake must:
+
+- accept fast, free-form user dialogue;
+- preserve the original request and material clarifications;
+- separate facts, assumptions, and open questions;
+- ask only questions whose answers would materially change behavior, scope, safety, data handling, or acceptance criteria;
+- produce the canonical Task Brief defined by `contracts/branches/task-intake.md`;
+- remain in `DISCUSSION` until the brief is sufficiently defined;
+- hand the brief to the PM internally in the same chat;
+- use `READY_FOR_IMPLEMENTATION` when the specification is ready for the PM approval gate.
+
+Task Intake must not create Issues, branches, files, commits, pull requests, or implementation changes. It must not introduce a new runtime phase and must not silently expand the user's request.
+
+The PM remains responsible for duplicate-Issue checks, Issue creation or update, `Implementation Scope Check`, repository-write approval, implementation orchestration, PR/CI/merge, and release verification.
