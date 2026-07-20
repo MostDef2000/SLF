@@ -110,11 +110,11 @@
         saveCustom(customPresets) {
             const normalized = normalizePresets(customPresets);
             this.saveLocalOnly(normalized);
-            Api.post(CONFIG.COLLECTIONS.TACTICS, normalized, 'tactics');
+            void Api.post(CONFIG.COLLECTIONS.TACTICS, normalized, 'tactics').catch(() => {});
         },
 
         loadFromServerAndMerge(callback) {
-            Api.get(
+            return Api.get(
                 CONFIG.COLLECTIONS.TACTICS,
                 data => {
                     const serverData = normalizePresets(data);
@@ -126,7 +126,7 @@
                 () => {
                     if (callback) callback();
                 }
-            );
+            ).catch(() => undefined);
         },
 
         getAllPresets() {
