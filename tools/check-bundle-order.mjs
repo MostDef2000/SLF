@@ -32,6 +32,39 @@ function listJavaScriptFiles(dir) {
   return files.sort();
 }
 
+function validateProductionDebugBoundary() {
+  const raw = fs.readFileSync(absolute(BOOTSTRAP), 'utf8');
+  const source = maskNonCode(raw);
+  const forbidden = [
+    {
+      label: 'debug export identifier',
+      pattern: /\bSLF_DEBUG(?:_EXPORT)?\b/
+    },
+    {
+      label: 'page-global SLF/debug assignment',
+      pattern: /\b(?:window|unsafeWindow)\s*\.\s*(?:SLF_DEBUG|SLF|slf)\s*=/
+    },
+    {
+      label: 'legacy cleanup entrypoint',
+      pattern: /\b(?:clearLegacyCollections|clearLegacy|deleteLegacyCollections|resetLegacyCollections|clearLegacyMatchCollections)\b/
+    },
+    {
+      label: 'collection mutation closure',
+      pattern: /\bApi\s*\.\s*clearCollection\s*\(/
+    }
+  ];
+
+  const violations = forbidden
+    .filter(rule => rule.pattern.test(source))
+    .map(rule => rule.label);
+
+  if (violations.length) {
+    fail('production bootstrap exposes a forbidden debug or mutation capability', violations);
+  }
+
+  return { forbiddenPatternCount: forbidden.length };
+}
+
 function identifierPattern(identifier) {
   const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(?<![A-Za-z0-9_$])${escaped}(?![A-Za-z0-9_$])`);
@@ -396,10 +429,12 @@ const unregistered = sourceFiles.filter(file => !registered.has(file));
 if (unregistered.length) fail('unregistered src JavaScript files', unregistered);
 
 const dependencyAudit = validateDependencyAudit(manifest, files);
+const debugBoundary = validateProductionDebugBoundary();
 
 console.log(
   `[bundle-order] OK: ${files.length} registered runtime modules; manifest is complete and bootstrap is final; `
   + `dependency pilot validates ${dependencyAudit.moduleCount} modules, `
   + `${dependencyAudit.dependencySymbolCount} dependency symbols, and `
-  + `${dependencyAudit.hostCapabilityCount} host capabilities.`
+  + `${dependencyAudit.hostCapabilityCount} host capabilities; `
+  + `production debug boundary rejects ${debugBoundary.forbiddenPatternCount} privileged export patterns.`
 );
