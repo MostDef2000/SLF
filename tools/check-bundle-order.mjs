@@ -85,14 +85,13 @@ function createApiTransportHarness() {
   vm.createContext(sandbox);
   const source = fs.readFileSync(absolute('src/core/api.js'), 'utf8');
   vm.runInContext(
-    `(() => {\n${source}\nglobalThis.__SLF_API__ = Api;\nglobalThis.__SLF_API_TIMEOUT__ = API_REQUEST_TIMEOUT_MS;\n})();`,
+    `(() => {\n${source}\nglobalThis.__SLF_API__ = Api;\n})();`,
     sandbox,
     { filename: 'src/core/api.js' }
   );
 
   return {
     api: sandbox.__SLF_API__,
-    timeout: sandbox.__SLF_API_TIMEOUT__,
     requests,
     debugLogs,
     debugWarnings,
