@@ -38,7 +38,7 @@
             });
 
             SnapshotEngine.freezeRecommendationsAfterTacticChange(name, beforeSnapshot);
-            Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, event, 'preset event history');
+            void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, event, 'preset event history').catch(() => {});
             UI.addParserLog(`Пресет применён: ${PresetStorage.getAllLabels()[name] || TacticPresetLibrary?.meta?.[name]?.title || name}`);
         },
 
@@ -263,8 +263,9 @@
 
                     STATE.pendingPresetEvent = event;
                     SnapshotEngine.freezeRecommendationsAfterTacticChange('manual_change', snapshot);
-                    Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, event, 'manual tactic event history');
-                    UI.addParserLog('Ручное изменение тактики сохранено');
+                    void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, event, 'manual tactic event history')
+                        .then(() => UI.addParserLog('Ручное изменение тактики сохранено'))
+                        .catch(error => UI.addParserLog(`Ошибка сохранения изменения тактики: ${error?.kind || 'unknown'}`));
 
                     STATE.lastManualTactic = current;
                 }, 500);
