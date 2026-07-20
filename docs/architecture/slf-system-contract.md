@@ -1,6 +1,6 @@
 # SLF System Contract v1
 
-Version: 1.0.0  
+Version: 1.1.0  
 Status: Active  
 Owner: SLF Project Manager Agent  
 Scope: VPS export, RAG build, Google Drive mirror, runtime knowledge boundaries  
@@ -77,7 +77,7 @@ The PM must treat these as the active VPS architecture unless a newer inventory 
 
 ## 4. API and storage contract
 
-The API server is the private storage/API backend.
+The API server is the storage/API backend. Data sensitivity is determined by endpoint behavior and authorization, not by the presence of the current public client key.
 
 Current model:
 
@@ -110,11 +110,31 @@ wiki_docs
 Operational rule:
 
 ```text
-private API: localhost preferred
+local API access: localhost preferred
+remote key-only API endpoints: effectively public
 public data: sanitized /slf_ai export only
 ```
 
 The exporter should read from `http://127.0.0.1:5000/api` when running on the VPS.
+
+### 4.1 Public client-key boundary
+
+For the current SLF threat model, the API token is a **public client key**, not a secret credential.
+
+The key may be embedded in userscript and server source and may appear in repository source, generated runtime output, terminal output, or chat. Its presence there is not credential compromise and does not, by itself, require rotation, protected environment storage, removal from client artifacts, or Tampermonkey-only storage.
+
+Any endpoint that relies only on this key must be treated as publicly callable. The key may identify the expected SLF client population or reject accidental unauthenticated traffic, but it is not a security boundary for sensitive capabilities.
+
+Separate real authentication and authorization become mandatory before an endpoint exposes:
+
+- private data;
+- destructive or administrative operations;
+- material external cost;
+- any capability the owner does not intend to expose to arbitrary callers.
+
+Plain HTTP is a separate confidentiality and integrity risk because traffic can be observed or modified in transit. That transport risk is currently accepted and must be tracked independently from token handling. HTTPS is not a prerequisite for continued use of the current public-client-key model.
+
+Production debug capabilities are also a separate hardening concern tracked by GitHub Issue #68. They must not be described as public-client-key compromise remediation.
 
 ## 5. Static export contract
 
@@ -212,7 +232,7 @@ RAG build rules:
 - deterministic export-time generation;
 - rebuildable from VPS data;
 - no external API dependency for local forum_faq;
-- no token exposure in public artifacts;
+- no secret credential exposure in public artifacts; the accepted public client key is not a secret, although unnecessary copies should still be omitted;
 - no private raw API exposure to ChatGPT;
 - no LLM-generated hidden state required for rebuild.
 ```
@@ -231,7 +251,7 @@ Role:
 Not allowed:
   using Drive as primary data storage
   letting userscript read Google Drive directly
-  storing secrets/tokens/logs in Drive mirror
+  storing secret credentials, logs, or unnecessary public client-key copies in Drive mirror
 ```
 
 Allowed mirror contents:
@@ -266,6 +286,8 @@ cache/**
 raw private API dumps
 private env files
 ```
+
+The filename filters above are data-minimization hygiene. They do not classify the current public client key as a secret or make its prior exposure a credential incident.
 
 ## 8. rclone sync contract
 
@@ -315,7 +337,7 @@ Expected steps:
 4. sync current mirror to Google Drive via rclone --filter-from
 ```
 
-The wrapper must not require manually passing the API token in the crontab line.
+The wrapper should load the public client key from the existing environment file rather than duplicating it in the crontab line. This is operational configuration hygiene, not secret storage.
 
 Cron should call only the wrapper, not duplicate the raw exporter command.
 
@@ -420,7 +442,7 @@ PM must not:
 ```text
 - reintroduce persistent player memory;
 - treat Drive as a primary database;
-- expose API tokens/secrets in public artifacts;
+- expose secret credentials in public artifacts or misrepresent the accepted public client key as strong authentication;
 - add runtime dependency on the full RAG corpus;
 - request GitHub Actions for docs-only architecture updates.
 ```

@@ -1,6 +1,6 @@
 # SLF Governance
 
-Version: 2.3.0
+Version: 2.4.0
 Status: Active
 Applies to: all SLF agents, implementation workflows, release workflows, and user handoffs
 Source of truth: GitHub repository contracts
@@ -106,7 +106,7 @@ Domain agents must:
 - not edit release artifacts;
 - not bump version;
 - not publish the common userscript;
-- not add secrets, tokens, passwords, or credentials;
+- not add secret credentials, passwords, or private tokens; public client keys are allowed only when an active decision record explicitly defines their boundary;
 - provide an internal handoff for PM/Core Release validation.
 
 The PM may operationally switch into domain-agent and Core Release roles in the same chat, while obeying each contract.
@@ -313,7 +313,12 @@ A release may be approved only when scope, changed files, safety, and required c
 
 ## 16. Security and system invariants
 
-- Never commit secrets, tokens, passwords, or credentials.
+- Never commit secret credentials, passwords, or private tokens.
+- The current SLF API token is an explicitly accepted **public client key**, not a secret credential. It may be present in client/server source and generated runtime output without constituting credential compromise.
+- Any endpoint that relies only on the public client key is effectively publicly callable. The key must not be represented as strong authentication.
+- Separate real authentication and authorization are mandatory before exposing private data, destructive or administrative operations, material external cost, or any capability not intended for arbitrary callers.
+- Plain HTTP is an accepted, independent transport confidentiality/integrity risk; HTTPS work must not be presented as remediation for public-client-key exposure.
+- Production debug-surface hardening is independent from credential handling and is tracked by GitHub Issue #68.
 - VPS is source of truth for live/exported data.
 - Google Drive is a mirror only.
 - RAG artifacts are derived and rebuildable.
