@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.219
+// @version      4.4.220
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.219',
-        scriptVersion: '4.4.219',
+        version: '4.4.220',
+        scriptVersion: '4.4.220',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.219',
+        scriptVersion: '4.4.220',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -1924,7 +1924,7 @@ const SnapshotEngine = {
                 page: 'game',
                 url: location.href,
                 collectedAt: Date.now(),
-                scriptVersion: '4.4.72'
+                scriptVersion: SLF_VERSION_INFO.scriptVersion
             }
         });
     },
@@ -2292,7 +2292,7 @@ const SnapshotEngine = {
                 page: 'game',
                 url: location.href,
                 collectedAt: Date.now(),
-                scriptVersion: '4.4.72'
+                scriptVersion: SLF_VERSION_INFO.scriptVersion
             }
         });
 
@@ -11873,7 +11873,7 @@ const TransferMarketAnalyzer = {
                 page: 'transfers_history',
                 url: location.href,
                 collectedAt: Date.now(),
-                scriptVersion: '4.4.72'
+                scriptVersion: SLF_VERSION_INFO.scriptVersion
             },
 
             transfer: {
@@ -19036,9 +19036,9 @@ const App = {
             }
         });
         const SLF_DEBUG_EXPORT = {
-            scriptVersion: '4.4.72',
+            scriptVersion: SLF_VERSION_INFO.scriptVersion,
             versionInfo: {
-                scriptVersion: '4.4.72',
+                scriptVersion: SLF_VERSION_INFO.scriptVersion,
                 canonicalCollections: CONFIG.COLLECTIONS,
                 legacyCollections: CONFIG.LEGACY_COLLECTIONS,
                 aliases: CONFIG.COLLECTION_ALIASES
@@ -19179,15 +19179,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.219',
-        scriptVersion: '4.4.219',
+        version: '4.4.220',
+        scriptVersion: '4.4.220',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.219',
+        scriptVersion: '4.4.220',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

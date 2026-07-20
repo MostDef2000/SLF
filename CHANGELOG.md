@@ -1,5 +1,38 @@
 # Changelog
 
+## 4.4.220
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- contracts/SLF_GOVERNANCE.md
+- contracts/branches/project-manager.md
+- contracts/branches/task-intake.md
+- docs/architecture/slf-control-plane.md
+- docs/decision_records/DR-005-issues-as-backlog-source.md
+- docs/decision_records/DR-006-task-intake-agent.md
+- src/app/bootstrap.js
+- src/app/bundle-order.json
+- src/app/userscript-header.js
+- src/modules/live-parser/snapshot-engine.js
+- src/modules/transfer-analyzer/transfer-market-analyzer.js
+- tools/build-latest-userscript.mjs
+- tools/validate-release-provenance.mjs
+
+Approved base commit:
+- 284f0ed75fbcf3fd2cf2ebcecda6c092ba1bdf1e
+
+Approved commit:
+- 51b03748c4cd6b1fdd94ac369698f7cf87532631
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order/module-registry changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.219
 
 ### Automatic latest-only build
