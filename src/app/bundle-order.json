@@ -58,5 +58,247 @@
     "src/modules/team-management/team4-alter-current-season-minutes-fix.js",
     "src/modules/team-management/team4-form-saved-choice-notice.js",
     "src/app/bootstrap.js"
-  ]
+  ],
+  "dependencyAudit": {
+    "schema": "slf_module_dependency_audit_v1",
+    "status": "pilot",
+    "expectedModuleCount": 8,
+    "modules": [
+      {
+        "file": "src/core/domain.js",
+        "declares": [
+          "SLF_GAME_DOMAINS",
+          "getSlfGameOrigin",
+          "buildSlfUrl"
+        ],
+        "public": [
+          "buildSlfUrl"
+        ],
+        "requires": [],
+        "hostCapabilities": [
+          "location"
+        ]
+      },
+      {
+        "file": "src/core/config.js",
+        "declares": [
+          "CONFIG",
+          "getTeamName",
+          "BASE_PRESETS",
+          "BASE_LABELS",
+          "DEFAULT_CUSTOM_PRESETS",
+          "STATE",
+          "LIVE_PARSER_STATE_PREFIX",
+          "LIVE_RECOMMENDATION_HISTORY_LIMIT",
+          "LAST_PRESET_STORAGE_KEY",
+          "RECENT_PRESETS_STORAGE_KEY",
+          "PresetUsageTracker",
+          "debugLog",
+          "debugWarn",
+          "toNum",
+          "num",
+          "normalizeTeamText",
+          "aliasMatchesTeamName"
+        ],
+        "public": [
+          "CONFIG",
+          "BASE_PRESETS",
+          "BASE_LABELS",
+          "DEFAULT_CUSTOM_PRESETS",
+          "STATE",
+          "LIVE_PARSER_STATE_PREFIX",
+          "PresetUsageTracker",
+          "debugLog",
+          "debugWarn",
+          "toNum",
+          "num",
+          "aliasMatchesTeamName"
+        ],
+        "requires": [
+          {
+            "file": "src/modules/tactics-presets/preset-storage.js",
+            "symbols": [
+              "PresetStorage"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/match-state-parser.js",
+            "symbols": [
+              "MatchStateParser"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-preset-library.js",
+            "symbols": [
+              "TacticPresetLibrary"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/app/ui-layer.js",
+            "symbols": [
+              "UI"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "console",
+          "localStorage"
+        ]
+      },
+      {
+        "file": "src/core/token-storage.js",
+        "declares": [
+          "SLF_API_TOKEN_STORAGE_KEY",
+          "SLF_API_TOKEN_MISSING_WARNED",
+          "SLF_API_TOKEN_MENU_INSTALLED",
+          "getApiToken",
+          "warnMissingApiTokenOnce",
+          "hasApiToken",
+          "installApiTokenMenuCommands"
+        ],
+        "public": [
+          "getApiToken",
+          "warnMissingApiTokenOnce"
+        ],
+        "requires": [],
+        "hostCapabilities": [
+          "GM_deleteValue",
+          "GM_getValue",
+          "GM_registerMenuCommand",
+          "GM_setValue",
+          "alert",
+          "console",
+          "prompt"
+        ]
+      },
+      {
+        "file": "src/core/dom-utils.js",
+        "declares": [
+          "DomUtils"
+        ],
+        "public": [
+          "DomUtils"
+        ],
+        "requires": [],
+        "hostCapabilities": [
+          "MutationObserver",
+          "document",
+          "setTimeout",
+          "window"
+        ]
+      },
+      {
+        "file": "src/core/api.js",
+        "declares": [
+          "buildApiAuthorizationHeader",
+          "Api",
+          "normalizeServerRows",
+          "payloadType",
+          "fetchCanonicalApiStatus",
+          "legacyCollectionNames"
+        ],
+        "public": [
+          "Api",
+          "normalizeServerRows",
+          "fetchCanonicalApiStatus",
+          "legacyCollectionNames"
+        ],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "CONFIG",
+              "debugLog",
+              "debugWarn"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/token-storage.js",
+            "symbols": [
+              "getApiToken",
+              "warnMissingApiTokenOnce"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "GM_xmlhttpRequest"
+        ]
+      },
+      {
+        "file": "src/modules/live-parser/match-state-parser.js",
+        "declares": [
+          "MatchTimingModel",
+          "MatchStateParser"
+        ],
+        "public": [
+          "MatchTimingModel",
+          "MatchStateParser"
+        ],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "toNum"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "URLSearchParams",
+          "document",
+          "location"
+        ]
+      },
+      {
+        "file": "src/modules/live-parser/match-stats-parser.js",
+        "declares": [
+          "MatchStatsParser"
+        ],
+        "public": [
+          "MatchStatsParser"
+        ],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "CONFIG",
+              "aliasMatchesTeamName",
+              "toNum"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document"
+        ]
+      },
+      {
+        "file": "src/modules/live-parser/squad-parser.js",
+        "declares": [
+          "SquadParser"
+        ],
+        "public": [
+          "SquadParser"
+        ],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "toNum"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document"
+        ]
+      }
+    ]
+  }
 }
