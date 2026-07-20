@@ -6,6 +6,8 @@ import { execFileSync } from 'node:child_process';
 
 const ROOT = process.cwd();
 const MANIFEST_PATH = 'src/app/bundle-order.json';
+const VERSION_MANIFEST_PATH = 'data/version.json';
+const VERSION_TOKEN = '__SLF_VERSION__';
 const UPDATE_URL = 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js';
 const DOWNLOAD_URL = 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js';
 
@@ -23,11 +25,13 @@ function git(...args) {
   return clean(execFileSync('git', args, { encoding: 'utf8' }));
 }
 
-function parseVersion(text) {
-  const match = text.match(/@version\s+([0-9]+\.[0-9]+\.[0-9]+)/)
-    || text.match(/"scriptVersion"\s*:\s*"([0-9]+\.[0-9]+\.[0-9]+)"/);
-  if (!match) throw new Error('Unable to resolve current script version');
-  return match[1];
+function publishedVersion() {
+  const manifest = JSON.parse(read(VERSION_MANIFEST_PATH));
+  const version = clean(manifest.scriptVersion);
+  if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version)) {
+    throw new Error(`${VERSION_MANIFEST_PATH} contains an invalid scriptVersion: ${version}`);
+  }
+  return version;
 }
 
 function bumpPatch(version) {
@@ -116,6 +120,10 @@ function loadBundleManifest() {
   const raw = read(MANIFEST_PATH);
   const manifest = JSON.parse(raw);
   if (manifest.schema !== 'slf_bundle_order_v1') throw new Error(`Unsupported bundle manifest schema: ${manifest.schema}`);
+  if (Object.hasOwn(manifest, 'baseline')) throw new Error('bundle manifest baseline must use structuralBaselineRelease');
+  if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(clean(manifest.structuralBaselineRelease))) {
+    throw new Error('bundle manifest structuralBaselineRelease must be a semantic version');
+  }
   const files = assertExactPaths('bundle manifest files', Array.isArray(manifest.files) ? manifest.files : []);
   for (const rel of files) {
     if (!rel.startsWith('src/') || !rel.endsWith('.js')) throw new Error(`Invalid runtime path: ${rel}`);
@@ -172,9 +180,12 @@ function formatChangelog(version, provenance, notes) {
 const provenance = resolveProvenance();
 const notes = loadReleaseNotes(provenance);
 const bundle = loadBundleManifest();
-const latestExisting = fs.existsSync(p('releases/latest.user.js')) ? read('releases/latest.user.js') : read('src/app/userscript-header.js');
-const version = clean(process.env.TARGET_VERSION) || bumpPatch(parseVersion(latestExisting));
-let header = read('src/app/userscript-header.js').replace(/(@version\s+)[0-9]+\.[0-9]+\.[0-9]+/, `$1${version}`);
+const version = clean(process.env.TARGET_VERSION) || bumpPatch(publishedVersion());
+const headerTemplate = read('src/app/userscript-header.js');
+const versionDirectives = headerTemplate.match(/^\/\/\s*@version\s+__SLF_VERSION__\s*$/gmu) || [];
+if (versionDirectives.length !== 1) throw new Error('userscript header must contain exactly one __SLF_VERSION__ directive');
+let header = headerTemplate.replace(/(@version\s+)__SLF_VERSION__/, `$1${version}`);
+if (header.includes(VERSION_TOKEN)) throw new Error('userscript version token was not fully replaced');
 if (!header.includes(`@updateURL    ${UPDATE_URL}`)) throw new Error('updateURL mismatch');
 if (!header.includes(`@downloadURL  ${DOWNLOAD_URL}`)) throw new Error('downloadURL mismatch');
 

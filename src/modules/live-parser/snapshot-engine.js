@@ -135,7 +135,7 @@ const SnapshotEngine = {
                 page: 'game',
                 url: location.href,
                 collectedAt: Date.now(),
-                scriptVersion: '4.4.72'
+                scriptVersion: SLF_VERSION_INFO.scriptVersion
             }
         });
     },
@@ -503,7 +503,7 @@ const SnapshotEngine = {
                 page: 'game',
                 url: location.href,
                 collectedAt: Date.now(),
-                scriptVersion: '4.4.72'
+                scriptVersion: SLF_VERSION_INFO.scriptVersion
             }
         });
 

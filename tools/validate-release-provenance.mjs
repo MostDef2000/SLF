@@ -4,6 +4,8 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 
 const MANIFEST_PATH = 'src/app/bundle-order.json';
+const SOURCE_HEADER_PATH = 'src/app/userscript-header.js';
+const VERSION_TOKEN = '__SLF_VERSION__';
 const UPDATE_URL = 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js';
 const DOWNLOAD_URL = 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js';
 const read = rel => fs.readFileSync(rel, 'utf8');
@@ -37,6 +39,7 @@ function versionFromMetadata(text, name) {
 const versionManifest = JSON.parse(read('data/version.json'));
 const bundleRaw = read(MANIFEST_PATH);
 const bundleManifest = JSON.parse(bundleRaw);
+const sourceHeader = read(SOURCE_HEADER_PATH);
 const user = read('releases/latest.user.js');
 const meta = read('releases/latest.meta.js');
 const changelog = read('CHANGELOG.md');
@@ -61,14 +64,28 @@ if (build.source !== 'src/**') fail('build.source mismatch');
 if (build.assembly !== 'manifest-only') fail('build.assembly must be manifest-only');
 if (build.bundleOrder !== MANIFEST_PATH) fail('bundleOrder path mismatch');
 if (bundleManifest.schema !== 'slf_bundle_order_v1') fail('bundle manifest schema mismatch');
+if (Object.hasOwn(bundleManifest, 'baseline')) fail('bundle manifest baseline must use structuralBaselineRelease');
+if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(bundleManifest.structuralBaselineRelease || '')) {
+  fail('bundle manifest structuralBaselineRelease must be a semantic version');
+}
 if (!Array.isArray(bundleManifest.files) || !bundleManifest.files.length) fail('bundle manifest files missing');
 if (build.bundleFileCount !== bundleManifest.files.length) fail('bundleFileCount mismatch');
 if (build.bundleManifestSha256 !== sha256(bundleRaw)) fail('bundleManifestSha256 mismatch');
 
 const version = versionManifest.scriptVersion;
+const sourceVersionDirectives = sourceHeader.match(/^\/\/\s*@version\s+__SLF_VERSION__\s*$/gmu) || [];
+if (sourceVersionDirectives.length !== 1) fail(`${SOURCE_HEADER_PATH} must contain exactly one ${VERSION_TOKEN} directive`);
+const hardcodedRuntimeVersion = /\bscriptVersion\s*[:=]\s*['"]([0-9]+\.[0-9]+\.[0-9]+)['"]/g;
+for (const rel of bundleManifest.files) {
+  const matches = [...read(rel).matchAll(hardcodedRuntimeVersion)];
+  if (matches.length) fail(`${rel} contains a hardcoded runtime scriptVersion: ${matches.map(match => match[1]).join(', ')}`);
+}
 if (versionFromMetadata(user, 'latest.user.js') !== version) fail('latest.user.js version mismatch');
 if (versionFromMetadata(meta, 'latest.meta.js') !== version) fail('latest.meta.js version mismatch');
 if (!user.includes(`scriptVersion: '${version}'`)) fail('runtime version mismatch');
+const generatedRuntimeVersions = [...user.matchAll(hardcodedRuntimeVersion)].map(match => match[1]);
+const staleRuntimeVersions = [...new Set(generatedRuntimeVersions.filter(value => value !== version))];
+if (staleRuntimeVersions.length) fail(`latest.user.js contains stale runtime versions: ${staleRuntimeVersions.join(', ')}`);
 if (!user.includes('BEGIN SLF FINAL RUNTIME VERSION EXPORT')) fail('final runtime export missing');
 if (!meta.trimEnd().endsWith('// ==/UserScript==')) fail('latest.meta.js contains runtime content');
 for (const [name, text] of [['latest.user.js', user], ['latest.meta.js', meta]]) {
