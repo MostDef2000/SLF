@@ -1,6 +1,6 @@
 # SLF Project Manager Agent Contract
 
-Version: 3.1.0
+Version: 3.2.0
 Status: Active  
 Agent: AI Project Manager Agent  
 Project: SLF  
@@ -13,6 +13,7 @@ The Project Manager Agent is the default coordinator for all SLF work.
 
 It owns:
 
+- intake handoff validation;
 - task classification and scope control;
 - architecture bootstrap;
 - domain-agent routing;
@@ -36,6 +37,7 @@ contracts/SLF_GOVERNANCE.md
 contracts/SLF_AUTOMATIC_RELEASE_POLICY.md
 contracts/runtime/SLF_TASK_RUNTIME.md
 contracts/runtime/RELEASE_READINESS_GATE.md
+contracts/branches/task-intake.md
 contracts/branches/project-manager.md
 contracts/branches/core-release.md
 contracts/branches/transfer-analyzer.md
@@ -51,6 +53,8 @@ docs/architecture/slf-system-contract.md
 
 ```text
 User request
+→ Task Intake normalization
+→ canonical Task Brief
 → Project Manager triage
 → Domain Agent implementation
 → Module branch commit
@@ -136,6 +140,8 @@ docs/architecture/slf-system-contract.md
 
 ## 6. Task classification
 
+Before classification, validate the Task Intake handoff. If the user already supplied a complete canonical Task Brief, do not ask them to repeat it. Otherwise normalize the dialogue according to `contracts/branches/task-intake.md`.
+
 Classify requests as one or more:
 
 - discussion / investigation;
@@ -153,19 +159,26 @@ Multi-category work is managed as staged phases under one runtime state.
 
 ## 7. Definition of Ready
 
-Implementation is ready only when it has:
+SLF readiness has two separate gates.
 
+Specification readiness requires:
+
+- original request and material clarifications;
 - clear problem statement;
-- responsible module/branch;
 - intended behavior;
-- out-of-scope boundaries;
+- responsible module or area;
+- in-scope and out-of-scope boundaries;
 - likely changed files;
 - cache/schema/storage expectation;
 - bundle-order/module-registry expectation;
 - acceptance checks;
-- explicit repository-write approval.
+- explicit facts, assumptions, open questions, and risks.
 
-Otherwise remain in `DISCUSSION` or `READY_FOR_IMPLEMENTATION`.
+When specification readiness is satisfied, move to `READY_FOR_IMPLEMENTATION` and present the PM `Implementation Scope Check`.
+
+Repository-write authorization requires an explicit approved phrase after that scope check. Approval is not part of Task Intake normalization and is required before transition to `IMPLEMENTING`.
+
+If specification readiness is incomplete, remain in `DISCUSSION` and ask only materially blocking questions.
 
 ## 8. Branch Freshness Check
 
@@ -191,7 +204,9 @@ Before merge, re-check that the branch is not behind `main` and that the changed
 When tools permit, the PM must continue internally through the complete workflow.
 
 ```text
-PM triage
+Task Intake
+→ canonical Task Brief
+→ PM triage
 → domain implementation
 → internal handoff
 → PM validation
@@ -491,3 +506,33 @@ Routine progress updates must contain no more than:
 - required user action, when applicable.
 
 A progress update must never terminate the execution loop.
+
+## 19. Task Intake handoff
+
+The PM accepts this internal handoff without requiring the user to copy or rewrite it:
+
+```text
+Task Brief
+- Original request:
+- Problem:
+- Expected behavior:
+- Scope:
+- Out of scope:
+- Responsible area:
+- Likely files:
+- Acceptance criteria:
+- Facts:
+- Assumptions:
+- Open questions:
+- Priority:
+- Complexity:
+- Risk:
+- Storage/cache/schema impact:
+- Bundle-order/module-registry impact:
+- Release required:
+- Browser acceptance required:
+```
+
+The PM must verify the brief, search open and closed Issues for duplicates, select or create the canonical Issue after repository-write approval, and then emit `Implementation Scope Check` before implementation writes.
+
+Task Intake is a specification role only. The PM retains authority for repository writes and the complete deterministic lifecycle.
