@@ -44,9 +44,13 @@
             parseBtn.style.cssText = 'padding:5px 8px;background:#444;color:#fff;border:1px solid #777;border-radius:3px;cursor:pointer;';
             parseBtn.onclick = () => {
                 const snapshot = SnapshotEngine.build();
-                SnapshotEngine.sendMatchResult(snapshot);
+                void SnapshotEngine.sendMatchResult(snapshot)
+                    .then(() => this.addParserLog('Финальный результат отправлен'))
+                    .catch(error => {
+                        this.addParserLog(`Ошибка отправки результата: ${error?.kind || 'unknown'}`);
+                        console.warn('[SLF API] final result send error', error);
+                    });
                 RecommendationEngine.update(snapshot);
-                this.addParserLog('Финальный результат отправлен');
             };
 
             const statsBtn = document.createElement('button');
@@ -65,7 +69,7 @@
                         console.log('[SLF API v2 canonical]', status);
                     })
                     .catch(error => {
-                        this.addParserLog('API v2 connection/parse error');
+                        this.addParserLog(`API v2 error: ${error?.kind || 'unknown'}`);
                         console.warn('[SLF API v2 canonical error]', error);
                     });
             };
