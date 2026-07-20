@@ -1,5 +1,38 @@
 # Changelog
 
+## 4.4.221
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/ISSUE_TEMPLATE/slf-backlog-task.md
+- contracts/SLF_AGENT_SYSTEM_SPEC.md
+- contracts/SLF_BACKLOG_PROCESS.md
+- contracts/SLF_GIT_CONFLICT_STRATEGY.md
+- contracts/SLF_GOVERNANCE.md
+- contracts/branches/core-release.md
+- contracts/branches/project-manager.md
+- contracts/branches/task-intake.md
+- contracts/branches/team-management.md
+- docs/decision_records/DR-005-standard-module-handoff.md
+- src/app/module-registry.json
+- tools/build-latest-userscript.mjs
+- tools/check-bundle-order.mjs
+
+Approved base commit:
+- 53ae53eb7a664c4a6be9cf63bc1e1cdd72590e37
+
+Approved commit:
+- 1baa97914d3e70938955c53ccb25185980c96263
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.220
 
 ### Automatic latest-only build
