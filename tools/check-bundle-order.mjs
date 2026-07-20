@@ -1,6 +1,8 @@
 #!/usr/bin/env node
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 
 const ROOT = process.cwd();
 const MANIFEST_PATH = 'src/app/bundle-order.json';
@@ -63,6 +65,136 @@ function validateProductionDebugBoundary() {
   }
 
   return { forbiddenPatternCount: forbidden.length };
+}
+
+
+function createApiTransportHarness() {
+  const requests = [];
+  const debugLogs = [];
+  const debugWarnings = [];
+  const clientKey = 'TEST_PUBLIC_CLIENT_KEY';
+  const sandbox = {
+    CONFIG: { SERVER_URL: 'http://slf.test' },
+    getApiToken: () => clientKey,
+    warnMissingApiTokenOnce: () => {},
+    debugLog: (...args) => debugLogs.push(args),
+    debugWarn: (...args) => debugWarnings.push(args),
+    GM_xmlhttpRequest: request => requests.push(request)
+  };
+
+  vm.createContext(sandbox);
+  const source = fs.readFileSync(absolute('src/core/api.js'), 'utf8');
+  vm.runInContext(
+    `(() => {\n${source}\nglobalThis.__SLF_API__ = Api;\n})();`,
+    sandbox,
+    { filename: 'src/core/api.js' }
+  );
+
+  return {
+    api: sandbox.__SLF_API__,
+    requests,
+    debugLogs,
+    debugWarnings,
+    clientKey
+  };
+}
+
+async function captureRejection(promise) {
+  try {
+    await promise;
+  } catch (error) {
+    return error;
+  }
+  throw new Error('expected API request to reject');
+}
+
+function assertSafeApiError(error, expectedKind, harness) {
+  assert.equal(error?.name, 'SLFApiError');
+  assert.equal(error?.kind, expectedKind);
+  const serialized = `${error?.message || ''} ${JSON.stringify(error)} ${JSON.stringify(harness.debugWarnings)}`;
+  assert.equal(serialized.includes(harness.clientKey), false, 'client key leaked through API error or log');
+  assert.equal(Object.hasOwn(error || {}, 'request'), false, 'raw request must not be attached to API errors');
+}
+
+async function validateApiTransportContract() {
+  try {
+    {
+      const harness = createApiTransportHarness();
+      const promise = harness.api.post('writes', { ok: true }, 'write test');
+      const request = harness.requests[0];
+      assert.equal(request.timeout, 15000);
+      assert.equal(request.headers.Authorization, `Bearer ${harness.clientKey}`);
+      request.onload({ status: 201, statusText: 'Created', finalUrl: 'http://slf.test/api/writes', responseText: '{}' });
+      const result = await promise;
+      assert.equal(result.status, 201);
+      assert.equal(harness.debugLogs.length, 1);
+    }
+
+    {
+      const harness = createApiTransportHarness();
+      const promise = harness.api.getPromise('reads');
+      harness.requests[0].onload({
+        status: 200,
+        statusText: 'OK',
+        finalUrl: 'http://slf.test/api/reads',
+        responseText: '{"items":[1,2]}'
+      });
+      const result = await promise;
+      assert.deepEqual(Array.from(result.data.items), [1, 2]);
+    }
+
+    {
+      const harness = createApiTransportHarness();
+      const promise = harness.api.post('writes', { ok: false }, 'rejected write');
+      harness.requests[0].onload({
+        status: 500,
+        statusText: `Failure ${harness.clientKey}`,
+        finalUrl: `http://slf.test/api/writes?echo=${harness.clientKey}`,
+        responseText: harness.clientKey
+      });
+      const error = await captureRejection(promise);
+      assertSafeApiError(error, 'http', harness);
+      assert.equal(error.status, 500);
+      assert.equal(harness.debugLogs.length, 0, 'rejected POST must not log success');
+    }
+
+    {
+      const harness = createApiTransportHarness();
+      const promise = harness.api.getPromise('missing');
+      harness.requests[0].onload({
+        status: 404,
+        statusText: 'Not Found',
+        finalUrl: 'http://slf.test/api/missing',
+        responseText: '<html>not json</html>'
+      });
+      const error = await captureRejection(promise);
+      assertSafeApiError(error, 'http', harness);
+      assert.equal(error.status, 404);
+    }
+
+    {
+      const harness = createApiTransportHarness();
+      const promise = harness.api.getPromise('invalid-json');
+      harness.requests[0].onload({
+        status: 200,
+        statusText: 'OK',
+        finalUrl: 'http://slf.test/api/invalid-json',
+        responseText: '{invalid'
+      });
+      assertSafeApiError(await captureRejection(promise), 'parse', harness);
+    }
+
+    for (const [handler, kind] of [['onerror', 'network'], ['ontimeout', 'timeout'], ['onabort', 'abort']]) {
+      const harness = createApiTransportHarness();
+      const promise = harness.api.getPromise(kind);
+      harness.requests[0][handler]({ status: 0, responseText: harness.clientKey });
+      assertSafeApiError(await captureRejection(promise), kind, harness);
+    }
+  } catch (error) {
+    fail(`API transport contract validation failed: ${error.message}`);
+  }
+
+  return { scenarioCount: 8 };
 }
 
 function identifierPattern(identifier) {
@@ -430,11 +562,13 @@ if (unregistered.length) fail('unregistered src JavaScript files', unregistered)
 
 const dependencyAudit = validateDependencyAudit(manifest, files);
 const debugBoundary = validateProductionDebugBoundary();
+const apiTransport = await validateApiTransportContract();
 
 console.log(
   `[bundle-order] OK: ${files.length} registered runtime modules; manifest is complete and bootstrap is final; `
   + `dependency pilot validates ${dependencyAudit.moduleCount} modules, `
   + `${dependencyAudit.dependencySymbolCount} dependency symbols, and `
   + `${dependencyAudit.hostCapabilityCount} host capabilities; `
-  + `production debug boundary rejects ${debugBoundary.forbiddenPatternCount} privileged export patterns.`
+  + `production debug boundary rejects ${debugBoundary.forbiddenPatternCount} privileged export patterns; `
+  + `API transport contract validates ${apiTransport.scenarioCount} deterministic scenarios.`
 );

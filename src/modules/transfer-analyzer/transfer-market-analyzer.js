@@ -1791,15 +1791,16 @@ const TransferMarketAnalyzer = {
     },
 
     sendTransferHistoryEvents(events) {
-        if (!Array.isArray(events) || !events.length) return;
+        if (!Array.isArray(events) || !events.length) return Promise.resolve(null);
 
-        Api.post(
+        return Api.post(
             CONFIG.COLLECTIONS.TRANSFER_HISTORY + '?mode=append',
             events,
             'transfer history events'
-        );
-
-        this.markHistoryEventsSubmitted(events);
+        ).then(result => {
+            this.markHistoryEventsSubmitted(events);
+            return result;
+        });
     },
 
     async analyzeHistoryVisibleRows() {
@@ -1882,11 +1883,18 @@ const TransferMarketAnalyzer = {
         }
 
         if (eventsToSend.length) {
-            this.sendTransferHistoryEvents(eventsToSend);
+            try {
+                await this.sendTransferHistoryEvents(eventsToSend);
+            } catch (error) {
+                this.setStatus(
+                    `История: ошибка отправки ${eventsToSend.length} записей (${error?.kind || 'unknown'}).`
+                );
+                return;
+            }
         }
 
         this.setStatus(
-            `История готова: подготовлено к отправке ${eventsToSend.length}, пропущено дублей ${skipped}, ошибок ${failed}.`
+            `История готова: отправлено ${eventsToSend.length}, пропущено дублей ${skipped}, ошибок ${failed}.`
         );
     },
 

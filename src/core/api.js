@@ -7,80 +7,154 @@
         return "Bearer " + token;
     }
 
-    const Api = {
-        postPromise(collection, data, label) {
+    const Api = (() => {
+        const API_REQUEST_TIMEOUT_MS = 15000;
+
+        function redactApiText(value) {
+            const text = String(value || '');
+            const token = String(getApiToken() || '');
+            return token ? text.split(token).join('[redacted]') : text;
+        }
+    
+        function safeApiResponseMetadata(response) {
+            const numericStatus = Number(response?.status || 0);
+            return {
+                status: Number.isFinite(numericStatus) ? numericStatus : 0,
+                statusText: redactApiText(response?.statusText),
+                finalUrl: redactApiText(response?.finalUrl || response?.responseURL)
+            };
+        }
+    
+        function createApiError(kind, context, response) {
+            const metadata = safeApiResponseMetadata(response);
+            const operation = redactApiText(context.operation || context.collection);
+            const statusSuffix = metadata.status ? ` (HTTP ${metadata.status})` : '';
+            const error = new Error(`SLF API ${kind} error during ${operation}${statusSuffix}`);
+    
+            error.name = 'SLFApiError';
+            error.kind = kind;
+            error.method = context.method;
+            error.collection = redactApiText(context.collection);
+            error.operation = operation;
+            error.status = metadata.status;
+            error.statusText = metadata.statusText;
+            error.response = metadata;
+    
+            return error;
+        }
+    
+        function requestApi({ method, collection, data, label, parseJson }) {
+            const context = {
+                method,
+                collection: String(collection || ''),
+                operation: String(label || `${method} ${collection || ''}`)
+            };
+    
             return new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: "POST",
-                    url: `${CONFIG.SERVER_URL}/api/${collection}`,
-                    headers: {
-                        "Authorization": buildApiAuthorizationHeader(),
-                        "Content-Type": "application/json"
-                    },
-                    data: JSON.stringify(data),
-                    onload: r => resolve({ response: r, status: r.status, data }),
-                    onerror: e => reject(e)
-                });
-            });
-        },
-
-        post(collection, data, label) {
-            return this.postPromise(collection, data, label)
-                .then(result => {
-                    debugLog(`[SLF] ${label || collection} saved:`, result.status, data);
-                    return result;
-                })
-                .catch(error => {
-                    debugWarn(`[SLF] ${label || collection} save error:`, error);
-                    throw error;
-                });
-        },
-
-        postAppend(collection, data, label) {
-            const payload = Array.isArray(data) ? data : [data];
-            return this.post(`${collection}?mode=append`, payload, label || `${collection} append`);
-        },
-
-        clearCollection(collection, label) {
-            return this.post(collection, [], label || `${collection} clear`);
-        },
-
-        getPromise(collection) {
-            return new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: "GET",
+                const request = {
+                    method,
                     url: `${CONFIG.SERVER_URL}/api/${collection}`,
                     headers: {
                         "Authorization": buildApiAuthorizationHeader()
                     },
-                    onload: r => {
+                    timeout: API_REQUEST_TIMEOUT_MS,
+                    onload: response => {
+                        const metadata = safeApiResponseMetadata(response);
+    
+                        if (metadata.status < 200 || metadata.status >= 300) {
+                            reject(createApiError('http', context, response));
+                            return;
+                        }
+    
+                        if (!parseJson) {
+                            resolve({ response: metadata, status: metadata.status, data });
+                            return;
+                        }
+    
                         try {
-                            resolve({ data: JSON.parse(r.responseText), response: r, status: r.status });
-                        } catch (e) {
-                            reject({ error: e, response: r });
+                            resolve({
+                                data: JSON.parse(response.responseText),
+                                response: metadata,
+                                status: metadata.status
+                            });
+                        } catch (_) {
+                            reject(createApiError('parse', context, response));
                         }
                     },
-                    onerror: e => reject({ error: e })
-                });
+                    onerror: response => reject(createApiError('network', context, response)),
+                    ontimeout: response => reject(createApiError('timeout', context, response)),
+                    onabort: response => reject(createApiError('abort', context, response))
+                };
+    
+                if (method === 'POST') {
+                    request.headers["Content-Type"] = "application/json";
+                    request.data = JSON.stringify(data);
+                }
+    
+                GM_xmlhttpRequest(request);
             });
-        },
-
-        get(collection, onSuccess, onError) {
-            return this.getPromise(collection)
-                .then(({ data, response }) => {
-                    if (onSuccess) onSuccess(data, response);
-                    return data;
-                })
-                .catch(payload => {
-                    if (onError) onError(payload.error || payload, payload.response);
-                    throw payload.error || payload;
-                });
-        },
-
-        getAnalysis(onSuccess, onError) {
-            return this.get("analysis", onSuccess, onError);
         }
-    };
+
+        const api = {
+            postPromise(collection, data, label) {
+                return requestApi({
+                    method: 'POST',
+                    collection,
+                    data,
+                    label: label || collection,
+                    parseJson: false
+                });
+            },
+    
+            post(collection, data, label) {
+                return this.postPromise(collection, data, label)
+                    .then(result => {
+                        debugLog(`[SLF] ${label || collection} saved:`, result.status);
+                        return result;
+                    })
+                    .catch(error => {
+                        debugWarn(`[SLF] ${label || collection} save error:`, error);
+                        throw error;
+                    });
+            },
+    
+            postAppend(collection, data, label) {
+                const payload = Array.isArray(data) ? data : [data];
+                return this.post(`${collection}?mode=append`, payload, label || `${collection} append`);
+            },
+    
+            clearCollection(collection, label) {
+                return this.post(collection, [], label || `${collection} clear`);
+            },
+    
+            getPromise(collection, label) {
+                return requestApi({
+                    method: 'GET',
+                    collection,
+                    label: label || collection,
+                    parseJson: true
+                });
+            },
+    
+            get(collection, onSuccess, onError) {
+                return this.getPromise(collection)
+                    .then(({ data, response }) => {
+                        if (onSuccess) onSuccess(data, response);
+                        return data;
+                    })
+                    .catch(error => {
+                        if (onError) onError(error, error.response);
+                        throw error;
+                    });
+            },
+    
+            getAnalysis(onSuccess, onError) {
+                return this.get("analysis", onSuccess, onError);
+            }
+        };
+
+        return api;
+    })();
 
     function normalizeServerRows(data) {
         if (Array.isArray(data)) return data;

@@ -145,13 +145,14 @@ const SnapshotEngine = {
 
         const record = this.buildSnapshotRecord(snapshot);
 
-        Api.postAppend(
+        const request = Api.postAppend(
             CONFIG.COLLECTIONS.MATCH_SNAPSHOTS,
             record,
             'snapshot history'
         );
 
-        this.sendPlayerObservations(snapshot);
+        void this.sendPlayerObservations(snapshot).catch(() => {});
+        return request;
     },
 
     getLiveStorageKey(gameId = MatchStateParser.getGameId()) {
@@ -482,9 +483,9 @@ const SnapshotEngine = {
                 };
             });
 
-        if (!observations.length) return;
+        if (!observations.length) return Promise.resolve(null);
 
-        Api.post(
+        return Api.post(
             CONFIG.COLLECTIONS.PLAYER_OBSERVATIONS + '?mode=append',
             observations,
             'player observations'
@@ -507,13 +508,14 @@ const SnapshotEngine = {
             }
         });
 
-        Api.postAppend(
+        const request = Api.postAppend(
             CONFIG.COLLECTIONS.MATCH_RESULTS,
             result,
             'match result history'
         );
 
-        this.sendPlayerObservations(snapshot);
+        void this.sendPlayerObservations(snapshot).catch(() => {});
+        return request;
     },
 
     startLive(options = {}) {
@@ -579,14 +581,16 @@ const SnapshotEngine = {
             if (snapshot.bucket && snapshot.bucket !== STATE.lastSavedBucket) {
                 STATE.lastSavedBucket = snapshot.bucket;
 
-                this.sendSnapshot(snapshot);
-                UI.addParserLog(`Сохранён generation snapshot: ${snapshot.bucket}`);
+                void this.sendSnapshot(snapshot)
+                    .then(() => UI.addParserLog(`Сохранён generation snapshot: ${snapshot.bucket}`))
+                    .catch(error => UI.addParserLog(`Ошибка сохранения snapshot: ${error?.kind || 'unknown'}`));
 
                 const effect = EventTracker.buildPresetEffect(snapshot);
 
                 if (effect) {
-                    Api.postAppend(CONFIG.COLLECTIONS.PRESET_EFFECTS, effect, 'preset effect history');
-                    UI.addParserLog(`Эффект тактики сохранён: ${effect.presetName}`);
+                    void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EFFECTS, effect, 'preset effect history')
+                        .then(() => UI.addParserLog(`Эффект тактики сохранён: ${effect.presetName}`))
+                        .catch(error => UI.addParserLog(`Ошибка сохранения эффекта: ${error?.kind || 'unknown'}`));
                 }
             }
 
