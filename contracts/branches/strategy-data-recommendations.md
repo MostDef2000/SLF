@@ -17,13 +17,15 @@ After `COMMIT APPROVED`, do not ask for separate confirmation for each internal 
 
 ## Branch lifecycle and source rule
 
-`main` is the long-term source of truth after release. This module branch is a disposable working branch, not long-term storage.
+`main` is the only long-term source of truth after integration. This contract defines domain ownership; it does not define a permanent workflow branch.
+
+For each approved implementation task, use a fresh disposable task/domain branch created from current `main`. The exact branch name and base SHA must be recorded in the Implementation Scope Check.
 
 Before implementation, perform the Branch Freshness Check defined in `contracts/SLF_GOVERNANCE.md`.
 
-Do not implement from a stale `strategy-data-recommendations` branch. If this branch is not fresh from current `main` and there is no explicitly approved active diff/range, stop and request branch reset/recreate from current `main`.
+Do not implement from a stale branch. If a candidate branch is not fresh from current `main` and there is no explicitly approved active diff/range, stop and recreate it from current `main`.
 
-Read implementation source from `main/src/**` or from a verified fresh `strategy-data-recommendations` branch. Do not use `releases/latest.user.js` as editable source.
+Read implementation source from `main/src/**` or from the verified fresh task/domain branch. Do not use `releases/latest.user.js` as editable source.
 
 ## Server/API knowledge source policy
 
@@ -126,9 +128,9 @@ This branch owns:
 
 ## Output
 
-This branch does not create module release manifests.
+This domain does not create module release manifests.
 
-After every completed in-scope task, return exactly two sections:
+After every completed in-scope task, produce exactly two internal artifacts:
 
 1. Technical report
 - commit hash
@@ -138,9 +140,9 @@ After every completed in-scope task, return exactly two sections:
 - files/scopes not changed
 - knowledge source block when server/API, exports, or `forum_faq` were used
 
-2. COPY-READY MESSAGE FOR CORE RELEASE AGENT
+2. Internal PM/Core Release handoff
 - module name
-- source branch
+- source task/domain branch
 - approved commit
 - changed files
 - summary
@@ -151,9 +153,11 @@ After every completed in-scope task, return exactly two sections:
 - instruction to integrate only approved files
 - instruction not to invent business logic
 
+The PM receives and validates this handoff internally in the same chat. Do not ask the user to copy the handoff, choose another agent, merge the PR, or run routine GitHub Actions.
+
 ## Integration
 
-Core Release integrates approved commits from the copy-ready handoff.
+PM/Core Release integrates the approved commit after validating the internal handoff. `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md` governs CI and publication and overrides older manual-release wording.
 
 Do not use:
 - module-releases/

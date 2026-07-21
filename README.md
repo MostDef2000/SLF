@@ -2,18 +2,19 @@
 
 SLF userscript project.
 
-This repository is the source of truth for SLF module contracts, module release manifests, and the final Tampermonkey userscript release files.
+This repository is the source of truth for SLF contracts, editable module source, and generated Tampermonkey release artifacts.
 
-## Branch workflow
+## Development workflow
 
-Development is split by workflow branches:
+The canonical workflow is:
 
-- `strategy-data-recommendations`
-- `transfer-analyzer`
-- `team-management`
-- `core-release`
+```text
+Issue → fresh disposable task/domain branch → pull request → CI validation → merge into main → automatic release when required
+```
 
-Module branches produce module release manifests. `core-release` integrates explicitly requested module releases into one bundled Tampermonkey userscript.
+`main` is the only long-term source of truth after integration. Domain contracts define ownership and forbidden areas; they do not define permanent workflow branches.
+
+Domain agents hand completed work to PM/Core Release internally in the same chat. They must not create module release manifests, bump the userscript version, or edit generated release artifacts. Routine manual GitHub Actions execution is not part of the normal workflow.
 
 ## Release channel
 
@@ -22,4 +23,4 @@ Tampermonkey reads:
 - `releases/latest.meta.js`
 - `releases/latest.user.js`
 
-The initial GitHub update-channel migration is manual. After that, Tampermonkey updates through `@updateURL` and `@downloadURL`.
+Eligible source or release-workflow changes merged into `main` trigger the Automatic Release Policy. Documentation-only changes do not create an empty userscript release. Manual workflow dispatch is fallback-only.

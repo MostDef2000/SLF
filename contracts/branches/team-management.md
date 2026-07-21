@@ -17,13 +17,15 @@ Do not ask for separate confirmation for every small internal edit after the use
 
 ## Branch lifecycle and source rule
 
-`main` is the long-term source of truth after release. This module branch is a disposable working branch, not long-term storage.
+`main` is the only long-term source of truth after integration. This contract defines domain ownership; it does not define a permanent workflow branch.
+
+For each approved implementation task, use a fresh disposable task/domain branch created from current `main`. The exact branch name and base SHA must be recorded in the Implementation Scope Check.
 
 Before implementation, perform the Branch Freshness Check defined in `contracts/SLF_GOVERNANCE.md`.
 
-Do not implement from a stale `team-management` branch. If this branch is not fresh from current `main` and there is no explicitly approved active diff/range, stop and request branch reset/recreate from current `main`.
+Do not implement from a stale branch. If a candidate branch is not fresh from current `main` and there is no explicitly approved active diff/range, stop and recreate it from current `main`.
 
-Read implementation source from `main/src/**` or from a verified fresh `team-management` branch. Do not use `releases/latest.user.js` as editable source.
+Read implementation source from `main/src/**` or from the verified fresh task/domain branch. Do not use `releases/latest.user.js` as editable source.
 
 ## Game knowledge source priority
 
@@ -69,9 +71,9 @@ No separate `youth-scouting` branch is used. Youth work belongs here.
 
 ## Output
 
-This branch does not create module release manifests.
+This domain does not create module release manifests.
 
-After every completed in-scope implementation task, return exactly two sections:
+After every completed in-scope implementation task, produce exactly two internal artifacts:
 
 1. Technical report
 - commit hash
@@ -81,9 +83,9 @@ After every completed in-scope implementation task, return exactly two sections:
 - files/scopes not changed
 - knowledge source block when server/API, exports, Wiki, or `forum_faq` were used
 
-2. COPY-READY MESSAGE FOR CORE RELEASE AGENT
+2. Internal PM/Core Release handoff
 - Module name
-- Source branch
+- Source task/domain branch
 - Approved commit
 - Changed files
 - Summary
@@ -94,24 +96,26 @@ After every completed in-scope implementation task, return exactly two sections:
 - Bundle-order changes needed: YES/NO
 - Core Release Authorization
 
-## COPY-READY MESSAGE requirements
+## Internal handoff requirements
 
 Every implementation handoff must include a Core Release Authorization section stating:
 
-- whether Core Release may integrate the approved files into main;
+- whether Core Release may integrate the approved files into `main`;
 - that the approved commit and changed files must match the handoff;
 - that release files and out-of-scope files must not be touched;
-- that Core Release should create the source integration commit, not stop at a prepared tree;
-- that Core Release must not publish release artifacts manually;
-- that the user manually runs GitHub Actions only after Core Release reports RUN ACTIONS: YES.
+- that Core Release must complete source integration rather than stop at a prepared tree;
+- that generated release artifacts must not be published or edited manually;
+- that `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md` governs CI and publication, while manual workflow dispatch is fallback-only.
 
-The copy-ready handoff must explicitly state whether cache/schema/storage keys changed. Do not introduce new cache/schema/storage key versions unless explicitly required and approved.
+The handoff must explicitly state whether cache/schema/storage keys changed. Do not introduce new cache/schema/storage key versions unless explicitly required and approved.
 
-The copy-ready handoff must explicitly state whether bundle-order changes are needed.
+The handoff must explicitly state whether bundle-order changes are needed.
+
+The PM receives and validates this handoff internally in the same chat. Do not ask the user to copy the handoff, choose another agent, merge the PR, or run routine GitHub Actions.
 
 ## Integration
 
-Core Release integrates approved commits from the copy-ready handoff.
+PM/Core Release integrates the approved commit after validating the internal handoff. `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md` overrides older manual-release wording.
 
 Do not use:
 - module-releases/
