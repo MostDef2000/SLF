@@ -5,6 +5,7 @@ After=network.target
 [Service]
 User=root
 WorkingDirectory=/root/slf-server
+EnvironmentFile=/root/slf-server/slf_api.env
 ExecStart=/root/slf-server/venv/bin/python /root/slf-server/server.py
 Restart=always
 

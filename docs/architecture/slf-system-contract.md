@@ -96,7 +96,7 @@ The PM must treat the mapping and paths above as the active architecture unless 
 
 ## 4. API and storage contract
 
-The API server is the storage/API backend. Data sensitivity is determined by endpoint behavior and authorization, not by the presence of the current public client key.
+The API server is the storage/API backend. Data sensitivity is determined by endpoint behavior and authorization. The shared bearer credential is a coarse access boundary, not per-user identity or fine-grained authorization.
 
 Current model:
 
@@ -130,19 +130,19 @@ Operational rule:
 
 ```text
 local API access: localhost preferred
-remote key-only API endpoints: effectively public
+remote bearer-only API endpoints: shared-credential access, without per-user authorization
 public data: sanitized /slf_ai export only
 ```
 
 The exporter should read from `http://127.0.0.1:5000/api` when running on the VPS.
 
-### 4.1 Public client-key boundary
+### 4.1 Private bearer-credential boundary
 
-For the current SLF threat model, the API token is a **public client key**, not a secret credential.
+`SLF_API_TOKEN` is a **private shared bearer credential** for the current API.
 
-The key may be embedded in userscript and server source and may appear in repository source, generated runtime output, terminal output, or chat. Its presence there is not credential compromise and does not, by itself, require rotation, protected environment storage, removal from client artifacts, or Tampermonkey-only storage.
+The server must read it from the process environment loaded from `/root/slf-server/slf_api.env` and must fail closed when the value is absent or empty. The value must not appear in repository source, generated artifacts, logs, chat, issues, pull requests, or deployment command history. Intended userscript installations store it only in Tampermonkey-local storage through `SLF: Set API token`.
 
-Any endpoint that relies only on this key must be treated as publicly callable. The key may identify the expected SLF client population or reject accidental unauthenticated traffic, but it is not a security boundary for sensitive capabilities.
+Possession grants the same access to every bearer, including write access. The credential therefore provides only a shared access boundary and must not be represented as per-user identity, fine-grained authorization, or sufficient protection for higher-risk capabilities.
 
 Separate real authentication and authorization become mandatory before an endpoint exposes:
 
@@ -151,7 +151,7 @@ Separate real authentication and authorization become mandatory before an endpoi
 - material external cost;
 - any capability the owner does not intend to expose to arbitrary callers.
 
-Plain HTTP is a separate confidentiality and integrity risk because traffic can be observed or modified in transit. That transport risk is currently accepted and must be tracked independently from token handling. HTTPS is not a prerequisite for continued use of the current public-client-key model.
+Plain HTTP can expose or modify the credential in transit. Removing its value from Git resolves repository disclosure only; it does not solve transport security. HTTPS remains separate required hardening.
 
 Production builds must not export userscript API closures, internal engines, or mutation methods to page globals through `window` or `unsafeWindow`. Legacy collection cleanup must not be callable from the page context.
 
@@ -164,7 +164,7 @@ SLF.versionInfo
 
 It must contain no API methods, collection readers, cleanup entrypoints, or internal module references. Source validation must reject any return of privileged debug exports. Browser acceptance must verify that `SLF_DEBUG`, lowercase `slf`, and mutating methods are absent from production page globals.
 
-This debug-surface boundary is independent from public client-key handling. Removing privileged page capabilities does not rotate or conceal the client key.
+This debug-surface boundary is independent from bearer-credential handling. Removing privileged page capabilities does not rotate or conceal the credential.
 
 ### 4.2 API transport error contract
 
@@ -192,7 +192,7 @@ statusText
 response: safe status metadata
 ```
 
-Errors and logs must not contain the Authorization header, the public client key, raw request objects, or raw response bodies. This is log/data minimization and is independent from whether the client key is classified as secret.
+Errors and logs must not contain the Authorization header, the API bearer credential, raw request objects, or raw response bodies.
 
 ## 5. Static export contract
 
@@ -290,7 +290,7 @@ RAG build rules:
 - deterministic export-time generation;
 - rebuildable from VPS data;
 - no external API dependency for local forum_faq;
-- no secret credential exposure in public artifacts; the accepted public client key is not a secret, although unnecessary copies should still be omitted;
+- no secret credential exposure in public artifacts;
 - no private raw API exposure to ChatGPT;
 - no LLM-generated hidden state required for rebuild.
 ```
@@ -309,7 +309,7 @@ Role:
 Not allowed:
   using Drive as primary data storage
   letting userscript read Google Drive directly
-  storing secret credentials, logs, or unnecessary public client-key copies in Drive mirror
+  storing credentials or logs in the Drive mirror
 ```
 
 Allowed mirror contents:
@@ -345,7 +345,7 @@ raw private API dumps
 private env files
 ```
 
-The filename filters above are data-minimization hygiene. They do not classify the current public client key as a secret or make its prior exposure a credential incident.
+The filename filters above are data-minimization hygiene and must exclude the API bearer credential and private environment files.
 
 ## 8. rclone sync contract
 
@@ -395,7 +395,7 @@ Expected steps:
 4. sync current mirror to Google Drive via rclone --filter-from
 ```
 
-The wrapper should load the public client key from the existing environment file rather than duplicating it in the crontab line. This is operational configuration hygiene, not secret storage.
+The wrapper must load the API bearer credential from the existing environment file rather than duplicating it in the crontab line.
 
 Cron should call only the wrapper, not duplicate the raw exporter command.
 
@@ -500,7 +500,7 @@ PM must not:
 ```text
 - reintroduce persistent player memory;
 - treat Drive as a primary database;
-- expose secret credentials in public artifacts or misrepresent the accepted public client key as strong authentication;
+- expose credentials in public artifacts or misrepresent the shared bearer credential as strong authentication;
 - add runtime dependency on the full RAG corpus;
 - request GitHub Actions for docs-only architecture updates.
 ```
