@@ -15,8 +15,9 @@ Decision Records are not task notes. Use them only when a decision changes or pr
 | DR-004 | API token handling | Superseded by DR-007 |
 | DR-005 | Standard module handoff | Active |
 | DR-006 | Review gate verdicts | Active |
-| DR-007 | Public API client-key boundary | Active |
+| DR-007 | Public API client-key boundary | Superseded by DR-009 |
 | DR-008 | VPS source-control and deployment model | Proposed |
+| DR-009 | Private VPS API bearer credential | Active |
 
 ## When to create a new DR
 

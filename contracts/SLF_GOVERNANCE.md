@@ -106,7 +106,7 @@ Domain agents must:
 - not edit release artifacts;
 - not bump version;
 - not publish the common userscript;
-- not add secret credentials, passwords, or private tokens; public client keys are allowed only when an active decision record explicitly defines their boundary;
+- not add secret credentials, passwords, or private tokens;
 - provide an internal handoff for PM/Core Release validation.
 
 The PM may operationally switch into domain-agent and Core Release roles in the same chat, while obeying each contract.
@@ -314,10 +314,11 @@ A release may be approved only when scope, changed files, safety, and required c
 ## 16. Security and system invariants
 
 - Never commit secret credentials, passwords, or private tokens.
-- The current SLF API token is an explicitly accepted **public client key**, not a secret credential. It may be present in client/server source and generated runtime output without constituting credential compromise.
-- Any endpoint that relies only on the public client key is effectively publicly callable. The key must not be represented as strong authentication.
+- `SLF_API_TOKEN` is a private shared bearer credential. Its value must remain outside Git, generated artifacts, logs, chat, issues, pull requests, and deployment command history.
+- The API must load `SLF_API_TOKEN` from protected VPS environment configuration and fail closed when it is missing or empty.
+- The shared bearer credential is not per-user identity or fine-grained authorization and must not be represented as strong authentication.
 - Separate real authentication and authorization are mandatory before exposing private data, destructive or administrative operations, material external cost, or any capability not intended for arbitrary callers.
-- Plain HTTP is an accepted, independent transport confidentiality/integrity risk; HTTPS work must not be presented as remediation for public-client-key exposure.
+- Plain HTTP can expose or modify the bearer credential in transit. Moving it out of Git does not solve transport security; HTTPS remains separate required hardening.
 - Production debug-surface hardening is independent from credential handling and is tracked by GitHub Issue #68.
 - VPS is source of truth for live/exported data.
 - Google Drive is a mirror only.

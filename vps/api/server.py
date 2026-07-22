@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import hmac
 import os
 import json
 import time
@@ -8,7 +9,9 @@ import re
 app = Flask(__name__)
 CORS(app)
 
-SECRET_TOKEN = "aTWA4qdwDlk/pINkaJFiJRQ1QN+S3AyDMhTus/Bfq9AB9C56kKkfQPtv7rb+WEZy"
+API_TOKEN = os.environ.get("SLF_API_TOKEN", "").strip()
+if not API_TOKEN:
+    raise RuntimeError("SLF_API_TOKEN must be set")
 
 DATA_DIR = "data"
 FORUM_FAQ_DIR = "forum_faq"
@@ -20,7 +23,7 @@ COLLECTION_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 def check_token():
     auth = request.headers.get("Authorization", "")
-    return auth == f"Bearer {SECRET_TOKEN}"
+    return hmac.compare_digest(auth, f"Bearer {API_TOKEN}")
 
 
 def is_valid_collection(collection):

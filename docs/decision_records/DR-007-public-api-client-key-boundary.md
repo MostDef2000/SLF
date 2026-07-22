@@ -1,11 +1,15 @@
 # DR-007 — Public API client-key boundary
 
-Status: Accepted
+Status: Superseded by DR-009
 Date: 2026-07-20
 Decision: Treat the current SLF API token as a public client key, not a secret credential.
 Scope: SLF client/server API boundary, future sensitive endpoints, transport risk, and security documentation.
 Consequences: Key-only endpoints are effectively public; sensitive capabilities require separate real authentication and authorization.
 Related contracts: `contracts/SLF_GOVERNANCE.md`, `docs/architecture/slf-system-contract.md`
+
+> Superseded on 2026-07-22. The deployed bearer value protects write-capable
+> endpoints and must not be published as a public client key. DR-009 defines
+> the replacement credential boundary and rotation model.
 
 ## Context
 
