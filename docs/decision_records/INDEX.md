@@ -16,6 +16,7 @@ Decision Records are not task notes. Use them only when a decision changes or pr
 | DR-005 | Standard module handoff | Active |
 | DR-006 | Review gate verdicts | Active |
 | DR-007 | Public API client-key boundary | Active |
+| DR-008 | VPS source-control and deployment model | Proposed |
 
 ## When to create a new DR
 
