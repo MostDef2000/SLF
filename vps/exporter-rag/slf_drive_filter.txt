@@ -1,0 +1,12 @@
++ /manifest.json
++ /ai_context.md
++ /data/**
++ /wiki/manifest.json
++ /wiki/index.json
++ /wiki/chunks.json
++ /wiki/rules.json
++ /wiki/docs/**
++ /forum_faq/**
++ /rag/**
++ /tactics/**
+- **

@@ -24,3 +24,7 @@ Tampermonkey reads:
 - `releases/latest.user.js`
 
 Eligible source or release-workflow changes merged into `main` trigger the Automatic Release Policy. Documentation-only changes do not create an empty userscript release. Manual workflow dispatch is fallback-only.
+
+## VPS source baseline
+
+Deployable VPS source is versioned under `vps/api/`, `vps/exporter-rag/`, and `vps/ops/`. Live data, environment values, credentials, generated export artifacts, and virtual environments remain outside Git. See `docs/decision_records/DR-008-vps-source-control-and-deployment-model.md`; DR-008 remains Proposed until an exact Git revision is deployed and rollback is verified.

@@ -1,14 +1,18 @@
 # SLF System Contract v1
 
-Version: 1.3.0  
-Status: Active  
-Owner: SLF Project Manager Agent  
-Scope: VPS export, RAG build, Google Drive mirror, runtime knowledge boundaries  
-Source of truth: GitHub contracts for governance, VPS export for live data, `main` for userscript source
+Version: 1.4.0
+
+Status: Active
+
+Owner: SLF Project Manager Agent
+
+Scope: VPS API, export, RAG build, Google Drive mirror, runtime knowledge boundaries
+
+Source of truth: `main` for deployable source and contracts, VPS for live data and generated artifacts
 
 ## 1. Purpose
 
-This document records the current SLF runtime architecture outside the userscript repository.
+This document records the current SLF runtime architecture across the repository and VPS.
 
 It exists so that the Project Manager Agent can start any future SLF conversation with the correct assumptions about:
 
@@ -55,9 +59,22 @@ SLF userscript / parser
 → Google Drive / SLF AI RAG / current
 ```
 
-## 3. VPS source-of-truth paths
+## 3. Source ownership and VPS paths
 
-The VPS is the source of truth for live SLF data and generated export artifacts.
+`MostDef2000/SLF` is the source of truth for deployable VPS code. The VPS is the source of truth for live SLF data, environment values, operational scheduler state, and generated export artifacts.
+
+Canonical source mapping:
+
+| Repository path | Current VPS path |
+|---|---|
+| `vps/api/server.py` | `/root/slf-server/server.py` |
+| `vps/api/requirements.txt` | API virtual environment dependencies |
+| `vps/exporter-rag/slf_ai_export.py` | `/opt/slf_ai_exporter_v2/slf_ai_exporter_v2/slf_ai_export.py` |
+| `vps/exporter-rag/slf_rag_build.py` | `/opt/slf_ai_exporter_v2/slf_ai_exporter_v2/slf_rag_build.py` |
+| `vps/exporter-rag/run_daily_export.sh` | `/opt/slf_ai_exporter_v2/slf_ai_exporter_v2/run_daily_export.sh` |
+| `vps/exporter-rag/slf_drive_filter.txt` | `/opt/slf_ai_exporter_v2/slf_ai_exporter_v2/slf_drive_filter.txt` |
+| `vps/exporter-rag/requirements.txt` | exporter virtual environment dependencies |
+| `vps/ops/slf-server.service` | `/etc/systemd/system/slf-server.service` |
 
 Known active paths:
 
@@ -73,7 +90,9 @@ Known active paths:
 /var/www/html/slf_ai/
 ```
 
-The PM must treat these as the active VPS architecture unless a newer inventory proves otherwise.
+The imported repository files are a verified `legacy pre-git baseline`. They do not yet identify the deployed Git revision because no Git-backed deployment has been performed. Deployment and rollback are manual and require separate operational approval; their current boundaries are defined in `contracts/branches/server-api-operations.md`, `contracts/branches/knowledge-export-rag.md`, and proposed DR-008.
+
+The PM must treat the mapping and paths above as the active architecture unless a newer inventory proves otherwise. `slf_api.env`, live data, forum content, virtual environments, cron configuration, rclone credentials, logs, backups, and generated exports must remain outside Git.
 
 ## 4. API and storage contract
 
@@ -468,8 +487,8 @@ PM must load or assume:
 PM must assume:
 
 ```text
-- VPS is source of truth for live data.
-- GitHub main is source of truth for userscript source.
+- VPS is source of truth for live data and generated artifacts.
+- GitHub main is source of truth for userscript and deployable VPS source.
 - Google Drive is mirror only.
 - RAG is derived, rebuildable, and non-authoritative over source data.
 - Userscript runtime must stay small and sanitized.
@@ -513,6 +532,8 @@ must follow normal PM → module branch → Core Release → Actions gate
 Last known stable state:
 
 ```text
+VPS source baseline in Git: imported, not yet deployed from Git
+Exact deployed Git revision: unknown
 VPS exporter: OK
 RAG builder: OK
 forum_faq: OK

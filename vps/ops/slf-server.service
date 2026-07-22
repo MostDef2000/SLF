@@ -1,0 +1,12 @@
+[Unit]
+Description=SLF Data Server
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/root/slf-server
+ExecStart=/root/slf-server/venv/bin/python /root/slf-server/server.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
