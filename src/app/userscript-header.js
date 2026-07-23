@@ -20,7 +20,7 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @grant        GM_registerMenuCommand
-// @connect      77.105.142.206
+// @connect      slf-api.mostdef.ru
 // @connect      www.transfermarkt.com
 // @connect      transfermarkt.com
 // @connect      slf.fm
