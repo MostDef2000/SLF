@@ -92,7 +92,8 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         if (Array.isArray(this.historyVpsRowsMemoryCache)) return this.historyVpsRowsMemoryCache;
         if (this.historyVpsRowsPromise) return this.historyVpsRowsPromise;
 
-        this.historyVpsRowsPromise = Api.getPromise(CONFIG.COLLECTIONS.TRANSFER_HISTORY)
+        const indexCollection = `${CONFIG.COLLECTIONS.TRANSFER_HISTORY}?view=index`;
+        this.historyVpsRowsPromise = Api.getPromise(indexCollection, 'transfer_history index')
             .then(result => {
                 const rows = this.normalizeHistoryVpsRows(result.data);
                 this.saveHistoryVpsCache(rows);
