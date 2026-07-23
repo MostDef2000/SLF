@@ -1,5 +1,32 @@
 # Changelog
 
+## 4.4.227
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- contracts/SLF_AGENT_SYSTEM_SPEC.md
+- contracts/SLF_GIT_CONFLICT_STRATEGY.md
+- contracts/SLF_ORCHESTRATION_LOOP.md
+- contracts/SLF_ORCHESTRATOR_ENGINE.md
+- contracts/SLF_SINGLE_CHAT_UNIVERSAL_AGENT.md
+- contracts/SLF_STATE_MODEL.md
+- src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
+
+Approved base commit:
+- 441d6e7f18f2fc7303c0607f2904d82f943e1e98
+
+Approved commit:
+- d2cc6db78b2c45093c9121a3f9e853b5352308c1
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.226
 
 ### Automatic latest-only build

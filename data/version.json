@@ -1,22 +1,28 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.226",
+  "scriptVersion": "4.4.227",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_226_published",
+  "status": "release_4_4_227_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "2abd25ae5704aa2c65c8670b12a2c9fbf0b60bae35f688129a58987ea34661dd",
     "bundleFileCount": 54,
-    "approvedBaseCommit": "ed7d22c1a2c1609f7b880edc342cf43cab2a22ce",
-    "approvedCommit": "14a28de72d5b7fee76bf4d2f3ebaeef15e224f23",
+    "approvedBaseCommit": "441d6e7f18f2fc7303c0607f2904d82f943e1e98",
+    "approvedCommit": "d2cc6db78b2c45093c9121a3f9e853b5352308c1",
     "approvedFiles": [
-      "src/app/bundle-order.json"
+      "contracts/SLF_AGENT_SYSTEM_SPEC.md",
+      "contracts/SLF_GIT_CONFLICT_STRATEGY.md",
+      "contracts/SLF_ORCHESTRATION_LOOP.md",
+      "contracts/SLF_ORCHESTRATOR_ENGINE.md",
+      "contracts/SLF_SINGLE_CHAT_UNIVERSAL_AGENT.md",
+      "contracts/SLF_STATE_MODEL.md",
+      "src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js"
     ],
     "sourceBranch": "main",
     "releaseNotesProvided": false,
