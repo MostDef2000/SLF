@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.228
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js
+- vps/api/server.py
+
+Approved base commit:
+- c904ce5903e4e8bae71cfa16096670f101c16a1d
+
+Approved commit:
+- cd9fb193c09f7c5866511df5cf259d287a7a5064
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.227
 
 ### Automatic latest-only build
