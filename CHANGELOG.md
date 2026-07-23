@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.4.226
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/bundle-order.json
+
+Approved base commit:
+- ed7d22c1a2c1609f7b880edc342cf43cab2a22ce
+
+Approved commit:
+- 14a28de72d5b7fee76bf4d2f3ebaeef15e224f23
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.225
 
 ### Automatic latest-only build
