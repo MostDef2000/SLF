@@ -124,6 +124,41 @@ def filter_transfer_history_append_duplicates(existing, incoming):
     return accepted, skipped
 
 
+def build_transfer_history_index(data):
+    if not isinstance(data, list):
+        return []
+
+    result = []
+
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+
+        record_type = item.get("recordType") or item.get("eventType")
+        if record_type != "completed_transfer":
+            continue
+
+        player = item.get("player") if isinstance(item.get("player"), dict) else {}
+        transfer = item.get("transfer") if isinstance(item.get("transfer"), dict) else {}
+        player_id = player.get("playerId") or item.get("playerId") or ""
+        price = transfer.get("price") if transfer.get("price") is not None else item.get("price")
+        date_text = transfer.get("dateText") or item.get("dateText") or ""
+        date_ts = transfer.get("dateTs") if transfer.get("dateTs") is not None else item.get("dateTs")
+
+        compact = {
+            "recordType": "completed_transfer",
+            "playerId": str(player_id).strip(),
+            "dateText": str(date_text).strip()
+        }
+
+        if price is not None:
+            compact["price"] = price
+        if date_ts is not None:
+            compact["dateTs"] = date_ts
+
+        result.append(compact)
+
+    return result
 
 
 def load_forum_faq(default=None):
@@ -195,6 +230,10 @@ def api_get(collection):
 
     if not is_valid_collection(collection):
         return jsonify({"error": "Invalid collection"}), 400
+
+    if collection == "transfer_history" and request.args.get("view") == "index":
+        data = load_collection(collection, default=[])
+        return jsonify(build_transfer_history_index(data))
 
     return jsonify(load_collection(collection, default={}))
 
