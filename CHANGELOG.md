@@ -1,5 +1,47 @@
 # Changelog
 
+## 4.4.225
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- README.md
+- contracts/SLF_GOVERNANCE.md
+- contracts/branches/knowledge-export-rag.md
+- contracts/branches/server-api-operations.md
+- contracts/branches/strategy-data-recommendations.md
+- contracts/branches/team-management.md
+- contracts/branches/transfer-analyzer.md
+- docs/architecture/slf-system-contract.md
+- docs/decision_records/DR-007-public-api-client-key-boundary.md
+- docs/decision_records/DR-008-vps-source-control-and-deployment-model.md
+- docs/decision_records/DR-009-private-vps-api-bearer-credential.md
+- docs/decision_records/INDEX.md
+- src/app/userscript-header.js
+- src/core/config.js
+- vps/api/requirements.txt
+- vps/api/server.py
+- vps/exporter-rag/requirements.txt
+- vps/exporter-rag/run_daily_export.sh
+- vps/exporter-rag/slf_ai_export.py
+- vps/exporter-rag/slf_drive_filter.txt
+- vps/exporter-rag/slf_rag_build.py
+- vps/ops/slf-server.service
+
+Approved base commit:
+- ed4c0dcdee89f7d90d4c10edae38d9e0037e7ef3
+
+Approved commit:
+- 7abe668533e8dc32405d5de427f2fde65b392e0f
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.224
 
 ### Automatic latest-only build

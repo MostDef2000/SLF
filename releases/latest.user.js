@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.224
+// @version      4.4.225
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -20,7 +20,7 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @grant        GM_registerMenuCommand
-// @connect      77.105.142.206
+// @connect      slf-api.mostdef.ru
 // @connect      www.transfermarkt.com
 // @connect      transfermarkt.com
 // @connect      slf.fm
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.224',
-        scriptVersion: '4.4.224',
+        version: '4.4.225',
+        scriptVersion: '4.4.225',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.224',
+        scriptVersion: '4.4.225',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -91,8 +91,7 @@
 
 const CONFIG = {
     DEBUG: false,
-    SERVER_URL: "http://77.105.142.206:5000",
-    TOKEN: "oaAbGtmEKf7qGdH8cXVILmfCJ7zoWvqSv4pY30o4pXSGHsX1HXFReJYU6LkZk3Bg",
+    SERVER_URL: "https://slf-api.mostdef.ru",
 
     COLLECTIONS: {
         TACTICS: "tactics",
@@ -19136,15 +19135,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.224',
-        scriptVersion: '4.4.224',
+        version: '4.4.225',
+        scriptVersion: '4.4.225',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.224',
+        scriptVersion: '4.4.225',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
