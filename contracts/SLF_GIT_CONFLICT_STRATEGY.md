@@ -1,376 +1,233 @@
 # SLF Git Conflict Strategy
 
+Version: 2.0.0
+Status: Active compatibility contract
+Source of truth: `contracts/SLF_GOVERNANCE.md`, `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`, and `contracts/branches/core-release.md`
+
 ## Purpose
 
-This document defines the Git conflict prevention and recovery strategy for SLF.
+This document defines deterministic, scoped, recoverable Git behavior for SLF. It exists to prevent stale-SHA conflicts, branch drift, unsafe parallel writes, partial integration, accidental overwrite of `main`, and confusion between source and generated release artifacts.
 
-It exists to prevent:
-
-- stale SHA conflicts;
-- unsafe parallel writes;
-- branch drift;
-- partial integration states;
-- accidental overwrite of `main`;
-- inconsistent runtime wiring;
-- release artifact/source confusion.
-
-This is a governance document. It does not define product behavior or runtime logic.
+It does not override active governance, runtime, release, or domain contracts.
 
 ## Core principle
 
-SLF Git operations must be deterministic, scoped, and recoverable.
-
-The standard write model is:
-
 ```text
-read latest state -> apply approved scoped change -> validate -> write atomically -> verify
+read current state
+→ verify approved scope and capability path
+→ apply the approved change idempotently
+→ validate complete output
+→ commit on a fresh disposable branch
+→ verify branch diff
+→ PR and CI
+→ merge into main
+→ verify main
 ```
 
-No agent may write to GitHub based on stale assumptions when the latest state can be re-fetched.
+No write may be based on stale assumptions when the latest repository state can be re-fetched.
 
-## Source of truth
+## Source and branch model
 
-`main` is the only long-term source of truth.
-
-Module branches are temporary implementation branches.
-
-Release artifacts are build outputs, not source files.
-
-```text
-Source of implementation truth:
-src/**
-
-Source of governance truth:
-contracts/**
-
-Source of release output:
-releases/latest.user.js
-releases/latest.meta.js
-data/version.json
-CHANGELOG.md
-```
-
-## Branch model
-
-### main
-
-`main` is authoritative after every completed integration.
-
-All final release/build operations must target `main`.
-
-### module branches
-
-Module branches are disposable and must be considered stale after successful Core Release integration.
-
-A module branch must not be reused for new work unless it is recreated or refreshed from current `main`.
-
-### governance changes
-
-Governance changes should be committed directly to `main` only by Project Manager Agent after explicit approval.
-
-Governance changes normally do not require userscript release build.
-
-## Path ownership
-
-| Path | Primary owner | Write rule |
-|---|---|---|
-| `contracts/**` | Project Manager Agent | Governance only |
-| `src/modules/**` | Module Implementation Agent | Approved module scope only |
-| `src/app/bundle-order.json` | Module Agent / Core Release | Only when required for runtime wiring |
-| `tools/**` | Project Manager / Core Release tooling task | Explicit approval required |
-| `.github/workflows/**` | Project Manager / Core Release tooling task | Explicit approval required |
-| `releases/latest.user.js` | Build Workflow / Core Release | Build output only |
-| `releases/latest.meta.js` | Build Workflow / Core Release | Build output only |
-| `data/version.json` | Build Workflow / Core Release | Version metadata only |
-| `CHANGELOG.md` | Build Workflow / Core Release | Release notes only |
-
-## Write authority rules
-
-### Project Manager Agent
-
-May write:
+- `main` is the only long-term source of truth after integration.
+- Task/domain branches are fresh disposable execution state.
+- A branch used for completed work must not be reused for a new task unless recreated or refreshed from current `main`.
+- Generated release artifacts are build outputs, not editable source.
+- Governance changes follow the same branch → PR → CI → merge workflow; they must not be written directly to `main` during normal execution.
 
 ```text
-contracts/**
+Implementation source:      src/**
+Governance source:          contracts/**
+Generated release outputs:  releases/latest.user.js
+                            releases/latest.meta.js
+                            data/version.json
+                            CHANGELOG.md
 ```
 
-May write only with explicit approval:
+## Pre-write capability and scope check
+
+Before the first repository write, the responsible agent must know:
 
 ```text
-README.md
-docs/**
-tools/**
-.github/workflows/**
+Repository
+Current main SHA
+Target branch and base SHA
+Approved task and behavior
+Required file set
+Expected changed files
+Forbidden paths
+Write method for every required file
+Post-write verification method
+PR creation path
+CI inspection path
+Merge path
+Release verification path when applicable
 ```
 
-Must not write by default:
+For multi-file work, a safe strategy for the complete required file set must exist before the first partial write.
 
-```text
-src/**
-releases/**
-data/version.json
-CHANGELOG.md
-```
+## Branch freshness
 
-### Module Implementation Agent
+Before implementation, perform the active `Branch Freshness Check`.
 
-May write only approved module/source paths.
+Rules:
 
-Typical allowed paths:
+- create the task branch from current `main`;
+- do not implement from a stale branch;
+- if no approved active diff exists, recreate from current `main`;
+- before merge, verify the branch is not behind `main` and the changed-file list still matches scope;
+- never force-push `main`.
 
-```text
-src/modules/<module>/**
-src/app/bundle-order.json        # only if explicitly required
-```
+## Execution-method fallback ladder
 
-Must not write:
+Use the first safe available method:
 
-```text
-contracts/**
-releases/**
-data/version.json
-CHANGELOG.md
-```
+1. connector-native repository operations / GitHub Contents API;
+2. Git Data API with blobs, tree, commit, and ref update;
+3. local git with authenticated push;
+4. authenticated `gh`;
+5. one consolidated GitHub UI manual step;
+6. terminal `BLOCKED` only when no safe method remains.
 
-### Core Release Agent
+Failure of one connector or tool is not a task-level blocker while another safe method remains.
 
-May write approved source integration to `main`.
+## Recoverable conflict rule
 
-May coordinate release output generation.
-
-Must not invent module logic.
-
-Must not use release artifacts as implementation source.
-
-### GitHub Actions Build Workflow
-
-May write:
-
-```text
-releases/latest.user.js
-releases/latest.meta.js
-data/version.json
-CHANGELOG.md
-```
-
-Must not write:
-
-```text
-src/**
-contracts/**
-```
-
-## Pre-write requirements
-
-Before any GitHub write, the agent must know:
-
-```text
-Target repository:
-Target branch:
-Target path(s):
-Current file SHA or current main state:
-Approved scope:
-Expected changed files:
-Forbidden paths:
-```
-
-For multi-file changes, the agent must identify:
-
-```text
-Required file set:
-- ...
-
-Atomicity:
-- all files must be committed together: YES/NO
-- partial commit allowed: YES/NO
-```
-
-## Stale SHA / 409 conflict rule
-
-If GitHub write fails due to:
+Recoverable conflicts include:
 
 - stale SHA;
-- 409 conflict;
+- `409 Conflict`;
 - file changed after read;
 - branch advanced after read;
-- expected SHA mismatch;
+- the same patch is already partly applied;
+- a deterministic non-semantic merge conflict.
 
-the agent must not ask the user to retry immediately.
-
-Required recovery:
+Required behavior:
 
 ```text
-1. Re-fetch latest target file or latest main state.
-2. Re-apply the same approved patch idempotently.
-3. Retry the write once.
-4. Continue if successful.
+1. re-fetch current main and target files;
+2. verify the approved scope is still valid;
+3. re-apply the same approved operation idempotently;
+4. retry once using the current safe execution method or the next safe fallback;
+5. re-read and verify the result;
+6. continue from the last verified safe phase.
 ```
 
-Only after this retry fails may the agent return `BLOCKED`.
+The user must not be asked to retry routine Git operations manually while an agent-executable fallback exists.
 
-## Idempotent patch rule
+## Idempotency
 
-Every patch must be repeat-safe.
-
-A repeat-safe patch means:
+Approved operations must be repeat-safe:
 
 - no duplicate imports;
-- no duplicate bundle-order entries;
-- no duplicate bootstrap mounts;
+- no duplicate bundle entries or bootstrap mounts;
+- no duplicate contract sections;
 - no duplicate changelog entry for the same release;
-- no repeated deletion errors treated as fatal when the intended file is already absent.
-
-Before adding a line or entry, check whether it already exists.
-
-Before deleting a reference, check whether it exists.
+- deleting an already absent approved reference is not a fatal error;
+- adding an already present approved item does not create a second copy.
 
 Before claiming success, re-read the target state.
 
-## Atomicity rule
+## Atomicity and sequential writes
 
-Changes must be atomic when runtime correctness depends on multiple files.
+A runtime-required multi-file set must be integrated atomically or verified as a complete safe set on the isolated task branch before PR creation.
 
-Atomic file sets include:
+Typical atomic sets include:
 
 ```text
-new module file + bundle-order wiring
-deleted module file + bundle-order cleanup
-module consolidation + obsolete file removal + bundle-order cleanup
-runtime source change + required registry/bootstrap wiring
-release build output + version.json + changelog
+new module + bundle-order/bootstrap wiring
+module deletion + reference cleanup
+runtime source + required configuration/wiring
+release artifacts + version metadata + changelog
 ```
 
-Core Release must not advance `main` with partial runtime wiring.
+Sequential writes are allowed on an isolated task branch only when:
 
-If atomic write is unavailable in the current environment, return `BLOCKED` before writing any part of the file set.
+- each intermediate state is confined to the branch;
+- no partial state is merged into `main`;
+- the complete file set is re-fetched and verified before PR creation;
+- all actual changed files match the approved scope.
 
-## Sequential write rule
-
-Sequential single-file writes are allowed only when:
-
-- each file can stand independently;
-- intermediate repository state is safe;
-- failed later writes do not leave broken runtime wiring.
-
-Sequential writes are not allowed for required runtime wiring sets.
+Do not advance `main` with incomplete runtime wiring.
 
 ## Conflict classification
 
-### Recoverable conflict
+### Recoverable
+
+The approved intent is unchanged and the conflict can be resolved mechanically from current state.
+
+Action: re-fetch, replay idempotently, retry once, and continue.
+
+### Structural
 
 Examples:
 
-- stale SHA;
-- target file changed after read;
-- branch advanced;
-- same patch already partly applied.
+- expected file or anchor moved;
+- manifest/bootstrap structure changed materially;
+- approved handoff no longer matches current `main`;
+- safe application would require interpreting new product behavior.
 
-Required behavior:
+Action: return to scope/review. Use terminal `BLOCKED` only after the active blocker-evidence gate is satisfied.
 
-```text
-re-fetch -> re-apply idempotently -> retry once -> continue
-```
-
-### Structural conflict
+### Scope or safety conflict
 
 Examples:
 
-- expected file moved;
-- expected anchor removed;
-- bundle-order structure changed;
-- bootstrap entrypoint pattern changed;
-- approved handoff no longer matches latest `main`.
+- an unapproved file must change;
+- generated artifacts would be edited as source;
+- unrelated work would be overwritten;
+- a destructive action was not approved;
+- resolving the conflict requires guessing business logic;
+- secrets or protected values would be exposed.
 
-Required behavior:
+Action: do not apply the change. Request the required approval or return `FAILED`/`BLOCKED` according to active governance.
 
-```text
-return BLOCKED with exact mismatch and required next action
-```
+## Shared-file serialization
 
-### Safety conflict
+Work touching the same path or shared wiring must be serialized.
 
-Examples:
-
-- unapproved file would be changed;
-- release artifact would be edited as source;
-- unrelated module would be overwritten;
-- destructive cleanup was not approved.
-
-Required behavior:
-
-```text
-return FAILED or BLOCKED depending on whether the scope is invalid or input is missing
-```
-
-## Parallel agent strategy
-
-Agents may work in parallel only when their writable paths do not overlap.
-
-Safe parallel examples:
-
-```text
-Project Manager edits contracts/**
-Module Agent edits src/modules/team/**
-Another Module Agent edits src/modules/strategy/**
-```
-
-Unsafe parallel examples:
-
-```text
-Two agents edit src/app/bundle-order.json
-Two agents edit the same module file
-Module Agent edits source while Core Release integrates the same branch
-Core Release and Build Workflow both edit release artifacts manually
-```
-
-When shared files are involved, work must be serialized.
-
-Shared files include:
+Shared paths include:
 
 ```text
 src/app/bundle-order.json
 src/bootstrap.js
+.github/workflows/**
+tools/build-latest-userscript.mjs
+tools/check-bundle-order.mjs
 releases/latest.user.js
 releases/latest.meta.js
 data/version.json
 CHANGELOG.md
-contracts/SLF_AGENT_SYSTEM_SPEC.md
-contracts/branches/core-release.md
+core governance contracts
 ```
 
-## Bundle-order conflict strategy
+Parallel work is permitted only when writable paths and integration dependencies do not overlap.
 
-`src/app/bundle-order.json` is a shared runtime wiring file.
+## Bundle and bootstrap safety
 
-Before modifying it, the agent must verify:
+Before modifying shared runtime wiring, verify:
 
-- target module file exists or will exist in the same atomic commit;
-- deleted module references are removed;
-- no duplicate entries exist;
-- order is preserved unless order change is explicitly approved;
-- JSON remains valid.
+- every referenced module exists or is created in the same complete set;
+- deleted modules have no remaining references;
+- no duplicate entry or mount exists;
+- ordering changes are intentional and approved;
+- JSON and JavaScript syntax remain valid;
+- all required wiring changes are included.
 
-If two approved changes both touch `bundle-order.json`, Core Release must merge both idempotently or block with exact conflict.
+A changed structure that cannot be reconciled mechanically must return to review rather than being guessed.
 
-## Bootstrap conflict strategy
+## Protected and secret-bearing files
 
-Bootstrap/app entrypoint files are shared runtime wiring files.
+- Never display or commit credentials, tokens, cookies, private environment values, or secret-bearing logs.
+- Preserve unchanged protected ranges exactly.
+- Never replace a protected file from incomplete or truncated content.
+- Use hashes, redacted comparisons, or unchanged-range verification where appropriate.
+- Existing unchanged secrets do not expand scope, but any new secret handling requires explicit approval.
 
-Before modifying bootstrap wiring, the agent must verify:
+## Release artifact safety
 
-- imported module exists;
-- mounted module exists;
-- mount is not duplicated;
-- deleted module is not referenced;
-- entrypoint order change is intentional.
+Generated release outputs must be produced by the canonical workflow, not hand-edited as implementation source.
 
-If bootstrap structure no longer matches expected anchor, return `BLOCKED`.
-
-## Release artifact conflict strategy
-
-Release artifacts must be generated, not hand-edited.
-
-Protected release outputs:
+Module and PM phases must not manually change:
 
 ```text
 releases/latest.user.js
@@ -379,138 +236,68 @@ data/version.json
 CHANGELOG.md
 ```
 
-Rules:
+Documentation-only changes do not bump the userscript version or trigger a release. Manual workflow dispatch is fallback-only.
 
-- Module Agents must never edit them.
-- Project Manager Agent must not edit them by default.
-- Core Release must not use `latest.user.js` as source.
-- Build Workflow must generate them from approved source and release notes.
-- No version-specific archive userscript may be created.
+## Post-write integrity gate
 
-## Changelog conflict strategy
+After every file write and before creating or updating a PR:
 
-`CHANGELOG.md` must describe actual approved module/runtime changes.
+1. fetch the complete written file from the branch;
+2. verify it is not truncated;
+3. verify expected structural markers and ending;
+4. validate syntax or parseability where applicable;
+5. compare the branch against current `main`;
+6. verify all and only approved files changed;
+7. verify forbidden/generated files were not modified;
+8. verify the complete required file set is present.
 
-Do not add generic entries such as:
+A failed integrity check returns the task to implementation. It is not automatically a terminal blocker.
 
-```text
-Updated latest userscript artifacts.
-Preserved Tampermonkey URLs.
-No archive file created.
-```
+## PR, merge, and main advancement
 
-These are validation facts, not changelog content.
+A branch commit is an intermediate checkpoint.
 
-If two releases target the same version, Core Release or Build Workflow must block unless the target version is explicitly approved and release notes are reconciled.
+The PM/Core Release must:
 
-## Version conflict strategy
+- open or update the PR;
+- inspect CI and changed files;
+- re-check branch freshness;
+- merge only when safe;
+- verify that `main` advanced to the expected integration result;
+- verify exact files on `main`;
+- continue to automatic release verification when applicable.
 
-`data/version.json` must be synchronized with:
+Do not stop after a prepared tree, commit, PR, merge, or running workflow.
 
-```text
-releases/latest.user.js @version
-releases/latest.meta.js @version
-runtime SLF.scriptVersion
-CHANGELOG.md latest entry
-```
+## Blocker threshold
 
-Version bump must happen only when runtime behavior or release tooling changes require userscript update detection.
+Agent-level `BLOCKED` is routed to safe recovery when possible.
 
-Docs/contracts-only changes must not bump userscript version.
+The task may enter terminal `BLOCKED` only when:
 
-## Main advancement rule
+- the required operation failed with evidence;
+- current repository state was re-fetched;
+- the primary method was attempted;
+- safe fallbacks were evaluated and attempted where available;
+- no deterministic agent-executable path remains;
+- no narrow consolidated manual step can safely recover the lifecycle;
+- the exact minimum recovery action is known.
 
-A commit is not integrated until `main` points to it.
+Waiting for CI, mergeability, automatic workflow start, or release artifacts is not a blocker. An empty push-workflow lookup is not proof that the workflow did not run.
 
-Forbidden final states:
+## Terminal reporting for Git blockers
 
-```text
-commit created but main not advanced
-tree prepared
-patch applied
-source integration incomplete
-```
-
-After creating an integration commit, Core Release must immediately attempt to advance `main`.
-
-If advancing `main` fails due to recoverable conflict, apply the stale SHA / conflict recovery rule.
-
-## Verification after write
-
-After every successful write, the agent must re-read the changed path(s) or relevant `main` state.
-
-Verification must confirm:
-
-- expected file exists;
-- expected content is present;
-- forbidden files were not changed;
-- runtime wiring is consistent when applicable;
-- final state is safe.
-
-Do not claim success based only on a write response.
-
-## Forbidden operations
-
-Agents must not:
-
-- force-push `main`;
-- overwrite `main` with stale state;
-- manually edit build artifacts as implementation source;
-- create partial runtime wiring;
-- apply unapproved file changes;
-- delete files outside approved scope;
-- resolve semantic code conflicts by guessing product behavior;
-- reuse stale branch state after release;
-- treat GitHub write failure as final without required retry/reconcile behavior.
-
-## Required BLOCKED output for Git conflicts
-
-When blocking on Git conflict, output:
+A terminal Git blocker report must include:
 
 ```text
-Final State:
-- BLOCKED
-
-Conflict type:
-- stale SHA / structural conflict / safety conflict / missing source / permission issue
-
-Completed steps:
-Blocked step:
-Affected files:
-Latest known main commit:
-Retry attempted: YES/NO
-Why automatic recovery is unsafe:
-Required next action:
-Continuation command:
+Final State: BLOCKED
+Conflict type
+Completed steps
+Blocked operation
+Affected files
+Latest verified main SHA
+Recovery attempts
+Why remaining automatic recovery is unsafe
+Minimum recovery action
+Continuation checkpoint
 ```
-
-## Required FAILED output for unsafe conflicts
-
-When failing due to scope or safety violation, output:
-
-```text
-Final State:
-- FAILED
-
-Failed rule:
-Evidence:
-Affected files:
-Why this cannot be auto-reconciled:
-Required correction:
-Recommended next agent:
-```
-
-## Strategy summary
-
-SLF avoids Git conflicts by enforcing:
-
-- strict path ownership;
-- latest-state reads before writes;
-- idempotent patches;
-- atomic multi-file commits;
-- automatic one-time retry for deterministic conflicts;
-- clear BLOCKED/FAILED outputs for non-deterministic conflicts;
-- source/release separation;
-- `main` as the only long-term source of truth.
-
-END OF STRATEGY

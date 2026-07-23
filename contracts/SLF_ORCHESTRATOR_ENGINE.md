@@ -1,112 +1,110 @@
-# SLF Orchestrator Engine (Final Architecture)
+# SLF Orchestrator Engine
+
+Version: 2.0.0
+Status: Active compatibility contract
+Source of truth: `contracts/SLF_GOVERNANCE.md`, `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`, and `contracts/branches/project-manager.md`
 
 ## Purpose
 
-The Orchestrator Engine is the single control system of SLF.
+The Orchestrator Engine is the SLF control system for task routing, state transitions, recovery, integration, release orchestration, and terminal-state decisions.
 
-It is responsible for:
-- task routing
-- agent selection
-- state transitions
-- Git recovery
-- execution continuity
-- release orchestration
+This document defines the engine model only. It does not replace active governance, runtime, release-gate, Core Release, Task Intake, or domain contracts.
 
-## System Model
+## System model
 
-User Input -> Orchestrator -> Agent Graph -> Git State -> Build -> Release -> Runtime
+```text
+User request
+→ Task Intake
+→ Project Manager orchestration
+→ domain executor
+→ review and integrity gates
+→ Core Release
+→ CI and automatic release
+→ runtime/browser acceptance
+→ terminal state
+```
 
-## Core Principle
+## Authority
 
-Only Orchestrator controls:
-- next agent selection
-- failure handling
-- retries
-- Git recovery
-- release triggering
-- final task state
+Only the Project Manager acting as orchestrator may:
 
-Agents are stateless executors.
+- select the next internal role;
+- change the system task state;
+- choose recovery and fallback paths;
+- validate handoffs;
+- merge approved work;
+- determine release applicability;
+- declare `COMPLETE`, `BLOCKED`, or `FAILED`.
 
-## Execution Loop
+Domain agents and release executors are stateless within their authority boundaries. They must not silently expand scope or declare system-level completion.
 
-while state not in [COMPLETE, FAILED]:
+## Execution loop
 
-    agent = select_agent(state)
-    result = execute(agent)
+```text
+while task_state not in [COMPLETE, BLOCKED, FAILED]:
+    role = select_next_role(task_state, approved_scope, repository_state)
+    result = execute(role)
 
     if result == READY_FOR_ROUTING:
-        route_next()
+        validate_handoff_and_route()
 
     if result == BLOCKED:
-        recover_git_or_context()
-        retry(agent)
+        if safe_recovery_exists():
+            transition_to_recovery()
+            recover_idempotently()
+            retry_once()
+        else:
+            validate_blocker_evidence()
+            task_state = BLOCKED
 
     if result == FAILED:
-        if deterministic:
-            recover_and_retry_once()
+        if deterministic_recovery_is_safe():
+            recover_idempotently()
+            retry_once()
         else:
-            state = FAILED
+            task_state = FAILED
 
-    if final_stage_reached:
-        validate_completion_conditions()
-        state = COMPLETE
+    if completion_conditions_are_verified():
+        task_state = COMPLETE
+```
 
-## Git Model
+## Agent output contract
 
-- main = source of truth
-- branches = temporary state
-- commits = checkpoints
+Internal executor results are:
 
-## Recovery Model
-
-1. fetch main
-2. reset or recreate branch when needed
-3. replay approved actions idempotently
-4. retry execution once
-
-## Agent Model
-
-Agents:
-- stateless
-- deterministic
-- non-authoritative
-
-## Agent Output Contract
-
-Agents may return only:
-
+```text
 READY_FOR_ROUTING
 BLOCKED
 FAILED
+```
 
-Agents must not return COMPLETE as a system-level final state.
+`READY_FOR_ROUTING` means the current role completed its authorized phase and the orchestrator must select the next role. It is not a final user-facing state.
 
-Only the Orchestrator may set COMPLETE or FAILED as terminal task states.
+## Git and recovery model
 
-## BLOCKED Meaning
+- `main` is the only long-term source of truth.
+- Task/domain branches are disposable execution state.
+- Commits are checkpoints, not completion.
+- Recoverable stale-SHA, branch-advance, or idempotent partial-application problems require re-fetch, safe replay, and one retry.
+- Failure of one connector or execution method is not a project blocker while another safe method remains.
+- A required multi-file set must not be partially integrated into `main`.
 
-Agent-level BLOCKED means the worker cannot continue inside its authority.
+## Release model
 
-Orchestrator-level BLOCKED is a recoverable routing state and should move to RECOVERING when recovery is safe.
+For eligible runtime/build changes merged into `main`, the orchestrator verifies the automatic `SLF Validate and Release` workflow and the resulting release commit/version.
 
-## Completion Rules
+Manual workflow dispatch is fallback-only. Documentation-only changes do not create a userscript release.
 
-Runtime or release tasks are COMPLETE only when:
-- required agents executed
-- git is synced to main
-- build is successful when required
-- runtime is validated or marked for manual browser check
+## Completion conditions
 
-Docs or contracts-only tasks are COMPLETE when:
-- approved docs/contracts files are committed to main
-- changed files are verified on main
-- no runtime build is required
+Runtime or release work is `COMPLETE` only when:
 
-## Release Rule
+- all required roles have completed;
+- approved source is verified on `main`;
+- required CI passes;
+- automatic release succeeds when applicable;
+- release artifacts and version are verified;
+- browser acceptance is complete, deferred, or explicitly not applicable;
+- the Tampermonkey instruction is explicit.
 
-Release triggers automatically only for runtime or release-tooling tasks.
-
-Docs/contracts-only changes do not trigger userscript build.
-
-END
+Documentation-only work is `COMPLETE` when approved files are merged and verified on `main` and no runtime release is required.
