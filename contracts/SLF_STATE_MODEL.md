@@ -1,55 +1,104 @@
-# SLF State Machine Definition (Final)
+# SLF State Model
 
-## States
+Version: 2.0.0
+Status: Active compatibility contract
+Source of truth: `contracts/runtime/SLF_TASK_RUNTIME.md`
 
+## Purpose
+
+This document provides a compact orchestration-level state model. The detailed task phases and user-facing status rules are defined by `contracts/runtime/SLF_TASK_RUNTIME.md`.
+
+## Orchestration states
+
+```text
 INIT
 ROUTING
 EXECUTING
-BLOCKED
 RECOVERING
 RETRYING
 CONSOLIDATING
 BUILDING
 RELEASING
+BROWSER_ACCEPTANCE
 COMPLETE
+BLOCKED
 FAILED
+```
 
-## Transitions
+Only one orchestration state may be active at a time. Only the Project Manager acting as orchestrator may change the system state.
 
-INIT -> ROUTING
-ROUTING -> EXECUTING
-EXECUTING -> BLOCKED
-BLOCKED -> RECOVERING
-RECOVERING -> RETRYING
-RETRYING -> EXECUTING
-EXECUTING -> CONSOLIDATING
-CONSOLIDATING -> BUILDING
-BUILDING -> RELEASING
-RELEASING -> COMPLETE
+## Canonical transitions
 
-ANY -> FAILED only when recovery is not possible
+```text
+INIT → ROUTING
+ROUTING → EXECUTING
+EXECUTING → ROUTING
+EXECUTING → CONSOLIDATING
+EXECUTING → RECOVERING
+RECOVERING → RETRYING
+RETRYING → EXECUTING
+CONSOLIDATING → BUILDING        # when runtime/build release is required
+CONSOLIDATING → COMPLETE        # documentation-only work after merge verification
+BUILDING → RELEASING
+RELEASING → BROWSER_ACCEPTANCE  # when browser acceptance is required
+RELEASING → COMPLETE            # when browser acceptance is not required or deferred
+BROWSER_ACCEPTANCE → COMPLETE
+```
 
-## Rules
+Transition to `BLOCKED` is allowed only after the blocker-evidence gate is satisfied. Transition to `FAILED` is allowed when implementation, integration, validation, or release has failed and no approved deterministic recovery remains.
 
-- Only one active state at a time
-- Agent-level BLOCKED means the worker cannot continue inside its authority
-- Orchestrator-level BLOCKED is a routing state
-- When recovery is safe, BLOCKED goes to RECOVERING
-- Orchestrator is the only entity allowed to change system state
-- Agents return READY_FOR_ROUTING, BLOCKED, or FAILED
-- Agents do not set COMPLETE
+## Executor results
 
-## Completion Conditions
+Internal agents do not set system states. They return:
 
-Runtime or release tasks are COMPLETE only if:
-- all required agents executed
-- git is synced to main
-- build is successful when required
-- runtime is validated or marked for manual browser check
+```text
+READY_FOR_ROUTING
+BLOCKED
+FAILED
+```
 
-Docs or contracts-only tasks are COMPLETE only if:
-- approved docs/contracts files are committed to main
-- changed files are verified on main
-- no runtime build is required
+- `READY_FOR_ROUTING`: the current role completed its authorized phase.
+- agent-level `BLOCKED`: the current role cannot continue within its authority; the orchestrator must attempt safe routing or recovery.
+- `FAILED`: the role encountered a failure; the orchestrator determines whether recovery is possible.
 
-END
+## Mapping to task runtime phases
+
+The authoritative detailed phases remain:
+
+```text
+DISCUSSION
+READY_FOR_IMPLEMENTATION
+IMPLEMENTING
+MODULE_COMMITTED
+HANDOFF_VALIDATED
+CORE_RELEASE_INTEGRATING
+SOURCE_INTEGRATED
+MANUAL_STEP_REQUIRED
+ACTIONS_REQUIRED
+ACTIONS_RUNNING
+ACTIONS_COMPLETED
+BROWSER_ACCEPTANCE
+COMPLETE
+BLOCKED
+FAILED
+```
+
+`ACTIONS_REQUIRED` is fallback-only. Normal eligible source changes move from `SOURCE_INTEGRATED` to `ACTIONS_RUNNING` automatically.
+
+## Terminal states
+
+The only terminal task states are:
+
+```text
+COMPLETE
+BLOCKED
+FAILED
+```
+
+Commits, handoffs, prepared trees, PRs, merges, and workflow-running states are intermediate and must not be presented as final.
+
+## Completion conditions
+
+Runtime/release work is `COMPLETE` only after approved source is verified on `main`, required CI passes, automatic release succeeds when applicable, release commit/version are verified, and browser/Tampermonkey instructions are explicit.
+
+Documentation-only work is `COMPLETE` after approved files are merged and verified on `main`, with release marked not required.
