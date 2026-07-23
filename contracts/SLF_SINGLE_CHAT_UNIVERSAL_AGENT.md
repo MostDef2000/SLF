@@ -1,199 +1,108 @@
 # SLF Single-Chat Universal Agent
 
+Version: 2.0.0
+Status: Active compatibility contract
+Source of truth: active SLF governance, Project Manager, runtime, Core Release, release-gate, and domain contracts
+
 ## Purpose
 
-This contract defines the single-chat universal execution mode for SLF.
+This contract defines the single-chat execution mode for SLF. One conversation may execute several logical roles sequentially while preserving each role's authority, scope, approval, safety, and release boundaries.
 
-In this mode, one assistant conversation may execute multiple SLF agent roles sequentially while preserving the same governance, scope, approval, and release rules used by the dedicated agents.
-
-This document does not replace module-specific contracts. It defines an operating mode for using them inside one conversation.
+This operating mode does not replace module-specific or higher-priority contracts.
 
 ## Core principle
 
-One chat may contain multiple logical agent phases.
-
-Roles are phases, not separate conversations.
-
-The assistant may act as:
+Roles are internal phases, not separate conversations:
 
 ```text
-Orchestrator -> Project Manager -> Module Implementation -> Review Gate -> Core Release -> Release Verification
+Task Intake
+→ Project Manager
+→ Domain Implementation
+→ Review / Integrity Gate
+→ Core Release
+→ Release Verification
 ```
 
-but each phase must remain logically separated and must follow its own authority boundaries.
+The user must not normally select the next agent, copy handoffs between chats, merge pull requests, or manually run GitHub Actions.
 
-## When this mode is allowed
+## Contract priority
 
-Single-chat universal mode may be used when:
+When wording differs, apply this order:
 
-- the user explicitly asks the assistant to act as the universal SLF agent;
-- the task can be executed with available repository/tooling access;
-- required approvals are present;
-- role boundaries can be preserved inside the conversation;
-- the task does not require a separate external agent runner.
+1. `contracts/SLF_GOVERNANCE.md`;
+2. `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`;
+3. `contracts/runtime/SLF_TASK_RUNTIME.md` and `contracts/runtime/RELEASE_READINESS_GATE.md`;
+4. `contracts/branches/task-intake.md`, `project-manager.md`, and `core-release.md`;
+5. the relevant domain contract;
+6. this compatibility contract and older system documents only where they do not conflict with the active set.
 
-## Required phase structure
+## Approval boundary
 
-The assistant must make phase transitions explicit.
+Before any repository write, the Project Manager must present an `Implementation Scope Check` for the exact task, intended behavior, files, risks, and acceptance checks.
 
-Recommended phase headers:
+Repository writes require explicit approval accepted by active governance. Approval persists for the exact approved scope through the complete deterministic lifecycle.
+
+After approval, no separate confirmation is required for branch creation, implementation, commits, PR creation, CI, merge, automatic release, or release verification.
+
+New approval is required only for scope expansion, destructive action, unapproved protected-file changes, secrets or credentials, behavior redesign, or a non-recoverable platform/permission blocker.
+
+## Required workflow
 
 ```text
-Phase: Orchestrator Intake
-Phase: Scope Check
-Phase: Implementation
-Phase: Review Gate
-Phase: Core Release
-Phase: Release Verification
-Final State
+Scope Check
+→ approval
+→ fresh disposable task/domain branch
+→ implementation
+→ post-write integrity verification
+→ internal handoff
+→ PR
+→ CI
+→ merge into main
+→ automatic release when applicable
+→ release/version verification
+→ browser acceptance when applicable
+→ COMPLETE
 ```
 
-Not every task requires every phase.
-
-Docs/contracts-only tasks may stop after:
-
-```text
-Scope Check -> Governance Write -> Verification -> COMPLETE
-```
-
-Runtime tasks normally require:
-
-```text
-Scope Check -> Implementation -> Review Gate -> Core Release -> Build Instruction -> Release Verification
-```
-
-## Approval rules
-
-Repository writes still require explicit approval.
-
-Valid approval phrases include:
-
-```text
-COMMIT APPROVED
-внедряй
-делай реализацию
-готовь ветку
-```
-
-If approval is absent, the assistant may prepare a plan, patch, or handoff, but must not write to GitHub.
+Phase boundaries must remain logically explicit internally even when user-facing progress reporting is concise.
 
 ## Role boundaries
 
-### Orchestrator phase
+### Task Intake
 
-Allowed:
+May normalize the request and produce the canonical Task Brief. It must not create Issues, branches, commits, PRs, or repository changes.
 
-- classify task type;
-- choose route;
-- detect required agents/phases;
-- detect release need;
-- decide whether the task is docs-only, source/runtime, release, or tooling.
+### Project Manager / Orchestrator
 
-Must not:
+Owns classification, duplicate review, scope, approval progression, routing, branch freshness, handoff validation, PR/CI/merge, release verification, and terminal state.
 
-- change files before approval;
-- skip scope check.
+### Domain Implementation
 
-### Project Manager phase
+May change only approved source files in the responsible domain. It must not edit generated release artifacts, bump versions, alter unrelated modules, or expand business logic.
 
-Allowed:
+### Review / Integrity Gate
 
-- define scope;
-- clarify requirements;
-- edit governance files after approval;
-- maintain contracts and backlog tasks.
+Must verify complete file content, structural integrity, syntax where applicable, exact changed-file scope, secrets/config risk, and consistency with current `main`.
 
-Must not:
+### Core Release
 
-- change runtime source unless explicitly acting in a later implementation phase with approved scope.
+Must validate the approved handoff, reconcile with current `main`, complete PR/CI/merge, and verify automatic release output. It must not invent product behavior or manually edit generated artifacts.
 
-### Module Implementation phase
+### Release Verification
 
-Allowed:
+Must verify the release commit and version hierarchy defined by the automatic release policy. Browser behavior may be claimed only when actually tested or explicitly accepted/deferred.
 
-- change only approved source files;
-- create isolated implementation commits;
-- perform minimal local cleanup inside approved scope.
+## Internal routing results and terminal states
 
-Must not:
-
-- change release files;
-- bump version;
-- edit `data/version.json`;
-- edit `CHANGELOG.md`;
-- silently expand scope;
-- mix unrelated work.
-
-### Review Gate phase
-
-Allowed:
-
-- inspect changed files;
-- verify scope boundaries;
-- identify release risks;
-- return approval, required changes, or blocker.
-
-Must not:
-
-- approve unrelated changes;
-- hide scope violations.
-
-### Core Release phase
-
-Allowed:
-
-- integrate approved runtime/source changes into `main` when needed;
-- prepare release handoff;
-- verify release-channel requirements;
-- instruct whether GitHub Actions build is required.
-
-Must follow:
-
-- `contracts/branches/core-release.md`;
-- latest-only release rules;
-- Git-safe continuous release execution.
-
-Must not:
-
-- treat `releases/latest.user.js` as editable source;
-- create archive userscripts;
-- stop at intermediate states.
-
-### Release Verification phase
-
-Allowed:
-
-- verify `data/version.json`;
-- verify `releases/latest.user.js`;
-- verify `releases/latest.meta.js`;
-- verify `CHANGELOG.md`;
-- verify build result when available.
-
-Must not:
-
-- claim runtime browser behavior is verified unless actually checked by the user or test environment.
-
-## Git safety rules
-
-Single-chat mode must follow:
-
-- `main` is source of truth;
-- branches are disposable execution states;
-- stale branch or stale SHA requires re-fetch/reconcile before write;
-- unrelated changes must not be mixed;
-- release files are build outputs unless the current phase is authorized release tooling.
-
-If a branch is diverged and contains old unreleased work, the assistant must choose one of:
+Internal executors return:
 
 ```text
-reset/recreate from current main
-release old approved work first
-declare cumulative branch only with explicit user approval
+READY_FOR_ROUTING
+BLOCKED
+FAILED
 ```
 
-## Output states
-
-Valid final states:
+The orchestrator alone sets terminal task states:
 
 ```text
 COMPLETE
@@ -201,92 +110,28 @@ BLOCKED
 FAILED
 ```
 
-Invalid final states:
+`READY_FOR_NEXT_AGENT`, copy-ready user handoffs, commits, prepared trees, PRs, merges, and running workflows are not final task states.
 
-```text
-ACKNOWLEDGED
-PARTIAL
-IN_PROGRESS
-PATCH_APPLIED
-TREE_PREPARED
-COMMIT_CREATED
-WAITING_WITHOUT_BLOCKER
-```
+## Git and recovery rules
 
-If an intermediate state is reached, the assistant must either continue to a valid final state or return `BLOCKED` with exact reason and next action.
+- `main` is the only long-term source of truth.
+- Task/domain branches are fresh and disposable.
+- Stale state requires re-fetch and reconciliation before write.
+- Approved operations must be repeat-safe.
+- Recoverable Git conflicts require re-fetch, idempotent replay, and one retry.
+- Failure of one tool is not a project blocker while another safe method remains.
+- Required multi-file changes must be verified as a complete set before PR creation and must not be partially integrated into `main`.
 
-## Runtime release rule
+## Release behavior
 
-If `src/**` runtime behavior changes, release is normally required.
+Eligible runtime/build changes merged into `main` trigger the automatic `SLF Validate and Release` workflow.
 
-The assistant must output:
+Manual workflow dispatch is fallback-only and may be requested only when automatic execution cannot be safely completed or rerun by the agent.
 
-```text
-Manual Build Action:
-- RUN ACTIONS: YES|NO
-- Safe to run now: YES|NO
-- Required branch: main|not applicable
-- Required workflow: Build latest SLF release|not applicable
-- Reason: <reason>
-```
+Documentation-only changes do not publish a userscript release.
 
-Docs/contracts-only changes normally require:
+## User-facing completion
 
-```text
-RUN ACTIONS: NO
-```
+A final response after repository approval is permitted only for `COMPLETE`, `BLOCKED`, or `FAILED`.
 
-## User workflow
-
-The user may submit tasks directly to the universal agent using:
-
-```text
-SLF UNIVERSAL TASK
-
-Goal:
-...
-
-Expected behavior:
-...
-
-Allowed files:
-...
-
-Forbidden:
-...
-
-Release needed:
-YES / NO / UNKNOWN
-
-COMMIT APPROVED
-```
-
-The assistant then performs all applicable phases inside the same conversation.
-
-## Escalation rules
-
-The assistant must return `BLOCKED` when:
-
-- required file content cannot be read safely;
-- write permission is blocked;
-- scope is ambiguous and unsafe to infer;
-- the requested change conflicts with repository contracts;
-- runtime behavior cannot be safely validated without user/manual browser check;
-- a destructive or cumulative branch action requires explicit approval.
-
-## Contract precedence
-
-This contract is subordinate to specific safety and release contracts.
-
-When there is a conflict, stricter rules apply.
-
-Relevant contracts:
-
-- `contracts/SLF_AGENT_SYSTEM_SPEC.md`
-- `contracts/SLF_ORCHESTRATION_LOOP.md`
-- `contracts/SLF_ORCHESTRATOR_ENGINE.md`
-- `contracts/SLF_STATE_MODEL.md`
-- `contracts/SLF_GIT_CONFLICT_STRATEGY.md`
-- `contracts/branches/core-release.md`
-
-END
+Every terminal implementation or governance response must explicitly state GitHub Actions mode/status and whether a Tampermonkey update is required.
