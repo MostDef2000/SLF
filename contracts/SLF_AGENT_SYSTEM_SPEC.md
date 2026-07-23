@@ -1,779 +1,242 @@
-# SLF Agent System Spec
+# SLF Agent System Specification
+
+Version: 2.0.0
+Status: Active compatibility contract
+Source of truth: active SLF governance, automatic release, runtime, Project Manager, Core Release, release-gate, and domain contracts
 
 ## Purpose
 
-This document defines the SLF multi-agent operating model.
+This document describes the SLF multi-role operating model: authority boundaries, routing, handoffs, approval, file ownership, release responsibilities, and completion semantics.
 
-It describes:
+It is a compatibility specification. It does not override higher-priority active contracts and does not define product behavior.
 
-- agent roles;
-- authority boundaries;
-- handoff rules;
-- file ownership;
-- approval requirements;
-- final state rules;
-- release flow responsibilities.
+## Contract priority
 
-This document is a governance contract. It does not define product behavior, runtime logic, or implementation details.
+Apply this order when wording differs:
 
-## Core principle
+1. `contracts/SLF_GOVERNANCE.md`;
+2. `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`;
+3. `contracts/runtime/SLF_TASK_RUNTIME.md` and `contracts/runtime/RELEASE_READINESS_GATE.md`;
+4. `contracts/branches/task-intake.md`, `project-manager.md`, and `core-release.md`;
+5. the relevant domain contract;
+6. this document and older compatibility documents only where they do not conflict with the active set.
 
-SLF agents must operate as a staged production pipeline, not as independent conversational assistants.
+## Core model
 
-The normal flow is:
-
-```text
-Discussion -> Project Management -> Module Implementation -> Review Gate -> Core Release -> Build Workflow -> Tampermonkey Runtime
-```
-
-Each agent owns only its assigned phase.
-
-No agent may silently expand scope, cross role boundaries, or treat an intermediate state as final.
-
-## Allowed final states
-
-Every agent task must end in exactly one of these final states:
-
-- `COMPLETE`
-- `READY_FOR_NEXT_AGENT`
-- `BLOCKED`
-- `FAILED`
-
-The following are never valid final states:
-
-- `ACKNOWLEDGED`
-- `PARTIAL`
-- `IN PROGRESS`
-- `PATCH APPLIED`
-- `TREE PREPARED`
-- `COMMIT CREATED`
-- `WAITING WITHOUT BLOCKER`
-
-If an agent reaches an intermediate state, it must either continue to a valid final state or return `BLOCKED` with exact reason and next action.
-
-## Agent topology
+SLF operates as a controlled same-chat delivery pipeline:
 
 ```text
-Discussion Agent
-    -> Project Manager Agent
-        -> Module Implementation Agent
-            -> Review / Release Gate Agent
-                -> Core Release Agent
-                    -> GitHub Actions Build Workflow
-                        -> Tampermonkey Runtime
+User request
+→ Task Intake normalization
+→ Project Manager scope and routing
+→ approved domain implementation
+→ post-write integrity and review
+→ Core Release integration
+→ PR and CI
+→ merge into main
+→ automatic release when applicable
+→ release/browser verification
+→ terminal state
 ```
 
-## Agent roles
-
-### 1. Discussion Agent
-
-Purpose:
-
-- clarify user intent;
-- compare options;
-- define business/product direction;
-- prepare implementation brief.
-
-Allowed:
-
-- ask clarifying questions;
-- propose variants;
-- identify risks;
-- draft requirements;
-- prepare copy-ready implementation scope.
-
-Forbidden:
-
-- modify repository files;
-- commit code;
-- release userscript artifacts;
-- approve its own implementation;
-- silently convert discussion into implementation.
-
-Final outputs:
-
-- `READY_FOR_PROJECT_MANAGER`
-- `READY_FOR_MODULE_AGENT`
-- `BLOCKED`
-- `FAILED`
-
-### 2. Project Manager Agent
-
-Purpose:
-
-- own SLF governance;
-- maintain contracts;
-- define agent responsibilities;
-- prepare approved implementation scopes;
-- manage cross-agent process rules.
-
-Allowed:
-
-- create and edit files under `contracts/**`;
-- create governance docs;
-- define handoff templates;
-- define approval rules;
-- clarify ownership boundaries.
-
-Forbidden:
-
-- modify runtime source unless explicitly approved as a project-management source task;
-- modify release artifacts;
-- bump userscript version;
-- publish releases;
-- implement module business logic;
-- approve unsafe scope expansion.
-
-Writable paths by default:
-
-```text
-contracts/**
-```
-
-Writable paths only with explicit approval:
-
-```text
-README.md
-docs/**
-```
-
-Forbidden paths by default:
-
-```text
-src/**
-releases/**
-data/version.json
-CHANGELOG.md
-```
-
-Final outputs:
-
-- `COMPLETE`
-- `READY_FOR_MODULE_AGENT`
-- `READY_FOR_CORE_RELEASE`
-- `BLOCKED`
-- `FAILED`
-
-### 3. Module Implementation Agent
-
-Purpose:
-
-- implement approved scoped runtime/source changes on a module branch.
-
-Allowed:
-
-- modify approved source files only;
-- create new runtime files only if approved;
-- update module-local tests or fixtures when approved;
-- commit implementation on its module branch;
-- return a Core Release handoff.
-
-Forbidden:
-
-- modify release artifacts;
-- modify `data/version.json`;
-- bump version;
-- publish userscript;
-- merge to `main`;
-- modify unrelated modules;
-- change governance contracts;
-- redesign approved product logic;
-- silently expand scope.
-
-Typical writable paths:
-
-```text
-src/modules/<module>/**
-src/app/bundle-order.json        # only if explicitly required
-```
-
-Forbidden paths:
-
-```text
-releases/**
-data/version.json
-CHANGELOG.md
-contracts/**
-```
-
-Required final handoff for runtime/user-visible changes:
-
-```text
-COPY-READY MESSAGE FOR CORE RELEASE AGENT
-
-Module:
-Source branch:
-Approved commit:
-Changed files:
-Summary:
-User-visible/runtime behavior changes:
-Technical changes:
-Bundle-order impact:
-Cache/schema/storage impact:
-Validation performed:
-Known risks:
-Manual test notes:
-Release needed: YES/NO
-```
-
-Final outputs:
-
-- `READY_FOR_REVIEW_GATE`
-- `READY_FOR_CORE_RELEASE`
-- `BLOCKED`
-- `FAILED`
-
-### 4. Review / Release Gate Agent
-
-Purpose:
-
-- inspect implementation before release;
-- verify scope, safety, and readiness;
-- block unsafe changes.
-
-Allowed:
-
-- inspect branch, diff, and commits;
-- compare implementation against approved scope;
-- check changed files;
-- check secrets/config risks;
-- check release risks;
-- return release verdict.
-
-Forbidden:
-
-- implement new features;
-- rewrite code;
-- redesign product logic;
-- deploy;
-- merge to `main`;
-- publish release artifacts;
-- approve out-of-scope changes.
-
-Verdicts:
-
-```text
-APPROVED_FOR_CORE_RELEASE
-CHANGES_REQUIRED
-BLOCKED
-FAILED
-```
-
-Required output:
-
-```text
-Review Verdict:
-- APPROVED_FOR_CORE_RELEASE / CHANGES_REQUIRED / BLOCKED / FAILED
-
-Scope Check:
-- approved files:
-- actual files:
-- scope match: YES/NO
-
-Risk Check:
-- secrets/config risk:
-- release risk:
-- runtime risk:
-
-Required Next Action:
-```
-
-### 5. Core Release Agent
-
-Purpose:
-
-- integrate approved module commits into `main`;
-- maintain source/release consistency;
-- trigger or prepare latest-only userscript release flow;
-- produce final release handoff.
-
-Core Release is governed by:
-
-```text
-contracts/branches/core-release.md
-```
-
-Allowed:
-
-- perform intake review;
-- integrate approved files into `main`;
-- validate bundle-order/bootstrap consistency;
-- prepare release notes JSON;
-- provide Manual Build Action block;
-- confirm latest userscript artifact readiness after GitHub Actions build.
-
-Forbidden:
-
-- invent or rewrite module business logic;
-- edit release artifacts as source of truth;
-- create archive userscripts;
-- use obsolete release mechanisms;
-- stop at intermediate states;
-- skip validation;
-- ask for manual retry on deterministic Git conflicts before applying required retry/reconcile behavior.
-
-Writable paths during source integration:
-
-```text
-approved source files from handoff
-src/app/bundle-order.json        # if required by approved handoff
-```
-
-Writable paths during release artifact flow:
-
-```text
-releases/latest.user.js
-releases/latest.meta.js
-data/version.json
-CHANGELOG.md
-```
-
-Final outputs:
-
-- `COMPLETE`
-- `BLOCKED`
-- `FAILED`
-
-Core Release must always include:
-
-```text
-Final State:
-Source Integration:
-Manual Build Action:
-Actions Input:          # only when RUN ACTIONS: YES
-Validation:
-```
-
-### 6. GitHub Actions Build Workflow
-
-Purpose:
-
-- generate latest-only userscript artifacts;
-- update version metadata;
-- validate build output.
-
-Allowed:
-
-- build latest userscript;
-- update release artifacts;
-- update `data/version.json`;
-- update changelog according to supplied release notes.
-
-Forbidden:
-
-- invent module behavior;
-- reuse stale release notes;
-- create archive userscripts;
-- modify runtime source;
-- change governance contracts.
-
-Expected output files:
-
-```text
-releases/latest.user.js
-releases/latest.meta.js
-data/version.json
-CHANGELOG.md
-```
-
-### 7. Tampermonkey Runtime
-
-Purpose:
-
-- execute the latest published userscript.
-
-Source of runtime truth:
-
-```text
-releases/latest.user.js
-```
-
-Source of implementation truth:
-
-```text
-src/**
-```
-
-Important rule:
-
-```text
-releases/latest.user.js is build output, not editable source.
-```
-
-## Authority model
-
-### Project Manager owns
-
-```text
-contracts/**
-agent rules
-handoff templates
-approval model
-governance documents
-```
-
-### Module Agents own
-
-```text
-approved module implementation branches
-approved runtime source changes
-module-local implementation details
-```
-
-### Review Gate owns
-
-```text
-release readiness verdict
-scope verification
-safety review
-```
-
-### Core Release owns
-
-```text
-main integration
-release-channel consistency
-latest-only userscript release process
-Manual Build Action output
-```
-
-### GitHub Actions owns
-
-```text
-artifact generation
-version synchronization
-release artifact validation
-```
-
-## File ownership matrix
-
-| Path | Owner | Notes |
-|---|---|---|
-| `contracts/**` | Project Manager Agent | Governance only |
-| `src/modules/**` | Module Implementation Agent | Only approved module scope |
-| `src/app/bundle-order.json` | Module Agent + Core Release | Only when required for runtime wiring |
-| `releases/latest.user.js` | Build Workflow / Core Release | Build artifact only |
-| `releases/latest.meta.js` | Build Workflow / Core Release | Build artifact only |
-| `data/version.json` | Build Workflow / Core Release | Version metadata only |
-| `CHANGELOG.md` | Build Workflow / Core Release | Release notes only |
-| `.github/workflows/**` | Project Manager / Core Release tooling task | Requires explicit approval |
-| `tools/**` | Project Manager / Core Release tooling task | Requires explicit approval |
+Roles are internal execution phases. The user must not normally choose agents, copy handoffs, merge PRs, or run GitHub Actions.
 
 ## Approval model
 
-Repository writes require explicit approval.
+Repository writes require an explicit approval phrase accepted by active governance and issued after the Project Manager presents an `Implementation Scope Check`.
 
-Accepted approval phrases:
+Approval is attached to the exact task, intended behavior, file set, and scope. It persists through branch creation, implementation, commits, PR, CI, merge, automatic release, and verification.
+
+Additional approval is required only for scope expansion, destructive action, unapproved protected-file changes, secrets or credentials, behavior redesign after validation failure, or a non-recoverable platform/permission blocker.
+
+## Agent topology and authority
+
+### Task Intake
+
+Purpose:
+
+- preserve the original request and material clarifications;
+- separate facts, assumptions, and open questions;
+- produce the canonical Task Brief;
+- decide `DISCUSSION` or `READY_FOR_IMPLEMENTATION` at the specification level.
+
+Forbidden:
+
+- repository writes;
+- Issue, branch, commit, PR, merge, or release operations;
+- treating ordinary discussion as approval.
+
+### Project Manager / Orchestrator
+
+Purpose:
+
+- validate Task Intake;
+- check duplicate/open/closed Issues;
+- classify and stage work;
+- emit the `Implementation Scope Check`;
+- own approval progression, routing, branch freshness, handoff validation, PR/CI/merge, release verification, and final state.
+
+The PM may operationally act as the responsible domain agent and Core Release agent in the same chat while obeying each role's contract.
+
+### Domain Implementation Agent
+
+Purpose:
+
+- implement only the approved behavior in the responsible domain on a fresh disposable branch;
+- change only approved source and test files;
+- provide an internal technical report and PM/Core Release handoff.
+
+Forbidden:
+
+- editing release artifacts;
+- bumping versions;
+- changing unrelated modules or governance;
+- merging to `main` independently;
+- silently expanding scope or redesigning behavior.
+
+### Review / Integrity Gate
+
+Purpose:
+
+- re-fetch and verify complete written files;
+- check structure, endings, syntax, changed-file scope, secrets/config risk, runtime risk, and release applicability;
+- return a release verdict consistent with active governance.
+
+The active release verdicts are:
 
 ```text
-COMMIT APPROVED
-внедряй
-делай реализацию
-готовь ветку
+APPROVED FOR RELEASE
+CHANGES REQUIRED
+BLOCKED
 ```
 
-Approval must be interpreted within the current scoped task only.
+Review is not a terminal system state.
 
-Approval does not authorize:
+### Core Release
 
-- unrelated file changes;
-- scope expansion;
-- release publication outside contract;
-- destructive cleanup unless explicitly included;
-- production runtime behavior changes not described in the approved scope.
+Purpose:
+
+- validate the exact approved commit/range and handoff;
+- reconcile with current `main`;
+- create/update the PR;
+- validate CI and branch freshness;
+- merge when safe;
+- verify automatic release and the published version;
+- return the final Tampermonkey decision.
+
+Forbidden:
+
+- inventing business logic;
+- manually editing generated release artifacts;
+- stopping at prepared tree, commit, PR, merge, or running workflow;
+- instructing routine manual Actions execution.
+
+### GitHub Actions
+
+The canonical workflow is `SLF Validate and Release`.
+
+On pull requests it validates only. On eligible pushes/merges to `main` it validates source, builds latest-only artifacts, validates outputs, and commits generated release files.
+
+Manual dispatch is fallback-only.
+
+## Source and ownership model
+
+```text
+Implementation source:      main/src/** or a verified fresh task branch
+Governance source:          contracts/**
+Generated release outputs:  releases/latest.user.js
+                            releases/latest.meta.js
+                            data/version.json
+                            CHANGELOG.md
+```
+
+`main` is the only long-term source of truth after integration. Task/domain branches are disposable. Generated release files are never editable implementation source.
+
+Typical ownership:
+
+| Path | Primary authority | Rule |
+|---|---|---|
+| `contracts/**` | Project Manager | Governance scope only |
+| `src/modules/**` | Responsible domain agent | Approved domain scope only |
+| `src/app/bundle-order.json` | Domain agent + Core Release | Only when required and approved |
+| `tools/**` | PM/Core Release tooling task | Explicit approved scope |
+| `.github/workflows/**` | PM/Core Release tooling task | Explicit approved scope |
+| release outputs | GitHub Actions | Generated only |
 
 ## Handoff model
 
-Every cross-agent transition must use a structured handoff.
+Cross-role handoffs are internal control artifacts in the same chat. The user must not normally copy or reformat them.
 
-### Discussion -> Project Manager
+A domain handoff must identify:
 
 ```text
-PROJECT MANAGER HANDOFF
-
-Problem:
-Goal:
-Scope:
-Affected areas:
-Constraints:
-Open questions:
-Recommended next agent:
+Module
+Source branch
+Approved commit/range
+Changed files
+Summary
+User-visible/runtime behavior
+Acceptance checks
+Safety checks
+Knowledge/data sources
+Cache/schema/storage impact
+Bundle-order impact
+Core Release instruction
 ```
 
-### Project Manager -> Module Agent
+The Project Manager validates the handoff before Core Release integration.
+
+## Executor results and terminal states
+
+Internal executors may return:
 
 ```text
-MODULE IMPLEMENTATION HANDOFF
-
-Task:
-Approved scope:
-Files allowed:
-Files forbidden:
-Expected behavior:
-Acceptance checks:
-Out of scope:
-Approval status:
-```
-
-### Module Agent -> Review Gate
-
-```text
-REVIEW HANDOFF
-
-Branch:
-Commit:
-Changed files:
-Scope implemented:
-Validation performed:
-Known risks:
-Review requested:
-```
-
-### Review Gate -> Core Release
-
-```text
-CORE RELEASE APPROVAL HANDOFF
-
-Verdict: APPROVED_FOR_CORE_RELEASE
-Source branch:
-Approved commit:
-Changed files:
-Scope verified:
-Validation verified:
-Release needed: YES/NO
-Notes:
-```
-
-### Module Agent -> Core Release
-
-Allowed only when review gate is not required or user explicitly approved direct release handoff.
-
-```text
-COPY-READY MESSAGE FOR CORE RELEASE AGENT
-
-Module:
-Source branch:
-Approved commit:
-Changed files:
-Summary:
-User-visible/runtime behavior changes:
-Technical changes:
-Bundle-order impact:
-Cache/schema/storage impact:
-Validation performed:
-Known risks:
-Release needed: YES/NO
-```
-
-### Core Release -> User / Build Workflow
-
-```text
-Final State:
-Source Integration:
-Manual Build Action:
-Actions Input:
-Validation:
-```
-
-## State model
-
-Agents must distinguish progress states from final states.
-
-Progress states may be reported only as part of a final response, never as the final state.
-
-Progress states include:
-
-- intake complete;
-- patch prepared;
-- tree prepared;
-- commit created;
-- validation passed;
-- release notes prepared;
-- build requested.
-
-Final states:
-
-```text
-COMPLETE
-READY_FOR_NEXT_AGENT
+READY_FOR_ROUTING
 BLOCKED
 FAILED
 ```
 
-## BLOCKED requirements
+`READY_FOR_ROUTING` is an internal transition signal. `READY_FOR_NEXT_AGENT` is not a final system state.
 
-When returning `BLOCKED`, an agent must include:
-
-```text
-Final State:
-- BLOCKED
-
-Completed steps:
-Blocked step:
-Exact blocker:
-Retry attempted: YES/NO
-Safe next action:
-Copy-ready continuation command:
-```
-
-A task is not blocked merely because a step completed. A task is blocked only when no further safe action is available within the agent's authority.
-
-## FAILED requirements
-
-When returning `FAILED`, an agent must include:
+Only the Project Manager/orchestrator may set terminal states:
 
 ```text
-Final State:
-- FAILED
-
-Failed check:
-Evidence:
-Affected files:
-Required correction:
-Recommended next agent:
+COMPLETE
+BLOCKED
+FAILED
 ```
 
-Use `FAILED` for validation/scope/safety failures.
+Commits, handoffs, prepared trees, PRs, merges, and workflow-running phases are intermediate.
 
-Use `BLOCKED` for missing access, missing input, unavailable repository state, or tool limitations.
+## Git recovery and capability rules
 
-## Runtime release rule
+- Read current state before write.
+- Use a fresh disposable branch from current `main`.
+- Re-fetch before resolving stale SHA or branch advancement.
+- Re-apply approved operations idempotently and retry recoverable conflicts once.
+- Use the first safe available execution method; one tool failure is not a project blocker.
+- Determine the write strategy for the complete required file set before the first partial write.
+- Do not integrate incomplete runtime wiring into `main`.
+- Do not expose secrets or replace protected files from partial content.
 
-Any user-visible or Tampermonkey-runtime source change requires Core Release processing before it can reach users.
+Agent-level `BLOCKED` routes to safe recovery when possible. Terminal `BLOCKED` requires evidence that no agent-executable path or narrow recoverable manual step remains.
 
-Runtime source changes usually include:
+## Release applicability
 
-```text
-src/**
-src/app/bundle-order.json
-tools/build-latest-userscript.mjs
-tools/smoke-latest-userscript.mjs
-.github/workflows/build-latest-release.yml
-```
+Automatic userscript release is required only when merged changes affect the runtime/build trigger set defined by `SLF_AUTOMATIC_RELEASE_POLICY.md`.
 
-Docs/contracts-only changes do not require userscript release build.
+Contracts, architecture documents, decision records, Issues, and other documentation-only changes do not publish a userscript version.
 
-## Branch model
+## Completion semantics
 
-`main` is the source of truth.
+Runtime work is `COMPLETE` only after:
 
-Module branches are temporary and disposable.
+- implementation is committed and verified;
+- PR validation succeeds;
+- approved source is merged and verified on `main`;
+- automatic release succeeds when applicable;
+- release commit and version are verified;
+- browser acceptance is completed, deferred, or not applicable;
+- GitHub Actions and Tampermonkey user actions are explicit.
 
-A module branch must not be treated as long-term source of truth after successful release.
-
-Core Release must verify branch freshness or approved active diff/range before integrating.
-
-## Conflict model
-
-Deterministic Git conflicts must be handled automatically when safe.
-
-Examples:
-
-- stale SHA;
-- 409 conflict;
-- file changed after read;
-- branch advanced after initial fetch.
-
-Required behavior:
-
-```text
-re-fetch latest state
-re-apply approved patch idempotently
-retry once
-continue if successful
-```
-
-Manual user retry is allowed only after the required automatic reconcile/retry path fails or when the conflict is non-deterministic.
-
-## Cross-role forbidden behavior
-
-### Discussion Agent must not
-
-- commit files;
-- approve release;
-- claim production completion.
-
-### Project Manager Agent must not
-
-- implement runtime business logic by default;
-- release userscript artifacts;
-- bypass Core Release.
-
-### Module Agent must not
-
-- edit `releases/**`;
-- edit `data/version.json`;
-- edit governance contracts;
-- merge to `main`;
-- publish userscript.
-
-### Review Gate Agent must not
-
-- implement features;
-- rewrite code;
-- release artifacts.
-
-### Core Release Agent must not
-
-- redesign module logic;
-- use release artifact as source;
-- skip intake review;
-- stop at intermediate states;
-- release unapproved changes.
-
-### Build Workflow must not
-
-- invent release notes;
-- modify source files;
-- create archive userscripts.
-
-## Contract precedence
-
-When contracts conflict, use this precedence order:
-
-1. Explicit user instruction in the current approved task.
-2. Safety and security constraints.
-3. `contracts/SLF_AGENT_SYSTEM_SPEC.md`.
-4. Role-specific contract, such as `contracts/branches/core-release.md`.
-5. Module-specific contract.
-6. Older local wording.
-
-A stricter safety rule overrides a looser rule.
-
-## Minimal final response standard
-
-Every agent final response must include:
-
-```text
-Final State:
-- COMPLETE / READY_FOR_NEXT_AGENT / BLOCKED / FAILED
-
-Scope:
-- requested:
-- completed:
-- not completed:
-
-Changed files:
-- ...
-
-Next action:
-- ...
-```
-
-Core Release has a stricter final output format defined in `contracts/branches/core-release.md`.
-
-## Summary
-
-SLF agents form a controlled production pipeline.
-
-Each agent must:
-
-- stay inside its role;
-- modify only owned or approved files;
-- use structured handoffs;
-- avoid intermediate final states;
-- preserve source/release separation;
-- escalate only true blockers;
-- hand off cleanly to the next responsible agent.
-
-END OF SPEC
+Documentation-only work is `COMPLETE` after approved files are merged and verified on `main`, with release marked not required.
