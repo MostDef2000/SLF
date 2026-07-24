@@ -57,6 +57,7 @@
     "src/modules/team-management/team-loan-limit-helper.js",
     "src/modules/team-management/team4-alter-current-season-minutes-fix.js",
     "src/modules/team-management/team4-form-saved-choice-notice.js",
+    "src/modules/team-management/team4-leadership-upgrade-indicator.js",
     "src/app/bootstrap.js"
   ],
   "dependencyAudit": {
