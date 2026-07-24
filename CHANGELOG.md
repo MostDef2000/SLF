@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.229
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/bundle-order.json
+- src/modules/team-management/team4-leadership-upgrade-indicator.js
+
+Approved base commit:
+- 595b016dde0383a27a445ac1fc212a20c057e98e
+
+Approved commit:
+- 1d0868d8fa6b2d96588291e6a947a538c1b8030b
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.228
 
 ### Automatic latest-only build
