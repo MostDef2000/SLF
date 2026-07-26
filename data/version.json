@@ -1,23 +1,22 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.243",
+  "scriptVersion": "4.4.244",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_243_published",
+  "status": "release_4_4_244_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "399c93c8fcbdc91f798dbfda16fd682e6f61a61e90e39aac8d75778d33d17c49",
     "bundleFileCount": 55,
-    "approvedBaseCommit": "eecedc2d90862fb139e6b84195a0915a279355be",
-    "approvedCommit": "4641ae3911888da194516931d943b6135a235a2f",
+    "approvedBaseCommit": "9a3bc62de37208d5faa1d42edfb4c4bb96e3b4a0",
+    "approvedCommit": "805a87017db60d4f56573f53461a70ac5209b4e6",
     "approvedFiles": [
-      "src/modules/tactics-presets/active-preset-registry.js",
-      "src/modules/tactics-presets/tactic-preset-direction-policy.js"
+      "src/app/bootstrap.js"
     ],
     "sourceBranch": "main",
     "releaseNotesProvided": false,

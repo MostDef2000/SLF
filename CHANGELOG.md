@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.4.244
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/bootstrap.js
+
+Approved base commit:
+- 9a3bc62de37208d5faa1d42edfb4c4bb96e3b4a0
+
+Approved commit:
+- 805a87017db60d4f56573f53461a70ac5209b4e6
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.243
 
 ### Automatic latest-only build
