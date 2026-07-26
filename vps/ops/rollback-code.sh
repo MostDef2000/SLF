@@ -71,7 +71,7 @@ case "$component" in
     "$VENV_PY" -m py_compile "$EXPORT_DIR/slf_ai_export.py" "$EXPORT_DIR/slf_rag_build.py"
     bash -n "$EXPORT_DIR/run_daily_export.sh"
     (cd "$EXPORT_DIR" && ./run_daily_export.sh)
-    [ -s /var/www/html/slf_ai/catalog.json ] || { echo 'catalog.json verification failed after rollback' >&2; exit 1; }
+    [ -s /var/www/html/slf_ai/manifest.json ] || { echo 'manifest.json verification failed after rollback' >&2; exit 1; }
     [ -s /var/www/html/slf_ai/rag/catalog.json ] || { echo 'RAG catalog verification failed after rollback' >&2; exit 1; }
     ;;
 
