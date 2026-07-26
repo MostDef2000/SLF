@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.4.233
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/team-management/training-reference-guide.js
+
+Approved base commit:
+- 38fc64b5ce189e6b9ac4a8ec6e1e135a91a17c6a
+
+Approved commit:
+- 4db748f958d03bc291208b942d79268ecd02aedb
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.232
 
 ### Automatic latest-only build

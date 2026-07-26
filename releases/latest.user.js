@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.232
+// @version      4.4.233
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.232',
-        scriptVersion: '4.4.232',
+        version: '4.4.233',
+        scriptVersion: '4.4.233',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.232',
+        scriptVersion: '4.4.233',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -17989,94 +17989,87 @@ const TrainingGuidePanel = {
         return this.skillKey(textNode?.textContent || '');
     },
 
-    inspectPlayer(playerId) {
-        const safeId=String(playerId);
-        if (!/^\d+$/.test(safeId)) return {ok:false,reason:'Некорректный ID игрока.'};
-        const primary=[...document.querySelectorAll(`#train tr[data-id="${safeId}"]`)].find(row=>row.querySelector('input[name="pl_arr[]"]'));
-        const plan=[...document.querySelectorAll(`#train tr[data-plan="${safeId}"]`)].find(row=>row.querySelector('.up[data-sk-up]'));
-        if (!primary || !plan) return {ok:false,reason:'План тренировок не найден.'};
-        const controls=[...plan.querySelectorAll('.up[data-sk-up]')].map(cell=>({
+    selectedTrainingTables() {
+        const selected=[...document.querySelectorAll('#train input[name="pl_arr[]"]:checked')];
+        if (!selected.length) return {selected, tables:[]};
+        const tables=[];
+        selected.forEach(box=>{
+            const table=box.closest('table');
+            if (table && !tables.includes(table)) tables.push(table);
+        });
+        return {selected,tables};
+    },
+
+    inspectGroupFooter(table) {
+        const footer=[...table.querySelectorAll('tfoot')].find(node=>/планирование тренировок для группы выбранных игроков/i.test(this.norm(node.textContent)));
+        if (!footer) return {ok:false,reason:'Групповая таблица планирования не найдена.'};
+        const controls=[...footer.querySelectorAll('.up[data-sk-up]')].map(cell=>({
             cell,
             index:Number(cell.dataset.skUp),
             skill:this.planSkillLabel(cell),
             input:cell.querySelector('input[name^="up["]'),
             order:cell.querySelector('select[name^="order["]')
         })).filter(x=>x.index>=1 && x.index<=10 && x.skill && x.input && x.order);
-        if (controls.length!==10) return {ok:false,reason:'Не распознаны тренировочные поля.'};
+        if (controls.length!==10) return {ok:false,reason:'Не распознаны групповые тренировочные поля.'};
         const skillSet=new Set(controls.map(x=>x.skill));
         const type=this.goalkeeperSkills.every(skill=>skillSet.has(skill))?'GK':this.fieldSkills.every(skill=>skillSet.has(skill))?'FIELD':'';
-        if (!type) return {ok:false,reason:'Не распознан тип игрока.'};
-        const expected=type==='GK'?this.goalkeeperSkills:this.fieldSkills;
-        const current={};
-        controls.forEach(control=>{
-            const cell=primary.querySelector(`td[data-sk="${control.index}"]`);
-            const raw=this.norm(cell?.querySelector('.wide_format')?.textContent || cell?.textContent).replace(',','.');
-            const value=Number(raw);
-            if (Number.isFinite(value)) current[control.skill]=value;
-        });
-        if (!expected.every(skill=>Number.isFinite(current[skill]))) return {ok:false,reason:'Не распознаны текущие навыки.'};
-        return {ok:true,primary,plan,controls,type,current};
+        if (!type) return {ok:false,reason:'Не распознан тип групповой таблицы.'};
+        return {ok:true,footer,controls,type};
     },
 
-    restoreControls(snapshot) {
-        snapshot.forEach(item=>{
-            item.control.order.value=item.order;
-            item.control.order.dispatchEvent(new Event('change',{bubbles:true}));
-            item.control.input.value=item.value;
-            item.control.input.dispatchEvent(new Event('input',{bubbles:true}));
-            item.control.input.dispatchEvent(new Event('change',{bubbles:true}));
+    restoreFooters(snapshots) {
+        snapshots.forEach(snapshot=>{
+            snapshot.controls.forEach(item=>{
+                item.control.order.value=item.order;
+                item.control.order.dispatchEvent(new Event('change',{bubbles:true}));
+                item.control.input.value=item.value;
+                item.control.input.dispatchEvent(new Event('input',{bubbles:true}));
+                item.control.input.dispatchEvent(new Event('change',{bubbles:true}));
+            });
+            snapshot.footer.style.display=snapshot.display;
         });
-    },
-
-    applyToPlayer(playerId, profile) {
-        const inspected=this.inspectPlayer(playerId);
-        if (!inspected.ok) return inspected;
-        const profileType=profile.role==='GK'?'GK':'FIELD';
-        if (inspected.type!==profileType) return {ok:false,reason:'Несовместимый тип навыков.'};
-        const targets=Object.entries(profile.skills||{}).map(([skill,data])=>({skill:this.skillKey(skill),target:Math.round(Number(data?.value))})).filter(x=>Number.isFinite(x.target));
-        const controls=targets.map(target=>inspected.controls.find(control=>control.skill===target.skill)).filter(Boolean);
-        if (controls.length!==10) return {ok:false,reason:'Профиль не соответствует полям игрока.'};
-        const snapshot=inspected.controls.map(control=>({control,order:control.order.value,value:control.input.value}));
-        inspected.controls.forEach(control=>{
-            control.order.value='';
-            control.order.dispatchEvent(new Event('change',{bubbles:true}));
-        });
-        let order=0;
-        for (const target of targets) {
-            const control=inspected.controls.find(item=>item.skill===target.skill);
-            if (!control) { this.restoreControls(snapshot); return {ok:false,reason:`Не найден навык ${target.skill}.`}; }
-            if (Math.round(inspected.current[target.skill])>=target.target) continue;
-            order++;
-            control.order.value=String(order);
-            control.order.dispatchEvent(new Event('change',{bubbles:true}));
-            if (control.input.disabled) { this.restoreControls(snapshot); return {ok:false,reason:`Поле ${target.skill} осталось недоступным.`}; }
-            control.input.value=Number(target.target).toFixed(3);
-            control.input.dispatchEvent(new Event('input',{bubbles:true}));
-            control.input.dispatchEvent(new Event('change',{bubbles:true}));
-        }
-        const icon=inspected.primary.querySelector('img[title="Планировать тренировку"]');
-        if (icon && getComputedStyle(inspected.plan).display==='none') icon.click();
-        if (getComputedStyle(inspected.plan).display==='none') inspected.plan.style.display='table-row';
-        return {ok:true,assigned:order};
     },
 
     applyProfile(role) {
         if (this.currentPayload?.schema!==this.cacheSchema) return this.setStatus('Динамический профиль недоступен. Выполните расчёт лиг.','error');
         const profile=(this.currentPayload.profiles||[]).find(item=>item.role===role);
         if (!profile) return this.setStatus(`Профиль ${role} не найден в динамическом расчёте.`,'error');
-        const selected=[...document.querySelectorAll('#train input[name="pl_arr[]"]:checked')];
+        const {selected,tables}=this.selectedTrainingTables();
         if (!selected.length) return this.setStatus('Сначала отметьте хотя бы одного игрока.','error');
-        let applied=0, assigned=0;
-        const skipped=[];
-        selected.forEach(box=>{
-            const result=this.applyToPlayer(box.value,profile);
-            if (result.ok) { applied++; assigned+=result.assigned; }
-            else skipped.push(result.reason||'Неизвестная ошибка.');
-        });
-        if (!applied) return this.setStatus(`Профиль ${role} не применён. ${skipped[0]||''}`,'error');
-        const suffix=skipped.length?` Пропущено: ${skipped.length}. ${skipped[0]}`:'';
-        const message=assigned?`Профиль ${role} применён к ${applied} из ${selected.length} игроков. Назначено тренировочных навыков: ${assigned}.${suffix}`:`У ${applied} игроков цели профиля ${role} уже достигнуты; прежние порядки очищены.${suffix}`;
-        this.setStatus(message,skipped.length?'muted':'ok');
+        if (!tables.length) return this.setStatus('Не найдена таблица выбранных игроков.','error');
+        const inspected=tables.map(table=>this.inspectGroupFooter(table));
+        const failed=inspected.find(item=>!item.ok);
+        if (failed) return this.setStatus(`Профиль ${role} не применён. ${failed.reason}`,'error');
+        const profileType=role==='GK'?'GK':'FIELD';
+        const incompatible=inspected.find(item=>item.type!==profileType);
+        if (incompatible) return this.setStatus('Нельзя применить один профиль одновременно к вратарям и полевым игрокам.','error');
+        const targets=Object.entries(profile.skills||{}).map(([skill,data])=>({skill:this.skillKey(skill),target:Math.round(Number(data?.value))})).filter(x=>Number.isFinite(x.target));
+        if (targets.length!==10) return this.setStatus(`Профиль ${role} содержит неполный набор навыков.`,'error');
+        const snapshots=inspected.map(item=>({
+            footer:item.footer,
+            display:item.footer.style.display,
+            controls:item.controls.map(control=>({control,order:control.order.value,value:control.input.value}))
+        }));
+        for (const item of inspected) {
+            const controls=targets.map(target=>item.controls.find(control=>control.skill===target.skill));
+            if (controls.some(control=>!control)) { this.restoreFooters(snapshots); return this.setStatus(`Профиль ${role} не соответствует групповой таблице.`,'error'); }
+            item.footer.style.display='table-footer-group';
+            item.controls.forEach(control=>{
+                control.order.value='';
+                control.order.dispatchEvent(new Event('change',{bubbles:true}));
+            });
+            for (let index=0; index<targets.length; index++) {
+                const target=targets[index];
+                const control=controls[index];
+                control.order.value=String(index+1);
+                control.order.dispatchEvent(new Event('change',{bubbles:true}));
+                if (control.input.disabled) { this.restoreFooters(snapshots); return this.setStatus(`Поле ${target.skill} в групповой таблице осталось недоступным.`,'error'); }
+                control.input.value=Number(target.target).toFixed(3);
+                control.input.dispatchEvent(new Event('input',{bubbles:true}));
+                control.input.dispatchEvent(new Event('change',{bubbles:true}));
+            }
+        }
+        this.setStatus(`Профиль ${role} подготовлен для ${selected.length} выбранных игроков. Заполнено групповых таблиц: ${inspected.length}. Нажмите штатную кнопку «Сохранить».`,'ok');
     },
 
     async calculate() {
@@ -19427,15 +19420,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.232',
-        scriptVersion: '4.4.232',
+        version: '4.4.233',
+        scriptVersion: '4.4.233',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.232',
+        scriptVersion: '4.4.233',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
