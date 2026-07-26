@@ -19,6 +19,8 @@ Runtime behavior impact: None
 
 Each entry records `file`, complete top-level `declares`, cross-file `public` symbols, provider/symbol/phase `requires`, and executable-code `hostCapabilities`. Phases remain `evaluation` or `runtime`.
 
+An empty `declares` array is valid for extension-only files that mutate an existing public object without creating a new top-level global. Their dependency edges and host capabilities remain mandatory and machine-checked.
+
 ## Validator states
 
 - `pilot`: bounded proof-of-concept coverage;
