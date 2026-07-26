@@ -1,26 +1,45 @@
 {
-  "version": 1,
-  "branches": {
+  "version": 2,
+  "model": "domain-ownership",
+  "branchLifecycle": "fresh-disposable-from-main",
+  "domains": {
+    "task-intake": {
+      "type": "governance",
+      "owns": ["contracts/branches/task-intake.md"]
+    },
+    "project-manager": {
+      "type": "orchestration",
+      "owns": ["contracts/branches/project-manager.md", "contracts/runtime/**", "contracts/SLF_BACKLOG_PROCESS.md"]
+    },
     "strategy-data-recommendations": {
       "type": "module",
-      "owns": ["src/modules/strategy-data-recommendations/**", "src/modules/live-parser/**", "src/modules/tactics-presets/**"],
-      "forbidden": ["src/modules/transfer-analyzer/**", "src/modules/team-management/**", "releases/**", "CHANGELOG.md"]
+      "owns": ["src/modules/strategy-data-recommendations/**", "src/modules/live-parser/**", "src/modules/tactics-presets/**"]
     },
     "transfer-analyzer": {
       "type": "module",
-      "owns": ["src/modules/transfer-analyzer/**"],
-      "forbidden": ["src/modules/strategy-data-recommendations/**", "src/modules/team-management/**", "releases/**", "CHANGELOG.md"]
+      "owns": ["src/modules/transfer-analyzer/**"]
     },
     "team-management": {
       "type": "module",
-      "owns": ["src/modules/team-management/**", "src/modules/team4-status-monitor/**", "src/modules/team4-loans/**", "src/modules/training-helper/**", "src/modules/youth-monitor/**"],
-      "forbidden": ["src/modules/strategy-data-recommendations/**", "src/modules/transfer-analyzer/**", "releases/**", "CHANGELOG.md"]
+      "owns": ["src/modules/team-management/**", "src/modules/team4-status-monitor/**", "src/modules/team4-loans/**", "src/modules/training-helper/**", "src/modules/youth-monitor/**"]
+    },
+    "server-api-operations": {
+      "type": "operations",
+      "owns": ["vps/api/**", "vps/ops/**"]
+    },
+    "knowledge-export-rag": {
+      "type": "operations",
+      "owns": ["vps/exporter-rag/**"]
     },
     "core-release": {
       "type": "integration",
-      "owns": ["src/core/**", "src/app/**", "contracts/**", "module-releases/**", "releases/**", "data/version.json", "CHANGELOG.md", "tools/**"],
-      "integrationOnly": true,
-      "forbidden": []
+      "owns": ["src/core/**", "src/app/**", "contracts/**", "docs/architecture/**", "docs/decision_records/**", ".github/workflows/build-latest-release.yml", "tools/**"],
+      "generatedArtifacts": ["releases/latest.user.js", "releases/latest.meta.js", "data/version.json", "CHANGELOG.md"],
+      "integrationOnly": true
+    },
+    "review-integrity-gate": {
+      "type": "verification",
+      "owns": ["contracts/runtime/RELEASE_READINESS_GATE.md"]
     }
   }
 }

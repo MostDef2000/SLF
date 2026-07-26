@@ -1,57 +1,46 @@
 # SLF Backlog Intake Process
 
-Version: 1.1.0
+Version: 2.0.0
 Status: Active
 Owner: User
 Primary role: SLF Project Manager Agent
-Source of truth: GitHub Issues + GitHub Project board
+Source of truth: GitHub Issues
 
 ## 1. Purpose
 
-This document defines how raw user ideas become actionable SLF backlog tasks.
+This document defines how free-form user ideas become durable, agent-ready SLF backlog tasks without requiring the user to prepare prompts, select agents, or manage internal handoffs.
 
-The user may write rough notes in natural language. The Project Manager Agent must preserve the original note and convert it into a structured backlog task that can later be given to the correct SLF agent.
+## 2. Source of truth
 
-The goal is to keep creative idea capture lightweight while making implementation controlled and traceable.
+GitHub Issues in `MostDef2000/SLF` are the durable backlog source of truth.
 
-## 2. Backlog source of truth
+GitHub Projects may be used as optional views, filters, and planning boards. Project fields or cards must not replace, contradict, or block the Issue record.
 
-Backlog tasks are stored as GitHub Issues.
+Raw notes may temporarily live in chat or external notes. A task enters the durable backlog only after the user explicitly confirms creating or updating the relevant Issue.
 
-The recommended project board is:
-
-```text
-SLF Backlog
-```
-
-The GitHub Project board should be used to view issue status, module ownership, priority, release state, and blocked tasks.
-
-Raw notes may temporarily live in chat or external notes, but a task is not part of the actionable backlog until it is converted into a GitHub Issue.
-
-## 3. User input format
-
-The user may write:
+## 3. Intake and routing flow
 
 ```text
-Идея для бэклога:
-<raw text>
+Free-form user request
+→ Task Intake preserves intent and prepares a Task Brief
+→ PM checks duplicates and extensions
+→ PM selects the responsible domain
+→ user confirms Issue creation/update when a public backlog write is needed
+→ PM manages same-chat discussion and Implementation Scope Check
+→ explicit repository-write approval
+→ implementation, PR, CI, merge, release verification
+→ terminal state and Issue update
 ```
 
-or any equivalent phrase that clearly indicates backlog capture.
+The user is not required to copy prompts between agents or manually move Project cards.
 
-The Project Manager Agent must not require the user to write a polished task. The PM agent must perform the triage.
+## 4. Author note
 
-## 4. Author note rule
+The user's original wording must be preserved verbatim as `Author note`. Normalized requirements are added separately and must not silently replace the original request.
 
-The user's raw text must be preserved exactly as an Author note.
+## 5. Triage decision
 
-The Author note must not be rewritten, normalized, translated, or silently shortened.
-
-The normalized task is added separately under PM summary / Problem / Expected behavior.
-
-## 5. Backlog triage decision
-
-For every backlog idea, the Project Manager Agent must decide one of:
+For each backlog idea, the PM returns one of:
 
 ```text
 NEW TASK
@@ -60,56 +49,28 @@ EXTENSION
 NEEDS CLARIFICATION
 ```
 
-### NEW TASK
+- `NEW TASK`: no existing Issue covers the same problem and expected behavior.
+- `DUPLICATE`: an existing Issue already covers the request; add the Author note only after user confirmation.
+- `EXTENSION`: the request adds an acceptance check, edge case, risk, or follow-up to an existing Issue.
+- `NEEDS CLARIFICATION`: materially blocking information is missing.
 
-Use when the idea is not already covered by an existing issue.
+Before creating an Issue, inspect existing Issues by module, page/feature, keywords, expected behavior, affected domain, likely files, and acceptance-check similarity.
 
-### DUPLICATE
+## 6. Responsible domains
 
-Use when an existing issue already covers the same problem and expected behavior.
+Every actionable Issue names one primary responsible domain:
 
-The PM agent should recommend adding the Author note as a comment to the existing issue instead of creating a new issue.
-
-### EXTENSION
-
-Use when the idea belongs to an existing issue but adds a new acceptance check, edge case, risk, or subtask.
-
-The PM agent should recommend either updating the existing issue or creating a linked follow-up issue.
-
-### NEEDS CLARIFICATION
-
-Use when the idea cannot be assigned to an agent or converted into acceptance checks without more information.
-
-## 6. Duplicate and extension check
-
-Before creating a new backlog task, search or inspect existing backlog issues by:
-
-- module;
-- page or feature name, such as `team4.php`, `game.php`, `transfer`, `alter.php`;
-- keywords from the raw note;
-- expected behavior;
-- affected agent;
-- likely files or runtime area;
-- acceptance-check similarity.
-
-If a likely duplicate or extension exists, do not create a new issue without telling the user.
-
-## 7. Responsible agent
-
-Every backlog task must specify one responsible agent:
-
-- Team Management Agent;
-- Transfer Analyzer Agent;
-- Strategy Data Agent;
-- Core Release Agent;
-- Server/API/Security;
+- Team Management;
+- Transfer Analyzer;
+- Strategy Data Recommendations;
+- Core Release;
+- Server/API Operations;
+- Knowledge Export/RAG;
 - Governance/Contracts.
 
-If the task spans multiple agents, split it into separate issues or staged subtasks.
+Split cross-domain work into staged tasks when one atomic scope cannot be assigned safely.
 
-## 8. Backlog task structure
-
-Every actionable GitHub Issue must include:
+## 7. Canonical Issue body
 
 ```markdown
 ## Author note
@@ -128,9 +89,9 @@ What is wrong or missing now.
 
 What should happen.
 
-## Responsible agent
+## Responsible domain
 
-Team Management / Transfer Analyzer / Strategy Data / Core Release / Server/API/Security / Governance.
+One primary domain.
 
 ## Scope
 
@@ -139,10 +100,6 @@ What may be changed.
 ## Out of scope
 
 What must not be changed.
-
-## Suggested implementation mode
-
-DISCUSSION ONLY first.
 
 ## Acceptance checks
 
@@ -162,62 +119,20 @@ Unknown / NO / YES.
 
 Unknown / NO / YES.
 
-## Changelog notes draft
+## Agent task
 
-User-visible/runtime changes:
--
-
-Technical changes:
--
-
-Storage/cache/schema impact:
--
-
-Compatibility/safety:
--
-
-## Agent prompt
-
-```text
 DISCUSSION ONLY.
 
 Active Task:
 ...
 
-Problem:
-...
-
-Do not commit yet.
-First return root cause, implementation plan, intended changed files, risks, checks.
-```
+Do not modify the repository yet.
+First return root cause, implementation plan, intended changed files, risks, and checks.
 ```
 
-## 9. Recommended labels
+## 8. Labels and lifecycle statuses
 
-Module labels:
-
-```text
-module:team-management
-module:transfer-analyzer
-module:strategy-data
-module:core-release
-module:server-api
-module:governance
-```
-
-Type labels:
-
-```text
-type:bug
-type:feature
-type:refactor
-type:cleanup
-type:tech-debt
-type:security
-type:ux
-```
-
-Status labels:
+Recommended status labels:
 
 ```text
 status:inbox
@@ -231,138 +146,43 @@ status:done
 status:blocked
 ```
 
-Risk labels:
+Meaning:
 
-```text
-risk:low
-risk:medium
-risk:high
-```
+- `Inbox`: captured but not fully triaged.
+- `Needs Triage`: duplicate check, scope, or blocking detail is unresolved.
+- `Ready for Agent`: the Issue is agent-ready in DISCUSSION mode.
+- `In Progress`: discussion or implementation is active.
+- `Ready for Core Release`: a valid implementation handoff is ready for integration.
+- `Waiting Actions`: source integration is complete and automated checks/release are pending.
+- `Browser Testing`: repository checks passed and user-facing verification remains.
+- `Done`: implementation, release, and required verification are complete.
+- `Blocked`: progress requires missing evidence, a fix, permission, or user decision.
 
-## 10. Recommended project statuses
+A Project board may mirror these statuses, but the Issue remains authoritative.
 
-The GitHub Project board should use these statuses:
+## 9. Approval boundaries
 
-```text
-Inbox
-Needs Triage
-Ready for Agent
-In Progress
-Ready for Core Release
-Waiting Actions
-Browser Testing
-Done
-Blocked
-```
+Creating or updating an Issue is a public GitHub write and requires explicit user confirmation for that action.
 
-## 11. Status meaning
+An Issue or backlog status does not authorize repository implementation. Repository writes require:
 
-### Inbox
+1. a current `Implementation Scope Check`;
+2. explicit approval accepted by the active governance contracts.
 
-Raw idea captured, not yet fully triaged.
+Approval persists only within the exact approved scope.
 
-### Needs Triage
+## 10. Release traceability
 
-PM needs more details or must check duplicates/extensions.
+As work progresses, keep the Issue updated with relevant evidence:
 
-### Ready for Agent
+- approved implementation commit or range;
+- integration commit or PR;
+- CI result;
+- release version when applicable;
+- browser verification result;
+- terminal state;
+- follow-up tasks.
 
-Issue has enough detail to send to the responsible agent in DISCUSSION ONLY mode.
+## 11. Rule of thumb
 
-### In Progress
-
-Task has been sent to an agent or is being discussed/implemented.
-
-### Ready for Core Release
-
-Agent returned a valid COMPLETE handoff with approved commit or approved range.
-
-### Waiting Actions
-
-Core Release source integration is complete and RUN ACTIONS is YES.
-
-### Browser Testing
-
-Actions passed and the user must test in browser.
-
-### Done
-
-Browser acceptance checks passed and no follow-up is required.
-
-### Blocked
-
-Task needs missing information, agent fix, GitHub/tool unblock, or user decision.
-
-## 12. Project Manager response format for backlog ideas
-
-When the user writes a backlog idea, respond with:
-
-```text
-Backlog triage
-
-Decision:
-NEW TASK / DUPLICATE / EXTENSION / NEEDS CLARIFICATION
-
-Author note:
-<raw text verbatim>
-
-Duplicate/extension check:
-- Result:
-- Related issue(s):
-
-Normalized task:
-...
-
-Responsible agent:
-...
-
-Suggested GitHub issue title:
-...
-
-Labels:
-...
-
-Project status:
-...
-
-Issue body:
-...
-
-Next action:
-Create issue / update existing issue / ask clarification
-```
-
-## 13. Agent-ready task rule
-
-The final backlog issue must be directly usable as an input for the responsible agent.
-
-The issue must contain an Agent prompt section that starts in DISCUSSION ONLY mode.
-
-Implementation is not approved by the backlog issue itself. Repository writes still require the explicit phrase:
-
-```text
-COMMIT APPROVED
-```
-
-## 14. Release traceability
-
-As tasks move through implementation and release, update the issue with:
-
-- module approved commit or range;
-- Core Release source integration commit;
-- release version if known;
-- GitHub Actions result;
-- browser test result;
-- follow-up tasks if any.
-
-## 15. Manual fallback
-
-If GitHub tool automation is blocked, manual GitHub UI fallback is allowed only for verified approved code.
-
-Manual fallback files should be attached or linked in the issue if used.
-
-## 16. Rule of thumb
-
-One backlog task should normally map to one small commit.
-
-If an idea is large, split it into staged tasks before implementation.
+One backlog Issue should normally map to one small implementation task or a clearly staged series. Split broad ideas before implementation when that improves ownership, verification, or rollback safety.

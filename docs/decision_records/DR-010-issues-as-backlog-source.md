@@ -1,4 +1,4 @@
-# DR-005: GitHub Issues as Backlog Source of Truth
+# DR-010: GitHub Issues as Backlog Source of Truth
 
 Status: Accepted
 Date: 2026-07-16
@@ -20,17 +20,19 @@ Rules:
 - New backlog tasks are created as Issues.
 - Task discussion, acceptance criteria, and implementation notes live in Issues.
 - Completed tasks remain as closed Issues for history.
-- GitHub Projects may be used as temporary views, filters, and planning boards.
-- GitHub Project #1 is not a source of truth and may be deleted after active tasks are migrated and no longer require the view.
+- GitHub Projects may be used as optional views, filters, and planning boards.
+- Project status and metadata must not replace or contradict the Issue record.
+- Agents must not create Project-only backlog items unless explicitly requested.
 
 ## Consequences
 
-- Issue history becomes the permanent task archive.
-- Project deletion does not remove backlog history.
-- Agents must not create hidden Project-only backlog items unless explicitly requested.
-- PM reports should reference Issues as task identifiers.
+- Issue history is the permanent task archive.
+- Project deletion or reconfiguration does not remove backlog history.
+- PM reports reference Issues as task identifiers.
+- Project board automation is optional and must not block issue intake or execution.
 
 ## Related
 
-- SLF Project Manager Agent Contract
-- GitHub repository workflow
+- `contracts/SLF_BACKLOG_PROCESS.md`
+- `contracts/branches/project-manager.md`
+- `docs/decision_records/DR-011-task-intake-agent.md`

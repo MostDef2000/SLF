@@ -1,4 +1,4 @@
-# DR-006: SLF Task Intake as the Entry Stage
+# DR-011: SLF Task Intake as the Entry Stage
 
 Status: Accepted
 Date: 2026-07-20
@@ -40,7 +40,6 @@ This decision applies only to SLF. It does not create or modify a global cross-p
 - No new runtime phase is required.
 - The user does not copy handoffs between agents.
 - Approval and repository-write authority remain unchanged.
-- Future promotion to a global agent requires a separate decision and explicit approval.
 
 ## Alternatives considered
 
@@ -56,5 +55,5 @@ This decision applies only to SLF. It does not create or modify a global cross-p
 - `contracts/branches/task-intake.md`
 - `contracts/branches/project-manager.md`
 - `docs/architecture/slf-control-plane.md`
-- `docs/decision_records/DR-005-issues-as-backlog-source.md`
+- `docs/decision_records/DR-010-issues-as-backlog-source.md`
 - GitHub Issue #65

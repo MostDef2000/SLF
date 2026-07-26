@@ -1,151 +1,115 @@
 # SLF Minimal Confirmation Policy
 
-Version: 1.0.0
+Version: 2.0.0
 Status: Active
 Applies to: all SLF agents
 Source of truth: GitHub repository contracts
 
 ## 1. Purpose
 
-This policy defines how SLF agents should reduce unnecessary confirmation requests while preserving safety.
-
-The user wants agents to minimize repeated prompts and avoid asking for confirmation for every small step.
-
-Agents must batch related decisions whenever it is safe to do so.
+This policy minimizes unnecessary confirmation prompts while preserving scope, safety, security, and repository-write boundaries.
 
 ## 2. Default rule
 
-Agents should ask for the minimum number of confirmations required to complete the task safely.
+Agents ask for the minimum number of confirmations required to complete approved work safely. Related actions should be presented and approved as one batch whenever possible.
 
-Do not ask for separate confirmation for every issue, file, planning note, verification step, tree creation, commit creation, ref update, or comment when the user has already approved the batch or the action is already authorized by contract.
-
-Prefer one batch approval over many single-item approvals.
+Do not ask for separate confirmation for each file edit, verification step, tree creation, commit, branch ref update, PR action, or release check when those actions are already within an explicitly approved scope.
 
 ## 3. Batch approval pattern
 
-For multi-item work, agents should:
+For multi-item work:
 
-1. inspect the current state;
+1. inspect current state;
 2. prepare a complete proposed batch;
-3. show the user the full list of intended changes/actions;
-4. ask one approval question for the entire batch;
-5. after approval, execute the full batch without asking per item;
-6. report what was completed and what, if anything, was blocked.
+3. present the exact implementation scope, changed files, risks, and checks;
+4. obtain one valid approval;
+5. execute the approved lifecycle without per-step prompts;
+6. report completion, skipped items, blockers, and evidence.
 
-Example:
+Approval does not cover scope expansion.
 
-```text
-I will add PM planning comments to issues #1, #2, #19, #13, #15, and #20.
-Confirm once to apply this full batch.
-```
+## 4. Backlog and public GitHub writes
 
-After the user confirms, the agent should not ask again for each individual issue.
+Creating or updating Issues, comments, labels, or other public backlog state requires explicit user confirmation for the stated batch.
 
-## 4. Backlog planning rule
+After confirmation, the PM may perform all listed backlog writes without asking once per Issue. Ambiguous, unsafe, or likely duplicate items should be isolated while safe approved items continue.
 
-When ranking backlog issues or adding PM planning comments, the Project Manager Agent should prepare the proposed ranking first and request one confirmation for the whole batch.
+## 5. Repository implementation rule
 
-After confirmation, it may add comments or issue metadata to all approved issues without asking again per issue.
+Repository work starts in `DISCUSSION` mode.
 
-If a task is ambiguous, unsafe, or likely a duplicate, isolate that item and continue the safe part of the batch when possible.
+Before writes, the responsible agent must present a current `Implementation Scope Check` covering:
 
-## 5. Core Release rule
+- intended changed files;
+- behavioral scope;
+- out-of-scope areas;
+- risks;
+- verification plan;
+- release impact.
 
-Core Release must not ask for confirmation between already-authorized integration steps.
+A valid explicit approval accepted by the current governance contracts authorizes the complete in-scope lifecycle. The exact phrase `COMMIT APPROVED` remains the safest canonical form.
 
-When a valid module COPY-READY handoff or approved source/range is verified, Core Release should proceed through the full authorized sequence:
+## 6. Post-approval lifecycle
 
-1. verify approved commit/range;
-2. prepare integration tree;
-3. create integration commit;
-4. advance `main`;
-5. verify files on `main`;
-6. return Manual Build Action.
+After valid approval, proceed without repeated confirmation through the applicable sequence:
 
-Do not ask separate confirmations for tree creation, commit creation, or ref update if the handoff is valid and in scope.
+1. recheck current `main`;
+2. create a fresh disposable task branch;
+3. implement only the approved scope;
+4. run integrity and validation checks;
+5. create the implementation commit or commits;
+6. open or update the PR;
+7. inspect CI;
+8. merge when the active contracts and checks permit it;
+9. verify automatic release behavior when the change is release-eligible;
+10. verify generated artifacts and provide the required browser/Tampermonkey instructions;
+11. report a terminal state.
 
-## 6. Module agent rule
+`workflow_dispatch` or a manual build action is a fallback only. It is not the normal completion path for an eligible merge to `main`.
 
-Module agents default to DISCUSSION ONLY.
+## 7. Core Release rule
 
-They must not write repository changes unless the user gives the exact phrase:
+Core Release must not ask for confirmation between already authorized integration, PR, CI, merge, and automatic-release verification steps.
 
-```text
-COMMIT APPROVED
-```
+Generated release artifacts are never edited as implementation source. Source changes must originate from approved editable source and be assembled by the current deterministic release workflow.
 
-After `COMMIT APPROVED`, the module agent should complete the approved implementation task without asking repeated confirmation for each internal edit, unless a stop condition is reached.
+## 8. New approval required
 
-## 7. Required confirmation cases
+Stop and request new approval before:
 
-Agents must still ask for confirmation before:
-
-- repository writes when no valid `COMMIT APPROVED` or equivalent authorized handoff exists;
-- destructive actions;
-- deleting files;
-- changing release workflow behavior;
-- exposing, storing, or moving secrets/API keys;
+- expanding the approved file or behavioral scope;
+- destructive actions not included in the approved scope;
+- changing protected or unapproved files;
+- exposing, storing, moving, or rotating secrets and credentials;
 - changing cache/schema/storage keys or migrations beyond the approved plan;
-- changing files outside the agent scope;
-- expanding business logic beyond the approved task;
-- running or recommending a release when source integration is incomplete;
-- any action where the user explicitly asked to confirm first.
+- redesigning behavior beyond the approved task;
+- performing operational VPS deployment, restart, cron changes, token rotation, exporter/RAG deployment or rebuild, or Drive synchronization unless separately approved;
+- taking any action the user explicitly reserved for later confirmation.
 
-## 8. Stop conditions
+## 9. Stop conditions
 
-Agents must stop and ask or return BLOCKED/FAILED when:
+Return `BLOCKED` or `FAILED`, or request a decision, when:
 
-- scope is unclear;
-- approved files do not match actual changed files;
-- commit/range cannot be verified;
-- GitHub/tool safety blocks a write;
-- the operation would modify unapproved files;
-- a destructive or security-sensitive step is required;
-- the task cannot be completed safely in the current turn.
+- scope is materially unclear;
+- actual changed files no longer match the approved scope;
+- the approved commit/range cannot be verified;
+- a required permission or platform capability is unavailable;
+- the task cannot be completed safely without an unapproved destructive or security-sensitive step;
+- validation establishes that the implementation is not releasable.
 
-## 9. No silent approval
+Do not treat an intermediate commit, handoff, PR, merge, running workflow, or generated artifact as a terminal state.
 
-Minimizing confirmations does not mean assuming approval.
+## 10. No silent approval
 
-Silence is not approval.
+Silence is not approval. Pre-scope discussion language does not authorize repository writes. Approval must be explicit and must follow the current scope presentation.
 
-For repository writes and other gated actions, approval must be explicit.
+## 11. Reporting requirement
 
-## 10. Reporting requirement
-
-After executing a batch, agents should report:
+After execution, report:
 
 - completed items;
 - skipped items;
-- blocked items;
-- exact reason for each blocked item;
-- whether any further user action is required.
-
-## 11. Practical guidance
-
-Good behavior:
-
-```text
-I found 12 backlog issues. I propose applying PM planning comments to 10 of them and skipping 2 duplicates. Confirm once to apply this batch.
-```
-
-Bad behavior:
-
-```text
-Should I comment issue #1?
-Should I comment issue #2?
-Should I comment issue #3?
-```
-
-Good behavior:
-
-```text
-The approved handoff is valid. I will integrate the approved files, advance main, verify, and return RUN ACTIONS status.
-```
-
-Bad behavior:
-
-```text
-Tree prepared. Should I create the commit?
-Commit created. Should I advance main?
-```
+- blocked or failed items and exact reasons;
+- branch, commits, PR, CI, merge, and release evidence as applicable;
+- terminal state;
+- any remaining user action.
