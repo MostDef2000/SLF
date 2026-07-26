@@ -1,5 +1,36 @@
 # Changelog
 
+## 4.4.238
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- contracts/SLF_BACKLOG_PROCESS.md
+- contracts/SLF_BACKLOG_TASK_CREATION_CONTRACT.md
+- contracts/SLF_MINIMAL_CONFIRMATION_POLICY.md
+- contracts/branch-map.json
+- contracts/global-rules.md
+- docs/architecture/slf-module-dependency-pilot.md
+- docs/decision_records/DR-010-issues-as-backlog-source.md
+- docs/decision_records/DR-011-task-intake-agent.md
+- docs/decision_records/INDEX.md
+- src/app/bundle-order.json
+- tools/check-bundle-order.mjs
+
+Approved base commit:
+- c60acece5dcd5198645bec993e149052c6966b84
+
+Approved commit:
+- 8a4015b80c92f8b3ca4b0d0936796619f3148af9
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.237
 
 ### Automatic latest-only build
