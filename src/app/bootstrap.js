@@ -102,7 +102,8 @@ const App = {
     // - no live parser auto-resume;
     // - no manual tactic watcher freeze/status loop;
     // - tactical blocks are rebuilt only when the user presses "Подсказка".
-    TacticPresetLibraryPanel.mount();
+    // Keep the library module loaded for preset metadata, but do not mount its visible reference panel.
+    void TacticPresetLibraryPanel;
     TrainingGuidePanel.mount();
     LoanLimitPanel.mount();
 
