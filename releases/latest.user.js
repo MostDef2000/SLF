@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.234
+// @version      4.4.235
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.234',
-        scriptVersion: '4.4.234',
+        version: '4.4.235',
+        scriptVersion: '4.4.235',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.234',
+        scriptVersion: '4.4.235',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -18003,13 +18003,13 @@ const TrainingGuidePanel = {
     inspectGroupFooter(table) {
         const footer=table.tFoot || table.querySelector('tfoot');
         if (!footer) return {ok:false,reason:'Групповая таблица планирования не найдена.'};
-        const controls=[...footer.querySelectorAll('.up[data-sk-up]')].map(cell=>({
-            cell,
-            index:Number(cell.dataset.skUp),
-            skill:this.planSkillLabel(cell),
-            input:cell.querySelector('input[name^="up["]'),
-            order:cell.querySelector('select[name^="order["]')
-        })).filter(x=>x.index>=1 && x.index<=10 && x.skill && x.input && x.order);
+        const controls=[...footer.querySelectorAll('input[name^="up["]')].map(input=>{
+            const match=/^up\[(\d+)\]$/.exec(input.name);
+            const index=Number(match?.[1]);
+            const cell=input.closest('.up');
+            const order=cell?.querySelector(`select[name="order[${index}]"]`);
+            return {cell,index,skill:cell?this.planSkillLabel(cell):'',input,order};
+        }).filter(x=>x.index>=1 && x.index<=10 && x.cell && x.skill && x.order);
         if (controls.length!==10) return {ok:false,reason:'Не распознаны групповые тренировочные поля.'};
         const skillSet=new Set(controls.map(x=>x.skill));
         const type=this.goalkeeperSkills.every(skill=>skillSet.has(skill))?'GK':this.fieldSkills.every(skill=>skillSet.has(skill))?'FIELD':'';
@@ -19420,15 +19420,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.234',
-        scriptVersion: '4.4.234',
+        version: '4.4.235',
+        scriptVersion: '4.4.235',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.234',
+        scriptVersion: '4.4.235',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
