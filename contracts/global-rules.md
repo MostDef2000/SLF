@@ -1,69 +1,54 @@
 # SLF Global Rules
 
-These rules are the source of truth for SLF branch/module work. Do not rely on ChatGPT memory as the source of truth.
+Version: 2.0.0
+Status: Compatibility contract
 
-## Branches
+This file is not the highest-priority source of truth. Current execution must follow, in order:
 
-The active workflow branches are:
+1. `contracts/SLF_GOVERNANCE.md`
+2. `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`
+3. `contracts/runtime/SLF_TASK_RUNTIME.md`
+4. the relevant active branch/domain contract
 
-1. `strategy-data-recommendations`
-2. `transfer-analyzer`
-3. `team-management`
-4. `core-release`
+If this compatibility document conflicts with those contracts, the higher-priority contract wins.
 
-No separate `youth-scouting` branch is used. Youth work belongs to `team-management`.
+## Execution model
 
-## Global principles
+- Normal work uses a fresh disposable task branch created from a rechecked current `main`.
+- Domain names identify responsibility, not permanent working branches.
+- The user interacts with one same-chat orchestration flow; internal agent handoffs do not require manual copying.
+- Repository writes require a valid post-scope approval under the active governance contracts.
+- Generated release artifacts are not editable implementation source.
 
-- One workflow branch owns one product area.
-- Module branches work independently and do not synchronize full context with each other.
-- Module branches do not publish the final userscript.
-- `core-release` is the only branch that publishes the final bundled userscript.
-- On the SLF site, users get one unified Tampermonkey userscript.
-- In development, each module branch keeps its own context, requirements, and release output.
+## Domain ownership
 
-## Contract authority
+Active responsibility domains include:
 
-- Files under `contracts/**` are the source of truth.
-- ChatGPT memory is only a convenience cache.
-- If memory is empty or contradictory, read these contract files first.
-- Branch rules must not be changed during ordinary module work.
-- Contract changes require an explicit user command such as: `измени контракт веток`.
+- Task Intake;
+- Project Manager / Orchestrator;
+- Strategy Data Recommendations;
+- Transfer Analyzer;
+- Team Management;
+- Server/API Operations;
+- Knowledge Export/RAG;
+- Core Release;
+- Review/Integrity Gate.
 
-## Module branch release rule
+Detailed ownership is defined in `contracts/branches/*.md` and `contracts/branch-map.json`.
 
-Each module branch must produce a release manifest under:
+## Release model
 
-```text
-module-releases/<branch>/<release-id>.json
-```
+- Editable runtime source lives under `src/**`.
+- `src/app/bundle-order.json` defines deterministic userscript assembly order.
+- Eligible merges or pushes to `main` are validated and released by `.github/workflows/build-latest-release.yml`.
+- `workflow_dispatch` is a fallback, not the normal release path.
+- The supported publication model is latest-only.
+- Generated artifacts include `releases/latest.user.js`, `releases/latest.meta.js`, `data/version.json`, and `CHANGELOG.md`.
+- Do not create or require `module-releases/**` manifests or archived per-version userscripts unless a future accepted contract explicitly restores them.
 
-A module release manifest must describe:
+## GitHub and Tampermonkey channel
 
-- branch name;
-- module release ID;
-- base script version;
-- changed scope;
-- changes;
-- migration/cache notes;
-- acceptance checks;
-- whether core changes are required.
-
-## Core release rule
-
-`core-release` may integrate only an explicitly requested module release manifest.
-
-It must not:
-
-- invent module business logic;
-- reinterpret module requirements;
-- merge unrequested branch work;
-- change branch contracts during normal release;
-- publish without incrementing `@version`.
-
-## GitHub/Tampermonkey release channel
-
-GitHub repo `MostDef2000/SLF` is the release source.
+GitHub repository `MostDef2000/SLF` is the code and release source.
 
 Tampermonkey updates through:
 
@@ -72,12 +57,4 @@ Tampermonkey updates through:
 @downloadURL https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js
 ```
 
-Every final release must update:
-
-- `releases/latest.user.js`
-- `releases/latest.meta.js`
-- `releases/SLF_<version>.user.js`
-- `CHANGELOG.md`
-- optionally `data/version.json`
-
-`@name` and `@namespace` must stay stable unless the user explicitly requests a migration.
+`@name` and `@namespace` remain stable unless an explicitly approved migration changes them.
