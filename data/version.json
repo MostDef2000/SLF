@@ -1,22 +1,23 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.242",
+  "scriptVersion": "4.4.243",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_242_published",
+  "status": "release_4_4_243_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "399c93c8fcbdc91f798dbfda16fd682e6f61a61e90e39aac8d75778d33d17c49",
     "bundleFileCount": 55,
-    "approvedBaseCommit": "2d995734bbb8f9098cfe25caaa4a06c13e62c94d",
-    "approvedCommit": "495634db1b5115f7ce297a24ed63740b39d0a072",
+    "approvedBaseCommit": "eecedc2d90862fb139e6b84195a0915a279355be",
+    "approvedCommit": "4641ae3911888da194516931d943b6135a235a2f",
     "approvedFiles": [
-      "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js"
+      "src/modules/tactics-presets/active-preset-registry.js",
+      "src/modules/tactics-presets/tactic-preset-direction-policy.js"
     ],
     "sourceBranch": "main",
     "releaseNotesProvided": false,

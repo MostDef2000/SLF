@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.243
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/tactics-presets/active-preset-registry.js
+- src/modules/tactics-presets/tactic-preset-direction-policy.js
+
+Approved base commit:
+- eecedc2d90862fb139e6b84195a0915a279355be
+
+Approved commit:
+- 4641ae3911888da194516931d943b6135a235a2f
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.242
 
 ### Automatic latest-only build
