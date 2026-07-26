@@ -62,8 +62,8 @@
   ],
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
-    "status": "expanding",
-    "expectedModuleCount": 47,
+    "status": "complete",
+    "expectedModuleCount": 55,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -1067,6 +1067,105 @@
         ]
       },
       {
+        "file": "src/app/ui-layer.js",
+        "declares": [
+          "UI"
+        ],
+        "public": [
+          "UI"
+        ],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "BASE_PRESETS"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/api.js",
+            "symbols": [
+              "fetchCanonicalApiStatus"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/preset-storage.js",
+            "symbols": [
+              "PresetStorage",
+              "normalizePresets"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-control-engine.js",
+            "symbols": [
+              "applyPresetAsync",
+              "getCurrentTactic"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/match-state-parser.js",
+            "symbols": [
+              "MatchStateParser"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/match-stats-parser.js",
+            "symbols": [
+              "MatchStatsParser"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/snapshot-engine.js",
+            "symbols": [
+              "SnapshotEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-preset-library.js",
+            "symbols": [
+              "TacticPresetLibrary"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/recommendation-engine.js",
+            "symbols": [
+              "RecommendationEngine"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "URL",
+          "URLSearchParams",
+          "document",
+          "location",
+          "alert",
+          "confirm",
+          "setTimeout",
+          "console"
+        ]
+      },
+      {
+        "file": "src/app/version-badge.js",
+        "declares": [],
+        "public": [],
+        "requires": [],
+        "hostCapabilities": [
+          "document",
+          "window",
+          "unsafeWindow",
+          "setInterval",
+          "clearInterval"
+        ]
+      },
+      {
         "file": "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
         "declares": [],
         "public": [],
@@ -1578,6 +1677,170 @@
         ],
         "hostCapabilities": [
           "document"
+        ]
+      },
+      {
+        "file": "src/modules/team-management/training-reference-guide.js",
+        "declares": [
+          "TrainingGuidePanel"
+        ],
+        "public": [
+          "TrainingGuidePanel"
+        ],
+        "requires": [
+          {
+            "file": "src/core/api.js",
+            "symbols": [
+              "Api"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "DOMParser",
+          "Event",
+          "document",
+          "location",
+          "fetch"
+        ]
+      },
+      {
+        "file": "src/modules/team-management/team-loan-limit-helper.js",
+        "declares": [
+          "LoanLimitPanel"
+        ],
+        "public": [
+          "LoanLimitPanel"
+        ],
+        "requires": [],
+        "hostCapabilities": [
+          "document",
+          "location",
+          "setTimeout"
+        ]
+      },
+      {
+        "file": "src/modules/team-management/team4-alter-current-season-minutes-fix.js",
+        "declares": [
+          "Team4AlterCurrentSeasonMinutesBridge"
+        ],
+        "public": [],
+        "requires": [],
+        "hostCapabilities": [
+          "URL",
+          "DOMParser",
+          "document",
+          "window",
+          "location",
+          "localStorage",
+          "fetch",
+          "setTimeout",
+          "setInterval",
+          "clearInterval",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/team-management/team4-form-saved-choice-notice.js",
+        "declares": [
+          "SLFTeam4FormSavedChoiceNotice"
+        ],
+        "public": [],
+        "requires": [],
+        "hostCapabilities": [
+          "URLSearchParams",
+          "DOMParser",
+          "document",
+          "window",
+          "location",
+          "fetch",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/team-management/team4-leadership-upgrade-indicator.js",
+        "declares": [
+          "SLFTeam4LeadershipUpgradeIndicator"
+        ],
+        "public": [],
+        "requires": [],
+        "hostCapabilities": [
+          "MutationObserver",
+          "URL",
+          "URLSearchParams",
+          "DOMParser",
+          "document",
+          "window",
+          "location",
+          "sessionStorage",
+          "fetch",
+          "setTimeout",
+          "clearTimeout",
+          "console"
+        ]
+      },
+      {
+        "file": "src/app/bootstrap.js",
+        "declares": [
+          "applyTacticsDropdownUiPolicy",
+          "App"
+        ],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/dom-utils.js",
+            "symbols": [
+              "DomUtils"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/preset-storage.js",
+            "symbols": [
+              "PresetStorage"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-preset-library-panel.js",
+            "symbols": [
+              "TacticPresetLibraryPanel"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/app/ui-layer.js",
+            "symbols": [
+              "UI"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/team-management/training-reference-guide.js",
+            "symbols": [
+              "TrainingGuidePanel"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/team-management/team-loan-limit-helper.js",
+            "symbols": [
+              "LoanLimitPanel"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "MutationObserver",
+          "document",
+          "setTimeout"
         ]
       }
     ]
