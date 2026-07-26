@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.4.239
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- docs/architecture/slf-module-dependency-pilot.md
+- src/app/bundle-order.json
+- tools/check-bundle-order.mjs
+
+Approved base commit:
+- 5ba3c31b0ce36512097f11ebf75fb712f17a8e4a
+
+Approved commit:
+- 196438c34d232ea5100eed28b3336a011b9f655d
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.238
 
 ### Automatic latest-only build
