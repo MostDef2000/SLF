@@ -363,6 +363,7 @@ function validateDependencyAudit(manifest, files) {
   }
 
   const sourceByFile = new Map();
+  const codeByFile = new Map();
   const declarationsByFile = new Map();
   const auditedByFile = new Map();
   const declarationOwners = new Map();
@@ -370,6 +371,11 @@ function validateDependencyAudit(manifest, files) {
   const readSource = file => {
     if (!sourceByFile.has(file)) sourceByFile.set(file, fs.readFileSync(absolute(file), 'utf8'));
     return sourceByFile.get(file);
+  };
+
+  const readCode = file => {
+    if (!codeByFile.has(file)) codeByFile.set(file, maskNonCode(readSource(file)));
+    return codeByFile.get(file);
   };
 
   const readDeclarations = file => {
@@ -403,7 +409,7 @@ function validateDependencyAudit(manifest, files) {
       fail(`public symbols are not declared by ${module.file}`, undeclaredPublic);
     }
 
-    const source = readSource(module.file);
+    const source = readCode(module.file);
     const missingCapabilities = module.hostCapabilities.filter(capability => !containsIdentifier(source, capability));
     if (missingCapabilities.length) {
       fail(`host capabilities are not referenced by ${module.file}`, missingCapabilities);
@@ -421,7 +427,7 @@ function validateDependencyAudit(manifest, files) {
   let dependencySymbolCount = 0;
 
   for (const module of audit.modules) {
-    const source = readSource(module.file);
+    const source = readCode(module.file);
     const seenProviders = new Set();
 
     for (const dependency of module.requires) {
