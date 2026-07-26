@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.230
+// @version      4.4.231
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.230',
-        scriptVersion: '4.4.230',
+        version: '4.4.231',
+        scriptVersion: '4.4.231',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.230',
+        scriptVersion: '4.4.231',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -17961,7 +17961,7 @@ const TrainingGuidePanel = {
                 buckets.get(skill).push({source:result.name,championshipId:result.championshipId,value:Number(value)});
             }));
             const skills = {};
-            buckets.forEach((values,skill) => { skills[skill]={value:Math.round(values.reduce((s,x)=>s+x.value,0)/values.length*10)/10,sample:values.length,values}; });
+            buckets.forEach((values,skill) => { skills[skill]={value:Math.round(values.reduce((s,x)=>s+x.value,0)/values.length),sample:values.length,values}; });
             return {role,skills};
         });
     },
@@ -17982,7 +17982,7 @@ const TrainingGuidePanel = {
     render(payload, label) {
         if (payload?.schema!==this.cacheSchema || !Array.isArray(payload.profiles)) return false;
         const total=(payload.sources||[]).length, ok=(payload.sources||[]).filter(x=>x.status==='ok').length;
-        const rows=payload.profiles.map(profile => `<tr><td>${this.esc(profile.role)}</td><td>${Object.entries(profile.skills||{}).map(([skill,data]) => { const title=(data.values||[]).map(x=>`${x.source}: ${x.value}`).join('\n')||`Источников: ${data.sample}`; return `<span class="slf-pair" title="${this.esc(title)}"><b>${this.esc(skill)}</b> ${Number(data.value).toFixed(1)}<sup>${data.sample}/${total||data.sample}</sup></span>`; }).join('')}</td></tr>`).join('');
+        const rows=payload.profiles.map(profile => `<tr><td>${this.esc(profile.role)}</td><td>${Object.entries(profile.skills||{}).map(([skill,data]) => { const title=(data.values||[]).map(x=>`${x.source}: ${x.value}`).join('\n')||`Источников: ${data.sample}`; return `<span class="slf-pair" title="${this.esc(title)}"><b>${this.esc(skill)}</b> ${Math.round(Number(data.value))}<sup>${data.sample}/${total||data.sample}</sup></span>`; }).join('')}</td></tr>`).join('');
         document.getElementById('slf-result').innerHTML=`<div class="slf-muted">${label} · ${new Date(payload.calculatedAt).toLocaleString('ru-RU')} · источников ${ok}/${total}</div><table class="slf-table"><thead><tr><th>Роль</th><th>Средние значения</th></tr></thead><tbody>${rows}</tbody></table>`;
         document.getElementById('slf-static-profiles').open=false;
         return true;
@@ -19348,15 +19348,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.230',
-        scriptVersion: '4.4.230',
+        version: '4.4.231',
+        scriptVersion: '4.4.231',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.230',
+        scriptVersion: '4.4.231',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
