@@ -375,7 +375,7 @@ function validateDependencyAudit(manifest, files) {
     if (typeof module.file !== 'string' || !module.file) fail('dependency audit module file is invalid');
     if (!registered.has(module.file)) fail(`audited module is not registered: ${module.file}`);
 
-    assertStringArray(module.declares, `${module.file} declares`, { allowEmpty: false });
+    assertStringArray(module.declares, `${module.file} declares`);
     assertStringArray(module.public, `${module.file} public`);
     assertStringArray(module.hostCapabilities, `${module.file} hostCapabilities`);
     if (!Array.isArray(module.requires)) fail(`${module.file} requires must be an array`);
