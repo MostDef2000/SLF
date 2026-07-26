@@ -28,7 +28,7 @@ An empty `declares` array is valid for extension-only files that mutate an exist
 - `expanding`: approved incremental coverage;
 - `complete`: every registered runtime file must have exactly one audit entry.
 
-The validator checks source/declaration parity, public ownership, dependency providers and references, evaluation ordering, audited cross-use edges, collisions, host references, expected count, and exact all-file coverage in `complete` state. The masker preserves executable expressions inside nested template literals, while declaration ownership is resolved from the minimum declaration indentation rather than fragile brace-depth counting.
+The validator checks source/declaration parity, public ownership, dependency providers and references, evaluation ordering, audited cross-use edges, collisions, host references, expected count, and exact all-file coverage in `complete` state. The masker preserves executable expressions inside nested template literals. Declaration extraction uses brace-depth scanning where balanced and a minimum-indentation fallback only for syntax that cannot be balanced by the lightweight scanner.
 
 ## Remaining batches
 
