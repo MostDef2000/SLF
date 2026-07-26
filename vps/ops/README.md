@@ -40,9 +40,9 @@ The script:
 4. backs up the currently deployed code and service unit under `/var/backups/slf-code/`;
 5. records checksums before replacement;
 6. installs dependencies and files;
-7. writes `/root/slf-server/DEPLOYED_GIT_COMMIT` without secrets;
-8. restarts the service;
-9. verifies that the service is active and the protected endpoint returns `401` without credentials.
+7. restarts the service;
+8. verifies that the service is active and the protected endpoint returns `401` without credentials;
+9. writes `/root/slf-server/DEPLOYED_GIT_COMMIT` only after verification succeeds.
 
 Authenticated read/write verification remains a separate operator check. Never put the bearer value in the command line, logs, Issue, PR, or chat.
 
@@ -55,7 +55,9 @@ bash vps/ops/deploy-code.sh \
   --component exporter-rag
 ```
 
-The script validates Python and shell syntax, backs up the current executable file set, installs dependencies and code, writes `DEPLOYED_GIT_COMMIT`, runs the existing daily wrapper, and verifies non-empty public catalog files.
+The script validates Python and shell syntax, backs up the current executable file set, installs dependencies and code, runs the existing daily wrapper, verifies non-empty public catalog files, and writes `DEPLOYED_GIT_COMMIT` only after the wrapper and catalog checks succeed.
+
+`DEPLOYED_GIT_COMMIT` is therefore a completed-deployment marker, not an installation-started marker. A failed service, exporter, RAG, or Drive-sync verification must leave the marker unchanged or absent.
 
 ## Rollback
 
