@@ -1,21 +1,22 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.233",
+  "scriptVersion": "4.4.234",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_233_published",
+  "status": "release_4_4_234_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "cad23a3ea167109115e022b712b119d8f3746e453c2d0bfd10bb17a688df7bfa",
     "bundleFileCount": 55,
-    "approvedBaseCommit": "38fc64b5ce189e6b9ac4a8ec6e1e135a91a17c6a",
-    "approvedCommit": "4db748f958d03bc291208b942d79268ecd02aedb",
+    "approvedBaseCommit": "fa74f9df61f7fc94ae056943257ebb42c09ec6d2",
+    "approvedCommit": "71f9019b00cc101f9992bbb7ecebd38840791a8e",
     "approvedFiles": [
+      "contracts/SLF_SINGLE_CHAT_UNIVERSAL_AGENT.md",
       "src/modules/team-management/training-reference-guide.js"
     ],
     "sourceBranch": "main",

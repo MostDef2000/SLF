@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.234
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- contracts/SLF_SINGLE_CHAT_UNIVERSAL_AGENT.md
+- src/modules/team-management/training-reference-guide.js
+
+Approved base commit:
+- fa74f9df61f7fc94ae056943257ebb42c09ec6d2
+
+Approved commit:
+- 71f9019b00cc101f9992bbb7ecebd38840791a8e
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.233
 
 ### Automatic latest-only build
