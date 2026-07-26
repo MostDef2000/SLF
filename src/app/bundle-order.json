@@ -888,6 +888,13 @@
             "phase": "runtime"
           },
           {
+            "file": "src/modules/live-parser/snapshot-engine.js",
+            "symbols": [
+              "SnapshotEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
             "file": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
             "symbols": [
               "CurrentActionHintEngine"
