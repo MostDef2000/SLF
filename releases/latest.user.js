@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.231
+// @version      4.4.232
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.231',
-        scriptVersion: '4.4.231',
+        version: '4.4.232',
+        scriptVersion: '4.4.232',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.231',
+        scriptVersion: '4.4.232',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -17864,23 +17864,14 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
 // 14.5 Training Reference Guide
 // ============================================================
 
-const SLF_TRAINING_PROFILES_V1 = [
-    { role: 'GK', normal: [['ПС',8],['СВ',7],['ТВ',7],['СК',6],['РЕ',23],['ИВ',22],['ВП',22],['РМ',6],['ПИ',2],['ВВ',58]], top: [['ПС',9],['СВ',8],['ТВ',8],['СК',8],['РЕ',26],['ИВ',26],['ВП',26],['РМ',8],['ПИ',2],['ВВ',66]] },
-    { role: 'CD', normal: [['ПС',15],['СУ',4],['ТУ',4],['СК',19],['УС',19],['ОТ',25],['ВП',24],['ТХ',11],['БВ',23],['КР',14]], top: [['ПС',18],['СУ',5],['ТУ',5],['СК',23],['УС',23],['ОТ',30],['ВП',28],['ТХ',12],['БВ',27],['КР',17]] },
-    { role: 'LD / RD', normal: [['ПС',17],['СУ',4],['ТУ',4],['СК',22],['УС',22],['ОТ',25],['ВП',23],['ТХ',13],['БВ',16],['КР',16]], top: [['ПС',20],['СУ',5],['ТУ',5],['СК',25],['УС',25],['ОТ',30],['ВП',26],['ТХ',15],['БВ',18],['КР',18]] },
-    { role: 'DM', normal: [['ПС',23],['СУ',8],['ТУ',8],['СК',19],['УС',20],['ОТ',24],['ВП',23],['ТХ',18],['БВ',11],['КР',18]], top: [['ПС',26],['СУ',10],['ТУ',10],['СК',23],['УС',23],['ОТ',29],['ВП',27],['ТХ',21],['БВ',12],['КР',21]] },
-    { role: 'CM', normal: [['ПС',26],['СУ',16],['ТУ',16],['СК',20],['УС',20],['ОТ',4],['ВП',18],['ТХ',22],['БВ',8],['КР',22]], top: [['ПС',30],['СУ',19],['ТУ',19],['СК',23],['УС',23],['ОТ',5],['ВП',20],['ТХ',25],['БВ',9],['КР',25]] },
-    { role: 'LM / RM', normal: [['ПС',25],['СУ',15],['ТУ',15],['СК',23],['УС',22],['ОТ',3],['ВП',15],['ТХ',22],['БВ',8],['КР',21]], top: [['ПС',28],['СУ',18],['ТУ',18],['СК',26],['УС',25],['ОТ',3],['ВП',18],['ТХ',25],['БВ',9],['КР',24]] },
-    { role: 'LW / RW', normal: [['ПС',24],['СУ',20],['ТУ',20],['СК',22],['УС',22],['ОТ',2],['ВП',16],['ТХ',22],['БВ',8],['КР',21]], top: [['ПС',27],['СУ',24],['ТУ',24],['СК',25],['УС',25],['ОТ',2],['ВП',19],['ТХ',25],['БВ',9],['КР',24]] },
-    { role: 'AM', normal: [['ПС',22],['СУ',22],['ТУ',22],['СК',19],['УС',19],['ОТ',2],['ВП',17],['ТХ',20],['БВ',9],['КР',19]], top: [['ПС',27],['СУ',26],['ТУ',26],['СК',23],['УС',23],['ОТ',2],['ВП',20],['ТХ',24],['БВ',11],['КР',23]] },
-    { role: 'ST', normal: [['ПС',11],['СУ',25],['ТУ',25],['СК',18],['УС',18],['ОТ',2],['ВП',20],['ТХ',18],['БВ',20],['КР',16]], top: [['ПС',13],['СУ',29],['ТУ',29],['СК',22],['УС',21],['ОТ',2],['ВП',23],['ТХ',21],['БВ',26],['КР',18]] }
-];
-
 const TrainingGuidePanel = {
     panelId: 'slf-training-guide-panel',
     cacheCollection: 'training_league_benchmarks_v1',
     cacheSchema: 'slf_training_league_benchmarks_v1',
     roles: ['GK','CD','LD / RD','DM','LM / RM','CM','AM','ST'],
+    goalkeeperSkills: ['ПС','СВ','ТВ','СК','РЕ','ИВ','ВП','РМ','ПИ','ВВ'],
+    fieldSkills: ['ПС','СУ','ТУ','СК','УС','ОТ','ВП','ТХ','БВ','КР'],
+    currentPayload: null,
     sourceSlots: [
         ['Италия','54164'], ['Англия','53597'], ['Германия','53582'], ['Испания','54151'], ['Франция','53609']
     ],
@@ -17888,15 +17879,7 @@ const TrainingGuidePanel = {
     isPage() { return /\/train\.php$/i.test(location.pathname || '') && !(location.search || ''); },
     esc(v) { return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); },
     norm(v) { return String(v ?? '').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim(); },
-
-    formatPairs(role, column, pairs) {
-        return (pairs || []).map(([skill,value]) => `<span class="slf-pair" data-slf-role="${this.esc(role)}" data-slf-col="${column}" data-slf-skill="${this.esc(skill)}" data-slf-value="${value}"><b>${this.esc(skill)}</b> ${value}</span>`).join('');
-    },
-
-    staticTable() {
-        const rows = SLF_TRAINING_PROFILES_V1.map(row => `<tr data-slf-training-role="${this.esc(row.role)}"><td>${this.esc(row.role)}</td><td>${this.formatPairs(row.role,'normal',row.normal)}</td><td>${this.formatPairs(row.role,'top',row.top)}</td></tr>`).join('');
-        return `<details id="slf-static-profiles" open><summary>Статический справочник SLF Training Profiles v1</summary><table class="slf-table"><thead><tr><th>Роль</th><th>normal</th><th>top</th></tr></thead><tbody>${rows}</tbody></table></details>`;
-    },
+    skillKey(v) { return this.norm(v).toUpperCase().replace(/^ВЫН$/,'ВЫН'); },
 
     sourceRows() {
         return this.sourceSlots.map(([name,id],index) => `<div class="slf-source" data-index="${index}"><label>${name}</label><input class="slf-champ-id" value="${id}" inputmode="numeric" maxlength="10"><a class="slf-league" href="/champ.php?action=view&id=${id}" target="_blank">Чемпионат</a><a class="slf-stats" href="/champ.stat.php?id=${id}" target="_blank">Статистика</a><span class="slf-source-state"></span></div>`).join('');
@@ -17911,8 +17894,8 @@ const TrainingGuidePanel = {
 #slf-training-guide-panel .slf-status{margin:7px 0;padding:5px;background:#191919;border:1px solid #444}.slf-ok{color:#78e46d}.slf-error{color:#f1aaaa}.slf-muted{color:#aaa}
 #slf-training-guide-panel .slf-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}#slf-training-guide-panel th,#slf-training-guide-panel td{padding:4px 5px;border-bottom:1px solid #444;text-align:left;vertical-align:top}
 #slf-training-guide-panel th{color:#8cf}#slf-training-guide-panel td:first-child{color:#ffd76a;font-weight:bold;white-space:nowrap}#slf-training-guide-panel .slf-pair{display:inline-block;margin:0 6px 3px 0;white-space:nowrap}#slf-training-guide-panel .slf-pair b{color:#8cf}
-#slf-training-guide-panel details{margin-top:8px}#slf-training-guide-panel summary{cursor:pointer}
-</style><div class="slf-title">Средние прокачки выбранных лиг</div><div class="slf-muted">Страницы статистики загружаются только после нажатия «Рассчитать».</div><div id="slf-sources">${this.sourceRows()}</div><button id="slf-calc" type="button">Рассчитать</button><div id="slf-status" class="slf-status">Загрузка последнего результата с VPS…</div><div id="slf-result"></div>${this.staticTable()}`;
+#slf-training-guide-panel .slf-apply-profile{margin:0;padding:3px 7px;font-size:11px;white-space:nowrap}
+</style><div class="slf-title">Средние прокачки выбранных лиг</div><div class="slf-muted">Страницы статистики загружаются только после нажатия «Рассчитать». Динамический профиль можно применить к отмеченным игрокам без автоматического сохранения.</div><div id="slf-sources">${this.sourceRows()}</div><button id="slf-calc" type="button">Рассчитать</button><div id="slf-status" class="slf-status">Загрузка последнего результата с VPS…</div><div id="slf-result"></div>`;
     },
 
     updateLinks(row) {
@@ -17942,7 +17925,7 @@ const TrainingGuidePanel = {
             const names = [...item.querySelectorAll('.stat-position-compare__skill-name')];
             const values = [...item.querySelectorAll('.stat-position-compare__skill-block')];
             const skills = {};
-            names.forEach((el,i) => { const skill=this.norm(el.textContent).toUpperCase(); const value=Number(this.norm(values[i]?.textContent).replace(',','.')); if (skill && Number.isFinite(value)) skills[skill]=value; });
+            names.forEach((el,i) => { const skill=this.skillKey(el.textContent); const value=Number(this.norm(values[i]?.textContent).replace(',','.')); if (skill && Number.isFinite(value)) skills[skill]=value; });
             return role && Object.keys(skills).length ? {role,skills} : null;
         }).filter(Boolean);
         const map = new Map(parsed.map(x => [x.role,x]));
@@ -17977,14 +17960,14 @@ const TrainingGuidePanel = {
     },
 
     setStatus(text,type='') { const el=document.getElementById('slf-status'); if(el){el.className=`slf-status ${type?'slf-'+type:''}`;el.textContent=text;} },
-    setSource(source,text,type='') { const el=source.row.querySelector('.slf-source-state'); el.className=`slf-source-state ${type?'slf-'+type:''}`;el.textContent=text; },
+    setSource(source,text,type='') { const el=source.row.querySelector('.slf-source-state'); if(el){el.className=`slf-source-state ${type?'slf-'+type:''}`;el.textContent=text;} },
 
     render(payload, label) {
         if (payload?.schema!==this.cacheSchema || !Array.isArray(payload.profiles)) return false;
+        this.currentPayload = payload;
         const total=(payload.sources||[]).length, ok=(payload.sources||[]).filter(x=>x.status==='ok').length;
-        const rows=payload.profiles.map(profile => `<tr><td>${this.esc(profile.role)}</td><td>${Object.entries(profile.skills||{}).map(([skill,data]) => { const title=(data.values||[]).map(x=>`${x.source}: ${x.value}`).join('\n')||`Источников: ${data.sample}`; return `<span class="slf-pair" title="${this.esc(title)}"><b>${this.esc(skill)}</b> ${Math.round(Number(data.value))}<sup>${data.sample}/${total||data.sample}</sup></span>`; }).join('')}</td></tr>`).join('');
-        document.getElementById('slf-result').innerHTML=`<div class="slf-muted">${label} · ${new Date(payload.calculatedAt).toLocaleString('ru-RU')} · источников ${ok}/${total}</div><table class="slf-table"><thead><tr><th>Роль</th><th>Средние значения</th></tr></thead><tbody>${rows}</tbody></table>`;
-        document.getElementById('slf-static-profiles').open=false;
+        const rows=payload.profiles.map(profile => `<tr><td>${this.esc(profile.role)}</td><td>${Object.entries(profile.skills||{}).map(([skill,data]) => { const title=(data.values||[]).map(x=>`${x.source}: ${x.value}`).join('\n')||`Источников: ${data.sample}`; return `<span class="slf-pair" title="${this.esc(title)}"><b>${this.esc(skill)}</b> ${Math.round(Number(data.value))}<sup>${data.sample}/${total||data.sample}</sup></span>`; }).join('')}</td><td><button type="button" class="slf-apply-profile" data-role="${this.esc(profile.role)}">Применить к выбранным</button></td></tr>`).join('');
+        document.getElementById('slf-result').innerHTML=`<div class="slf-muted">${label} · ${new Date(payload.calculatedAt).toLocaleString('ru-RU')} · источников ${ok}/${total}</div><table class="slf-table"><thead><tr><th>Роль</th><th>Средние значения</th><th>Действие</th></tr></thead><tbody>${rows}</tbody></table>`;
         return true;
     },
 
@@ -17996,9 +17979,104 @@ const TrainingGuidePanel = {
     async loadCache() {
         try {
             const {data}=await Api.getPromise(this.cacheCollection,'training league benchmarks cache');
-            if (!this.render(data,'Кеш VPS')) return this.setStatus('VPS-кеш отсутствует. Показан статический справочник.','muted');
+            if (!this.render(data,'Кеш VPS')) return this.setStatus('VPS-кеш отсутствует. Выполните динамический расчёт лиг.','muted');
             this.applyIds(data); this.setStatus('Последний расчёт загружен с VPS.','ok');
         } catch(error) { this.setStatus(`VPS-кеш недоступен (${error?.kind||'error'}${error?.status?'/'+error.status:''}).`,'error'); }
+    },
+
+    planSkillLabel(cell) {
+        const textNode=[...cell.childNodes].find(node=>node.nodeType===3 && this.norm(node.textContent));
+        return this.skillKey(textNode?.textContent || '');
+    },
+
+    inspectPlayer(playerId) {
+        const safeId=String(playerId);
+        if (!/^\d+$/.test(safeId)) return {ok:false,reason:'Некорректный ID игрока.'};
+        const primary=[...document.querySelectorAll(`#train tr[data-id="${safeId}"]`)].find(row=>row.querySelector('input[name="pl_arr[]"]'));
+        const plan=[...document.querySelectorAll(`#train tr[data-plan="${safeId}"]`)].find(row=>row.querySelector('.up[data-sk-up]'));
+        if (!primary || !plan) return {ok:false,reason:'План тренировок не найден.'};
+        const controls=[...plan.querySelectorAll('.up[data-sk-up]')].map(cell=>({
+            cell,
+            index:Number(cell.dataset.skUp),
+            skill:this.planSkillLabel(cell),
+            input:cell.querySelector('input[name^="up["]'),
+            order:cell.querySelector('select[name^="order["]')
+        })).filter(x=>x.index>=1 && x.index<=10 && x.skill && x.input && x.order);
+        if (controls.length!==10) return {ok:false,reason:'Не распознаны тренировочные поля.'};
+        const skillSet=new Set(controls.map(x=>x.skill));
+        const type=this.goalkeeperSkills.every(skill=>skillSet.has(skill))?'GK':this.fieldSkills.every(skill=>skillSet.has(skill))?'FIELD':'';
+        if (!type) return {ok:false,reason:'Не распознан тип игрока.'};
+        const expected=type==='GK'?this.goalkeeperSkills:this.fieldSkills;
+        const current={};
+        controls.forEach(control=>{
+            const cell=primary.querySelector(`td[data-sk="${control.index}"]`);
+            const raw=this.norm(cell?.querySelector('.wide_format')?.textContent || cell?.textContent).replace(',','.');
+            const value=Number(raw);
+            if (Number.isFinite(value)) current[control.skill]=value;
+        });
+        if (!expected.every(skill=>Number.isFinite(current[skill]))) return {ok:false,reason:'Не распознаны текущие навыки.'};
+        return {ok:true,primary,plan,controls,type,current};
+    },
+
+    restoreControls(snapshot) {
+        snapshot.forEach(item=>{
+            item.control.order.value=item.order;
+            item.control.order.dispatchEvent(new Event('change',{bubbles:true}));
+            item.control.input.value=item.value;
+            item.control.input.dispatchEvent(new Event('input',{bubbles:true}));
+            item.control.input.dispatchEvent(new Event('change',{bubbles:true}));
+        });
+    },
+
+    applyToPlayer(playerId, profile) {
+        const inspected=this.inspectPlayer(playerId);
+        if (!inspected.ok) return inspected;
+        const profileType=profile.role==='GK'?'GK':'FIELD';
+        if (inspected.type!==profileType) return {ok:false,reason:'Несовместимый тип навыков.'};
+        const targets=Object.entries(profile.skills||{}).map(([skill,data])=>({skill:this.skillKey(skill),target:Math.round(Number(data?.value))})).filter(x=>Number.isFinite(x.target));
+        const controls=targets.map(target=>inspected.controls.find(control=>control.skill===target.skill)).filter(Boolean);
+        if (controls.length!==10) return {ok:false,reason:'Профиль не соответствует полям игрока.'};
+        const snapshot=inspected.controls.map(control=>({control,order:control.order.value,value:control.input.value}));
+        inspected.controls.forEach(control=>{
+            control.order.value='';
+            control.order.dispatchEvent(new Event('change',{bubbles:true}));
+        });
+        let order=0;
+        for (const target of targets) {
+            const control=inspected.controls.find(item=>item.skill===target.skill);
+            if (!control) { this.restoreControls(snapshot); return {ok:false,reason:`Не найден навык ${target.skill}.`}; }
+            if (Math.round(inspected.current[target.skill])>=target.target) continue;
+            order++;
+            control.order.value=String(order);
+            control.order.dispatchEvent(new Event('change',{bubbles:true}));
+            if (control.input.disabled) { this.restoreControls(snapshot); return {ok:false,reason:`Поле ${target.skill} осталось недоступным.`}; }
+            control.input.value=Number(target.target).toFixed(3);
+            control.input.dispatchEvent(new Event('input',{bubbles:true}));
+            control.input.dispatchEvent(new Event('change',{bubbles:true}));
+        }
+        const icon=inspected.primary.querySelector('img[title="Планировать тренировку"]');
+        if (icon && getComputedStyle(inspected.plan).display==='none') icon.click();
+        if (getComputedStyle(inspected.plan).display==='none') inspected.plan.style.display='table-row';
+        return {ok:true,assigned:order};
+    },
+
+    applyProfile(role) {
+        if (this.currentPayload?.schema!==this.cacheSchema) return this.setStatus('Динамический профиль недоступен. Выполните расчёт лиг.','error');
+        const profile=(this.currentPayload.profiles||[]).find(item=>item.role===role);
+        if (!profile) return this.setStatus(`Профиль ${role} не найден в динамическом расчёте.`,'error');
+        const selected=[...document.querySelectorAll('#train input[name="pl_arr[]"]:checked')];
+        if (!selected.length) return this.setStatus('Сначала отметьте хотя бы одного игрока.','error');
+        let applied=0, assigned=0;
+        const skipped=[];
+        selected.forEach(box=>{
+            const result=this.applyToPlayer(box.value,profile);
+            if (result.ok) { applied++; assigned+=result.assigned; }
+            else skipped.push(result.reason||'Неизвестная ошибка.');
+        });
+        if (!applied) return this.setStatus(`Профиль ${role} не применён. ${skipped[0]||''}`,'error');
+        const suffix=skipped.length?` Пропущено: ${skipped.length}. ${skipped[0]}`:'';
+        const message=assigned?`Профиль ${role} применён к ${applied} из ${selected.length} игроков. Назначено тренировочных навыков: ${assigned}.${suffix}`:`У ${applied} игроков цели профиля ${role} уже достигнуты; прежние порядки очищены.${suffix}`;
+        this.setStatus(message,skipped.length?'muted':'ok');
     },
 
     async calculate() {
@@ -18027,6 +18105,7 @@ const TrainingGuidePanel = {
         else (document.querySelector('.pad2')||document.body).appendChild(panel);
         document.getElementById('slf-calc').addEventListener('click',()=>this.calculate());
         document.getElementById('slf-sources').addEventListener('input',event=>{const row=event.target.closest('.slf-source');if(row)this.updateLinks(row);});
+        document.getElementById('slf-result').addEventListener('click',event=>{const button=event.target.closest('.slf-apply-profile');if(button)this.applyProfile(button.dataset.role);});
         this.loadCache();
     }
 };
@@ -19348,15 +19427,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.231',
-        scriptVersion: '4.4.231',
+        version: '4.4.232',
+        scriptVersion: '4.4.232',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.231',
+        scriptVersion: '4.4.232',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

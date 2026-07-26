@@ -1,20 +1,20 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.231",
+  "scriptVersion": "4.4.232",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_231_published",
+  "status": "release_4_4_232_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "cad23a3ea167109115e022b712b119d8f3746e453c2d0bfd10bb17a688df7bfa",
     "bundleFileCount": 55,
-    "approvedBaseCommit": "6bfaaa06eaaf0f726e9f82bda2815eaccd32fc99",
-    "approvedCommit": "26c31c9fe80558d9a9f6c831efbc6b2eed299e5b",
+    "approvedBaseCommit": "39ba5c85fa30eb51619ed9350f151591f2139334",
+    "approvedCommit": "b3b269abfcc761ba3c7d10fd0dbb68c14352ba66",
     "approvedFiles": [
       "src/modules/team-management/training-reference-guide.js"
     ],
