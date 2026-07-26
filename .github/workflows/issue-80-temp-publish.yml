@@ -1,0 +1,24 @@
+name: Issue 80 temporary branch publisher
+
+on:
+  push:
+    branches:
+      - task/80-dependency-audit-analysis
+    paths:
+      - tools/check-bundle-order.mjs
+      - .github/workflows/issue-80-temp-publish.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish-approved-batch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout analysis branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Generate and publish approved Batch 2 branch
+        run: node tools/check-bundle-order.mjs
