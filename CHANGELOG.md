@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.4.241
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+
+Approved base commit:
+- be8a3ab6dc958914139da620db4f4a9d5e68aaa0
+
+Approved commit:
+- d2f4de57a0310582c5feef47a653121d46834b9b
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.240
 
 ### Automatic latest-only build
