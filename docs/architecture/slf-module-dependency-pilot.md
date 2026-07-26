@@ -8,6 +8,14 @@ Runtime behavior impact: None
 
 `src/app/bundle-order.json` remains the only source for deterministic userscript assembly. Its `files` array defines the canonical file set and order. The adjacent `dependencyAudit` block records machine-checkable declarations, public globals, cross-file dependencies, phases, and host capabilities without creating a second runtime registry.
 
+The top-level provenance fields describe the historical structural split, not the current editable source hierarchy:
+
+- `structuralBaselineRelease` identifies the release used as the baseline for the original source split;
+- the legacy-named `source` field points to the generated userscript from which that structural baseline was derived;
+- `source` must not be interpreted as the current implementation source or as permission to edit a generated release artifact;
+- current implementation source is `src/**`;
+- `releases/latest.user.js` is a deterministic generated target.
+
 ## Completion history
 
 - Pilot: 8 base modules, SLF 4.4.222.
