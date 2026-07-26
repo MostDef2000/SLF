@@ -54,16 +54,21 @@ case "$component" in
 
   exporter-rag)
     EXPORT_DIR='/opt/slf_ai_exporter_v2/slf_ai_exporter_v2'
+    VENV_PY="$EXPORT_DIR/.venv/bin/python"
+    VENV_PIP="$EXPORT_DIR/.venv/bin/pip"
+    [ -x "$VENV_PY" ] || { echo "Missing exporter Python: $VENV_PY" >&2; exit 1; }
+    [ -x "$VENV_PIP" ] || { echo "Missing exporter pip: $VENV_PIP" >&2; exit 1; }
+
     for file in slf_ai_export.py slf_rag_build.py run_daily_export.sh slf_drive_filter.txt requirements.txt; do
       [ -f "$BACKUP_DIR/$file" ] || continue
       mode=0644
       [ "$file" = 'run_daily_export.sh' ] && mode=0755
       install -m "$mode" "$BACKUP_DIR/$file" "$EXPORT_DIR/$file"
     done
-    [ -f "$BACKUP_DIR/requirements.txt" ] && "$EXPORT_DIR/venv/bin/pip" install -r "$EXPORT_DIR/requirements.txt"
+    [ -f "$BACKUP_DIR/requirements.txt" ] && "$VENV_PIP" install -r "$EXPORT_DIR/requirements.txt"
     rm -f "$EXPORT_DIR/DEPLOYED_GIT_COMMIT"
 
-    "$EXPORT_DIR/venv/bin/python" -m py_compile "$EXPORT_DIR/slf_ai_export.py" "$EXPORT_DIR/slf_rag_build.py"
+    "$VENV_PY" -m py_compile "$EXPORT_DIR/slf_ai_export.py" "$EXPORT_DIR/slf_rag_build.py"
     bash -n "$EXPORT_DIR/run_daily_export.sh"
     (cd "$EXPORT_DIR" && ./run_daily_export.sh)
     [ -s /var/www/html/slf_ai/catalog.json ] || { echo 'catalog.json verification failed after rollback' >&2; exit 1; }
