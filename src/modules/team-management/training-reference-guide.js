@@ -138,7 +138,7 @@ const TrainingGuidePanel = {
     },
 
     inspectGroupFooter(table) {
-        const footer=[...table.querySelectorAll('tfoot')].find(node=>/планирование тренировок для группы выбранных игроков/i.test(this.norm(node.textContent)));
+        const footer=table.tFoot || table.querySelector('tfoot');
         if (!footer) return {ok:false,reason:'Групповая таблица планирования не найдена.'};
         const controls=[...footer.querySelectorAll('.up[data-sk-up]')].map(cell=>({
             cell,
