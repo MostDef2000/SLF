@@ -55,9 +55,9 @@ bash vps/ops/deploy-code.sh \
   --component exporter-rag
 ```
 
-The script validates Python and shell syntax, backs up the current executable file set, installs dependencies and code, runs the existing daily wrapper, verifies non-empty public catalog files, and writes `DEPLOYED_GIT_COMMIT` only after the wrapper and catalog checks succeed.
+The script validates Python and shell syntax, backs up the current executable file set, installs dependencies and code, runs the existing daily wrapper, verifies non-empty `/var/www/html/slf_ai/manifest.json` and `/var/www/html/slf_ai/rag/catalog.json`, and writes `DEPLOYED_GIT_COMMIT` only after the wrapper and output checks succeed.
 
-`DEPLOYED_GIT_COMMIT` is therefore a completed-deployment marker, not an installation-started marker. A failed service, exporter, RAG, or Drive-sync verification must leave the marker unchanged or absent.
+`DEPLOYED_GIT_COMMIT` is therefore a completed-deployment marker, not an installation-started marker. A failed service, exporter, RAG, Drive-sync, manifest, or RAG-catalog verification must leave the marker unchanged or absent.
 
 ## Rollback
 
@@ -66,7 +66,7 @@ bash vps/ops/rollback-code.sh \
   --backup /var/backups/slf-code/<timestamp>-<component>-<commit>
 ```
 
-Rollback verifies backup checksums, restores only the preserved code/dependency declarations, reruns component verification, and removes `DEPLOYED_GIT_COMMIT` because the pre-Git legacy revision may be unknown. It does not roll back live data.
+Rollback verifies backup checksums, restores only the preserved code/dependency declarations, reruns component verification, and removes `DEPLOYED_GIT_COMMIT` because the pre-Git legacy revision may be unknown. Exporter rollback verifies the root `manifest.json` and `rag/catalog.json`; it does not require a root `catalog.json`. It does not roll back live data.
 
 ## Evidence required to accept DR-008
 
