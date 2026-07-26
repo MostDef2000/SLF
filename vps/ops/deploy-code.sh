@@ -39,8 +39,11 @@ TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
 BACKUP_DIR="$BACKUP_ROOT/$TIMESTAMP-$COMPONENT-$RESOLVED_COMMIT"
 STAGE_DIR=$(mktemp -d)
 trap 'rm -rf "$STAGE_DIR"' EXIT
-mkdir -p "$BACKUP_DIR"
 
+create_backup_dir() {
+  mkdir -p "$BACKUP_ROOT"
+  mkdir "$BACKUP_DIR"
+}
 write_manifest() {
   printf 'component=%s\ncommit=%s\ndeployed_at_utc=%s\n' \
     "$COMPONENT" "$RESOLVED_COMMIT" "$TIMESTAMP" > "$BACKUP_DIR/deployment.env"
@@ -66,6 +69,7 @@ case "$COMPONENT" in
     "$VENV_PY" -m py_compile "$STAGE_DIR/server.py"
     systemd-analyze verify "$STAGE_DIR/slf-server.service"
 
+    create_backup_dir
     [ -f "$API_DIR/server.py" ] && cp -a "$API_DIR/server.py" "$BACKUP_DIR/server.py"
     [ -f "$API_DIR/requirements.txt" ] && cp -a "$API_DIR/requirements.txt" "$BACKUP_DIR/requirements.txt"
     [ -f "$UNIT_PATH" ] && cp -a "$UNIT_PATH" "$BACKUP_DIR/slf-server.service"
@@ -86,8 +90,8 @@ case "$COMPONENT" in
 
   exporter-rag)
     EXPORT_DIR='/opt/slf_ai_exporter_v2/slf_ai_exporter_v2'
-    VENV_PY="$EXPORT_DIR/venv/bin/python"
-    VENV_PIP="$EXPORT_DIR/venv/bin/pip"
+    VENV_PY="$EXPORT_DIR/.venv/bin/python"
+    VENV_PIP="$EXPORT_DIR/.venv/bin/pip"
     FILES='slf_ai_export.py slf_rag_build.py run_daily_export.sh slf_drive_filter.txt requirements.txt'
     [ -d "$EXPORT_DIR" ] || { echo "Missing exporter directory: $EXPORT_DIR" >&2; exit 1; }
     [ -x "$VENV_PY" ] || { echo "Missing exporter Python: $VENV_PY" >&2; exit 1; }
@@ -95,14 +99,18 @@ case "$COMPONENT" in
 
     for file in $FILES; do
       git -C "$REPO_DIR" show "$RESOLVED_COMMIT:vps/exporter-rag/$file" > "$STAGE_DIR/$file"
+    done
+    "$VENV_PY" -m py_compile "$STAGE_DIR/slf_ai_export.py" "$STAGE_DIR/slf_rag_build.py"
+    bash -n "$STAGE_DIR/run_daily_export.sh"
+
+    create_backup_dir
+    for file in $FILES; do
       [ -f "$EXPORT_DIR/$file" ] && cp -a "$EXPORT_DIR/$file" "$BACKUP_DIR/$file"
     done
     write_manifest
     write_checksums
-    "$VENV_PY" -m py_compile "$STAGE_DIR/slf_ai_export.py" "$STAGE_DIR/slf_rag_build.py"
-    bash -n "$STAGE_DIR/run_daily_export.sh"
-    "$VENV_PIP" install -r "$STAGE_DIR/requirements.txt"
 
+    "$VENV_PIP" install -r "$STAGE_DIR/requirements.txt"
     install -m 0644 "$STAGE_DIR/slf_ai_export.py" "$EXPORT_DIR/slf_ai_export.py"
     install -m 0644 "$STAGE_DIR/slf_rag_build.py" "$EXPORT_DIR/slf_rag_build.py"
     install -m 0755 "$STAGE_DIR/run_daily_export.sh" "$EXPORT_DIR/run_daily_export.sh"
