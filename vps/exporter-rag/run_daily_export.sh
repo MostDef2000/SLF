@@ -30,10 +30,15 @@ SLF_FORUM_FAQ_DIR="$FORUM_DIR" \
 python slf_rag_build.py
 
 if command -v rclone >/dev/null 2>&1; then
-  rclone sync "$OUT_DIR" gdrive:"SLF AI RAG/current" \
+  echo "Starting Google Drive sync"
+  if ! rclone sync "$OUT_DIR" gdrive:"SLF AI RAG/current" \
     --filter-from "$FILTER_FILE" \
     --transfers 4 \
-    --checkers 8
+    --checkers 8; then
+    echo "ERROR: Google Drive sync failed"
+    exit 1
+  fi
+  echo "Google Drive sync completed"
 else
   echo "WARN: rclone not found; Google Drive sync skipped"
 fi
