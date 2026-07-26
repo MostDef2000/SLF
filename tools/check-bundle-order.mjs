@@ -286,24 +286,19 @@ function maskNonCode(source) {
 
 function extractTopLevelDeclarations(source, file = 'unknown source') {
   const maskedLines = maskNonCode(source).split(/\r?\n/);
-  const declarations = [];
-  let braceDepth = 0;
+  const candidates = [];
 
   for (const line of maskedLines) {
-    if (braceDepth === 0) {
-      const match = line.match(/^\s*(?:(?:async\s+)?function|class|const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\b/);
-      if (match) declarations.push(match[1]);
-    }
-
-    for (const char of line) {
-      if (char === '{') braceDepth++;
-      if (char === '}') braceDepth--;
-      if (braceDepth < 0) fail(`source contains an unmatched closing brace during dependency audit: ${file}`);
-    }
+    const match = line.match(/^(\s*)(?:(?:async\s+)?function|class|const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\b/);
+    if (!match) continue;
+    candidates.push({ indent: match[1].replace(/\t/g, '    ').length, name: match[2] });
   }
 
-  if (braceDepth !== 0) fail(`source contains unbalanced braces during dependency audit: ${file}`);
-  return declarations;
+  if (!candidates.length) return [];
+  const topLevelIndent = Math.min(...candidates.map(candidate => candidate.indent));
+  return candidates
+    .filter(candidate => candidate.indent === topLevelIndent)
+    .map(candidate => candidate.name);
 }
 
 function compareStringSets(expected, actual) {
