@@ -98,7 +98,7 @@ const TrainingGuidePanel = {
                 buckets.get(skill).push({source:result.name,championshipId:result.championshipId,value:Number(value)});
             }));
             const skills = {};
-            buckets.forEach((values,skill) => { skills[skill]={value:Math.round(values.reduce((s,x)=>s+x.value,0)/values.length*10)/10,sample:values.length,values}; });
+            buckets.forEach((values,skill) => { skills[skill]={value:Math.round(values.reduce((s,x)=>s+x.value,0)/values.length),sample:values.length,values}; });
             return {role,skills};
         });
     },
@@ -119,7 +119,7 @@ const TrainingGuidePanel = {
     render(payload, label) {
         if (payload?.schema!==this.cacheSchema || !Array.isArray(payload.profiles)) return false;
         const total=(payload.sources||[]).length, ok=(payload.sources||[]).filter(x=>x.status==='ok').length;
-        const rows=payload.profiles.map(profile => `<tr><td>${this.esc(profile.role)}</td><td>${Object.entries(profile.skills||{}).map(([skill,data]) => { const title=(data.values||[]).map(x=>`${x.source}: ${x.value}`).join('\n')||`Источников: ${data.sample}`; return `<span class="slf-pair" title="${this.esc(title)}"><b>${this.esc(skill)}</b> ${Number(data.value).toFixed(1)}<sup>${data.sample}/${total||data.sample}</sup></span>`; }).join('')}</td></tr>`).join('');
+        const rows=payload.profiles.map(profile => `<tr><td>${this.esc(profile.role)}</td><td>${Object.entries(profile.skills||{}).map(([skill,data]) => { const title=(data.values||[]).map(x=>`${x.source}: ${x.value}`).join('\n')||`Источников: ${data.sample}`; return `<span class="slf-pair" title="${this.esc(title)}"><b>${this.esc(skill)}</b> ${Math.round(Number(data.value))}<sup>${data.sample}/${total||data.sample}</sup></span>`; }).join('')}</td></tr>`).join('');
         document.getElementById('slf-result').innerHTML=`<div class="slf-muted">${label} · ${new Date(payload.calculatedAt).toLocaleString('ru-RU')} · источников ${ok}/${total}</div><table class="slf-table"><thead><tr><th>Роль</th><th>Средние значения</th></tr></thead><tbody>${rows}</tbody></table>`;
         document.getElementById('slf-static-profiles').open=false;
         return true;
