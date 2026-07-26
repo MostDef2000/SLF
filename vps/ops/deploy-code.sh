@@ -5,10 +5,9 @@ usage() {
   cat <<'EOF'
 Usage: deploy-code.sh --repo DIR --commit SHA --component api|exporter-rag [--backup-root DIR]
 
-Deploys source-controlled VPS code from an exact Git commit. This script must be
-run on the VPS only after separate operational approval. It never copies data,
-environment files, credentials, logs, virtual environments, cron state, or
-generated export artifacts.
+Deploys source-controlled VPS code from an exact Git commit. Run on the VPS only
+after separate operational approval. The script never copies data, environment
+files, credentials, logs, virtual environments, cron state, or generated data.
 EOF
 }
 
@@ -16,7 +15,6 @@ REPO_DIR=''
 COMMIT=''
 COMPONENT=''
 BACKUP_ROOT='/var/backups/slf-code'
-
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --repo) REPO_DIR=${2:-}; shift 2 ;;
@@ -32,11 +30,9 @@ done
 [ -n "$COMMIT" ] || { echo '--commit is required' >&2; exit 2; }
 case "$COMPONENT" in api|exporter-rag) ;; *) echo '--component must be api or exporter-rag' >&2; exit 2 ;; esac
 
-command -v git >/dev/null
-command -v sha256sum >/dev/null
+for command_name in git sha256sum install; do command -v "$command_name" >/dev/null; done
 [ "$(id -u)" -eq 0 ] || { echo 'Run as root on the VPS.' >&2; exit 1; }
 [ -d "$REPO_DIR/.git" ] || { echo "Not a Git checkout: $REPO_DIR" >&2; exit 1; }
-
 git -C "$REPO_DIR" cat-file -e "${COMMIT}^{commit}"
 RESOLVED_COMMIT=$(git -C "$REPO_DIR" rev-parse "$COMMIT")
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
@@ -46,14 +42,11 @@ trap 'rm -rf "$STAGE_DIR"' EXIT
 mkdir -p "$BACKUP_DIR"
 
 write_manifest() {
-  local target=$1
-  {
-    echo "component=$COMPONENT"
-    echo "commit=$RESOLVED_COMMIT"
-    echo "deployed_at_utc=$TIMESTAMP"
-    echo "repository=$REPO_DIR"
-    echo "backup_dir=$BACKUP_DIR"
-  } > "$target"
+  printf 'component=%s\ncommit=%s\ndeployed_at_utc=%s\n' \
+    "$COMPONENT" "$RESOLVED_COMMIT" "$TIMESTAMP" > "$BACKUP_DIR/deployment.env"
+}
+write_checksums() {
+  (cd "$BACKUP_DIR" && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
 }
 
 case "$COMPONENT" in
@@ -62,7 +55,7 @@ case "$COMPONENT" in
     UNIT_PATH='/etc/systemd/system/slf-server.service'
     VENV_PY="$API_DIR/venv/bin/python"
     VENV_PIP="$API_DIR/venv/bin/pip"
-
+    for command_name in systemctl systemd-analyze curl; do command -v "$command_name" >/dev/null; done
     [ -x "$VENV_PY" ] || { echo "Missing API Python: $VENV_PY" >&2; exit 1; }
     [ -x "$VENV_PIP" ] || { echo "Missing API pip: $VENV_PIP" >&2; exit 1; }
     [ -f "$API_DIR/slf_api.env" ] || { echo 'Missing slf_api.env; refusing deployment.' >&2; exit 1; }
@@ -70,29 +63,25 @@ case "$COMPONENT" in
     git -C "$REPO_DIR" show "$RESOLVED_COMMIT:vps/api/server.py" > "$STAGE_DIR/server.py"
     git -C "$REPO_DIR" show "$RESOLVED_COMMIT:vps/api/requirements.txt" > "$STAGE_DIR/requirements.txt"
     git -C "$REPO_DIR" show "$RESOLVED_COMMIT:vps/ops/slf-server.service" > "$STAGE_DIR/slf-server.service"
-
     "$VENV_PY" -m py_compile "$STAGE_DIR/server.py"
     systemd-analyze verify "$STAGE_DIR/slf-server.service"
 
     [ -f "$API_DIR/server.py" ] && cp -a "$API_DIR/server.py" "$BACKUP_DIR/server.py"
     [ -f "$API_DIR/requirements.txt" ] && cp -a "$API_DIR/requirements.txt" "$BACKUP_DIR/requirements.txt"
     [ -f "$UNIT_PATH" ] && cp -a "$UNIT_PATH" "$BACKUP_DIR/slf-server.service"
-    write_manifest "$BACKUP_DIR/deployment.env"
+    write_manifest
+    write_checksums
 
     "$VENV_PIP" install -r "$STAGE_DIR/requirements.txt"
     install -m 0644 "$STAGE_DIR/server.py" "$API_DIR/server.py"
     install -m 0644 "$STAGE_DIR/requirements.txt" "$API_DIR/requirements.txt"
     install -m 0644 "$STAGE_DIR/slf-server.service" "$UNIT_PATH"
     printf '%s\n' "$RESOLVED_COMMIT" > "$API_DIR/DEPLOYED_GIT_COMMIT"
-
     systemctl daemon-reload
     systemctl restart slf-server.service
     systemctl is-active --quiet slf-server.service
-    curl --fail --silent --show-error --output /dev/null http://127.0.0.1:5000/api/analysis || {
-      status=$?
-      echo 'API process is active, but unauthenticated probe did not reach an HTTP endpoint.' >&2
-      exit "$status"
-    }
+    HTTP_STATUS=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:5000/api/analysis)
+    [ "$HTTP_STATUS" = '401' ] || { echo "Expected authenticated endpoint to return 401 without credentials, got $HTTP_STATUS" >&2; exit 1; }
     ;;
 
   exporter-rag)
@@ -100,7 +89,6 @@ case "$COMPONENT" in
     VENV_PY="$EXPORT_DIR/venv/bin/python"
     VENV_PIP="$EXPORT_DIR/venv/bin/pip"
     FILES='slf_ai_export.py slf_rag_build.py run_daily_export.sh slf_drive_filter.txt requirements.txt'
-
     [ -d "$EXPORT_DIR" ] || { echo "Missing exporter directory: $EXPORT_DIR" >&2; exit 1; }
     [ -x "$VENV_PY" ] || { echo "Missing exporter Python: $VENV_PY" >&2; exit 1; }
     [ -x "$VENV_PIP" ] || { echo "Missing exporter pip: $VENV_PIP" >&2; exit 1; }
@@ -109,8 +97,8 @@ case "$COMPONENT" in
       git -C "$REPO_DIR" show "$RESOLVED_COMMIT:vps/exporter-rag/$file" > "$STAGE_DIR/$file"
       [ -f "$EXPORT_DIR/$file" ] && cp -a "$EXPORT_DIR/$file" "$BACKUP_DIR/$file"
     done
-    write_manifest "$BACKUP_DIR/deployment.env"
-
+    write_manifest
+    write_checksums
     "$VENV_PY" -m py_compile "$STAGE_DIR/slf_ai_export.py" "$STAGE_DIR/slf_rag_build.py"
     bash -n "$STAGE_DIR/run_daily_export.sh"
     "$VENV_PIP" install -r "$STAGE_DIR/requirements.txt"
@@ -121,12 +109,10 @@ case "$COMPONENT" in
     install -m 0644 "$STAGE_DIR/slf_drive_filter.txt" "$EXPORT_DIR/slf_drive_filter.txt"
     install -m 0644 "$STAGE_DIR/requirements.txt" "$EXPORT_DIR/requirements.txt"
     printf '%s\n' "$RESOLVED_COMMIT" > "$EXPORT_DIR/DEPLOYED_GIT_COMMIT"
-
     (cd "$EXPORT_DIR" && ./run_daily_export.sh)
     [ -s /var/www/html/slf_ai/catalog.json ] || { echo 'catalog.json verification failed' >&2; exit 1; }
     [ -s /var/www/html/slf_ai/rag/catalog.json ] || { echo 'RAG catalog verification failed' >&2; exit 1; }
     ;;
 esac
 
-find "$BACKUP_DIR" -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > "$BACKUP_DIR/SHA256SUMS"
 echo "Deployment complete: component=$COMPONENT commit=$RESOLVED_COMMIT backup=$BACKUP_DIR"
