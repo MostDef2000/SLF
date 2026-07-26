@@ -30,7 +30,7 @@ Dependency phases remain:
 
 The validator requires exact equality between audited files and the canonical `files` array. It also checks source/declaration parity, public ownership, dependency providers and references, evaluation ordering, audited cross-use edges, global collisions, host references, and expected count.
 
-The source masker preserves executable expressions inside nested template literals. Declaration extraction uses brace-depth scanning where balanced and a minimum-indentation fallback only for syntax the lightweight scanner cannot balance.
+Dependency references, public-symbol cross-use, and host capabilities are validated against lexically masked executable code, so comments and string literals cannot create false edges. The source masker preserves executable expressions inside nested template literals. Declaration extraction uses brace-depth scanning where balanced and a minimum-indentation fallback only for syntax the lightweight scanner cannot balance.
 
 ## Boundaries
 
