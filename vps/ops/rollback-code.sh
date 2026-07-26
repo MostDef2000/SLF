@@ -27,9 +27,8 @@ done
 [ -f "$BACKUP_DIR/SHA256SUMS" ] || { echo 'Backup checksums are missing.' >&2; exit 1; }
 (cd "$BACKUP_DIR" && sha256sum --check SHA256SUMS)
 
-# shellcheck disable=SC1090
-source "$BACKUP_DIR/deployment.env"
-case "${component:-}" in
+component=$(sed -n 's/^component=//p' "$BACKUP_DIR/deployment.env")
+case "$component" in
   api)
     API_DIR='/root/slf-server'
     UNIT_PATH='/etc/systemd/system/slf-server.service'
@@ -37,7 +36,10 @@ case "${component:-}" in
     [ -f "$BACKUP_DIR/slf-server.service" ] || { echo 'service unit is missing from backup.' >&2; exit 1; }
 
     install -m 0644 "$BACKUP_DIR/server.py" "$API_DIR/server.py"
-    [ -f "$BACKUP_DIR/requirements.txt" ] && install -m 0644 "$BACKUP_DIR/requirements.txt" "$API_DIR/requirements.txt"
+    if [ -f "$BACKUP_DIR/requirements.txt" ]; then
+      install -m 0644 "$BACKUP_DIR/requirements.txt" "$API_DIR/requirements.txt"
+      "$API_DIR/venv/bin/pip" install -r "$API_DIR/requirements.txt"
+    fi
     install -m 0644 "$BACKUP_DIR/slf-server.service" "$UNIT_PATH"
     rm -f "$API_DIR/DEPLOYED_GIT_COMMIT"
 
@@ -46,6 +48,8 @@ case "${component:-}" in
     systemctl daemon-reload
     systemctl restart slf-server.service
     systemctl is-active --quiet slf-server.service
+    HTTP_STATUS=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:5000/api/analysis)
+    [ "$HTTP_STATUS" = '401' ] || { echo "Expected 401 after rollback, got $HTTP_STATUS" >&2; exit 1; }
     ;;
 
   exporter-rag)
@@ -56,6 +60,7 @@ case "${component:-}" in
       [ "$file" = 'run_daily_export.sh' ] && mode=0755
       install -m "$mode" "$BACKUP_DIR/$file" "$EXPORT_DIR/$file"
     done
+    [ -f "$BACKUP_DIR/requirements.txt" ] && "$EXPORT_DIR/venv/bin/pip" install -r "$EXPORT_DIR/requirements.txt"
     rm -f "$EXPORT_DIR/DEPLOYED_GIT_COMMIT"
 
     "$EXPORT_DIR/venv/bin/python" -m py_compile "$EXPORT_DIR/slf_ai_export.py" "$EXPORT_DIR/slf_rag_build.py"
@@ -65,10 +70,7 @@ case "${component:-}" in
     [ -s /var/www/html/slf_ai/rag/catalog.json ] || { echo 'RAG catalog verification failed after rollback' >&2; exit 1; }
     ;;
 
-  *)
-    echo "Unsupported component in backup manifest: ${component:-missing}" >&2
-    exit 1
-    ;;
+  *) echo "Unsupported component in backup manifest: ${component:-missing}" >&2; exit 1 ;;
 esac
 
 echo "Rollback complete: component=$component backup=$BACKUP_DIR"
