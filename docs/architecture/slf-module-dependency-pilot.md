@@ -1,83 +1,39 @@
-# SLF module dependency audit pilot
+# SLF module dependency audit
 
-Status: Active pilot
-Scope: eight base userscript modules
+Status: Active incremental expansion
+Current coverage: 30 of 55 registered userscript modules
 Runtime behavior impact: None
 
 ## Purpose
 
-`src/app/bundle-order.json` remains the only source for deterministic userscript assembly. Its `files` array answers which files are concatenated and in which order, but the array alone does not describe shared globals or semantic dependencies.
+`src/app/bundle-order.json` remains the only source for deterministic userscript assembly. Its `files` array defines the canonical file set and order. The adjacent `dependencyAudit` block records machine-checkable declarations, public globals, cross-file dependencies, phases, and host capabilities without creating a second runtime registry.
 
-The `dependencyAudit` block is a bounded pilot. It adds machine-checkable metadata for eight representative modules without introducing another runtime registry and without changing the assembled file order.
+## Evidence and expansion history
 
-## Pilot modules
-
-| Module | Public interface | Internal dependencies | Host capabilities |
-| --- | --- | --- | --- |
-| `src/core/domain.js` | `buildSlfUrl` | None | `location` |
-| `src/core/config.js` | Shared configuration, state, preset data, logging, and numeric/team helpers | `PresetStorage`, `MatchStateParser`, `TacticPresetLibrary`, `UI` at runtime | `console`, `localStorage` |
-| `src/core/token-storage.js` | `getApiToken`, `warnMissingApiTokenOnce` | None | Tampermonkey value/menu APIs, `prompt`, `alert`, `console` |
-| `src/core/dom-utils.js` | `DomUtils` | None | DOM observer and timer APIs |
-| `src/core/api.js` | `Api` and canonical API status/row helpers | `CONFIG`, logging helpers, and token helpers at runtime | `GM_xmlhttpRequest` |
-| `src/modules/live-parser/match-state-parser.js` | `MatchTimingModel`, `MatchStateParser` | `toNum` at runtime | DOM, location, URL query API |
-| `src/modules/live-parser/match-stats-parser.js` | `MatchStatsParser` | `CONFIG`, `aliasMatchesTeamName`, `toNum` at runtime | DOM |
-| `src/modules/live-parser/squad-parser.js` | `SquadParser` | `toNum` at runtime | DOM |
-
-The current pilot records 14 dependency symbols and 20 host capabilities.
+- Pilot: 8 base modules, SLF 4.4.222.
+- Normal-change evidence: PR #83 exercised `src/core/api.js`; PR #89 exercised `src/core/config.js`; no recurring false-positive pattern was observed.
+- Batch 1: remaining Live Parser modules, PR #90, SLF 4.4.226; coverage reached 10 modules.
+- Batch 2: Tactics Presets and Strategy Data; coverage reaches 30 of 55 modules.
 
 ## Metadata contract
 
-Each audited module declares:
+Each entry records `file`, complete top-level `declares`, cross-file `public` symbols, provider/symbol/phase `requires`, and executable-code `hostCapabilities`. Phases remain `evaluation` or `runtime`.
 
-- `file`: its canonical bundle path;
-- `declares`: every top-level global declaration owned by the file;
-- `public`: the subset intended for cross-file use;
-- `requires`: provider file, required symbols, and dependency phase;
-- `hostCapabilities`: browser or Tampermonkey globals used by the module.
+## Validator states
 
-Dependency phases have different ordering rules:
+- `pilot`: bounded proof-of-concept coverage;
+- `expanding`: approved incremental coverage;
+- `complete`: every registered runtime file must have exactly one audit entry.
 
-- `evaluation`: the provider must precede the consumer because the symbol is needed while the consumer file is evaluated;
-- `runtime`: the symbol is resolved only after the full bundle has loaded, so the provider must be registered but may appear later in the bundle.
+The validator checks source/declaration parity, public ownership, dependency providers and references, evaluation ordering, audited cross-use edges, collisions, host references, expected count, and exact all-file coverage in `complete` state. The masker now preserves executable expressions inside nested template literals.
 
-## Validation
+## Remaining batches
 
-`node tools/check-bundle-order.mjs` keeps the existing all-bundle checks and additionally verifies the pilot:
+1. Transfer Analyzer: 17 modules, coverage 47/55.
+2. App/bootstrap and Team Management: final 8 modules, coverage 55/55 and status `complete`.
 
-1. between five and ten pilot modules are declared and the expected count matches;
-2. every audited module and dependency provider is registered in the bundle;
-3. audited top-level declarations match the corresponding source file;
-4. duplicate audited global declarations are rejected;
-5. public symbols are declared by their owner;
-6. required symbols are declared by their provider and referenced by their consumer;
-7. cross-use of a public symbol between two audited modules has an explicit dependency edge;
-8. evaluation dependencies precede their consumers;
-9. declared host capabilities are referenced by their module.
-
-Providers outside the eight-module pilot are checked for a matching source declaration and bundle registration. Their full declaration list and public/private boundary are deliberately not inferred until they enter an approved future audit scope.
-
-## Non-goals
-
-This pilot does not:
-
-- change runtime source or business behavior;
-- reorder bundle files;
-- replace `bundle-order.json`;
-- infer every dependency across all 54 modules;
-- isolate globals or convert modules to another module system;
-- introduce a second standalone registry.
-
-## Expansion decision
-
-Expansion beyond eight modules should be a separate approved task. Before expanding, review whether the pilot:
-
-- catches real dependency drift without frequent false failures;
-- remains understandable during normal module edits;
-- distinguishes evaluation and runtime dependencies correctly;
-- adds enough CI value to justify maintaining more metadata.
-
-If those conditions are met, extend the existing `dependencyAudit.modules` array incrementally by domain. Do not create a parallel manifest.
+The canonical `files` array and order, runtime source, storage, schemas, and business logic remain unchanged.
 
 ## Rollback
 
-Rollback is deterministic: revert the `dependencyAudit` block, its validation logic, and this document in one change. The canonical `files` array and runtime source remain unaffected.
+Revert the dependency metadata and validator/document changes. Runtime source and canonical bundle order remain unaffected.

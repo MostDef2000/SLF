@@ -219,111 +219,68 @@ function assertStringArray(value, label, { allowEmpty = true } = {}) {
 
 function maskNonCode(source) {
   let result = '';
-  let state = 'code';
+  const stack = [{ type: 'code', templateExpression: false, braceDepth: 0 }];
   let escaped = false;
   let regexCharacterClass = false;
   let lastSignificant = '';
-
+  const top = () => stack[stack.length - 1];
   const canStartRegex = () => !lastSignificant || /[([{:;,=!?&|+\-*%^~<>]/.test(lastSignificant);
-
   for (let index = 0; index < source.length; index++) {
     const char = source[index];
     const next = source[index + 1] || '';
-
-    if (state === 'line-comment') {
-      if (char === '\n') {
-        state = 'code';
-        result += char;
-      } else {
-        result += ' ';
-      }
+    const state = top();
+    if (state.type === 'line-comment') {
+      if (char === '\n') { stack.pop(); result += char; } else result += ' ';
       continue;
     }
-
-    if (state === 'block-comment') {
-      if (char === '*' && next === '/') {
-        result += '  ';
-        index++;
-        state = 'code';
-      } else {
-        result += char === '\n' ? '\n' : ' ';
-      }
+    if (state.type === 'block-comment') {
+      if (char === '*' && next === '/') { result += '  '; index++; stack.pop(); }
+      else result += char === '\n' ? '\n' : ' ';
       continue;
     }
-
-    if (['single-quote', 'double-quote', 'template'].includes(state)) {
-      const terminator = state === 'single-quote' ? "'" : state === 'double-quote' ? '"' : '`';
+    if (state.type === 'single' || state.type === 'double') {
+      const terminator = state.type === 'single' ? "'" : '"';
       result += char === '\n' ? '\n' : ' ';
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === terminator) {
-        state = 'code';
-        lastSignificant = terminator;
-      }
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === terminator) { stack.pop(); lastSignificant = terminator; }
       continue;
     }
-
-    if (state === 'regex') {
+    if (state.type === 'regex') {
       result += char === '\n' ? '\n' : ' ';
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === '[') {
-        regexCharacterClass = true;
-      } else if (char === ']') {
-        regexCharacterClass = false;
-      } else if (char === '/' && !regexCharacterClass) {
-        state = 'code';
-        lastSignificant = '/';
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '[') regexCharacterClass = true;
+      else if (char === ']') regexCharacterClass = false;
+      else if (char === '/' && !regexCharacterClass) { stack.pop(); lastSignificant = '/'; }
+      continue;
+    }
+    if (state.type === 'template') {
+      if (escaped) { result += char === '\n' ? '\n' : ' '; escaped = false; continue; }
+      if (char === '\\') { result += ' '; escaped = true; continue; }
+      if (char === '`') { result += ' '; stack.pop(); lastSignificant = '`'; continue; }
+      if (char === '$' && next === '{') {
+        result += '  '; index++; stack.push({ type: 'code', templateExpression: true, braceDepth: 1 }); lastSignificant = '{'; continue;
       }
+      result += char === '\n' ? '\n' : ' ';
       continue;
     }
-
-    if (char === '/' && next === '/') {
-      result += '  ';
-      index++;
-      state = 'line-comment';
-      continue;
+    if (char === '/' && next === '/') { result += '  '; index++; stack.push({ type: 'line-comment' }); continue; }
+    if (char === '/' && next === '*') { result += '  '; index++; stack.push({ type: 'block-comment' }); continue; }
+    if (char === '/' && canStartRegex()) { result += ' '; stack.push({ type: 'regex' }); regexCharacterClass = false; escaped = false; continue; }
+    if (char === "'") { result += ' '; stack.push({ type: 'single' }); escaped = false; continue; }
+    if (char === '"') { result += ' '; stack.push({ type: 'double' }); escaped = false; continue; }
+    if (char === '`') { result += ' '; stack.push({ type: 'template' }); escaped = false; continue; }
+    if (state.templateExpression) {
+      if (char === '{') state.braceDepth++;
+      if (char === '}') {
+        state.braceDepth--;
+        if (state.braceDepth === 0) { result += ' '; stack.pop(); continue; }
+      }
     }
-    if (char === '/' && next === '*') {
-      result += '  ';
-      index++;
-      state = 'block-comment';
-      continue;
-    }
-    if (char === '/' && canStartRegex()) {
-      result += ' ';
-      state = 'regex';
-      regexCharacterClass = false;
-      escaped = false;
-      continue;
-    }
-    if (char === "'") {
-      result += ' ';
-      state = 'single-quote';
-      escaped = false;
-      continue;
-    }
-    if (char === '"') {
-      result += ' ';
-      state = 'double-quote';
-      escaped = false;
-      continue;
-    }
-    if (char === '`') {
-      result += ' ';
-      state = 'template';
-      escaped = false;
-      continue;
-    }
-
     result += char;
     if (!/\s/.test(char)) lastSignificant = char;
   }
-
   return result;
 }
 
@@ -371,10 +328,12 @@ function validateDependencyAudit(manifest, files) {
   if (audit.schema !== 'slf_module_dependency_audit_v1') {
     fail(`unsupported dependency audit schema: ${audit.schema}`);
   }
-  if (audit.status !== 'pilot') fail(`dependency audit status must be pilot: ${audit.status}`);
+  if (!['pilot', 'expanding', 'complete'].includes(audit.status)) {
+    fail(`dependency audit status is invalid: ${audit.status}`);
+  }
   if (!Array.isArray(audit.modules)) fail('dependency audit modules must be an array');
-  if (audit.modules.length < 5 || audit.modules.length > 10) {
-    fail(`dependency audit pilot must cover 5-10 modules, found ${audit.modules.length}`);
+  if (audit.modules.length < 5 || audit.modules.length > files.length) {
+    fail(`dependency audit must cover 5-${files.length} modules, found ${audit.modules.length}`);
   }
   if (!Number.isInteger(audit.expectedModuleCount)
       || audit.expectedModuleCount !== audit.modules.length) {
@@ -383,6 +342,12 @@ function validateDependencyAudit(manifest, files) {
 
   const registered = new Set(files);
   const moduleFiles = audit.modules.map(module => module?.file);
+  if (audit.status === 'complete' && !compareStringSets(moduleFiles, files)) {
+    fail('complete dependency audit must cover every registered runtime module', [
+      `audited: ${moduleFiles.length}`,
+      `registered: ${files.length}`
+    ]);
+  }
   const duplicateModuleFiles = moduleFiles.filter((file, index) => moduleFiles.indexOf(file) !== index);
   if (duplicateModuleFiles.length) {
     fail('dependency audit contains duplicate module entries', [...new Set(duplicateModuleFiles)]);
@@ -566,7 +531,7 @@ const apiTransport = await validateApiTransportContract();
 
 console.log(
   `[bundle-order] OK: ${files.length} registered runtime modules; manifest is complete and bootstrap is final; `
-  + `dependency pilot validates ${dependencyAudit.moduleCount} modules, `
+  + `dependency audit validates ${dependencyAudit.moduleCount} modules, `
   + `${dependencyAudit.dependencySymbolCount} dependency symbols, and `
   + `${dependencyAudit.hostCapabilityCount} host capabilities; `
   + `production debug boundary rejects ${debugBoundary.forbiddenPatternCount} privileged export patterns; `
