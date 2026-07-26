@@ -80,12 +80,12 @@ case "$COMPONENT" in
     install -m 0644 "$STAGE_DIR/server.py" "$API_DIR/server.py"
     install -m 0644 "$STAGE_DIR/requirements.txt" "$API_DIR/requirements.txt"
     install -m 0644 "$STAGE_DIR/slf-server.service" "$UNIT_PATH"
-    printf '%s\n' "$RESOLVED_COMMIT" > "$API_DIR/DEPLOYED_GIT_COMMIT"
     systemctl daemon-reload
     systemctl restart slf-server.service
     systemctl is-active --quiet slf-server.service
     HTTP_STATUS=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:5000/api/analysis)
     [ "$HTTP_STATUS" = '401' ] || { echo "Expected authenticated endpoint to return 401 without credentials, got $HTTP_STATUS" >&2; exit 1; }
+    printf '%s\n' "$RESOLVED_COMMIT" > "$API_DIR/DEPLOYED_GIT_COMMIT"
     ;;
 
   exporter-rag)
@@ -116,10 +116,10 @@ case "$COMPONENT" in
     install -m 0755 "$STAGE_DIR/run_daily_export.sh" "$EXPORT_DIR/run_daily_export.sh"
     install -m 0644 "$STAGE_DIR/slf_drive_filter.txt" "$EXPORT_DIR/slf_drive_filter.txt"
     install -m 0644 "$STAGE_DIR/requirements.txt" "$EXPORT_DIR/requirements.txt"
-    printf '%s\n' "$RESOLVED_COMMIT" > "$EXPORT_DIR/DEPLOYED_GIT_COMMIT"
     (cd "$EXPORT_DIR" && ./run_daily_export.sh)
     [ -s /var/www/html/slf_ai/catalog.json ] || { echo 'catalog.json verification failed' >&2; exit 1; }
     [ -s /var/www/html/slf_ai/rag/catalog.json ] || { echo 'RAG catalog verification failed' >&2; exit 1; }
+    printf '%s\n' "$RESOLVED_COMMIT" > "$EXPORT_DIR/DEPLOYED_GIT_COMMIT"
     ;;
 esac
 
