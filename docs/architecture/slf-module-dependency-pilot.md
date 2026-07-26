@@ -1,7 +1,7 @@
 # SLF module dependency audit
 
 Status: Active incremental expansion
-Current coverage: 30 of 55 registered userscript modules
+Current coverage: 47 of 55 registered userscript modules
 Runtime behavior impact: None
 
 ## Purpose
@@ -13,7 +13,8 @@ Runtime behavior impact: None
 - Pilot: 8 base modules, SLF 4.4.222.
 - Normal-change evidence: PR #83 exercised `src/core/api.js`; PR #89 exercised `src/core/config.js`; no recurring false-positive pattern was observed.
 - Batch 1: remaining Live Parser modules, PR #90, SLF 4.4.226; coverage reached 10 modules.
-- Batch 2: Tactics Presets and Strategy Data; coverage reaches 30 of 55 modules.
+- Batch 2: Tactics Presets and Strategy Data, PR #105, SLF 4.4.237; coverage reached 30 of 55 modules.
+- Batch 3: Transfer Analyzer; coverage reaches 47 of 55 modules.
 
 ## Metadata contract
 
@@ -27,12 +28,11 @@ An empty `declares` array is valid for extension-only files that mutate an exist
 - `expanding`: approved incremental coverage;
 - `complete`: every registered runtime file must have exactly one audit entry.
 
-The validator checks source/declaration parity, public ownership, dependency providers and references, evaluation ordering, audited cross-use edges, collisions, host references, expected count, and exact all-file coverage in `complete` state. The masker now preserves executable expressions inside nested template literals.
+The validator checks source/declaration parity, public ownership, dependency providers and references, evaluation ordering, audited cross-use edges, collisions, host references, expected count, and exact all-file coverage in `complete` state. The masker preserves executable expressions inside nested template literals. Declaration extraction uses brace-depth scanning where balanced and a minimum-indentation fallback only for syntax that cannot be balanced by the lightweight scanner.
 
 ## Remaining batches
 
-1. Transfer Analyzer: 17 modules, coverage 47/55.
-2. App/bootstrap and Team Management: final 8 modules, coverage 55/55 and status `complete`.
+1. App/bootstrap and Team Management: final 8 modules, coverage 55/55 and status `complete`.
 
 The canonical `files` array and order, runtime source, storage, schemas, and business logic remain unchanged.
 
