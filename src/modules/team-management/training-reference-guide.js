@@ -17,6 +17,7 @@ const TrainingGuidePanel = {
     esc(v) { return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); },
     norm(v) { return String(v ?? '').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim(); },
     skillKey(v) { return this.norm(v).toUpperCase().replace(/^ВЫН$/,'ВЫН'); },
+    skillOrderForRole(role) { return role==='GK' ? this.goalkeeperSkills : this.fieldSkills; },
 
     sourceRows() {
         return this.sourceSlots.map(([name,id],index) => `<div class="slf-source" data-index="${index}"><label>${name}</label><input class="slf-champ-id" value="${id}" inputmode="numeric" maxlength="10"><a class="slf-league" href="/champ.php?action=view&id=${id}" target="_blank">Чемпионат</a><a class="slf-stats" href="/champ.stat.php?id=${id}" target="_blank">Статистика</a><span class="slf-source-state"></span></div>`).join('');
@@ -103,7 +104,10 @@ const TrainingGuidePanel = {
         if (payload?.schema!==this.cacheSchema || !Array.isArray(payload.profiles)) return false;
         this.currentPayload = payload;
         const total=(payload.sources||[]).length, ok=(payload.sources||[]).filter(x=>x.status==='ok').length;
-        const rows=payload.profiles.map(profile => `<tr><td>${this.esc(profile.role)}</td><td>${Object.entries(profile.skills||{}).map(([skill,data]) => { const title=(data.values||[]).map(x=>`${x.source}: ${x.value}`).join('\n')||`Источников: ${data.sample}`; return `<span class="slf-pair" title="${this.esc(title)}"><b>${this.esc(skill)}</b> ${Math.round(Number(data.value))}<sup>${data.sample}/${total||data.sample}</sup></span>`; }).join('')}</td><td><button type="button" class="slf-apply-profile" data-role="${this.esc(profile.role)}">Применить к выбранным</button></td></tr>`).join('');
+        const rows=payload.profiles.map(profile => {
+            const skills=this.skillOrderForRole(profile.role).map(skill=>[skill,profile.skills?.[skill]]).filter(([,data])=>data);
+            return `<tr><td>${this.esc(profile.role)}</td><td>${skills.map(([skill,data]) => { const title=(data.values||[]).map(x=>`${x.source}: ${x.value}`).join('\n')||`Источников: ${data.sample}`; return `<span class="slf-pair" title="${this.esc(title)}"><b>${this.esc(skill)}</b> ${Math.round(Number(data.value))}<sup>${data.sample}/${total||data.sample}</sup></span>`; }).join('')}</td><td><button type="button" class="slf-apply-profile" data-role="${this.esc(profile.role)}">Применить к выбранным</button></td></tr>`;
+        }).join('');
         document.getElementById('slf-result').innerHTML=`<div class="slf-muted">${label} · ${new Date(payload.calculatedAt).toLocaleString('ru-RU')} · источников ${ok}/${total}</div><table class="slf-table"><thead><tr><th>Роль</th><th>Средние значения</th><th>Действие</th></tr></thead><tbody>${rows}</tbody></table>`;
         return true;
     },
@@ -128,13 +132,20 @@ const TrainingGuidePanel = {
 
     selectedTrainingTables() {
         const selected=[...document.querySelectorAll('#train input[name="pl_arr[]"]:checked')];
-        if (!selected.length) return {selected, tables:[]};
-        const tables=[];
+        if (!selected.length) return {selected,groups:[],unresolved:0};
+        const groups=[];
+        let unresolved=0;
         selected.forEach(box=>{
             const table=box.closest('table');
-            if (table && !tables.includes(table)) tables.push(table);
+            const tbody=box.closest('tbody[data-type]');
+            const type=tbody?.dataset.type==='0'?'GK':tbody?.dataset.type==='1'?'FIELD':'';
+            if (!table || !type) { unresolved++; return; }
+            let group=groups.find(item=>item.table===table);
+            if (!group) { group={table,selected:[],types:new Set()}; groups.push(group); }
+            group.selected.push(box);
+            group.types.add(type);
         });
-        return {selected,tables};
+        return {selected,groups,unresolved};
     },
 
     inspectGroupFooter(table) {
@@ -145,13 +156,11 @@ const TrainingGuidePanel = {
             const index=Number(match?.[1]);
             const cell=input.closest('.up');
             const order=cell?.querySelector(`select[name="order[${index}]"]`);
-            return {cell,index,skill:cell?this.planSkillLabel(cell):'',input,order};
-        }).filter(x=>x.index>=1 && x.index<=10 && x.cell && x.skill && x.order);
-        if (controls.length!==10) return {ok:false,reason:'Не распознаны групповые тренировочные поля.'};
-        const skillSet=new Set(controls.map(x=>x.skill));
-        const type=this.goalkeeperSkills.every(skill=>skillSet.has(skill))?'GK':this.fieldSkills.every(skill=>skillSet.has(skill))?'FIELD':'';
-        if (!type) return {ok:false,reason:'Не распознан тип групповой таблицы.'};
-        return {ok:true,footer,controls,type};
+            return {cell,index,input,order};
+        }).filter(x=>x.index>=1 && x.index<=10 && x.cell && x.order).sort((a,b)=>a.index-b.index);
+        const indexes=new Set(controls.map(control=>control.index));
+        if (controls.length!==10 || indexes.size!==10 || controls.some((control,index)=>control.index!==index+1)) return {ok:false,reason:'Не распознаны групповые тренировочные поля.'};
+        return {ok:true,footer,controls};
     },
 
     restoreFooters(snapshots) {
@@ -171,25 +180,25 @@ const TrainingGuidePanel = {
         if (this.currentPayload?.schema!==this.cacheSchema) return this.setStatus('Динамический профиль недоступен. Выполните расчёт лиг.','error');
         const profile=(this.currentPayload.profiles||[]).find(item=>item.role===role);
         if (!profile) return this.setStatus(`Профиль ${role} не найден в динамическом расчёте.`,'error');
-        const {selected,tables}=this.selectedTrainingTables();
+        const {selected,groups,unresolved}=this.selectedTrainingTables();
         if (!selected.length) return this.setStatus('Сначала отметьте хотя бы одного игрока.','error');
-        if (!tables.length) return this.setStatus('Не найдена таблица выбранных игроков.','error');
-        const inspected=tables.map(table=>this.inspectGroupFooter(table));
+        if (unresolved || !groups.length) return this.setStatus('Не удалось определить тип выбранных игроков.','error');
+        const selectedTypes=new Set(groups.flatMap(group=>[...group.types]));
+        if (selectedTypes.size!==1) return this.setStatus('Нельзя применить один профиль одновременно к вратарям и полевым игрокам.','error');
+        const selectedType=[...selectedTypes][0];
+        const profileType=role==='GK'?'GK':'FIELD';
+        if (selectedType!==profileType) return this.setStatus(role==='GK'?'Профиль GK можно применить только к выбранным вратарям.':'Полевой профиль нельзя применить к выбранным вратарям.','error');
+        const inspected=groups.map(group=>({...this.inspectGroupFooter(group.table),selected:group.selected}));
         const failed=inspected.find(item=>!item.ok);
         if (failed) return this.setStatus(`Профиль ${role} не применён. ${failed.reason}`,'error');
-        const profileType=role==='GK'?'GK':'FIELD';
-        const incompatible=inspected.find(item=>item.type!==profileType);
-        if (incompatible) return this.setStatus('Нельзя применить один профиль одновременно к вратарям и полевым игрокам.','error');
-        const targets=Object.entries(profile.skills||{}).map(([skill,data])=>({skill:this.skillKey(skill),target:Math.round(Number(data?.value))})).filter(x=>Number.isFinite(x.target));
-        if (targets.length!==10) return this.setStatus(`Профиль ${role} содержит неполный набор навыков.`,'error');
+        const targets=this.skillOrderForRole(role).map(skill=>({skill,target:Math.round(Number(profile.skills?.[skill]?.value))}));
+        if (targets.length!==10 || targets.some(target=>!Number.isFinite(target.target))) return this.setStatus(`Профиль ${role} содержит неполный набор навыков.`,'error');
         const snapshots=inspected.map(item=>({
             footer:item.footer,
             display:item.footer.style.display,
             controls:item.controls.map(control=>({control,order:control.order.value,value:control.input.value}))
         }));
         for (const item of inspected) {
-            const controls=targets.map(target=>item.controls.find(control=>control.skill===target.skill));
-            if (controls.some(control=>!control)) { this.restoreFooters(snapshots); return this.setStatus(`Профиль ${role} не соответствует групповой таблице.`,'error'); }
             item.footer.style.display='table-footer-group';
             item.controls.forEach(control=>{
                 control.order.value='';
@@ -197,7 +206,7 @@ const TrainingGuidePanel = {
             });
             for (let index=0; index<targets.length; index++) {
                 const target=targets[index];
-                const control=controls[index];
+                const control=item.controls[index];
                 control.order.value=String(index+1);
                 control.order.dispatchEvent(new Event('change',{bubbles:true}));
                 if (control.input.disabled) { this.restoreFooters(snapshots); return this.setStatus(`Поле ${target.skill} в групповой таблице осталось недоступным.`,'error'); }
