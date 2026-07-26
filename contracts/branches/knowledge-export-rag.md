@@ -18,6 +18,9 @@ vps/exporter-rag/slf_rag_build.py
 vps/exporter-rag/run_daily_export.sh
 vps/exporter-rag/slf_drive_filter.txt
 vps/exporter-rag/requirements.txt
+vps/ops/deploy-code.sh
+vps/ops/rollback-code.sh
+vps/ops/README.md
 ```
 
 Current VPS directory:
@@ -26,12 +29,14 @@ Current VPS directory:
 /opt/slf_ai_exporter_v2/slf_ai_exporter_v2/
 ```
 
-The repository owns executable source and dependency declarations. The VPS remains authoritative for live input data, environment values, rclone credentials, cron configuration, and generated output under `/var/www/html/slf_ai/`. None of those runtime artifacts belong in Git.
+The repository owns executable source, dependency declarations, and deployment tooling. The VPS remains authoritative for live input data, environment values, rclone credentials, cron configuration, and generated output under `/var/www/html/slf_ai/`. None of those runtime artifacts belong in Git.
 
 ## Deployment and rollback
 
-Deployment is currently manual and requires separate operational approval. Before replacing files, preserve the previous exporter/RAG files together. Install `vps/exporter-rag/requirements.txt` in the exporter virtual environment, validate Python and shell syntax, install the files in the current VPS directory, run the export/RAG workflow, and verify the public manifest.
+Deployment remains manual and requires separate operational approval. The approved operator may use `vps/ops/deploy-code.sh` with an exact approved Git commit and component `exporter-rag`. The script stages files from that commit, validates Python and shell syntax, preserves the previous executable file set, records backup checksums, installs dependencies and files, writes non-secret `DEPLOYED_GIT_COMMIT`, runs the existing export/RAG wrapper, and verifies public catalog artifacts.
 
-Rollback restores the preserved file set and reruns verification. Generated export can be rebuilt; rollback must not delete or overwrite primary API data.
+Rollback may use `vps/ops/rollback-code.sh` with the exact backup directory created by deployment. It verifies checksums, restores only the preserved executable code and dependency declarations, reruns the workflow, and verifies the public catalogs. Generated export can be rebuilt; rollback must not delete or overwrite primary API data.
 
-No Git-backed deploy or rollback has been performed yet. Until one is verified, the exact deployed Git revision remains unknown.
+Cron state, rclone credentials, environment values, live inputs, and generated primary data are outside the scripts' write scope.
+
+No Git-backed deploy or rollback has been performed yet. Repository tooling alone does not establish production provenance; the exact deployed Git revision remains unknown until separately approved operational verification succeeds.

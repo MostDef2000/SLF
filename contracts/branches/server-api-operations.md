@@ -16,6 +16,9 @@ Canonical repository paths:
 vps/api/server.py
 vps/api/requirements.txt
 vps/ops/slf-server.service
+vps/ops/deploy-code.sh
+vps/ops/rollback-code.sh
+vps/ops/README.md
 ```
 
 Current VPS paths:
@@ -29,24 +32,18 @@ Current VPS paths:
 /etc/systemd/system/slf-server.service
 ```
 
-The repository owns code and the service-unit baseline. The VPS remains authoritative for live data and environment values. `slf_api.env`, JSON data, forum content, virtual environments, logs, and backups must not be committed.
+The repository owns code, dependency declarations, the service-unit baseline, and deployment tooling. The VPS remains authoritative for live data and environment values. `slf_api.env`, JSON data, forum content, virtual environments, logs, and backups must not be committed.
 
-`SLF_API_TOKEN` is a credential. The server must read it from
-`/root/slf-server/slf_api.env` through the systemd `EnvironmentFile` directive
-and must fail to start when it is absent or empty. The value must never appear
-in repository source, generated artifacts, logs, chat, or deployment command
-history.
+`SLF_API_TOKEN` is a credential. The server must read it from `/root/slf-server/slf_api.env` through the systemd `EnvironmentFile` directive and must fail to start when it is absent or empty. The value must never appear in repository source, generated artifacts, logs, chat, deployment command history, Issues, or pull requests.
 
 ## Deployment and rollback
 
-Deployment is currently manual and requires separate operational approval. Before replacing files, preserve the previous deployed code and service unit together. Install `vps/api/requirements.txt` in the API virtual environment, validate Python syntax, install the files at the mapped VPS paths, restart `slf-server.service`, and verify the existing API behavior.
+Deployment remains manual and requires separate operational approval. The approved operator may use `vps/ops/deploy-code.sh` with an exact approved Git commit and component `api`. The script stages source from that commit, validates Python and systemd syntax, preserves the previous deployed code and service unit, records backup checksums, installs dependencies and files, writes non-secret `DEPLOYED_GIT_COMMIT`, restarts the service, and verifies the protected endpoint without transmitting a credential.
 
-Credential rotation is a separate operational step: generate the replacement
-on the VPS, store it in `slf_api.env`, deploy the compatible server and service
-unit, restart and verify the service, update the Tampermonkey-local value via
-`SLF: Set API token`, and verify both reads and writes. Never place the
-replacement value in Git or share it in an issue or pull request.
+Authenticated read/write verification is still required as an operator step and must not expose the bearer value.
 
-Rollback restores the preserved code and service unit, then restarts and verifies the service. Data rollback is separate and must never happen implicitly with code rollback.
+Credential rotation is a separate operational step: generate the replacement on the VPS, store it in `slf_api.env`, deploy compatible server/service code, restart and verify the service, update the Tampermonkey-local value through `SLF: Set API token`, and verify reads and writes. Never place the replacement value in Git or public task records.
 
-No Git-backed deploy or rollback has been performed yet. Until one is verified, the exact deployed Git revision remains unknown.
+Rollback may use `vps/ops/rollback-code.sh` with the exact backup directory created by deployment. It verifies checksums, restores code, dependency declarations, and the service unit, then restarts and verifies the service. Data rollback is separate and must never happen implicitly with code rollback.
+
+No Git-backed deploy or rollback has been performed yet. Repository tooling alone does not establish production provenance; the exact deployed Git revision remains unknown until separately approved operational verification succeeds.
