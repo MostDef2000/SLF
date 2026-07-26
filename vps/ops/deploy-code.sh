@@ -117,7 +117,7 @@ case "$COMPONENT" in
     install -m 0644 "$STAGE_DIR/slf_drive_filter.txt" "$EXPORT_DIR/slf_drive_filter.txt"
     install -m 0644 "$STAGE_DIR/requirements.txt" "$EXPORT_DIR/requirements.txt"
     (cd "$EXPORT_DIR" && ./run_daily_export.sh)
-    [ -s /var/www/html/slf_ai/catalog.json ] || { echo 'catalog.json verification failed' >&2; exit 1; }
+    [ -s /var/www/html/slf_ai/manifest.json ] || { echo 'manifest.json verification failed' >&2; exit 1; }
     [ -s /var/www/html/slf_ai/rag/catalog.json ] || { echo 'RAG catalog verification failed' >&2; exit 1; }
     printf '%s\n' "$RESOLVED_COMMIT" > "$EXPORT_DIR/DEPLOYED_GIT_COMMIT"
     ;;
