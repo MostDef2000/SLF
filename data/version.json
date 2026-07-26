@@ -1,23 +1,22 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.229",
+  "scriptVersion": "4.4.230",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_229_published",
+  "status": "release_4_4_230_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "cad23a3ea167109115e022b712b119d8f3746e453c2d0bfd10bb17a688df7bfa",
     "bundleFileCount": 55,
-    "approvedBaseCommit": "595b016dde0383a27a445ac1fc212a20c057e98e",
-    "approvedCommit": "1d0868d8fa6b2d96588291e6a947a538c1b8030b",
+    "approvedBaseCommit": "d80bdef715f89a761e92af74fc589404f7b2b9a9",
+    "approvedCommit": "4bb257f6b50cfba4be00253eee2d312f7057e08b",
     "approvedFiles": [
-      "src/app/bundle-order.json",
-      "src/modules/team-management/team4-leadership-upgrade-indicator.js"
+      "src/modules/team-management/training-reference-guide.js"
     ],
     "sourceBranch": "main",
     "releaseNotesProvided": false,
