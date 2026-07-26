@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.239
+// @version      4.4.240
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.239',
-        scriptVersion: '4.4.239',
+        version: '4.4.240',
+        scriptVersion: '4.4.240',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.239',
+        scriptVersion: '4.4.240',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -8345,6 +8345,170 @@ if (!isTacticPage) return;
         RecommendationEngine.__lateLosingPressCooldownGuard = true;
     }
 
+    function finiteNumber(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+    }
+
+    function statValue(stats, keys) {
+        for (const key of keys) {
+            const value = finiteNumber(stats?.[key]);
+            if (value !== null) return value;
+        }
+        return null;
+    }
+
+    function buildCompactContext(snapshot) {
+        const pack = RecommendationEngine.getTeamStats(snapshot);
+        const my = pack?.my?.stats || null;
+        const opp = pack?.opp?.stats || null;
+        const score = RecommendationEngine.getScoreState(snapshot);
+        const minute = RecommendationEngine.getEffectiveMinute(snapshot);
+        const parts = [];
+
+        if (minute) parts.push(`${minute}'`);
+        if (score?.known) parts.push(`${score.myGoals}:${score.oppGoals}`);
+
+        const myXg = statValue(my, ['xG']);
+        const oppXg = statValue(opp, ['xG']);
+        if (myXg !== null && oppXg !== null) parts.push(`xG ${myXg.toFixed(2)}–${oppXg.toFixed(2)}`);
+
+        const myPower = statValue(my, ['power']);
+        const oppPower = statValue(opp, ['power']);
+        if (myPower !== null && oppPower !== null) {
+            const gap = myPower - oppPower;
+            parts.push(`сила ${Math.round(myPower)}–${Math.round(oppPower)} (${gap >= 0 ? '+' : ''}${Math.round(gap)})`);
+        }
+
+        const bad = statValue(my, ['badActionsPct', 'defective']);
+        if (bad !== null && bad > 0) parts.push(`брак ${Math.round(bad)}%`);
+
+        return parts.join(' · ');
+    }
+
+    function pickGeneratorSignals(rows) {
+        return (Array.isArray(rows) ? rows : [])
+            .map(row => String(row || '').trim())
+            .filter(row => row && !row.includes('Детали «подробнее»'))
+            .sort((a, b) => {
+                const rank = row => row.includes('Каналы генератора') ? 0 : row.startsWith('Генератор:') ? 1 : 2;
+                return rank(a) - rank(b);
+            })
+            .slice(0, 2);
+    }
+
+    function canonicalSlot(raw) {
+        const slot = String(raw || '').trim().toUpperCase();
+        if (slot === 'DL') return 'LD';
+        if (slot === 'DR') return 'RD';
+        if (slot.startsWith('DC')) return `CD${slot.slice(2)}`;
+        return slot;
+    }
+
+    function slotProfile(raw) {
+        const slot = canonicalSlot(raw);
+        if (/^DM\d*$/.test(slot)) return { family: 'central', level: 2 };
+        if (/^CM\d*$/.test(slot)) return { family: 'central', level: 3 };
+        if (/^AM\d*$/.test(slot)) return { family: 'central', level: 4 };
+        if (slot === 'LM') return { family: 'left', level: 3 };
+        if (slot === 'LW') return { family: 'left', level: 4 };
+        if (slot === 'RM') return { family: 'right', level: 3 };
+        if (slot === 'RW') return { family: 'right', level: 4 };
+        return null;
+    }
+
+    function parseSchemeSlots(scheme) {
+        return String(scheme || '')
+            .split('/')
+            .slice(1)
+            .flatMap(group => group.trim().split('-'))
+            .map(canonicalSlot)
+            .filter(Boolean);
+    }
+
+    function getFormationMoves(snapshot, presetName) {
+        if (!presetName || typeof RecommendationEngine === 'undefined') return [];
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+        const targetSide = Number(teams[0]) === Number(snapshot?.myTeam) ? 'home' : 'away';
+        const desired = parseSchemeSlots(RecommendationEngine.getPresetScheme(presetName));
+        const desiredSet = new Set(desired);
+        const starters = (Array.isArray(snapshot?.lineupRows) ? snapshot.lineupRows : [])
+            .filter(row => row?.isStarter && row.side === targetSide)
+            .map(row => Object.assign({}, row, { slot: canonicalSlot(row.gridPosition || row.position) }));
+        const currentSet = new Set(starters.map(row => row.slot));
+        const missing = desired.filter(slot => !currentSet.has(slot));
+        const surplus = starters.filter(row => !desiredSet.has(row.slot));
+        const moves = [];
+
+        for (const target of missing) {
+            const targetProfile = slotProfile(target);
+            if (!targetProfile) continue;
+            const source = surplus.find(row => {
+                if (row.used) return false;
+                const sourceProfile = slotProfile(row.slot);
+                return sourceProfile?.family === targetProfile.family && Math.abs(sourceProfile.level - targetProfile.level) === 1;
+            });
+            if (!source) continue;
+            source.used = true;
+            moves.push({ name: source.name || `Игрок ${source.playerId}`, from: source.slot, to: target });
+            if (moves.length >= 2) break;
+        }
+
+        return moves;
+    }
+
+    function pickAlternative(rows, snapshot) {
+        const cautious = rows.find(row => String(row).startsWith('Осторожнее:')) || '';
+        const aggressive = rows.find(row => String(row).startsWith('Агрессивнее:')) || '';
+        const score = RecommendationEngine.getScoreState(snapshot);
+        const selected = score.state === 'winning' ? (cautious || aggressive) : (aggressive || cautious);
+        return selected ? `Альтернатива: ${selected.replace(/^[^:]+:\s*/, '')}` : '';
+    }
+
+    function buildActionRows(plan, snapshot, primaryPresetName) {
+        const source = Array.isArray(plan?.preset) ? plan.preset : [];
+        const rows = [
+            source.find(row => String(row).startsWith('Поставить:')),
+            source.find(row => String(row).startsWith('Почему:')),
+            source.find(row => String(row).startsWith('Что сделать:')),
+            pickAlternative(source, snapshot)
+        ].filter(Boolean);
+
+        const moves = getFormationMoves(snapshot, primaryPresetName);
+        if (moves.length) {
+            rows.push(`Расстановка вручную: ${moves.map(move => `${move.name}: ${move.from} → ${move.to}`).join('; ')}. Открыть «Расстановка» → игрок → «изменить позицию на поле».`);
+        }
+
+        return rows.length ? rows : ['Явной причины менять пресет нет. Сохранить текущую структуру до следующего подтверждённого сигнала.'];
+    }
+
+    function patchCompactCoachMode() {
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__compactCoachModePatched) return;
+
+        RecommendationEngine.compactPlan = function compactCoachPlan(plan, snapshot, primaryPresetName = '') {
+            const clean = this.normalizePlan(plan);
+            const context = buildCompactContext(snapshot);
+            const generator = pickGeneratorSignals(clean.developer);
+            const actions = buildActionRows(clean, snapshot, primaryPresetName);
+            const details = this.dedupeRows([...(clean.controls || []), ...(clean.notes || [])]).slice(0, 4);
+            const row = (text, color = '#ddd') => `<div style="margin:3px 0;line-height:1.35;color:${color};">${this.escapeHtml(text)}</div>`;
+
+            return `
+                <details open data-slf-rec-priority="1" data-slf-rec-section="combined" style="margin:5px 0;background:#151515;border:1px solid #444;border-radius:5px;color:#ddd;">
+                    <summary style="cursor:pointer;list-style:none;padding:7px 9px;font-weight:bold;color:#75ff75;text-align:center;user-select:none;"><span style="float:left;opacity:.65;font-weight:normal;">▸</span>Подсказка</summary>
+                    <div style="padding:0 9px 9px;">
+                        ${context ? `<div><b style="color:#8fd3ff;">Ситуация:</b> ${this.escapeHtml(context)}</div>` : ''}
+                        ${generator.length ? `<div style="margin-top:7px;padding-top:7px;border-top:1px solid #333;"><b style="color:#c8ff7a;">Сигналы генератора</b>${generator.map(text => row(text)).join('')}</div>` : ''}
+                        <div style="margin-top:7px;padding-top:7px;border-top:1px solid #333;"><b style="color:#75ff75;">Конкретное действие</b>${actions.map(text => row(text)).join('')}</div>
+                        ${details.length ? `<details style="margin-top:8px;padding-top:6px;border-top:1px solid #333;"><summary style="cursor:pointer;color:#bbb;">Подробности</summary>${details.map(text => row(text, '#bbb')).join('')}</details>` : ''}
+                    </div>
+                </details>`;
+        };
+
+        RecommendationEngine.__compactCoachModePatched = true;
+        if (typeof window !== 'undefined') window.SLFCompactCoachMode = { buildCompactContext, getFormationMoves, parseSchemeSlots };
+    }
+
     function resetLiveOnlyRecommendationState() {
         if (typeof STATE === 'undefined') return;
         STATE.recommendationFreeze = null;
@@ -8449,6 +8613,7 @@ if (!isTacticPage) return;
         patchHasEnoughLiveData();
         patchLateLosingPressCooldownGuard();
         patchPresetOptions();
+        patchCompactCoachMode();
         mountManualButton();
         mountForeignSelector();
     }
@@ -19429,15 +19594,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.239',
-        scriptVersion: '4.4.239',
+        version: '4.4.240',
+        scriptVersion: '4.4.240',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.239',
+        scriptVersion: '4.4.240',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

@@ -1,5 +1,35 @@
 # Changelog
 
+## 4.4.240
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- contracts/branches/knowledge-export-rag.md
+- contracts/branches/server-api-operations.md
+- docs/architecture/slf-module-dependency-pilot.md
+- docs/decision_records/DR-007-public-api-client-key-boundary.md
+- docs/decision_records/DR-008-vps-source-control-and-deployment-model.md
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- vps/exporter-rag/run_daily_export.sh
+- vps/ops/README.md
+- vps/ops/deploy-code.sh
+- vps/ops/rollback-code.sh
+
+Approved base commit:
+- 3ddce01b913a28c81cf194a979b44514cc2d9f1f
+
+Approved commit:
+- eef7960a3bda046ef453bacc77d9abb92f99c0f2
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.239
 
 ### Automatic latest-only build
