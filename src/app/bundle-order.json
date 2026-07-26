@@ -62,8 +62,8 @@
   ],
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
-    "status": "pilot",
-    "expectedModuleCount": 10,
+    "status": "expanding",
+    "expectedModuleCount": 30,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -146,8 +146,8 @@
           }
         ],
         "hostCapabilities": [
-          "console",
-          "localStorage"
+          "localStorage",
+          "console"
         ]
       },
       {
@@ -167,13 +167,13 @@
         ],
         "requires": [],
         "hostCapabilities": [
-          "GM_deleteValue",
-          "GM_getValue",
-          "GM_registerMenuCommand",
-          "GM_setValue",
           "alert",
-          "console",
-          "prompt"
+          "prompt",
+          "GM_getValue",
+          "GM_setValue",
+          "GM_deleteValue",
+          "GM_registerMenuCommand",
+          "console"
         ]
       },
       {
@@ -188,8 +188,8 @@
         "hostCapabilities": [
           "MutationObserver",
           "document",
-          "setTimeout",
-          "window"
+          "window",
+          "setTimeout"
         ]
       },
       {
@@ -205,8 +205,7 @@
         "public": [
           "Api",
           "normalizeServerRows",
-          "fetchCanonicalApiStatus",
-          "legacyCollectionNames"
+          "fetchCanonicalApiStatus"
         ],
         "requires": [
           {
@@ -229,6 +228,120 @@
         ],
         "hostCapabilities": [
           "GM_xmlhttpRequest"
+        ]
+      },
+      {
+        "file": "src/modules/tactics-presets/preset-storage.js",
+        "declares": [
+          "ALLOWED_HENTA_PRESET",
+          "isDeprecatedHentaPreset",
+          "filterDeprecatedPresetMap",
+          "unwrapServerData",
+          "isTacticObject",
+          "normalizePresets",
+          "PresetStorage"
+        ],
+        "public": [
+          "normalizePresets",
+          "PresetStorage"
+        ],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "BASE_LABELS",
+              "BASE_PRESETS",
+              "CONFIG",
+              "DEFAULT_CUSTOM_PRESETS",
+              "debugWarn"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/api.js",
+            "symbols": [
+              "Api"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "localStorage"
+        ]
+      },
+      {
+        "file": "src/modules/tactics-presets/tactic-control-engine.js",
+        "declares": [
+          "nativeClick",
+          "priorityNameToValue",
+          "setPriorityAsync",
+          "setControlAsync",
+          "getCurrentTactic",
+          "applyPresetAsync"
+        ],
+        "public": [
+          "getCurrentTactic",
+          "applyPresetAsync"
+        ],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "PresetUsageTracker",
+              "STATE",
+              "debugWarn"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/preset-storage.js",
+            "symbols": [
+              "PresetStorage",
+              "normalizePresets"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/match-state-parser.js",
+            "symbols": [
+              "MatchStateParser"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/snapshot-engine.js",
+            "symbols": [
+              "SnapshotEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/event-tracker.js",
+            "symbols": [
+              "EventTracker"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-preset-library.js",
+            "symbols": [
+              "TacticPresetLibrary"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/app/ui-layer.js",
+            "symbols": [
+              "UI"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "MouseEvent",
+          "document",
+          "location",
+          "setTimeout"
         ]
       },
       {
@@ -313,8 +426,8 @@
             "file": "src/core/config.js",
             "symbols": [
               "CONFIG",
-              "STATE",
               "LIVE_PARSER_STATE_PREFIX",
+              "STATE",
               "debugWarn",
               "num"
             ],
@@ -337,8 +450,8 @@
           {
             "file": "src/modules/live-parser/match-state-parser.js",
             "symbols": [
-              "MatchTimingModel",
-              "MatchStateParser"
+              "MatchStateParser",
+              "MatchTimingModel"
             ],
             "phase": "runtime"
           },
@@ -407,11 +520,11 @@
           }
         ],
         "hostCapabilities": [
-          "clearInterval",
-          "console",
-          "localStorage",
           "location",
-          "setInterval"
+          "localStorage",
+          "setInterval",
+          "clearInterval",
+          "console"
         ]
       },
       {
@@ -427,8 +540,8 @@
             "file": "src/core/config.js",
             "symbols": [
               "CONFIG",
-              "STATE",
               "PresetUsageTracker",
+              "STATE",
               "num"
             ],
             "phase": "runtime"
@@ -457,8 +570,8 @@
           {
             "file": "src/modules/live-parser/match-state-parser.js",
             "symbols": [
-              "MatchTimingModel",
-              "MatchStateParser"
+              "MatchStateParser",
+              "MatchTimingModel"
             ],
             "phase": "runtime"
           },
@@ -513,10 +626,476 @@
           }
         ],
         "hostCapabilities": [
-          "clearTimeout",
           "document",
           "location",
-          "setTimeout"
+          "setTimeout",
+          "clearTimeout"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/developer-hint-parser.js",
+        "declares": [
+          "DeveloperHintParser"
+        ],
+        "public": [
+          "DeveloperHintParser"
+        ],
+        "requires": [],
+        "hostCapabilities": [
+          "document"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/generator-advice-details-parser.js",
+        "declares": [
+          "GeneratorAdviceDetailsParser"
+        ],
+        "public": [
+          "GeneratorAdviceDetailsParser"
+        ],
+        "requires": [
+          {
+            "file": "src/modules/strategy-data-recommendations/developer-hint-parser.js",
+            "symbols": [
+              "DeveloperHintParser"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/generator-expected-performance-and-strength-context.js",
+        "declares": [
+          "GeneratorExpectedPerformanceParser",
+          "StrengthContextModel"
+        ],
+        "public": [
+          "GeneratorExpectedPerformanceParser",
+          "StrengthContextModel"
+        ],
+        "requires": [],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/dave-engine-knowledge.js",
+        "declares": [
+          "DaveEngineKnowledge"
+        ],
+        "public": [
+          "DaveEngineKnowledge"
+        ],
+        "requires": [],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/tactics-presets/tactic-preset-library.js",
+        "declares": [
+          "TacticPresetLibrary"
+        ],
+        "public": [
+          "TacticPresetLibrary"
+        ],
+        "requires": [],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/tactics-presets/tactic-preset-library-panel.js",
+        "declares": [
+          "TacticPresetLibraryPanel"
+        ],
+        "public": [
+          "TacticPresetLibraryPanel"
+        ],
+        "requires": [
+          {
+            "file": "src/modules/tactics-presets/preset-storage.js",
+            "symbols": [
+              "PresetStorage"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-preset-library.js",
+            "symbols": [
+              "TacticPresetLibrary"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "URLSearchParams",
+          "document",
+          "location"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/tactical-urgency-model.js",
+        "declares": [
+          "TacticalUrgencyModel"
+        ],
+        "public": [
+          "TacticalUrgencyModel"
+        ],
+        "requires": [],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/recommendation-engine.js",
+        "declares": [
+          "RecommendationEngine"
+        ],
+        "public": [
+          "RecommendationEngine"
+        ],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "STATE",
+              "num"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/preset-storage.js",
+            "symbols": [
+              "PresetStorage"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/match-state-parser.js",
+            "symbols": [
+              "MatchStateParser",
+              "MatchTimingModel"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/snapshot-engine.js",
+            "symbols": [
+              "SnapshotEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/developer-hint-parser.js",
+            "symbols": [
+              "DeveloperHintParser"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/generator-expected-performance-and-strength-context.js",
+            "symbols": [
+              "GeneratorExpectedPerformanceParser",
+              "StrengthContextModel"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/dave-engine-knowledge.js",
+            "symbols": [
+              "DaveEngineKnowledge"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-preset-library.js",
+            "symbols": [
+              "TacticPresetLibrary"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/tactical-urgency-model.js",
+            "symbols": [
+              "TacticalUrgencyModel"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/app/ui-layer.js",
+            "symbols": [
+              "UI"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document",
+          "window",
+          "localStorage",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/preset-fit-scoring.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/tactics-presets/tactic-preset-library.js",
+            "symbols": [
+              "TacticPresetLibrary"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/recommendation-engine.js",
+            "symbols": [
+              "RecommendationEngine"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
+        "declares": [
+          "CurrentActionHintEngine"
+        ],
+        "public": [
+          "CurrentActionHintEngine"
+        ],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "num"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "window"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/coach-hint-snapshot-context-layer.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "num"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/snapshot-engine.js",
+            "symbols": [
+              "SnapshotEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
+            "symbols": [
+              "CurrentActionHintEngine"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "window"
+        ]
+      },
+      {
+        "file": "src/modules/tactics-presets/active-preset-registry.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "BASE_LABELS",
+              "BASE_PRESETS"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-preset-library.js",
+            "symbols": [
+              "TacticPresetLibrary"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/recommendation-engine.js",
+            "symbols": [
+              "RecommendationEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
+            "symbols": [
+              "CurrentActionHintEngine"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "window"
+        ]
+      },
+      {
+        "file": "src/modules/tactics-presets/tactic-preset-direction-policy.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "BASE_PRESETS"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-preset-library.js",
+            "symbols": [
+              "TacticPresetLibrary"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/recommendation-engine.js",
+            "symbols": [
+              "RecommendationEngine"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "window"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/signal-noise-filter-layer.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "num"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
+            "symbols": [
+              "CurrentActionHintEngine"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "window"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/adaptive-opponent-style-layer.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
+            "symbols": [
+              "CurrentActionHintEngine"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "window"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/coach-mode-policy.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
+            "symbols": [
+              "CurrentActionHintEngine"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "window"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/moment-drift-stabilizer.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
+            "symbols": [
+              "CurrentActionHintEngine"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "window"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "STATE"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/match-state-parser.js",
+            "symbols": [
+              "MatchStateParser"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/snapshot-engine.js",
+            "symbols": [
+              "SnapshotEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/recommendation-engine.js",
+            "symbols": [
+              "RecommendationEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/app/ui-layer.js",
+            "symbols": [
+              "UI"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document",
+          "location",
+          "console"
         ]
       }
     ]
