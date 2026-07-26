@@ -229,10 +229,10 @@
     }
 
     function getFormationMoves(snapshot, presetName) {
-        if (!presetName || typeof TacticPresetLibrary === 'undefined') return [];
+        if (!presetName || typeof RecommendationEngine === 'undefined') return [];
         const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
         const targetSide = Number(teams[0]) === Number(snapshot?.myTeam) ? 'home' : 'away';
-        const desired = parseSchemeSlots(TacticPresetLibrary.getSchemeForPreset(presetName));
+        const desired = parseSchemeSlots(RecommendationEngine.getPresetScheme(presetName));
         const desiredSet = new Set(desired);
         const starters = (Array.isArray(snapshot?.lineupRows) ? snapshot.lineupRows : [])
             .filter(row => row?.isStarter && row.side === targetSide)
