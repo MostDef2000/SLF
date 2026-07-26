@@ -15,7 +15,7 @@ Runtime behavior impact: None
 - Batch 1: remaining Live Parser modules, PR #90, SLF 4.4.226; coverage reached 10 modules.
 - Batch 2: Tactics Presets and Strategy Data, PR #105, SLF 4.4.237; coverage reached 30 modules.
 - Batch 3: Transfer Analyzer, PR #106, SLF 4.4.238; coverage reached 47 modules.
-- Batch 4: App/bootstrap and Team Management; coverage reaches all 55 registered modules and audit status becomes `complete`.
+- Batch 4: App/bootstrap and Team Management; coverage reached all 55 registered modules and audit status became `complete`.
 
 ## Metadata contract
 
