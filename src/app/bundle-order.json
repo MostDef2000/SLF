@@ -63,7 +63,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "expanding",
-    "expectedModuleCount": 30,
+    "expectedModuleCount": 47,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -175,6 +175,21 @@
           "GM_registerMenuCommand",
           "console"
         ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/config.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "CONFIG"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": []
       },
       {
         "file": "src/core/dom-utils.js",
@@ -1096,6 +1111,473 @@
           "document",
           "location",
           "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+        "declares": [
+          "TMEnrichmentLayer"
+        ],
+        "public": [
+          "TMEnrichmentLayer"
+        ],
+        "requires": [
+          {
+            "file": "src/core/domain.js",
+            "symbols": [
+              "buildSlfUrl"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "CONFIG",
+              "num"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "DOMParser",
+          "localStorage",
+          "setTimeout",
+          "GM_xmlhttpRequest",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/slf-alter-layer.js",
+        "declares": [
+          "SLFAlterLayer"
+        ],
+        "public": [
+          "SLFAlterLayer"
+        ],
+        "requires": [
+          {
+            "file": "src/core/domain.js",
+            "symbols": [
+              "buildSlfUrl"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "CONFIG"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "DOMParser",
+          "localStorage",
+          "fetch",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+        "declares": [
+          "TransferMarketAnalyzer"
+        ],
+        "public": [
+          "TransferMarketAnalyzer"
+        ],
+        "requires": [
+          {
+            "file": "src/core/domain.js",
+            "symbols": [
+              "buildSlfUrl"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "CONFIG"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/api.js",
+            "symbols": [
+              "Api",
+              "normalizeServerRows"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/slf-alter-layer.js",
+            "symbols": [
+              "SLFAlterLayer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "URLSearchParams",
+          "document",
+          "window",
+          "location",
+          "localStorage",
+          "setTimeout",
+          "requestAnimationFrame",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-history-money-parser.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/domain.js",
+            "symbols": [
+              "buildSlfUrl"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/slf-alter-layer.js",
+            "symbols": [
+              "SLFAlterLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document",
+          "location",
+          "localStorage",
+          "setTimeout",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-candidate-scanner.js",
+        "declares": [
+          "TransferCandidateScanner"
+        ],
+        "public": [
+          "TransferCandidateScanner"
+        ],
+        "requires": [
+          {
+            "file": "src/core/api.js",
+            "symbols": [
+              "Api",
+              "normalizeServerRows"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/slf-alter-layer.js",
+            "symbols": [
+              "SLFAlterLayer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "URL",
+          "URLSearchParams",
+          "DOMParser",
+          "document",
+          "window",
+          "location",
+          "localStorage",
+          "fetch",
+          "setTimeout",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-candidate-scanner-money-parser.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-candidate-scanner.js",
+            "symbols": [
+              "TransferCandidateScanner"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-candidate-pagination-policy.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-candidate-scanner.js",
+            "symbols": [
+              "TransferCandidateScanner"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "URL",
+          "document",
+          "location",
+          "localStorage"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-candidate-full-market-policy.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/slf-alter-layer.js",
+            "symbols": [
+              "SLFAlterLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/transfer-candidate-scanner.js",
+            "symbols": [
+              "TransferCandidateScanner"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document",
+          "localStorage",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-candidate-four-ranking-policy.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-candidate-scanner.js",
+            "symbols": [
+              "TransferCandidateScanner"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "URL",
+          "Node",
+          "document",
+          "location",
+          "localStorage"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/purchase-forecast-full-date-policy.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-tm-profile-guard.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-my-bids-rank.js",
+        "declares": [
+          "TransferMyBidsRank"
+        ],
+        "public": [
+          "TransferMyBidsRank"
+        ],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "URLSearchParams",
+          "DOMParser",
+          "document",
+          "window",
+          "location",
+          "localStorage",
+          "fetch",
+          "setTimeout",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-my-bids-cache-policy.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-my-bids-rank.js",
+            "symbols": [
+              "TransferMyBidsRank"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-history-vps-skip-synced.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "CONFIG"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/api.js",
+            "symbols": [
+              "Api"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/slf-alter-layer.js",
+            "symbols": [
+              "SLFAlterLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "URL",
+          "URLSearchParams",
+          "DOMParser",
+          "document",
+          "location",
+          "localStorage",
+          "fetch",
+          "setTimeout",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-history-visible-analysis-cleanup.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document"
         ]
       }
     ]
