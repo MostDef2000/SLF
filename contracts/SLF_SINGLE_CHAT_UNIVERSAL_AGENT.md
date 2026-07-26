@@ -1,6 +1,6 @@
 # SLF Single-Chat Universal Agent
 
-Version: 2.0.0
+Version: 2.0.1
 Status: Active compatibility contract
 Source of truth: active SLF governance, Project Manager, runtime, Core Release, release-gate, and domain contracts
 
@@ -121,6 +121,16 @@ FAILED
 - Recoverable Git conflicts require re-fetch, idempotent replay, and one retry.
 - Failure of one tool is not a project blocker while another safe method remains.
 - Required multi-file changes must be verified as a complete set before PR creation and must not be partially integrated into `main`.
+
+## GitHub execution path
+
+When an authorized GitHub connector is available in the active execution environment and exposes the operations required by the approved scope, the agent must use the connector-native workflow for repository reads, branches, file writes, pull requests, CI inspection, merges, and release verification.
+
+The absence of a local GitHub CLI executable, local shell access, or access to the user's workstation credential store is not a blocker while the connector-native workflow remains capable of completing the task safely.
+
+Local `git` or `gh` may be used only when the connector is unavailable, lacks a required operation, or cannot complete that operation safely. A limitation of one interface must not be represented as a limitation of the repository workflow when another approved interface remains available.
+
+The agent must not ask the user to install, reconfigure, or re-authorize local `gh` when an already-authorized connector can complete the approved workflow. Local user authorization is not assumed to transfer into a cloud execution environment, and that isolation must not trigger redundant authentication instructions or stop an otherwise viable connector-native workflow.
 
 ## Release behavior
 
