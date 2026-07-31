@@ -1,5 +1,37 @@
 # Changelog
 
+## 4.4.245
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- docs/audit/generator-561-tactic-rebuild-2026-07.md
+- src/modules/live-parser/event-tracker.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- src/modules/tactics-presets/active-preset-registry.js
+- src/modules/tactics-presets/tactic-preset-direction-policy.js
+- vps/exporter-rag/generator_updates.json
+- vps/exporter-rag/run_daily_export.sh
+- vps/exporter-rag/slf_generator_update_rag.py
+- vps/exporter-rag/slf_preset_evidence_561.py
+- vps/ops/README.md
+- vps/ops/deploy-code.sh
+- vps/ops/rollback-code.sh
+
+Approved base commit:
+- 2168d5600901e5a8cccf326762d966c5b4c92345
+
+Approved commit:
+- b08a2e513c8c54f174b546b500f76a5992217be0
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.244
 
 ### Automatic latest-only build

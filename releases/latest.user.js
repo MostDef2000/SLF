@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.244
+// @version      4.4.245
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.244',
-        scriptVersion: '4.4.244',
+        version: '4.4.245',
+        scriptVersion: '4.4.245',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.244',
+        scriptVersion: '4.4.245',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -2653,6 +2653,47 @@ const SnapshotEngine = {
             return effect;
         },
 
+        getManualTelemetryFingerprint(snapshot) {
+            const score = snapshot?.score || {};
+            return [
+                snapshot?.gameId || '',
+                snapshot?.status || '',
+                snapshot?.minute ?? '',
+                snapshot?.bucket || '',
+                score.home ?? '',
+                score.away ?? '',
+                snapshot?.myTeam || ''
+            ].join('|');
+        },
+
+        submitManualTelemetry(snapshot, generatorVersion = '') {
+            if (!snapshot?.myTeam || snapshot.matchOwnership === 'foreign') return;
+
+            const effect = this.buildPresetEffect(snapshot);
+            if (effect) {
+                effect.source = Object.assign({}, effect.source || {}, {
+                    page: 'game',
+                    collectedAt: Date.now(),
+                    generatorVersion: generatorVersion || snapshot.generatorVersion || null,
+                    trigger: 'manual_hint_button'
+                });
+                void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EFFECTS, effect, 'preset effect history')
+                    .then(() => UI.addParserLog(`Эффект пресета сохранён: ${effect.presetName || 'unknown'}`))
+                    .catch(error => UI.addParserLog(`Эффект пресета: ошибка ${error?.kind || 'unknown'}`));
+            }
+
+            if (snapshot.status === 'finished') return;
+            const fingerprint = this.getManualTelemetryFingerprint(snapshot);
+            if (STATE.lastManualTelemetryFingerprint === fingerprint) return;
+            STATE.lastManualTelemetryFingerprint = fingerprint;
+
+            snapshot.generatorVersion = generatorVersion || snapshot.generatorVersion || null;
+            snapshot.recommendationSource = 'manual_hint_button';
+            void SnapshotEngine.sendSnapshot(snapshot)
+                .then(() => UI.addParserLog(`Snapshot ${snapshot.generatorVersion || ''} сохранён`.trim()))
+                .catch(error => UI.addParserLog(`Snapshot: ошибка ${error?.kind || 'unknown'}`));
+        },
+
         diffTactic(oldTactic, newTactic) {
             const diff = {};
 
@@ -2767,6 +2808,10 @@ const SnapshotEngine = {
 
             UI.addParserLog('Manual tactic watcher активен');
         }
+    };
+
+    SnapshotEngine.submitManualTelemetry = function submitManualTelemetry(snapshot, generatorVersion = '') {
+        return EventTracker.submitManualTelemetry(snapshot, generatorVersion);
     };
     // ============================================================
 // <<< src/modules/live-parser/event-tracker.js
@@ -6273,11 +6318,20 @@ if (typeof window !== 'undefined') {
         'Pep_ControlledPush_att3',
         'Pep_TwoThreeFive_att3',
         'Conte_WingbackWidth_bal4',
-        'Xabi_BoxMidfield_bal3',
         'Klopp_Gegenpress_att4',
         'Simeone_Compact442_def4',
         'Simeone_LowBlock_def5',
         'Bielsa_ChaosPress_att5'
+    ];
+
+    const REMOVED_PRESET_NAMES = [
+        'Mourinho_WeakSide_def3',
+        'Xabi_VerticalBox_att3',
+        'Xabi_BoxMidfield_bal3',
+        'DeZerbi_BaitPress_bal3',
+        'DeZerbi_Release_att4',
+        'Nagelsmann_WidePress_att4',
+        'Henta_LeftTrap_att3'
     ];
 
     const ACTIVE = new Set(['standard', ...ACTIVE_PRESET_NAMES]);
@@ -6290,7 +6344,6 @@ if (typeof window !== 'undefined') {
         Pep_ControlledPush_att3: { def_line: '2', press_line: '2', def_width: '2', press_intense: '3', build_type: '2', build_temp: '3', build_long: '1', build_fast: '3', style: '4', pass_risk: '3', dribble: '3', cross: '2', corner: '1', shot: '2', priority: ['left', 'right'] },
         Pep_TwoThreeFive_att3: { def_line: '2', press_line: '3', def_width: '3', press_intense: '3', build_type: '2', build_temp: '3', build_long: '1', build_fast: '3', style: '5', pass_risk: '4', dribble: '3', cross: '2', corner: '1', shot: '3', priority: ['left', 'right'] },
         Conte_WingbackWidth_bal4: { def_line: '2', press_line: '2', def_width: '3', press_intense: '3', build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3', pass_risk: '3', dribble: '3', cross: '3', corner: '1', shot: '2', priority: ['left', 'right'] },
-        Xabi_BoxMidfield_bal3: { def_line: '2', press_line: '2', def_width: '2', press_intense: '3', build_type: '2', build_temp: '2', build_long: '1', build_fast: '2', style: '3', pass_risk: '3', dribble: '2', cross: '1', corner: '1', shot: '2', priority: ['center'] },
         Klopp_Gegenpress_att4: { def_line: '3', press_line: '4', def_width: '3', press_intense: '4', build_type: '3', build_temp: '3', build_long: '2', build_fast: '3', style: '5', pass_risk: '3', dribble: '3', cross: '3', corner: '1', shot: '3', priority: ['left', 'right'] },
         Simeone_Compact442_def4: { def_line: '1', press_line: '2', def_width: '1', press_intense: '3', build_type: '2', build_temp: '1', build_long: '2', build_fast: '1', style: '2', pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1', priority: ['left', 'right'] },
         Simeone_LowBlock_def5: { def_line: '1', press_line: '1', def_width: '1', press_intense: '2', build_type: '1', build_temp: '1', build_long: '2', build_fast: '1', style: '1', pass_risk: '1', dribble: '1', cross: '1', corner: '1', shot: '1', priority: ['right'] },
@@ -6305,7 +6358,6 @@ if (typeof window !== 'undefined') {
         Pep_ControlledPush_att3: 'Pep Controlled Push',
         Pep_TwoThreeFive_att3: 'Pep Positional Attack',
         Conte_WingbackWidth_bal4: 'Conte Wingback Width',
-        Xabi_BoxMidfield_bal3: 'Xabi Box Midfield',
         Klopp_Gegenpress_att4: 'Klopp Gegenpress',
         Simeone_Compact442_def4: 'Simeone Compact 4-4-2',
         Simeone_LowBlock_def5: 'Simeone Low Block',
@@ -6320,7 +6372,6 @@ if (typeof window !== 'undefined') {
         Pep_ControlledPush_att3: { group: 'attack', rank: 3, title: LABELS.Pep_ControlledPush_att3, idea: 'добавить продвижение без all-in прессинга', use: 'нужен гол, но структура обороны ещё работает', risk: 'при высоком браке усиление превращается в потери' },
         Pep_TwoThreeFive_att3: { group: 'attack', rank: 4, title: LABELS.Pep_TwoThreeFive_att3, idea: 'позиционно дожимать при сохранённом transition guard', use: 'есть атакующий импульс и соперник не угрожает быстрыми переходами', risk: 'увеличивает встречную активность соперника' },
         Conte_WingbackWidth_bal4: { group: 'balance', rank: 4, title: LABELS.Conte_WingbackWidth_bal4, idea: 'растянуть закрытый центр через фланги без навесного all-in', use: 'центр закрыт, фланги сильны, кроссы не проваливаются', risk: 'без качества на флангах создаёт шум и открывает переходы' },
-        Xabi_BoxMidfield_bal3: { group: 'balance', rank: 3, title: LABELS.Xabi_BoxMidfield_bal3, idea: 'точечный перегруз слабого центра соперника', use: 'центр действительно доступен и брак низкий', risk: 'при закрытом центре даст стерильное владение и обрезы' },
         Klopp_Gegenpress_att4: { group: 'attack', rank: 4, title: LABELS.Klopp_Gegenpress_att4, idea: 'срочно поднять давление без перехода в полный хаос', use: 'проигрываем поздно, брак низкий, усталость и transition risk контролируются', risk: 'фолы, усталость и пространство за высокой линией' },
         Simeone_Compact442_def4: { group: 'defensive', rank: 4, title: LABELS.Simeone_Compact442_def4, idea: 'компактно защищать преимущество без полного автобуса', use: 'ведём после 70-й и давление соперника растёт', risk: 'при слишком раннем включении отдаёт инициативу' },
         Simeone_LowBlock_def5: { group: 'defensive', rank: 5, title: LABELS.Simeone_LowBlock_def5, idea: 'аварийно закрыть штрафную и пережить концовку', use: 'ведём после 80-й под тяжёлым давлением', risk: 'полностью отдаёт инициативу и выход из обороны' },
@@ -6336,7 +6387,6 @@ if (typeof window !== 'undefined') {
         Pep_ControlledPush_att3: '4-2-3-1 controlled push / GK-LD-CD1-CD3-RD / DM2-CM2 / LW-AM2-RW / ST2',
         Pep_TwoThreeFive_att3: '4-2-3-1 positional / GK-LD-CD1-CD3-RD / DM2-CM2 / LW-AM2-RW / ST2',
         Conte_WingbackWidth_bal4: '3-4-3 wingback width / GK-CD1-CD2-CD3 / LWB-DM2-CM2-RWB / LW-ST2-RW',
-        Xabi_BoxMidfield_bal3: '3-2-4-1 box midfield / GK-CD1-CD2-CD3 / DM2-CM2 / LM-AM1-AM2-RM / ST2',
         Klopp_Gegenpress_att4: '4-3-3 gegenpress / GK-LD-CD1-CD3-RD / CM1-DM2-CM3 / LW-ST2-RW',
         Simeone_Compact442_def4: '4-4-2 compact / GK-LD-CD1-CD3-RD / LM-CM2-DM2-RM / ST1-ST2',
         Simeone_LowBlock_def5: '5-4-1 low block / GK-LB-CD1-CD2-CD3-RB / LM-DM2-CM2-RM / ST2',
@@ -6354,7 +6404,6 @@ if (typeof window !== 'undefined') {
         Pep_ControlledPush_att3: { attackLanes: ['left', 'right'], build: 'controlled_push', tempo: 'medium_high', press: 'medium', risk: 'medium', requires: ['need_goal'], avoids: ['high_bad_actions', 'transition_threat'] },
         Pep_TwoThreeFive_att3: { attackLanes: ['left', 'right'], build: 'positional_attack', tempo: 'medium_high', press: 'medium', risk: 'medium_high', requires: ['attacking_momentum'], avoids: ['transition_threat', 'under_pressure'] },
         Conte_WingbackWidth_bal4: { attackLanes: ['left', 'right'], build: 'wingback_width', tempo: 'medium', press: 'medium', risk: 'medium', requires: ['wide_quality'], avoids: ['own_crosses_bad', 'opponent_crosses_dangerous'] },
-        Xabi_BoxMidfield_bal3: { attackLanes: ['center'], build: 'box_midfield', tempo: 'medium', press: 'medium', risk: 'medium', requires: ['center_weak'], avoids: ['center_closed', 'high_bad_actions', 'under_pressure'] },
         Klopp_Gegenpress_att4: { attackLanes: ['left', 'right'], build: 'gegenpress', tempo: 'high', press: 'high', risk: 'high', requires: ['need_pressure'], avoids: ['press_fatigue', 'high_bad_actions', 'transition_threat'] },
         Simeone_Compact442_def4: { attackLanes: ['left', 'right'], build: 'compact442', tempo: 'low', press: 'medium', risk: 'low', requires: ['protect_lead'], avoids: ['urgent_chase'] },
         Simeone_LowBlock_def5: { attackLanes: ['right'], build: 'low_block', tempo: 'low', press: 'low', risk: 'very_low', requires: ['protect_lead_heavy_pressure'], avoids: ['need_goal'] },
@@ -6375,13 +6424,39 @@ if (typeof window !== 'undefined') {
         { id: 'bad_actions_control_reset', preset: 'Pep_BoxControl_bal2', decision: 'stabilize_control', risk: 'low', reason: 'высокий брак — короткий контрольный reset', when: c => c.highBadActions && !c.lateNeedGoal },
         { id: 'under_pressure_counter', preset: 'Compact_Counter_def3', decision: 'defensive_reset', risk: 'medium', reason: 'соперник опаснее или угрожает переходами — закрыть зоны и сохранить быстрый выход', when: c => (c.underPressure || c.transitionThreat || c.opponentHighPress) && !c.lateNeedGoal },
         { id: 'center_closed_wide_quality', preset: 'Conte_WingbackWidth_bal4', decision: 'use_width', risk: 'medium', reason: 'центр закрыт, но ширина доступна — растянуть блок без навесного all-in', when: c => c.centerClosed && c.wideQuality && !c.ownCrossesBad && !c.opponentCrossesDangerous && !c.underPressure },
-        { id: 'center_weak_box_midfield', preset: 'Xabi_BoxMidfield_bal3', decision: 'attack_center', risk: 'medium', reason: 'центр соперника слаб и брак низкий — точечно перегрузить середину', when: c => c.centerWeak && !c.centerClosed && !c.highBadActions && !c.underPressure },
         { id: 'urgent_pressure_not_all_in', preset: 'Klopp_Gegenpress_att4', decision: 'urgent_pressure', risk: 'high', reason: 'после 70-й нужен срочный рост давления, но all-in ещё не требуется', when: c => c.needGoal && c.minute >= 70 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat },
         { id: 'attacking_momentum_positional', preset: 'Pep_TwoThreeFive_att3', decision: 'maintain_pressure', risk: 'medium', reason: 'есть атакующий импульс — дожимать позиционно при безопасных переходах', when: c => c.attackingMomentum && !c.underPressure && !c.transitionThreat },
         { id: 'need_goal_controlled_push', preset: 'Pep_ControlledPush_att3', decision: 'increase_attack', risk: 'medium', reason: 'нужен гол — добавить продвижение без all-in и высокого прессинга', when: c => c.needGoal && !c.underPressure && !c.highBadActions && !c.pressFatigueRisk },
         { id: 'standard_control_low_noise', preset: 'Arteta_Control433_bal3', decision: 'standard_control', risk: 'low', reason: 'нет сильного аварийного сигнала — держать структурный контроль', when: c => !c.needGoal && !c.underPressure && !c.highBadActions && !c.attackingMomentum },
         { id: 'safe_default_control', preset: 'Pep_BoxControl_bal2', decision: 'hold_control', risk: 'low', reason: 'нет надёжного сигнала для более рискованной смены — стабилизировать игру', when: () => true }
     ];
+
+    const DEFAULT_AUDIT_TIER = {
+        primary: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Compact_Counter_def3', 'Pep_TwoThreeFive_att3', 'Pep_PressCooldown_bal2'],
+        conditional: ['Pep_ControlledPush_att3', 'Conte_WingbackWidth_bal4', 'Simeone_Compact442_def4'],
+        restricted: ['Klopp_Gegenpress_att4'],
+        emergency: ['Bielsa_ChaosPress_att5', 'Simeone_LowBlock_def5'],
+        removed: REMOVED_PRESET_NAMES.slice(),
+        needsMoreData: [],
+        experimental: [],
+        blocked: []
+    };
+
+    function applyHintPolicy(auditTier = DEFAULT_AUDIT_TIER, rules = HINT_RULES) {
+        if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return false;
+        CurrentActionHintEngine.PRESET_AUDIT_TIER = Object.assign({}, auditTier, {
+            primary: (auditTier.primary || []).slice(),
+            conditional: (auditTier.conditional || []).slice(),
+            restricted: (auditTier.restricted || []).slice(),
+            emergency: (auditTier.emergency || []).slice(),
+            removed: (auditTier.removed || []).slice(),
+            needsMoreData: (auditTier.needsMoreData || []).slice(),
+            experimental: (auditTier.experimental || []).slice(),
+            blocked: (auditTier.blocked || []).slice()
+        });
+        CurrentActionHintEngine.HINT_RULES = (Array.isArray(rules) ? rules : []).slice();
+        return true;
+    }
 
     function choosePreset(state = {}) {
         const tags = Array.isArray(state.tags) ? state.tags : [];
@@ -6401,7 +6476,6 @@ if (typeof window !== 'undefined') {
         const lowBad = myBad > 0 && myBad <= 16 || has('low_bad_actions');
         const ownCrossBad = has('own_open_play_crosses_bad') || has('own_crosses_bad_total');
         const wideQuality = has('attack_left') || has('attack_right') || has('wide_quality');
-        const centerWeak = has('center_weak');
         const centerClosed = has('opponent_low_block') || has('center_closed');
         const opponentCrossesDangerous = has('opponent_crosses_dangerous');
         const attackingMomentum = has('attacking_momentum');
@@ -6413,7 +6487,6 @@ if (typeof window !== 'undefined') {
         if (highBad) return { name: 'Pep_BoxControl_bal2', reason: 'высокий брак — сначала стабилизировать розыгрыш' };
         if (transitionThreat || underPressure) return { name: 'Compact_Counter_def3', reason: 'соперник опаснее по текущим метрикам — закрыть переходы и сохранить быстрый выход' };
         if (centerClosed && wideQuality && !ownCrossBad && !opponentCrossesDangerous) return { name: 'Conte_WingbackWidth_bal4', reason: 'центр закрыт, а фланги доступны — растянуть блок контролируемой шириной' };
-        if (centerWeak && lowBad) return { name: 'Xabi_BoxMidfield_bal3', reason: 'центр соперника слаб и брак низкий — точечный перегруз середины' };
         if (needGoal && minute >= 70 && lowBad) return { name: 'Klopp_Gegenpress_att4', reason: 'после 70-й нужен срочный рост давления, но ещё не all-in' };
         if (attackingMomentum && !transitionThreat) return { name: 'Pep_TwoThreeFive_att3', reason: 'есть атакующий импульс — дожимать позиционно при контролируемых переходах' };
         if (needGoal) return { name: 'Pep_ControlledPush_att3', reason: 'нужен гол — добавить продвижение без all-in прессинга' };
@@ -6449,27 +6522,16 @@ if (typeof window !== 'undefined') {
         };
     }
 
-    if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
-        CurrentActionHintEngine.PRESET_AUDIT_TIER = {
-            primary: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Compact_Counter_def3', 'Pep_TwoThreeFive_att3', 'Pep_PressCooldown_bal2'],
-            conditional: ['Pep_ControlledPush_att3', 'Conte_WingbackWidth_bal4', 'Xabi_BoxMidfield_bal3', 'Simeone_Compact442_def4'],
-            restricted: ['Klopp_Gegenpress_att4'],
-            emergency: ['Bielsa_ChaosPress_att5', 'Simeone_LowBlock_def5'],
-            removed: ['Mourinho_WeakSide_def3', 'Xabi_VerticalBox_att3', 'DeZerbi_BaitPress_bal3', 'DeZerbi_Release_att4', 'Nagelsmann_WidePress_att4', 'Henta_LeftTrap_att3'],
-            needsMoreData: [],
-            experimental: [],
-            blocked: []
-        };
-        CurrentActionHintEngine.HINT_RULES = HINT_RULES.slice();
-    }
+    applyHintPolicy();
 
     if (typeof window !== 'undefined') {
         window.SLFActivePresetRegistry = {
             active: ACTIVE_PRESET_NAMES.slice(),
-            removed: ['Mourinho_WeakSide_def3', 'Xabi_VerticalBox_att3', 'DeZerbi_BaitPress_bal3', 'DeZerbi_Release_att4', 'Nagelsmann_WidePress_att4', 'Henta_LeftTrap_att3'],
+            removed: REMOVED_PRESET_NAMES.slice(),
             labels: Object.assign({}, LABELS),
             ladders: Object.assign({}, LADDERS),
-            choosePreset
+            choosePreset,
+            applyHintPolicy
         };
     }
 })();
@@ -6477,37 +6539,69 @@ if (typeof window !== 'undefined') {
 
 
 // >>> src/modules/tactics-presets/tactic-preset-direction-policy.js
-// Tactic Preset Direction Policy
+// Generator 5.61 Tactical Evidence Policy
 // ============================================================
-// Center attack is never a default direction. The only active center-only
-// preset is Xabi Box Midfield, and it requires a weak/open center plus low
-// bad-action pressure.
+// Conservative runtime policy based on the official 5.61 rule pack and the
+// current mixed-history preset evidence. Historical aggregates are not treated
+// as a clean post-5.61 cohort; high-risk choices remain guarded until the
+// exporter reports enough stable-5.61 effects.
 
 (function tacticPresetDirectionPolicy() {
     'use strict';
 
-    if (typeof window !== 'undefined' && window.SLFTacticDirectionPolicy?.applied) return;
+    if (typeof window !== 'undefined' && window.SLFTacticDirectionPolicy?.version === '5.61-evidence-v1') return;
 
-    const CENTER_EXCEPTIONS = new Set(['Xabi_BoxMidfield_bal3']);
+    const REMOVED_PRESETS = new Set(['Xabi_BoxMidfield_bal3']);
+    const NEUTRAL_PRIORITY_PRESETS = [
+        'standard',
+        'Arteta_Control433_bal3',
+        'Pep_BoxControl_bal2',
+        'Pep_PressCooldown_bal2',
+        'Compact_Counter_def3',
+        'Pep_ControlledPush_att3',
+        'Pep_TwoThreeFive_att3',
+        'Klopp_Gegenpress_att4',
+        'Simeone_Compact442_def4',
+        'Simeone_LowBlock_def5',
+        'Bielsa_ChaosPress_att5'
+    ];
 
-    const DIRECTION_OVERRIDES = {
-        standard: [],
-        Arteta_Control433_bal3: [],
-        Pep_BoxControl_bal2: [],
-        Pep_PressCooldown_bal2: [],
-        Compact_Counter_def3: ['left', 'right'],
-        Pep_ControlledPush_att3: ['left', 'right'],
-        Pep_TwoThreeFive_att3: ['left', 'right'],
-        Conte_WingbackWidth_bal4: ['left', 'right'],
-        Xabi_BoxMidfield_bal3: ['center'],
-        Klopp_Gegenpress_att4: ['left', 'right'],
-        Simeone_Compact442_def4: ['left', 'right'],
-        Simeone_LowBlock_def5: ['right'],
-        Bielsa_ChaosPress_att5: ['left', 'right']
+    const DIRECTION_OVERRIDES = Object.fromEntries(NEUTRAL_PRIORITY_PRESETS.map(name => [name, []]));
+    DIRECTION_OVERRIDES.Conte_WingbackWidth_bal4 = ['left', 'right'];
+
+    const AUDIT_TIER_561 = {
+        primary: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Compact_Counter_def3', 'Pep_TwoThreeFive_att3', 'Pep_PressCooldown_bal2'],
+        conditional: ['Pep_ControlledPush_att3', 'Conte_WingbackWidth_bal4', 'Simeone_Compact442_def4'],
+        restricted: ['Klopp_Gegenpress_att4'],
+        emergency: ['Bielsa_ChaosPress_att5', 'Simeone_LowBlock_def5'],
+        removed: ['Mourinho_WeakSide_def3', 'Xabi_VerticalBox_att3', 'Xabi_BoxMidfield_bal3', 'DeZerbi_BaitPress_bal3', 'DeZerbi_Release_att4', 'Nagelsmann_WidePress_att4', 'Henta_LeftTrap_att3'],
+        needsMoreData: [],
+        experimental: [],
+        blocked: []
     };
+
+    const HINT_RULES_561 = [
+        { id: 'late_goal_emergency_561', preset: 'Bielsa_ChaosPress_att5', decision: 'all_in_attack', risk: 'high', reason: 'после 86-й проигрываем и безопасные варианты недостаточны — финальный all-in', when: c => c.lateNeedGoal && c.minute >= 86 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat },
+        { id: 'late_protect_heavy_pressure_561', preset: 'Simeone_LowBlock_def5', decision: 'protect_lead', risk: 'high', reason: 'после 82-й ведём под тяжёлым давлением — закрыть штрафную', when: c => c.protectLead && c.underPressure && c.minute >= 82 },
+        { id: 'protect_compact_442_561', preset: 'Simeone_Compact442_def4', decision: 'compact_protect', risk: 'medium', reason: 'ведём поздно — компактно защитить преимущество', when: c => c.protectLead && c.minute >= 70 },
+        { id: 'own_press_fatigue_cooldown_561', preset: 'Pep_PressCooldown_bal2', decision: 'cooldown_press', risk: 'low', reason: 'растёт цена прессинга — снизить интенсивность и вернуть структуру', when: c => c.pressFatigueRisk && !c.needGoal },
+        { id: 'bad_actions_control_reset_561', preset: 'Pep_BoxControl_bal2', decision: 'stabilize_control', risk: 'low', reason: 'высокий брак — сначала стабилизировать розыгрыш', when: c => c.highBadActions },
+        { id: 'under_pressure_counter_561', preset: 'Compact_Counter_def3', decision: 'defensive_reset', risk: 'medium', reason: 'соперник опаснее — закрыть переходы и сохранить быстрый выход', when: c => c.underPressure || c.transitionThreat },
+        { id: 'verified_width_561', preset: 'Conte_WingbackWidth_bal4', decision: 'use_width', risk: 'medium', reason: 'фланг подтверждён как преимущество; одного закрытого центра после 5.61 недостаточно', when: c => c.centerClosed && c.wideQuality && (c.weakSideAvailable || c.attackingMomentum) && !c.ownCrossesBad && !c.opponentCrossesDangerous && !c.underPressure },
+        { id: 'late_gegenpress_561', preset: 'Klopp_Gegenpress_att4', decision: 'urgent_pressure', risk: 'high', reason: 'после 78-й нужен гол; высокий прессинг допустим только при низком браке и без fatigue/transition risk', when: c => c.needGoal && c.minute >= 78 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat },
+        { id: 'positional_attack_561', preset: 'Pep_TwoThreeFive_att3', decision: 'controlled_attack', risk: 'medium', reason: 'лучший наблюдаемый атакующий баланс — позиционно дожимать без раннего all-in прессинга', when: c => (c.needGoal || c.attackingMomentum) && c.lowBadActions && !c.underPressure && !c.transitionThreat },
+        { id: 'controlled_push_561', preset: 'Pep_ControlledPush_att3', decision: 'increase_attack', risk: 'medium', reason: 'нужен гол, но качество розыгрыша не позволяет сразу повышать прессинг', when: c => c.needGoal && !c.underPressure && !c.pressFatigueRisk },
+        { id: 'standard_control_561', preset: 'Arteta_Control433_bal3', decision: 'standard_control', risk: 'low', reason: 'нет сильного отрицательного сигнала — держать структурный контроль', when: c => !c.needGoal && !c.underPressure && !c.highBadActions && !c.attackingMomentum },
+        { id: 'safe_default_561', preset: 'Pep_BoxControl_bal2', decision: 'hold_control', risk: 'low', reason: 'нет надёжного сигнала для более рискованной смены — стабилизировать игру', when: () => true }
+    ];
 
     function copy(value) {
         return Array.isArray(value) ? value.slice() : [];
+    }
+
+    function number(value, fallback = 0) {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : fallback;
     }
 
     function tagsOf(state = {}) {
@@ -6517,135 +6611,170 @@ if (typeof window !== 'undefined') {
     }
 
     function hasTag(state, tag) {
-        return tagsOf(state).includes(tag) || !!state?.[tag];
+        return tagsOf(state).includes(tag) || state?.[tag] === true;
     }
 
-    function number(value, fallback = 0) {
-        const n = Number(value);
-        return Number.isFinite(n) ? n : fallback;
+    function scoreStateOf(state = {}) {
+        return state?.score?.state || state.scoreState || 'unknown';
     }
 
-    function priorityOfPreset(name) {
-        if (typeof BASE_PRESETS !== 'undefined' && BASE_PRESETS?.[name]) {
-            return copy(BASE_PRESETS[name].priority);
-        }
-        return copy(DIRECTION_OVERRIDES[name]);
+    function isPressFatigue(state = {}) {
+        return !!state.pressFatigue?.active || hasTag(state, 'press_fatigue_risk');
     }
 
-    function hasCenterDirection(name) {
-        return priorityOfPreset(name).includes('center') || (TacticPresetLibrary?.traits?.[name]?.attackLanes || []).includes('center');
+    function isHighBad(state = {}) {
+        return number(state.myBad, 0) >= 20 || hasTag(state, 'high_bad_actions');
     }
 
-    function hasCenterOveruseSymptoms(state = {}) {
-        const minute = number(state.minute, 0);
-        const myPossession = number(state.myPossession, 0);
-        const myXg = number(state.myXg, 0);
-        const oppXg = number(state.oppXg, 0);
-        const myXT = number(state.myXT, 0);
-        const oppXT = number(state.oppXT, 0);
-        const shotsGap = number(state.oppShots, 0) - number(state.myShots, 0);
-
-        if (minute >= 25 && myPossession >= 52 && myXg <= oppXg + 0.1) return true;
-        if (minute >= 35 && myXT < oppXT - 0.15) return true;
-        if (minute >= 45 && shotsGap >= 3 && myXg <= oppXg + 0.2) return true;
-        return false;
+    function isLowBad(state = {}) {
+        const bad = number(state.myBad, 0);
+        return hasTag(state, 'low_bad_actions') || bad > 0 && bad <= 16;
     }
 
-    function hasCenterExceptionContext(state = {}) {
-        const myBad = number(state.myBad, 0);
-        const centerWeak = hasTag(state, 'center_weak') || !!state.centerWeak;
-        const centerAvailable = hasTag(state, 'center_available') || !!state.centerAvailable;
-        const lowBadActions = hasTag(state, 'low_bad_actions') || myBad > 0 && myBad <= 16;
-        const centerClosed = hasTag(state, 'center_closed') || hasTag(state, 'opponent_low_block') || !!state.centerClosed;
-        const underPressure = hasTag(state, 'under_pressure') || hasTag(state, 'transition_threat') || !!state.underPressure || !!state.transitionThreat;
-        const highBadActions = hasTag(state, 'high_bad_actions') || !!state.highBadActions || myBad >= 20;
-
-        return (centerWeak || centerAvailable) && lowBadActions && !centerClosed && !underPressure && !highBadActions && !hasCenterOveruseSymptoms(state);
-    }
-
-    function isCenterOveruse(name, state = {}) {
-        if (!name || !hasCenterDirection(name)) return false;
-        if (!CENTER_EXCEPTIONS.has(name)) return true;
-        return !hasCenterExceptionContext(state);
-    }
-
-    function selectNonCenterAlternative(state = {}) {
-        const scoreState = state?.score?.state || state.scoreState || '';
-        const minute = number(state.minute, 0);
-        const myBad = number(state.myBad, 0);
+    function isUnderPressure(state = {}) {
         const xgGap = number(state.oppXg, 0) - number(state.myXg, 0);
         const xtGap = number(state.oppXT, 0) - number(state.myXT, 0);
+        return xgGap > 0.45 || xtGap > 0.25 || hasTag(state, 'under_pressure') || hasTag(state, 'transition_threat');
+    }
 
-        if (hasTag(state, 'press_fatigue_risk') || state.pressFatigue?.active) return 'Pep_PressCooldown_bal2';
-        if (myBad >= 20 || hasTag(state, 'high_bad_actions')) return 'Pep_BoxControl_bal2';
-        if (xgGap > 0.45 || xtGap > 0.25 || hasTag(state, 'transition_threat') || hasTag(state, 'under_pressure')) return 'Compact_Counter_def3';
-        if (scoreState === 'winning' && minute >= 70) return 'Simeone_Compact442_def4';
-        if (scoreState === 'losing' && minute >= 80) return 'Bielsa_ChaosPress_att5';
-        if (hasTag(state, 'center_closed') || hasTag(state, 'opponent_low_block') || hasTag(state, 'wide_quality')) return 'Conte_WingbackWidth_bal4';
-        if (scoreState === 'losing' || hasTag(state, 'need_goal') || hasTag(state, 'attacking_momentum')) return 'Pep_ControlledPush_att3';
-        return 'Arteta_Control433_bal3';
+    function hasVerifiedWideOpportunity(state = {}) {
+        const wideSignal = hasTag(state, 'wide_quality') || hasTag(state, 'wide_advantage') || hasTag(state, 'attack_left') || hasTag(state, 'attack_right');
+        const weakFullback = hasTag(state, 'opponent_flank_weak') || hasTag(state, 'weak_side_available');
+        const cardPressure = hasTag(state, 'opponent_fullback_yellow') || hasTag(state, 'opponent_wide_defender_booked');
+        const observedMomentum = hasTag(state, 'attacking_momentum');
+        const crossesBad = hasTag(state, 'own_open_play_crosses_bad') || hasTag(state, 'own_crosses_bad_total');
+        const crossesDangerous = hasTag(state, 'opponent_crosses_dangerous');
+        return wideSignal && (weakFullback || cardPressure || observedMomentum) && !crossesBad && !crossesDangerous && !isUnderPressure(state);
+    }
+
+    function selectEvidencePreset(state = {}) {
+        const minute = number(state.minute, 0);
+        const scoreState = scoreStateOf(state);
+        const needGoal = scoreState === 'losing' && minute >= 55 || hasTag(state, 'need_goal');
+        const protectLead = scoreState === 'winning' && minute >= 70 || hasTag(state, 'late_protect_lead');
+        const transitionThreat = isUnderPressure(state);
+        const highBad = isHighBad(state);
+        const lowBad = isLowBad(state);
+        const fatigue = isPressFatigue(state);
+        const attackingMomentum = hasTag(state, 'attacking_momentum');
+        const centerClosed = hasTag(state, 'center_closed') || hasTag(state, 'opponent_low_block');
+
+        if (protectLead && minute >= 82 && transitionThreat) {
+            return { name: 'Simeone_LowBlock_def5', reason: '5.61 policy: поздно ведём под тяжёлым давлением — аварийный низкий блок' };
+        }
+        if (protectLead) {
+            return {
+                name: transitionThreat || hasTag(state, 'opponent_crosses_dangerous') ? 'Simeone_Compact442_def4' : 'Pep_BoxControl_bal2',
+                reason: transitionThreat ? '5.61 policy: защитить преимущество компактной структурой' : '5.61 policy: сохранить преимущество через контроль и низкий риск'
+            };
+        }
+        if (fatigue) {
+            if (needGoal && minute >= 75) {
+                return {
+                    name: lowBad ? 'Pep_TwoThreeFive_att3' : 'Pep_ControlledPush_att3',
+                    reason: '5.61 policy: нужен гол, но цена прессинга высока — атаковать без автоматического gegenpress/chaos'
+                };
+            }
+            return { name: 'Pep_PressCooldown_bal2', reason: '5.61 policy: снизить цену прессинга и восстановить структуру' };
+        }
+        if (highBad) {
+            return { name: 'Pep_BoxControl_bal2', reason: '5.61 policy: высокий брак — сначала стабилизировать розыгрыш' };
+        }
+        if (transitionThreat) {
+            return { name: 'Compact_Counter_def3', reason: '5.61 policy: соперник опаснее — закрыть переходы и сохранить быстрый выход' };
+        }
+        if (needGoal && minute >= 86 && lowBad) {
+            return { name: 'Bielsa_ChaosPress_att5', reason: '5.61 policy: только финальное emergency-окно допускает chaos press' };
+        }
+        if (needGoal && minute >= 78 && lowBad) {
+            return { name: 'Klopp_Gegenpress_att4', reason: '5.61 policy: поздняя погоня допускает gegenpress только при низком браке и без fatigue/transition risk' };
+        }
+        if (needGoal || attackingMomentum) {
+            return {
+                name: lowBad || attackingMomentum ? 'Pep_TwoThreeFive_att3' : 'Pep_ControlledPush_att3',
+                reason: lowBad || attackingMomentum
+                    ? 'наблюдаемая выборка лучше поддерживает контролируемую позиционную атаку, чем ранний высокий прессинг'
+                    : 'нужен гол, но качество розыгрыша не позволяет сразу повышать прессинг'
+            };
+        }
+        if (centerClosed && hasVerifiedWideOpportunity(state)) {
+            return { name: 'Conte_WingbackWidth_bal4', reason: '5.61 policy: ширина подтверждена не только закрытым центром, но и фактическим преимуществом на фланге' };
+        }
+        return { name: 'Arteta_Control433_bal3', reason: '5.61 policy: структурный контроль является нейтральным baseline' };
+    }
+
+    function removePresetFromMap(map) {
+        if (!map || typeof map !== 'object') return;
+        REMOVED_PRESETS.forEach(name => delete map[name]);
     }
 
     function patchBasePresets() {
         if (typeof BASE_PRESETS === 'undefined' || !BASE_PRESETS) return;
+        removePresetFromMap(BASE_PRESETS);
         Object.entries(DIRECTION_OVERRIDES).forEach(([name, priority]) => {
             if (!BASE_PRESETS[name]) return;
             BASE_PRESETS[name] = Object.assign({}, BASE_PRESETS[name], { priority: copy(priority) });
         });
     }
 
-    function patchLibraryTraits() {
-        if (typeof TacticPresetLibrary === 'undefined' || !TacticPresetLibrary?.traits) return;
+    function patchLibrary() {
+        if (typeof TacticPresetLibrary === 'undefined' || !TacticPresetLibrary) return;
+        ['meta', 'traits', 'schemeStates', 'presetSchemeState'].forEach(key => removePresetFromMap(TacticPresetLibrary[key]));
         Object.entries(DIRECTION_OVERRIDES).forEach(([name, attackLanes]) => {
-            if (!TacticPresetLibrary.traits[name]) return;
-            TacticPresetLibrary.traits[name] = Object.assign({}, TacticPresetLibrary.traits[name], {
-                attackLanes: copy(attackLanes)
-            });
+            if (!TacticPresetLibrary.traits?.[name]) return;
+            TacticPresetLibrary.traits[name] = Object.assign({}, TacticPresetLibrary.traits[name], { attackLanes: copy(attackLanes) });
         });
     }
 
-    function patchRecommendationSelection() {
-        if (typeof RecommendationEngine === 'undefined' || !RecommendationEngine) return;
-        if (RecommendationEngine.__directionPolicySelectRawPresetApplied) return;
-        if (typeof RecommendationEngine.selectRawPreset !== 'function') return;
-
-        const originalSelectRawPreset = RecommendationEngine.selectRawPreset;
-        RecommendationEngine.selectRawPreset = function selectRawPresetWithDirectionPolicy(snapshot, state = {}) {
-            const candidate = originalSelectRawPreset.apply(this, arguments);
-            const candidateName = candidate?.name || '';
-            if (!isCenterOveruse(candidateName, state)) return candidate;
-
-            const alternative = selectNonCenterAlternative(state);
-            return Object.assign({}, candidate || {}, {
-                name: alternative,
-                directionPolicyRedirect: true,
-                rawCenterPreset: candidateName,
-                reason: `${candidate?.reason || 'выбран центральный пресет'}; center guard: центральный перегруз не подтверждён, поэтому выбран безопасный нецентральный план`
-            });
-        };
-
-        RecommendationEngine.__directionPolicySelectRawPresetApplied = true;
+    function getActiveRegistry() {
+        return typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
     }
 
-    patchBasePresets();
-    patchLibraryTraits();
-    patchRecommendationSelection();
+    function patchActiveRegistry() {
+        const registry = getActiveRegistry();
+        if (!registry) return;
+        registry.active = (registry.active || []).filter(name => !REMOVED_PRESETS.has(name));
+        registry.removed = Array.from(new Set([...(registry.removed || []), ...REMOVED_PRESETS]));
+        registry.choosePreset = selectEvidencePreset;
+    }
+
+    function patchRecommendationSelection() {
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__generator561SelectionApplied) return;
+        RecommendationEngine.selectRawPreset = function selectGenerator561Preset(snapshot, state = {}) {
+            const candidate = selectEvidencePreset(state);
+            const fused = this.applyPresetDecisionFusion ? this.applyPresetDecisionFusion(candidate, state) : candidate;
+            return REMOVED_PRESETS.has(fused?.name) ? candidate : fused;
+        };
+        RecommendationEngine.__directionPolicySelectRawPresetApplied = true;
+        RecommendationEngine.__generator561SelectionApplied = true;
+    }
+
+    function patchHintRules() {
+        const registry = getActiveRegistry();
+        if (!registry?.applyHintPolicy) return;
+        registry.applyHintPolicy(AUDIT_TIER_561, HINT_RULES_561);
+    }
+
+    function applyPolicy() {
+        patchBasePresets();
+        patchLibrary();
+        patchActiveRegistry();
+        patchRecommendationSelection();
+        patchHintRules();
+    }
+
+    applyPolicy();
 
     if (typeof window !== 'undefined') {
         window.SLFTacticDirectionPolicy = {
             applied: true,
-            centerExceptions: Array.from(CENTER_EXCEPTIONS),
+            version: '5.61-evidence-v1',
+            generatorVersion: '5.61',
+            removedPresets: Array.from(REMOVED_PRESETS),
             directionOverrides: Object.assign({}, DIRECTION_OVERRIDES),
-            hasCenterDirection,
-            hasCenterExceptionContext,
-            hasCenterOveruseSymptoms,
-            isCenterOveruse,
-            selectNonCenterAlternative,
-            refresh() {
-                patchBasePresets();
-                patchLibraryTraits();
-                return true;
-            }
+            hasVerifiedWideOpportunity,
+            selectEvidencePreset,
+            refresh() { applyPolicy(); return true; }
         };
     }
 })();
@@ -8154,6 +8283,8 @@ if (!isTacticPage) return;
 (function strategyDataTaskAExtension() {
     'use strict';
 
+    const GENERATOR_VERSION = '5.61';
+
     function getFallbackTargetTeam(snapshot) {
         const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
         if (!teams.length) return null;
@@ -8205,7 +8336,7 @@ if (!isTacticPage) return;
     }
 
     function patchLateLosingPressCooldownGuard() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuard) return;
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuardV2) return;
         if (typeof RecommendationEngine.selectRawPreset !== 'function') return;
 
         const original = RecommendationEngine.selectRawPreset;
@@ -8224,31 +8355,21 @@ if (!isTacticPage) return;
             }
 
             const myBad = Number(state.myBad || 0);
-            const finalLosing = minute >= 80;
-            const lastApplied = STATE?.presetProgression?.lastAppliedPreset || '';
-            const currentIsChaos = lastApplied === 'Bielsa_ChaosPress_att5';
-
-            if (finalLosing && currentIsChaos && myBad < 26) {
+            if (minute >= 86 && myBad > 0 && myBad <= 12) {
                 return {
-                    name: 'Bielsa_ChaosPress_att5',
-                    reason: 'late game override: preserve chaos press'
-                };
-            }
-
-            if (finalLosing) {
-                return {
-                    name: myBad >= 24 ? 'Klopp_Gegenpress_att4' : 'Bielsa_ChaosPress_att5',
-                    reason: 'final losing state adjustment'
+                    name: 'Klopp_Gegenpress_att4',
+                    reason: '5.61 late override: финальное окно допускает высокий прессинг только при очень низком браке'
                 };
             }
 
             return {
-                name: myBad >= 24 ? 'Pep_ControlledPush_att3' : 'Klopp_Gegenpress_att4',
-                reason: 'late losing override'
+                name: myBad > 0 && myBad <= 16 ? 'Pep_TwoThreeFive_att3' : 'Pep_ControlledPush_att3',
+                reason: '5.61 late override: нужен гол, но fatigue исключает автоматический chaos press'
             };
         };
 
         RecommendationEngine.__lateLosingPressCooldownGuard = true;
+        RecommendationEngine.__lateLosingPressCooldownGuardV2 = true;
     }
 
     function finiteNumber(value) {
@@ -8346,8 +8467,14 @@ if (!isTacticPage) return;
     function resetLiveOnlyRecommendationState() {
         if (typeof STATE === 'undefined') return;
         STATE.recommendationFreeze = null;
-        STATE.pendingPresetEvent = null;
+        // Keep pendingPresetEvent until the target generation window is reached.
+        // Clearing it here prevented current preset effects from being recorded.
         STATE.liveWaitStatus = null;
+    }
+
+    function submitManualTelemetry(snapshot) {
+        if (typeof SnapshotEngine?.submitManualTelemetry !== 'function') return;
+        SnapshotEngine.submitManualTelemetry(snapshot, GENERATOR_VERSION);
     }
 
     function buildManualRecommendationHtml(snapshot) {
@@ -8369,7 +8496,8 @@ if (!isTacticPage) return;
             gameId: snapshot?.gameId || MatchStateParser.getGameId(),
             bucket: snapshot?.bucket || '',
             minute: snapshot?.minute ?? null,
-            source: 'manual_hint_button'
+            source: 'manual_hint_button',
+            generatorVersion: GENERATOR_VERSION
         };
     }
 
@@ -8381,10 +8509,13 @@ if (!isTacticPage) return;
 
         snapshot.recommendationSource = 'manual_hint_button';
         snapshot.manualRecommendationRefresh = true;
+        snapshot.generatorVersion = GENERATOR_VERSION;
 
         if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.rememberLiveSnapshot) {
             SnapshotEngine.rememberLiveSnapshot(snapshot);
         }
+
+        submitManualTelemetry(snapshot);
 
         const el = document.getElementById('slf-parser-recommendation');
         const html = buildManualRecommendationHtml(snapshot);
@@ -19428,15 +19559,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.244',
-        scriptVersion: '4.4.244',
+        version: '4.4.245',
+        scriptVersion: '4.4.245',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.244',
+        scriptVersion: '4.4.245',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
