@@ -3,18 +3,42 @@
 
     const EventTracker = {
         findTeamStats(snapshot, teamId) {
-            return snapshot?.stats?.find(x => x.teamId === teamId)?.stats || null;
+            return snapshot?.stats?.find(x => Number(x.teamId) === Number(teamId))?.stats || null;
+        },
+
+        compactRuleDecision(decision) {
+            if (!decision?.action) return null;
+            return {
+                schema: decision.schema || 'slf_rule_decision_v3',
+                generatedAt: decision.generatedAt || Date.now(),
+                mode: decision.mode || null,
+                action: {
+                    preset: decision.action.preset || null,
+                    decision: decision.action.decision || null,
+                    score: Number(decision.action.score || 0),
+                    reason: decision.action.reason || '',
+                    guardType: decision.action.guardType || null,
+                    guardReason: decision.action.guardReason || '',
+                    emergency: !!decision.action.emergency
+                },
+                confidence: decision.confidence || null,
+                margin: Number(decision.margin || 0),
+                signals: decision.moment?.context || null,
+                candidateScores: Object.fromEntries((decision.candidates || []).map(item => [item.preset, item.score])),
+                vetoedPresets: decision.vetoedPresets || {}
+            };
         },
 
         savePresetEvent(name, preset, beforeSnapshot) {
             const ts = Date.now();
             const generationWindow = beforeSnapshot?.generationWindow || MatchStateParser.getGenerationWindow(beforeSnapshot?.minute);
             const targetGenerationWindow = MatchTimingModel.getTargetWindowAfterChange(beforeSnapshot?.minute);
+            const ruleDecision = this.compactRuleDecision(beforeSnapshot?.ruleDecision || STATE.lastRuleDecision || null);
             const event = {
                 ts,
                 recordType: 'preset_event',
                 schemaVersion: 2,
-                parserVersion: 'preset_event_generation_v2',
+                parserVersion: 'preset_event_generation_v3_rule_decision',
                 eventKey: ['preset_event', MatchStateParser.getGameId(), beforeSnapshot.minute ?? '', beforeSnapshot.bucket || '', name || '', ts].join('|'),
                 type: 'preset',
                 gameId: MatchStateParser.getGameId(),
@@ -26,6 +50,7 @@
                 timingModel: 'generation_windows_v1_last_change_before_next_window',
                 presetName: name,
                 tactic: preset,
+                ruleDecision,
                 beforeSnapshot
             };
 
@@ -46,7 +71,7 @@
             const pending = STATE.pendingPresetEvent;
 
             if (!pending || !afterSnapshot) return null;
-            if (pending.gameId !== afterSnapshot.gameId) return null;
+            if (String(pending.gameId || '') !== String(afterSnapshot.gameId || '')) return null;
             if (!afterSnapshot.myTeam) return null;
 
             const before = pending.beforeSnapshot;
@@ -59,12 +84,10 @@
             if ((afterWindow.index || 0) === (pendingWindow.index || 0)) return null;
 
             const myTeam = afterSnapshot.myTeam;
-
             const beforeMy = this.findTeamStats(before, myTeam);
-            const beforeOpp = before.stats.find(x => x.teamId !== myTeam)?.stats;
-
+            const beforeOpp = before?.stats?.find(x => Number(x.teamId) !== Number(myTeam))?.stats;
             const afterMy = this.findTeamStats(afterSnapshot, myTeam);
-            const afterOpp = afterSnapshot.stats.find(x => x.teamId !== myTeam)?.stats;
+            const afterOpp = afterSnapshot?.stats?.find(x => Number(x.teamId) !== Number(myTeam))?.stats;
 
             if (!beforeMy || !beforeOpp || !afterMy || !afterOpp) return null;
 
@@ -72,12 +95,21 @@
             const afterQualitySignal = afterSnapshot.generatorQualitySignal || DeveloperHintParser.getGeneratorQualitySignal(afterSnapshot.developerHints || []);
             const beforeExpectedPerformance = before.generatorExpectedPerformance || (typeof GeneratorExpectedPerformanceParser !== 'undefined' ? GeneratorExpectedPerformanceParser.parse(before.developerHints || []) : null);
             const afterExpectedPerformance = afterSnapshot.generatorExpectedPerformance || (typeof GeneratorExpectedPerformanceParser !== 'undefined' ? GeneratorExpectedPerformanceParser.parse(afterSnapshot.developerHints || []) : null);
+            const beforeXT = RecommendationEngine.getXTForMyTeam(before);
+            const afterXT = RecommendationEngine.getXTForMyTeam(afterSnapshot);
+            const beforePower = num(beforeMy.power);
+            const afterPower = num(afterMy.power);
+            const beforeOppPower = num(beforeOpp.power);
+            const afterOppPower = num(afterOpp.power);
+            const myPowerDropPct = beforePower > 0 ? ((beforePower - afterPower) / beforePower) * 100 : 0;
+            const oppPowerDropPct = beforeOppPower > 0 ? ((beforeOppPower - afterOppPower) / beforeOppPower) * 100 : 0;
             const ts = Date.now();
+            const ruleDecision = pending.ruleDecision || this.compactRuleDecision(before.ruleDecision || STATE.lastRuleDecision || null);
             const effect = {
                 ts,
                 recordType: 'preset_effect',
                 schemaVersion: 2,
-                parserVersion: 'preset_effect_generation_v2',
+                parserVersion: 'preset_effect_generation_v3_rule_decision',
                 effectKey: ['preset_effect', afterSnapshot.gameId || '', pending.presetName || pending.type || 'manual_change', before.bucket || '', afterSnapshot.bucket || '', ts].join('|'),
                 gameId: afterSnapshot.gameId,
                 presetName: pending.presetName || pending.type || 'manual_change',
@@ -92,23 +124,50 @@
                 timingModel: 'generation_windows_v1_last_change_before_next_window',
                 before,
                 after: afterSnapshot,
+                tacticContext: {
+                    appliedPreset: pending.presetName || pending.type || 'manual_change',
+                    appliedTactic: pending.tactic || before.currentTactic || null,
+                    currentTacticAfter: afterSnapshot.currentTactic || null
+                },
+                decisionContext: ruleDecision,
                 delta: {
                     myXG: num(afterMy.xG) - num(beforeMy.xG),
                     oppXG: num(afterOpp.xG) - num(beforeOpp.xG),
                     myShots: num(afterMy.shots) - num(beforeMy.shots),
                     oppShots: num(afterOpp.shots) - num(beforeOpp.shots),
                     myBadActionsPct: num(afterMy.badActionsPct) - num(beforeMy.badActionsPct),
-                    myPower: num(afterMy.power) - num(beforeMy.power),
-                    oppPower: num(afterOpp.power) - num(beforeOpp.power),
-                    strengthGap: (num(afterMy.power) - num(afterOpp.power)) - (num(beforeMy.power) - num(beforeOpp.power)),
-                    myXT: RecommendationEngine.getXTForMyTeam(afterSnapshot).myXT - RecommendationEngine.getXTForMyTeam(before).myXT,
-                    oppXT: RecommendationEngine.getXTForMyTeam(afterSnapshot).oppXT - RecommendationEngine.getXTForMyTeam(before).oppXT
+                    oppBadActionsPct: num(afterOpp.badActionsPct) - num(beforeOpp.badActionsPct),
+                    myPower: afterPower - beforePower,
+                    oppPower: afterOppPower - beforeOppPower,
+                    myPowerDropPct: Number(myPowerDropPct.toFixed(2)),
+                    oppPowerDropPct: Number(oppPowerDropPct.toFixed(2)),
+                    strengthGap: (afterPower - afterOppPower) - (beforePower - beforeOppPower),
+                    myDefVector: num(afterMy.defVector) - num(beforeMy.defVector),
+                    oppDefVector: num(afterOpp.defVector) - num(beforeOpp.defVector),
+                    myPressVector: num(afterMy.pressVector) - num(beforeMy.pressVector),
+                    oppPressVector: num(afterOpp.pressVector) - num(beforeOpp.pressVector),
+                    myXT: afterXT.myXT - beforeXT.myXT,
+                    oppXT: afterXT.oppXT - beforeXT.oppXT
+                },
+                vectorContext: {
+                    before: {
+                        myDefense: num(beforeMy.defVector),
+                        myPressing: num(beforeMy.pressVector),
+                        oppDefense: num(beforeOpp.defVector),
+                        oppPressing: num(beforeOpp.pressVector)
+                    },
+                    after: {
+                        myDefense: num(afterMy.defVector),
+                        myPressing: num(afterMy.pressVector),
+                        oppDefense: num(afterOpp.defVector),
+                        oppPressing: num(afterOpp.pressVector)
+                    }
                 },
                 varianceContext: {
-                    model: 'variance_tracking_v1_not_rigging_assumption',
+                    model: 'variance_tracking_v2_rule_decision',
                     scoreBefore: before.score || null,
                     scoreAfter: afterSnapshot.score || null,
-                    strengthGap: num(beforeMy.power) - num(beforeOpp.power),
+                    strengthGap: beforePower - beforeOppPower,
                     homeAway: Array.isArray(before.teams) && Number(before.teams[0]) === Number(myTeam) ? 'home' : 'away',
                     beforeDeveloperHints: Array.isArray(before.developerHints) ? before.developerHints.slice(0, 8) : [],
                     afterDeveloperHints: Array.isArray(afterSnapshot.developerHints) ? afterSnapshot.developerHints.slice(0, 8) : [],
@@ -119,12 +178,14 @@
                     beforeGeneratorDetailMetrics: before.generatorDetailMetrics || null,
                     afterGeneratorDetailMetrics: afterSnapshot.generatorDetailMetrics || null,
                     strengthContext: {
-                        myPowerBefore: num(beforeMy.power),
-                        myPowerAfter: num(afterMy.power),
-                        oppPowerBefore: num(beforeOpp.power),
-                        oppPowerAfter: num(afterOpp.power),
-                        strengthGapBefore: num(beforeMy.power) - num(beforeOpp.power),
-                        strengthGapAfter: num(afterMy.power) - num(afterOpp.power)
+                        myPowerBefore: beforePower,
+                        myPowerAfter: afterPower,
+                        oppPowerBefore: beforeOppPower,
+                        oppPowerAfter: afterOppPower,
+                        strengthGapBefore: beforePower - beforeOppPower,
+                        strengthGapAfter: afterPower - afterOppPower,
+                        myPowerDropPct: Number(myPowerDropPct.toFixed(2)),
+                        oppPowerDropPct: Number(oppPowerDropPct.toFixed(2))
                     }
                 },
                 generatorQualitySignal: afterQualitySignal,
@@ -141,13 +202,15 @@
                     (Number(effect.delta.myBadActionsPct || 0) * 0.3);
 
                 STATE.presetProgression.lastEffect = {
-                    schema: 'slf_preset_effect_score_v1',
+                    schema: 'slf_preset_effect_score_v2',
                     presetName: effect.presetName,
                     effectScore: Number(effectScore.toFixed(2)),
                     fromBucket: effect.fromBucket,
                     toBucket: effect.toBucket,
                     toWindowIndex: afterWindow?.index || 0,
                     delta: effect.delta,
+                    vectorContext: effect.vectorContext,
+                    decisionContext: effect.decisionContext,
                     generatorQualitySignal: afterQualitySignal,
                     evaluatedAt: Date.now()
                 };
@@ -161,6 +224,8 @@
 
         getManualTelemetryFingerprint(snapshot) {
             const score = snapshot?.score || {};
+            const my = this.findTeamStats(snapshot, snapshot?.myTeam) || {};
+            const opp = snapshot?.stats?.find(x => Number(x.teamId) !== Number(snapshot?.myTeam))?.stats || {};
             return [
                 snapshot?.gameId || '',
                 snapshot?.status || '',
@@ -168,7 +233,14 @@
                 snapshot?.bucket || '',
                 score.home ?? '',
                 score.away ?? '',
-                snapshot?.myTeam || ''
+                snapshot?.myTeam || '',
+                my.power ?? '',
+                opp.power ?? '',
+                my.defVector ?? '',
+                my.pressVector ?? '',
+                opp.defVector ?? '',
+                opp.pressVector ?? '',
+                snapshot?.ruleDecision?.action?.preset || ''
             ].join('|');
         },
 
@@ -195,6 +267,7 @@
 
             snapshot.generatorVersion = generatorVersion || snapshot.generatorVersion || null;
             snapshot.recommendationSource = 'manual_hint_button';
+            snapshot.ruleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
             void SnapshotEngine.sendSnapshot(snapshot)
                 .then(() => UI.addParserLog(`Snapshot ${snapshot.generatorVersion || ''} сохранён`.trim()))
                 .catch(error => UI.addParserLog(`Snapshot: ошибка ${error?.kind || 'unknown'}`));
@@ -202,7 +275,6 @@
 
         diffTactic(oldTactic, newTactic) {
             const diff = {};
-
             const keys = new Set([
                 ...Object.keys(oldTactic || {}),
                 ...Object.keys(newTactic || {})
@@ -211,7 +283,6 @@
             keys.forEach(key => {
                 const oldVal = JSON.stringify(oldTactic?.[key] ?? null);
                 const newVal = JSON.stringify(newTactic?.[key] ?? null);
-
                 if (oldVal !== newVal) {
                     diff[key] = {
                         from: oldTactic?.[key] ?? null,
@@ -235,7 +306,6 @@
 
             document.body.addEventListener('change', e => {
                 const el = e.target;
-
                 if (!el || !el.name) return;
 
                 const isTacticInput =
@@ -259,25 +329,18 @@
                     );
 
                 if (!isTacticInput) return;
-
-                if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) {
-                    return;
-                }
+                if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
 
                 clearTimeout(STATE.manualChangeTimer);
-
                 STATE.manualChangeTimer = setTimeout(() => {
-                    if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) {
-                        return;
-                    }
+                    if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
 
                     const current = getCurrentTactic();
                     const changed = this.diffTactic(STATE.lastManualTactic, current);
-
                     if (!Object.keys(changed).length) return;
 
                     const snapshot = SnapshotEngine.build();
-
+                    snapshot.ruleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
                     const ts = Date.now();
                     const generationWindow = snapshot?.generationWindow || MatchStateParser.getGenerationWindow(snapshot?.minute);
                     const targetGenerationWindow = MatchTimingModel.getTargetWindowAfterChange(snapshot?.minute);
@@ -285,7 +348,7 @@
                         ts,
                         recordType: 'preset_event',
                         schemaVersion: 2,
-                        parserVersion: 'manual_tactic_event_generation_v2',
+                        parserVersion: 'manual_tactic_event_generation_v3_rule_decision',
                         eventKey: ['manual_tactic_event', MatchStateParser.getGameId(), snapshot.minute ?? '', snapshot.bucket || '', ts].join('|'),
                         type: 'manual_change',
                         gameId: MatchStateParser.getGameId(),
@@ -298,6 +361,7 @@
                         myTeam: snapshot.myTeam,
                         changed,
                         tactic: current,
+                        ruleDecision: this.compactRuleDecision(snapshot.ruleDecision),
                         beforeSnapshot: snapshot,
                         snapshot
                     };
