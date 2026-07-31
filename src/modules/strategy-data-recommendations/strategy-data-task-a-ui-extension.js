@@ -4,6 +4,8 @@
 (function strategyDataTaskAExtension() {
     'use strict';
 
+    const GENERATOR_VERSION = '5.61';
+
     function getFallbackTargetTeam(snapshot) {
         const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
         if (!teams.length) return null;
@@ -55,7 +57,7 @@
     }
 
     function patchLateLosingPressCooldownGuard() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuard) return;
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuardV2) return;
         if (typeof RecommendationEngine.selectRawPreset !== 'function') return;
 
         const original = RecommendationEngine.selectRawPreset;
@@ -74,31 +76,21 @@
             }
 
             const myBad = Number(state.myBad || 0);
-            const finalLosing = minute >= 80;
-            const lastApplied = STATE?.presetProgression?.lastAppliedPreset || '';
-            const currentIsChaos = lastApplied === 'Bielsa_ChaosPress_att5';
-
-            if (finalLosing && currentIsChaos && myBad < 26) {
+            if (minute >= 86 && myBad > 0 && myBad <= 12) {
                 return {
-                    name: 'Bielsa_ChaosPress_att5',
-                    reason: 'late game override: preserve chaos press'
-                };
-            }
-
-            if (finalLosing) {
-                return {
-                    name: myBad >= 24 ? 'Klopp_Gegenpress_att4' : 'Bielsa_ChaosPress_att5',
-                    reason: 'final losing state adjustment'
+                    name: 'Klopp_Gegenpress_att4',
+                    reason: '5.61 late override: финальное окно допускает высокий прессинг только при очень низком браке'
                 };
             }
 
             return {
-                name: myBad >= 24 ? 'Pep_ControlledPush_att3' : 'Klopp_Gegenpress_att4',
-                reason: 'late losing override'
+                name: myBad > 0 && myBad <= 16 ? 'Pep_TwoThreeFive_att3' : 'Pep_ControlledPush_att3',
+                reason: '5.61 late override: нужен гол, но fatigue исключает автоматический chaos press'
             };
         };
 
         RecommendationEngine.__lateLosingPressCooldownGuard = true;
+        RecommendationEngine.__lateLosingPressCooldownGuardV2 = true;
     }
 
     function finiteNumber(value) {
@@ -196,8 +188,62 @@
     function resetLiveOnlyRecommendationState() {
         if (typeof STATE === 'undefined') return;
         STATE.recommendationFreeze = null;
-        STATE.pendingPresetEvent = null;
+        // Keep pendingPresetEvent until the target generation window is reached.
+        // Clearing it here prevented current preset effects from being recorded.
         STATE.liveWaitStatus = null;
+    }
+
+    function telemetryFingerprint(snapshot) {
+        const score = snapshot?.score || {};
+        return [
+            snapshot?.gameId || '',
+            snapshot?.status || '',
+            snapshot?.minute ?? '',
+            snapshot?.bucket || '',
+            score.home ?? '',
+            score.away ?? '',
+            snapshot?.myTeam || ''
+        ].join('|');
+    }
+
+    function isOwnMatchSnapshot(snapshot) {
+        return !!snapshot?.myTeam && snapshot.matchOwnership !== 'foreign';
+    }
+
+    function appendPresetEffect(effect) {
+        if (!effect || typeof Api === 'undefined' || !CONFIG?.COLLECTIONS?.PRESET_EFFECTS) return;
+        effect.source = Object.assign({}, effect.source || {}, {
+            page: 'game',
+            collectedAt: Date.now(),
+            scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : null,
+            generatorVersion: GENERATOR_VERSION,
+            trigger: 'manual_hint_button'
+        });
+        void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EFFECTS, effect, 'preset effect history')
+            .then(() => UI.addParserLog(`Эффект пресета сохранён: ${effect.presetName || 'unknown'}`))
+            .catch(error => UI.addParserLog(`Эффект пресета: ошибка ${error?.kind || 'unknown'}`));
+    }
+
+    function submitManualTelemetry(snapshot) {
+        if (!isOwnMatchSnapshot(snapshot)) return;
+
+        if (typeof EventTracker !== 'undefined' && typeof EventTracker.buildPresetEffect === 'function') {
+            const effect = EventTracker.buildPresetEffect(snapshot);
+            if (effect) appendPresetEffect(effect);
+        }
+
+        if (snapshot.status === 'finished') return;
+        const fingerprint = telemetryFingerprint(snapshot);
+        if (STATE.lastManualTelemetryFingerprint === fingerprint) return;
+        STATE.lastManualTelemetryFingerprint = fingerprint;
+
+        snapshot.generatorVersion = GENERATOR_VERSION;
+        snapshot.recommendationSource = 'manual_hint_button';
+        if (typeof SnapshotEngine !== 'undefined' && typeof SnapshotEngine.sendSnapshot === 'function') {
+            void SnapshotEngine.sendSnapshot(snapshot)
+                .then(() => UI.addParserLog('Snapshot 5.61 сохранён'))
+                .catch(error => UI.addParserLog(`Snapshot: ошибка ${error?.kind || 'unknown'}`));
+        }
     }
 
     function buildManualRecommendationHtml(snapshot) {
@@ -219,7 +265,8 @@
             gameId: snapshot?.gameId || MatchStateParser.getGameId(),
             bucket: snapshot?.bucket || '',
             minute: snapshot?.minute ?? null,
-            source: 'manual_hint_button'
+            source: 'manual_hint_button',
+            generatorVersion: GENERATOR_VERSION
         };
     }
 
@@ -231,10 +278,13 @@
 
         snapshot.recommendationSource = 'manual_hint_button';
         snapshot.manualRecommendationRefresh = true;
+        snapshot.generatorVersion = GENERATOR_VERSION;
 
         if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.rememberLiveSnapshot) {
             SnapshotEngine.rememberLiveSnapshot(snapshot);
         }
+
+        submitManualTelemetry(snapshot);
 
         const el = document.getElementById('slf-parser-recommendation');
         const html = buildManualRecommendationHtml(snapshot);
