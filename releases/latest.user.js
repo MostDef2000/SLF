@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.245
+// @version      4.4.246
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.245',
-        scriptVersion: '4.4.245',
+        version: '4.4.246',
+        scriptVersion: '4.4.246',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.245',
+        scriptVersion: '4.4.246',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -2497,18 +2497,42 @@ const SnapshotEngine = {
 
     const EventTracker = {
         findTeamStats(snapshot, teamId) {
-            return snapshot?.stats?.find(x => x.teamId === teamId)?.stats || null;
+            return snapshot?.stats?.find(x => Number(x.teamId) === Number(teamId))?.stats || null;
+        },
+
+        compactRuleDecision(decision) {
+            if (!decision?.action) return null;
+            return {
+                schema: decision.schema || 'slf_rule_decision_v3',
+                generatedAt: decision.generatedAt || Date.now(),
+                mode: decision.mode || null,
+                action: {
+                    preset: decision.action.preset || null,
+                    decision: decision.action.decision || null,
+                    score: Number(decision.action.score || 0),
+                    reason: decision.action.reason || '',
+                    guardType: decision.action.guardType || null,
+                    guardReason: decision.action.guardReason || '',
+                    emergency: !!decision.action.emergency
+                },
+                confidence: decision.confidence || null,
+                margin: Number(decision.margin || 0),
+                signals: decision.moment?.context || null,
+                candidateScores: Object.fromEntries((decision.candidates || []).map(item => [item.preset, item.score])),
+                vetoedPresets: decision.vetoedPresets || {}
+            };
         },
 
         savePresetEvent(name, preset, beforeSnapshot) {
             const ts = Date.now();
             const generationWindow = beforeSnapshot?.generationWindow || MatchStateParser.getGenerationWindow(beforeSnapshot?.minute);
             const targetGenerationWindow = MatchTimingModel.getTargetWindowAfterChange(beforeSnapshot?.minute);
+            const ruleDecision = this.compactRuleDecision(beforeSnapshot?.ruleDecision || STATE.lastRuleDecision || null);
             const event = {
                 ts,
                 recordType: 'preset_event',
                 schemaVersion: 2,
-                parserVersion: 'preset_event_generation_v2',
+                parserVersion: 'preset_event_generation_v3_rule_decision',
                 eventKey: ['preset_event', MatchStateParser.getGameId(), beforeSnapshot.minute ?? '', beforeSnapshot.bucket || '', name || '', ts].join('|'),
                 type: 'preset',
                 gameId: MatchStateParser.getGameId(),
@@ -2520,6 +2544,7 @@ const SnapshotEngine = {
                 timingModel: 'generation_windows_v1_last_change_before_next_window',
                 presetName: name,
                 tactic: preset,
+                ruleDecision,
                 beforeSnapshot
             };
 
@@ -2540,7 +2565,7 @@ const SnapshotEngine = {
             const pending = STATE.pendingPresetEvent;
 
             if (!pending || !afterSnapshot) return null;
-            if (pending.gameId !== afterSnapshot.gameId) return null;
+            if (String(pending.gameId || '') !== String(afterSnapshot.gameId || '')) return null;
             if (!afterSnapshot.myTeam) return null;
 
             const before = pending.beforeSnapshot;
@@ -2553,12 +2578,10 @@ const SnapshotEngine = {
             if ((afterWindow.index || 0) === (pendingWindow.index || 0)) return null;
 
             const myTeam = afterSnapshot.myTeam;
-
             const beforeMy = this.findTeamStats(before, myTeam);
-            const beforeOpp = before.stats.find(x => x.teamId !== myTeam)?.stats;
-
+            const beforeOpp = before?.stats?.find(x => Number(x.teamId) !== Number(myTeam))?.stats;
             const afterMy = this.findTeamStats(afterSnapshot, myTeam);
-            const afterOpp = afterSnapshot.stats.find(x => x.teamId !== myTeam)?.stats;
+            const afterOpp = afterSnapshot?.stats?.find(x => Number(x.teamId) !== Number(myTeam))?.stats;
 
             if (!beforeMy || !beforeOpp || !afterMy || !afterOpp) return null;
 
@@ -2566,12 +2589,21 @@ const SnapshotEngine = {
             const afterQualitySignal = afterSnapshot.generatorQualitySignal || DeveloperHintParser.getGeneratorQualitySignal(afterSnapshot.developerHints || []);
             const beforeExpectedPerformance = before.generatorExpectedPerformance || (typeof GeneratorExpectedPerformanceParser !== 'undefined' ? GeneratorExpectedPerformanceParser.parse(before.developerHints || []) : null);
             const afterExpectedPerformance = afterSnapshot.generatorExpectedPerformance || (typeof GeneratorExpectedPerformanceParser !== 'undefined' ? GeneratorExpectedPerformanceParser.parse(afterSnapshot.developerHints || []) : null);
+            const beforeXT = RecommendationEngine.getXTForMyTeam(before);
+            const afterXT = RecommendationEngine.getXTForMyTeam(afterSnapshot);
+            const beforePower = num(beforeMy.power);
+            const afterPower = num(afterMy.power);
+            const beforeOppPower = num(beforeOpp.power);
+            const afterOppPower = num(afterOpp.power);
+            const myPowerDropPct = beforePower > 0 ? ((beforePower - afterPower) / beforePower) * 100 : 0;
+            const oppPowerDropPct = beforeOppPower > 0 ? ((beforeOppPower - afterOppPower) / beforeOppPower) * 100 : 0;
             const ts = Date.now();
+            const ruleDecision = pending.ruleDecision || this.compactRuleDecision(before.ruleDecision || STATE.lastRuleDecision || null);
             const effect = {
                 ts,
                 recordType: 'preset_effect',
                 schemaVersion: 2,
-                parserVersion: 'preset_effect_generation_v2',
+                parserVersion: 'preset_effect_generation_v3_rule_decision',
                 effectKey: ['preset_effect', afterSnapshot.gameId || '', pending.presetName || pending.type || 'manual_change', before.bucket || '', afterSnapshot.bucket || '', ts].join('|'),
                 gameId: afterSnapshot.gameId,
                 presetName: pending.presetName || pending.type || 'manual_change',
@@ -2586,23 +2618,50 @@ const SnapshotEngine = {
                 timingModel: 'generation_windows_v1_last_change_before_next_window',
                 before,
                 after: afterSnapshot,
+                tacticContext: {
+                    appliedPreset: pending.presetName || pending.type || 'manual_change',
+                    appliedTactic: pending.tactic || before.currentTactic || null,
+                    currentTacticAfter: afterSnapshot.currentTactic || null
+                },
+                decisionContext: ruleDecision,
                 delta: {
                     myXG: num(afterMy.xG) - num(beforeMy.xG),
                     oppXG: num(afterOpp.xG) - num(beforeOpp.xG),
                     myShots: num(afterMy.shots) - num(beforeMy.shots),
                     oppShots: num(afterOpp.shots) - num(beforeOpp.shots),
                     myBadActionsPct: num(afterMy.badActionsPct) - num(beforeMy.badActionsPct),
-                    myPower: num(afterMy.power) - num(beforeMy.power),
-                    oppPower: num(afterOpp.power) - num(beforeOpp.power),
-                    strengthGap: (num(afterMy.power) - num(afterOpp.power)) - (num(beforeMy.power) - num(beforeOpp.power)),
-                    myXT: RecommendationEngine.getXTForMyTeam(afterSnapshot).myXT - RecommendationEngine.getXTForMyTeam(before).myXT,
-                    oppXT: RecommendationEngine.getXTForMyTeam(afterSnapshot).oppXT - RecommendationEngine.getXTForMyTeam(before).oppXT
+                    oppBadActionsPct: num(afterOpp.badActionsPct) - num(beforeOpp.badActionsPct),
+                    myPower: afterPower - beforePower,
+                    oppPower: afterOppPower - beforeOppPower,
+                    myPowerDropPct: Number(myPowerDropPct.toFixed(2)),
+                    oppPowerDropPct: Number(oppPowerDropPct.toFixed(2)),
+                    strengthGap: (afterPower - afterOppPower) - (beforePower - beforeOppPower),
+                    myDefVector: num(afterMy.defVector) - num(beforeMy.defVector),
+                    oppDefVector: num(afterOpp.defVector) - num(beforeOpp.defVector),
+                    myPressVector: num(afterMy.pressVector) - num(beforeMy.pressVector),
+                    oppPressVector: num(afterOpp.pressVector) - num(beforeOpp.pressVector),
+                    myXT: afterXT.myXT - beforeXT.myXT,
+                    oppXT: afterXT.oppXT - beforeXT.oppXT
+                },
+                vectorContext: {
+                    before: {
+                        myDefense: num(beforeMy.defVector),
+                        myPressing: num(beforeMy.pressVector),
+                        oppDefense: num(beforeOpp.defVector),
+                        oppPressing: num(beforeOpp.pressVector)
+                    },
+                    after: {
+                        myDefense: num(afterMy.defVector),
+                        myPressing: num(afterMy.pressVector),
+                        oppDefense: num(afterOpp.defVector),
+                        oppPressing: num(afterOpp.pressVector)
+                    }
                 },
                 varianceContext: {
-                    model: 'variance_tracking_v1_not_rigging_assumption',
+                    model: 'variance_tracking_v2_rule_decision',
                     scoreBefore: before.score || null,
                     scoreAfter: afterSnapshot.score || null,
-                    strengthGap: num(beforeMy.power) - num(beforeOpp.power),
+                    strengthGap: beforePower - beforeOppPower,
                     homeAway: Array.isArray(before.teams) && Number(before.teams[0]) === Number(myTeam) ? 'home' : 'away',
                     beforeDeveloperHints: Array.isArray(before.developerHints) ? before.developerHints.slice(0, 8) : [],
                     afterDeveloperHints: Array.isArray(afterSnapshot.developerHints) ? afterSnapshot.developerHints.slice(0, 8) : [],
@@ -2613,12 +2672,14 @@ const SnapshotEngine = {
                     beforeGeneratorDetailMetrics: before.generatorDetailMetrics || null,
                     afterGeneratorDetailMetrics: afterSnapshot.generatorDetailMetrics || null,
                     strengthContext: {
-                        myPowerBefore: num(beforeMy.power),
-                        myPowerAfter: num(afterMy.power),
-                        oppPowerBefore: num(beforeOpp.power),
-                        oppPowerAfter: num(afterOpp.power),
-                        strengthGapBefore: num(beforeMy.power) - num(beforeOpp.power),
-                        strengthGapAfter: num(afterMy.power) - num(afterOpp.power)
+                        myPowerBefore: beforePower,
+                        myPowerAfter: afterPower,
+                        oppPowerBefore: beforeOppPower,
+                        oppPowerAfter: afterOppPower,
+                        strengthGapBefore: beforePower - beforeOppPower,
+                        strengthGapAfter: afterPower - afterOppPower,
+                        myPowerDropPct: Number(myPowerDropPct.toFixed(2)),
+                        oppPowerDropPct: Number(oppPowerDropPct.toFixed(2))
                     }
                 },
                 generatorQualitySignal: afterQualitySignal,
@@ -2635,13 +2696,15 @@ const SnapshotEngine = {
                     (Number(effect.delta.myBadActionsPct || 0) * 0.3);
 
                 STATE.presetProgression.lastEffect = {
-                    schema: 'slf_preset_effect_score_v1',
+                    schema: 'slf_preset_effect_score_v2',
                     presetName: effect.presetName,
                     effectScore: Number(effectScore.toFixed(2)),
                     fromBucket: effect.fromBucket,
                     toBucket: effect.toBucket,
                     toWindowIndex: afterWindow?.index || 0,
                     delta: effect.delta,
+                    vectorContext: effect.vectorContext,
+                    decisionContext: effect.decisionContext,
                     generatorQualitySignal: afterQualitySignal,
                     evaluatedAt: Date.now()
                 };
@@ -2655,6 +2718,8 @@ const SnapshotEngine = {
 
         getManualTelemetryFingerprint(snapshot) {
             const score = snapshot?.score || {};
+            const my = this.findTeamStats(snapshot, snapshot?.myTeam) || {};
+            const opp = snapshot?.stats?.find(x => Number(x.teamId) !== Number(snapshot?.myTeam))?.stats || {};
             return [
                 snapshot?.gameId || '',
                 snapshot?.status || '',
@@ -2662,7 +2727,14 @@ const SnapshotEngine = {
                 snapshot?.bucket || '',
                 score.home ?? '',
                 score.away ?? '',
-                snapshot?.myTeam || ''
+                snapshot?.myTeam || '',
+                my.power ?? '',
+                opp.power ?? '',
+                my.defVector ?? '',
+                my.pressVector ?? '',
+                opp.defVector ?? '',
+                opp.pressVector ?? '',
+                snapshot?.ruleDecision?.action?.preset || ''
             ].join('|');
         },
 
@@ -2689,6 +2761,7 @@ const SnapshotEngine = {
 
             snapshot.generatorVersion = generatorVersion || snapshot.generatorVersion || null;
             snapshot.recommendationSource = 'manual_hint_button';
+            snapshot.ruleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
             void SnapshotEngine.sendSnapshot(snapshot)
                 .then(() => UI.addParserLog(`Snapshot ${snapshot.generatorVersion || ''} сохранён`.trim()))
                 .catch(error => UI.addParserLog(`Snapshot: ошибка ${error?.kind || 'unknown'}`));
@@ -2696,7 +2769,6 @@ const SnapshotEngine = {
 
         diffTactic(oldTactic, newTactic) {
             const diff = {};
-
             const keys = new Set([
                 ...Object.keys(oldTactic || {}),
                 ...Object.keys(newTactic || {})
@@ -2705,7 +2777,6 @@ const SnapshotEngine = {
             keys.forEach(key => {
                 const oldVal = JSON.stringify(oldTactic?.[key] ?? null);
                 const newVal = JSON.stringify(newTactic?.[key] ?? null);
-
                 if (oldVal !== newVal) {
                     diff[key] = {
                         from: oldTactic?.[key] ?? null,
@@ -2729,7 +2800,6 @@ const SnapshotEngine = {
 
             document.body.addEventListener('change', e => {
                 const el = e.target;
-
                 if (!el || !el.name) return;
 
                 const isTacticInput =
@@ -2753,25 +2823,18 @@ const SnapshotEngine = {
                     );
 
                 if (!isTacticInput) return;
-
-                if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) {
-                    return;
-                }
+                if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
 
                 clearTimeout(STATE.manualChangeTimer);
-
                 STATE.manualChangeTimer = setTimeout(() => {
-                    if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) {
-                        return;
-                    }
+                    if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
 
                     const current = getCurrentTactic();
                     const changed = this.diffTactic(STATE.lastManualTactic, current);
-
                     if (!Object.keys(changed).length) return;
 
                     const snapshot = SnapshotEngine.build();
-
+                    snapshot.ruleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
                     const ts = Date.now();
                     const generationWindow = snapshot?.generationWindow || MatchStateParser.getGenerationWindow(snapshot?.minute);
                     const targetGenerationWindow = MatchTimingModel.getTargetWindowAfterChange(snapshot?.minute);
@@ -2779,7 +2842,7 @@ const SnapshotEngine = {
                         ts,
                         recordType: 'preset_event',
                         schemaVersion: 2,
-                        parserVersion: 'manual_tactic_event_generation_v2',
+                        parserVersion: 'manual_tactic_event_generation_v3_rule_decision',
                         eventKey: ['manual_tactic_event', MatchStateParser.getGameId(), snapshot.minute ?? '', snapshot.bucket || '', ts].join('|'),
                         type: 'manual_change',
                         gameId: MatchStateParser.getGameId(),
@@ -2792,6 +2855,7 @@ const SnapshotEngine = {
                         myTeam: snapshot.myTeam,
                         changed,
                         tactic: current,
+                        ruleDecision: this.compactRuleDecision(snapshot.ruleDecision),
                         beforeSnapshot: snapshot,
                         snapshot
                     };
@@ -5578,212 +5642,94 @@ const RecommendationEngine = {
 
 
 // >>> src/modules/strategy-data-recommendations/current-action-hint-engine.js
-// SLF On-Demand Stage 2 Hint Engine
+// SLF Rule-Based Match Decision Engine
 // ============================================================
-// Button-only tactical hint policy.
+// Button-only tactical recommendation policy.
 //
 // Contract:
-// - executed only after user presses "Подсказка";
-// - no live parser loop;
-// - no drift/history/adaptation model;
-// - no localStorage;
-// - no RAG corpus in browser;
-// - one current-state action only.
+// - runs only after the user requests a hint;
+// - evaluates every active preset, not the first matching rule;
+// - keeps emergency rules as hard overrides;
+// - never applies a tactic automatically;
+// - keeps short in-memory match history for power/vector deltas and hysteresis;
+// - exposes candidate scores, vetoes, confidence and explanations for telemetry.
 
 const CurrentActionHintEngine = {
-    schema: 'slf_current_action_hint_v2',
+    schema: 'slf_rule_decision_v3',
+    mode: 'button_on_demand_scored_rules',
 
-    // Source: docs/audit/tactical-preset-rag-audit.md + active preset registry.
-    // RAG press note: "Прессинг Игрок" is treated as a pressure/pressing signal,
-    // not as a separate per-player tactical subsystem.
+    ACTIVE_PRESETS: [
+        'Arteta_Control433_bal3',
+        'Pep_BoxControl_bal2',
+        'Pep_PressCooldown_bal2',
+        'Compact_Counter_def3',
+        'Pep_ControlledPush_att3',
+        'Pep_TwoThreeFive_att3',
+        'Conte_WingbackWidth_bal4',
+        'Klopp_Gegenpress_att4',
+        'Simeone_Compact442_def4',
+        'Simeone_LowBlock_def5',
+        'Bielsa_ChaosPress_att5'
+    ],
+
     PRESET_AUDIT_TIER: {
         primary: [
-            'Pep_BoxControl_bal2',
             'Arteta_Control433_bal3',
-            'Compact_Counter_def3',
-            'Pep_TwoThreeFive_att3',
-            'Conte_WingbackWidth_bal4',
+            'Pep_BoxControl_bal2',
             'Pep_PressCooldown_bal2',
-            'Xabi_BoxMidfield_bal3',
-            'DeZerbi_BaitPress_bal3'
+            'Compact_Counter_def3',
+            'Pep_TwoThreeFive_att3'
         ],
-        restricted: [
+        conditional: [
             'Pep_ControlledPush_att3',
-            'Xabi_VerticalBox_att3',
-            'Mourinho_WeakSide_def3',
-            'Simeone_Compact442_def4',
-            'Klopp_Gegenpress_att4',
-            'Nagelsmann_WidePress_att4',
-            'DeZerbi_Release_att4',
-            'Henta_LeftTrap_att3'
+            'Conte_WingbackWidth_bal4',
+            'Simeone_Compact442_def4'
         ],
-        emergency: [
-            'Bielsa_ChaosPress_att5',
-            'Simeone_LowBlock_def5'
+        restricted: ['Klopp_Gegenpress_att4'],
+        emergency: ['Simeone_LowBlock_def5', 'Bielsa_ChaosPress_att5'],
+        removed: [
+            'Mourinho_WeakSide_def3',
+            'Xabi_VerticalBox_att3',
+            'Xabi_BoxMidfield_bal3',
+            'DeZerbi_BaitPress_bal3',
+            'DeZerbi_Release_att4',
+            'Nagelsmann_WidePress_att4',
+            'Henta_LeftTrap_att3'
         ],
         needsMoreData: [],
         experimental: [],
         blocked: []
     },
 
-    HINT_RULES: [
-        {
-            id: 'late_goal_emergency',
-            preset: 'Bielsa_ChaosPress_att5',
-            decision: 'all_in_attack',
-            risk: 'high',
-            reason: 'проигрываем в финальной фазе — только emergency all-in',
-            when: c => c.lateNeedGoal
-        },
-        {
-            id: 'late_protect_heavy_pressure',
-            preset: 'Simeone_LowBlock_def5',
-            decision: 'protect_lead',
-            risk: 'high',
-            reason: 'ведём поздно и соперник давит — пережить отрезок низким блоком',
-            when: c => c.protectLead && c.underPressure && c.minute >= 80
-        },
-        {
-            id: 'protect_compact_442',
-            preset: 'Simeone_Compact442_def4',
-            decision: 'compact_protect',
-            risk: 'medium',
-            reason: 'ведём, но полный низкий блок ещё не обязателен — компактная защита',
-            when: c => c.protectLead && c.minute < 80 && !c.lateNeedGoal
-        },
-        {
-            id: 'own_press_fatigue_cooldown',
-            preset: 'Pep_PressCooldown_bal2',
-            decision: 'cooldown_press',
-            risk: 'low',
-            reason: 'растёт цена собственного прессинга — снизить интенсивность и вернуть структуру',
-            when: c => c.pressFatigueRisk && !c.lateNeedGoal
-        },
-        {
-            id: 'bad_actions_control_reset',
-            preset: 'Pep_BoxControl_bal2',
-            decision: 'stabilize_control',
-            risk: 'low',
-            reason: 'высокий брак — сначала стабилизировать розыгрыш',
-            when: c => c.highBadActions && !c.lateNeedGoal
-        },
-        {
-            id: 'opponent_press_release_space',
-            preset: 'DeZerbi_Release_att4',
-            decision: 'release_after_press',
-            risk: 'high',
-            reason: 'соперник прессингует, но есть пространство за линией — быстрее выпускать атаку',
-            when: c => c.opponentHighPress && c.spaceBehind && !c.highBadActions && !c.pressFatigueRisk && !c.lateNeedGoal
-        },
-        {
-            id: 'opponent_press_bait',
-            preset: 'DeZerbi_BaitPress_bal3',
-            decision: 'bait_press',
-            risk: 'medium',
-            reason: 'соперник высоко прессингует, а брак низкий — можно выманить прессинг',
-            when: c => c.opponentHighPress && c.lowBadActions && !c.underPressure && !c.transitionThreat && !c.lateNeedGoal
-        },
-        {
-            id: 'opponent_press_compact_counter',
-            preset: 'Compact_Counter_def3',
-            decision: 'stabilize_and_counter',
-            risk: 'medium',
-            reason: 'соперник прессингует и давит — не держать автобусом мяч, закрыться и выйти быстро',
-            when: c => c.opponentHighPress && c.underPressure && !c.lateNeedGoal
-        },
-        {
-            id: 'under_pressure_counter',
-            preset: 'Compact_Counter_def3',
-            decision: 'defensive_reset',
-            risk: 'medium',
-            reason: 'соперник опаснее по текущим метрикам — нужен defensive reset с выходом в контратаку',
-            when: c => c.underPressure && (c.transitionThreat || !c.opponentHighPress) && !c.lateNeedGoal
-        },
-        {
-            id: 'weak_side_under_pressure',
-            preset: 'Mourinho_WeakSide_def3',
-            decision: 'attack_weak_side',
-            risk: 'medium',
-            reason: 'соперник давит, но есть слабая сторона или пространство для выхода',
-            when: c => c.underPressure && (c.spaceBehind || c.weakSideAvailable) && !c.highBadActions && !c.lateNeedGoal
-        },
-        {
-            id: 'center_closed_wide_quality',
-            preset: 'Conte_WingbackWidth_bal4',
-            decision: 'use_width',
-            risk: 'medium',
-            reason: 'центр закрыт, но ширина доступна — растянуть блок через фланги',
-            when: c => c.opponentLowBlock && c.wideQuality && !c.needGoal && !c.ownCrossesBad && !c.opponentCrossesDangerous
-        },
-        {
-            id: 'urgent_wide_press',
-            preset: 'Nagelsmann_WidePress_att4',
-            decision: 'wide_pressure',
-            risk: 'high',
-            reason: 'нужен гол, центр закрыт, фланги доступны — широкий прессинг вместо хаоса',
-            when: c => c.needGoal && c.minute >= 65 && c.centerClosed && c.wideQuality && !c.highBadActions && !c.pressFatigueRisk
-        },
-        {
-            id: 'urgent_pressure_not_all_in',
-            preset: 'Klopp_Gegenpress_att4',
-            decision: 'urgent_pressure',
-            risk: 'high',
-            reason: 'нужен срочный рост давления, но guard допускает высокий прессинг',
-            when: c => c.needGoal && c.minute >= 70 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat
-        },
-        {
-            id: 'attacking_momentum_positional',
-            preset: 'Pep_TwoThreeFive_att3',
-            decision: 'maintain_pressure',
-            risk: 'medium',
-            reason: 'есть атакующий импульс — дожимать позиционно с transition guard',
-            when: c => c.attackingMomentum && !c.underPressure && !c.transitionThreat
-        },
-        {
-            id: 'need_goal_controlled_push',
-            preset: 'Pep_ControlledPush_att3',
-            decision: 'increase_attack',
-            risk: 'medium',
-            reason: 'нужен гол, но без all-in и без лишнего прессинг-риска',
-            when: c => c.needGoal && !c.underPressure && !c.highBadActions && !c.pressFatigueRisk
-        },
-        {
-            id: 'center_vertical_entry',
-            preset: 'Xabi_VerticalBox_att3',
-            decision: 'vertical_center_entry',
-            risk: 'medium',
-            reason: 'центр доступен и нужен более быстрый вертикальный вход',
-            when: c => c.centerWeak && c.attackingMomentum && !c.centerClosed && !c.highBadActions
-        },
-        {
-            id: 'center_weak_box_midfield',
-            preset: 'Xabi_BoxMidfield_bal3',
-            decision: 'attack_center',
-            risk: 'medium',
-            reason: 'центр соперника доступен — можно перегрузить середину',
-            when: c => c.centerWeak && !c.centerClosed && !c.highBadActions
-        },
-        {
-            id: 'standard_control_low_noise',
-            preset: 'Arteta_Control433_bal3',
-            decision: 'standard_control',
-            risk: 'low',
-            reason: 'игра без сильного аварийного сигнала — базовый контроль через структуру',
-            when: c => !c.needGoal && !c.underPressure && !c.highBadActions && !c.attackingMomentum
-        },
-        {
-            id: 'safe_default_control',
-            preset: 'Pep_BoxControl_bal2',
-            decision: 'hold_control',
-            risk: 'low',
-            reason: 'нет сильного сигнала для рискованной смены — держать безопасный контроль',
-            when: () => true
-        }
-    ],
+    HINT_RULES: [],
+    runtimeByGame: new Map(),
+
+    TACTIC_SIGNATURES: {
+        Arteta_Control433_bal3: { def_line: '2', press_line: '3', def_width: '2', press_intense: '3', build_type: '2', build_temp: '2', build_long: '1', build_fast: '2', style: '4', pass_risk: '3', dribble: '2', cross: '2', shot: '2' },
+        Pep_BoxControl_bal2: { def_line: '2', press_line: '2', def_width: '1', press_intense: '2', build_type: '2', build_temp: '1', build_long: '1', build_fast: '1', style: '3', pass_risk: '2', dribble: '1', cross: '1', shot: '1' },
+        Pep_PressCooldown_bal2: { def_line: '2', press_line: '2', def_width: '2', press_intense: '2', build_type: '2', build_temp: '2', build_long: '1', build_fast: '2', style: '3', pass_risk: '2', dribble: '1', cross: '1', shot: '1' },
+        Compact_Counter_def3: { def_line: '1', press_line: '2', def_width: '2', press_intense: '3', build_type: '1', build_temp: '2', build_long: '3', build_fast: '4', style: '3', pass_risk: '2', dribble: '3', cross: '3', shot: '2' },
+        Pep_ControlledPush_att3: { def_line: '2', press_line: '2', def_width: '2', press_intense: '3', build_type: '2', build_temp: '3', build_long: '1', build_fast: '3', style: '4', pass_risk: '3', dribble: '3', cross: '2', shot: '2' },
+        Pep_TwoThreeFive_att3: { def_line: '2', press_line: '3', def_width: '3', press_intense: '3', build_type: '2', build_temp: '3', build_long: '1', build_fast: '3', style: '5', pass_risk: '4', dribble: '3', cross: '2', shot: '3' },
+        Conte_WingbackWidth_bal4: { def_line: '2', press_line: '2', def_width: '3', press_intense: '3', build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3', pass_risk: '3', dribble: '3', cross: '3', shot: '2' },
+        Klopp_Gegenpress_att4: { def_line: '3', press_line: '4', def_width: '3', press_intense: '4', build_type: '3', build_temp: '3', build_long: '2', build_fast: '3', style: '5', pass_risk: '3', dribble: '3', cross: '3', shot: '3' },
+        Simeone_Compact442_def4: { def_line: '1', press_line: '2', def_width: '1', press_intense: '3', build_type: '2', build_temp: '1', build_long: '2', build_fast: '1', style: '2', pass_risk: '2', dribble: '1', cross: '2', shot: '1' },
+        Simeone_LowBlock_def5: { def_line: '1', press_line: '1', def_width: '1', press_intense: '2', build_type: '1', build_temp: '1', build_long: '2', build_fast: '1', style: '1', pass_risk: '1', dribble: '1', cross: '1', shot: '1' },
+        Bielsa_ChaosPress_att5: { def_line: '4', press_line: '5', def_width: '4', press_intense: '5', build_type: '3', build_temp: '3', build_long: '3', build_fast: '5', style: '5', pass_risk: '5', dribble: '5', cross: '4', shot: '4' }
+    },
 
     num(value, fallback = 0) {
         const n = Number(value);
         return Number.isFinite(n) ? n : fallback;
+    },
+
+    clamp(value, min = 0, max = 100) {
+        return Math.max(min, Math.min(max, this.num(value)));
+    },
+
+    round(value, digits = 2) {
+        const factor = 10 ** digits;
+        return Math.round(this.num(value) * factor) / factor;
     },
 
     bool(value) {
@@ -5791,9 +5737,8 @@ const CurrentActionHintEngine = {
     },
 
     getMetric(snapshot, context, key, aliases = []) {
-        const sources = [snapshot || {}, context || {}];
         const keys = [key, ...aliases];
-        for (const source of sources) {
+        for (const source of [context || {}, snapshot || {}]) {
             for (const name of keys) {
                 if (source?.[name] !== undefined && source?.[name] !== null) return source[name];
             }
@@ -5801,189 +5746,697 @@ const CurrentActionHintEngine = {
         return undefined;
     },
 
-    getMinute(snapshot, context = {}) {
-        return this.num(this.getMetric(snapshot, context, 'minute', ['baseMinute', 'effectiveMinute']), 0);
-    },
-
-    getScoreState(snapshot, context = {}) {
-        const explicit = this.getMetric(snapshot, context, 'scoreState');
-        if (explicit) return String(explicit);
-
-        const score = snapshot?.score || context?.score;
-        if (!score || score.diff === undefined) return 'unknown';
-        if (Number(score.diff) > 0) return 'winning';
-        if (Number(score.diff) < 0) return 'losing';
-        return 'draw';
-    },
-
-    hasAny(values) {
-        return (Array.isArray(values) ? values : [values]).some(Boolean);
-    },
-
     hasSignal(signals, names) {
         const list = Array.isArray(names) ? names : [names];
         return list.some(name => signals.includes(name));
     },
 
-    buildContext(snapshot, context = {}) {
-        const minute = this.getMinute(snapshot, context);
-        const scoreState = this.getScoreState(snapshot, context);
-        const myXg = this.num(this.getMetric(snapshot, context, 'myXg', ['myXG']));
-        const oppXg = this.num(this.getMetric(snapshot, context, 'oppXg', ['oppXG']));
-        const myXT = this.num(this.getMetric(snapshot, context, 'myXT'));
-        const oppXT = this.num(this.getMetric(snapshot, context, 'oppXT'));
-        const myBad = this.num(this.getMetric(snapshot, context, 'myBad', ['badActionsPct', 'myBadActionsPct']));
-        const oppPress = this.num(this.getMetric(snapshot, context, 'oppPress', ['oppPressVector', 'opponentPress', 'opponentPressing']));
-        const myPress = this.num(this.getMetric(snapshot, context, 'myPress', ['myPressVector', 'ownPress', 'ownPressVector', 'pressingPlayer', 'playerPressing', 'pressing_player', 'player_pressing']));
-        const oppDef = this.num(this.getMetric(snapshot, context, 'oppDef', ['oppDefVector']));
-        const signals = Array.isArray(context.signals)
-            ? context.signals
-            : Array.isArray(snapshot?.signals)
-                ? snapshot.signals
-                : [];
+    getScoreState(snapshot, context = {}) {
+        const state = context?.score?.state || context?.scoreState;
+        if (state) return String(state);
 
-        const ownCrossesBad = this.bool(this.getMetric(snapshot, context, 'ownCrossesBad')) || this.hasSignal(signals, ['own_crosses_bad_total', 'own_open_play_crosses_bad']);
-        const opponentCrossesDangerous = this.bool(this.getMetric(snapshot, context, 'opponentCrossesDangerous')) || this.hasSignal(signals, ['opponent_crosses_dangerous']);
-        const pressFatigueRisk = this.bool(this.getMetric(snapshot, context, 'pressFatigueRisk')) || this.hasSignal(signals, ['press_fatigue_risk', 'own_press_fatigue', 'press_cost_high']);
-        const wideQuality = this.bool(this.getMetric(snapshot, context, 'wideQuality')) || this.hasSignal(signals, ['wide_quality', 'attack_left', 'attack_right', 'wide_advantage']);
-        const centerWeak = this.bool(this.getMetric(snapshot, context, 'centerWeak')) || this.hasSignal(signals, ['center_weak', 'center_available']);
-        const centerClosed = this.bool(this.getMetric(snapshot, context, 'centerClosed')) || this.hasSignal(signals, ['center_closed']);
-        const transitionThreat = this.bool(this.getMetric(snapshot, context, 'transitionThreat')) || this.hasSignal(signals, ['opponent_fast_counter_threat', 'transition_threat']);
-        const spaceBehind = this.bool(this.getMetric(snapshot, context, 'spaceBehind')) || this.hasSignal(signals, ['space_behind', 'opponent_high_line', 'release_space']);
-        const weakSideAvailable = this.bool(this.getMetric(snapshot, context, 'weakSideAvailable')) || this.hasSignal(signals, ['weak_side_available', 'opponent_flank_weak']);
-        const ownHighPress = myPress > 65 || this.hasSignal(signals, ['own_high_press', 'intensive_pressing', 'pressing_player', 'player_pressing']);
-        const opponentHighPress = oppPress > 65 || this.hasSignal(signals, ['opponent_high_press']);
-        const highBadActions = myBad >= 20 || this.hasSignal(signals, ['high_bad_actions']);
+        const score = snapshot?.score;
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+        const myTeam = snapshot?.myTeam;
+        if (!score || !myTeam || teams.length < 2) return 'unknown';
 
-        return {
-            minute,
-            scoreState,
-            myXg,
-            oppXg,
-            myXT,
-            oppXT,
-            myBad,
-            myPress,
-            oppPress,
-            oppDef,
-            signals,
-            needGoal: scoreState === 'losing' && minute >= 55,
-            lateNeedGoal: scoreState === 'losing' && minute >= 80,
-            protectLead: scoreState === 'winning' && minute >= 70,
-            underPressure: oppXg > myXg + 0.4 || oppXT > myXT + 0.2 || this.hasSignal(signals, ['under_pressure']),
-            attackingMomentum: myXg > oppXg + 0.3 || myXT > oppXT + 0.2 || this.hasSignal(signals, ['attacking_momentum']),
-            highBadActions,
-            lowBadActions: !highBadActions && myBad < 12,
-            ownHighPress,
-            opponentHighPress,
-            opponentLowBlock: (oppDef > 0 && oppDef < 45) || this.hasSignal(signals, ['opponent_low_block']),
-            ownCrossesBad,
-            opponentCrossesDangerous,
-            pressFatigueRisk,
-            wideQuality,
-            centerWeak,
-            centerClosed,
-            transitionThreat,
-            spaceBehind,
-            weakSideAvailable
-        };
+        const home = this.num(score.home);
+        const away = this.num(score.away);
+        const diff = Number(teams[0]) === Number(myTeam) ? home - away : away - home;
+        return diff > 0 ? 'winning' : diff < 0 ? 'losing' : 'draw';
+    },
+
+    getScoreDiff(snapshot, context = {}) {
+        if (Number.isFinite(Number(context?.score?.diff))) return Number(context.score.diff);
+        const score = snapshot?.score;
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+        const myTeam = snapshot?.myTeam;
+        if (!score || !myTeam || teams.length < 2) return 0;
+        const home = this.num(score.home);
+        const away = this.num(score.away);
+        return Number(teams[0]) === Number(myTeam) ? home - away : away - home;
+    },
+
+    getTeamPack(snapshot, context = {}) {
+        if (context?.myStats && context?.oppStats) {
+            return { my: context.myStats, opp: context.oppStats };
+        }
+
+        const stats = Array.isArray(snapshot?.stats) ? snapshot.stats : [];
+        const myTeam = snapshot?.myTeam;
+        if (!myTeam || stats.length < 2) return { my: {}, opp: {} };
+
+        const my = stats.find(item => Number(item?.teamId) === Number(myTeam))?.stats || {};
+        const opp = stats.find(item => Number(item?.teamId) !== Number(myTeam))?.stats || {};
+        return { my, opp };
+    },
+
+    getXT(snapshot, context = {}) {
+        if (Number.isFinite(Number(context?.myXT)) || Number.isFinite(Number(context?.oppXT))) {
+            return { my: this.num(context.myXT), opp: this.num(context.oppXT) };
+        }
+
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+        const myTeam = snapshot?.myTeam;
+        const xt = snapshot?.xT;
+        if (!xt || !myTeam || teams.length < 2) return { my: 0, opp: 0 };
+        const home = Number(teams[0]) === Number(myTeam);
+        return { my: this.num(home ? xt.home : xt.away), opp: this.num(home ? xt.away : xt.home) };
+    },
+
+    getGameRuntime(gameId) {
+        const key = String(gameId || 'unknown');
+        if (!this.runtimeByGame.has(key)) {
+            this.runtimeByGame.set(key, {
+                gameId: key,
+                baselinePower: null,
+                previousObservation: null,
+                lastDecision: null,
+                detectedPreset: '',
+                detectedPresetSinceWindow: null
+            });
+        }
+
+        if (this.runtimeByGame.size > 8) {
+            const keys = Array.from(this.runtimeByGame.keys());
+            keys.slice(0, this.runtimeByGame.size - 8).forEach(oldKey => this.runtimeByGame.delete(oldKey));
+        }
+
+        return this.runtimeByGame.get(key);
+    },
+
+    tacticMatches(signature, tactic) {
+        if (!signature || !tactic) return false;
+        return Object.entries(signature).every(([key, value]) => String(tactic?.[key] ?? '') === String(value));
+    },
+
+    detectCurrentPreset(snapshot, runtime) {
+        const tactic = snapshot?.currentTactic;
+        if (tactic) {
+            for (const name of this.ACTIVE_PRESETS) {
+                if (this.tacticMatches(this.TACTIC_SIGNATURES[name], tactic)) return name;
+            }
+        }
+        return runtime?.detectedPreset || runtime?.lastDecision?.action?.preset || '';
     },
 
     getPresetStatus(preset) {
         for (const [status, names] of Object.entries(this.PRESET_AUDIT_TIER)) {
-            if (names.includes(preset)) return status;
+            if (Array.isArray(names) && names.includes(preset)) return status;
         }
         return 'unknown';
     },
 
-    isPresetAllowed(preset, c) {
-        const status = this.getPresetStatus(preset);
-        if (status === 'blocked' || status === 'experimental' || status === 'needsMoreData') return false;
-        if (status === 'emergency') return c.lateNeedGoal || (c.protectLead && c.underPressure && c.minute >= 80);
-        return status === 'primary' || status === 'restricted';
+    isPresetAllowed(preset, context = {}) {
+        const decision = this.PresetRuleScorer.hardVeto(preset, context);
+        return !decision.vetoed;
+    },
+
+    MatchDecisionSignals: {
+        build(engine, snapshot, context = {}, runtime = null) {
+            const pack = engine.getTeamPack(snapshot, context);
+            const my = pack.my || {};
+            const opp = pack.opp || {};
+            const xt = engine.getXT(snapshot, context);
+            const signals = Array.isArray(context?.signals)
+                ? context.signals.slice()
+                : Array.isArray(snapshot?.signals)
+                    ? snapshot.signals.slice()
+                    : Array.isArray(context?.tags)
+                        ? context.tags.slice()
+                        : [];
+            const minute = engine.num(engine.getMetric(snapshot, context, 'minute', ['effectiveMinute', 'baseMinute']), 0);
+            const scoreState = engine.getScoreState(snapshot, context);
+            const scoreDiff = engine.getScoreDiff(snapshot, context);
+            const generationWindowIndex = engine.num(snapshot?.generationWindow?.index, Math.max(0, Math.floor(minute / 10)));
+
+            const myXg = engine.num(context?.myXg ?? context?.myXG ?? my.xG);
+            const oppXg = engine.num(context?.oppXg ?? context?.oppXG ?? opp.xG);
+            const myXT = engine.num(context?.myXT ?? xt.my);
+            const oppXT = engine.num(context?.oppXT ?? xt.opp);
+            const myBad = engine.num(context?.myBad ?? context?.myBadActionsPct ?? my.badActionsPct);
+            const oppBad = engine.num(context?.oppBad ?? opp.badActionsPct);
+            const myShots = engine.num(context?.myShots ?? my.shots);
+            const oppShots = engine.num(context?.oppShots ?? opp.shots);
+            const myPossession = engine.num(context?.myPossession ?? my.possession);
+            const oppPossession = engine.num(context?.oppPossession ?? opp.possession);
+            const myPower = engine.num(context?.myPower ?? my.power);
+            const oppPower = engine.num(context?.oppPower ?? opp.power);
+            const myDefVector = engine.num(context?.myDefVector ?? my.defVector);
+            const oppDefVector = engine.num(context?.oppDefVector ?? opp.defVector);
+            const myPressVector = engine.num(context?.myPressVector ?? context?.myPress ?? my.pressVector);
+            const oppPressVector = engine.num(context?.oppPressVector ?? context?.oppPress ?? opp.pressVector);
+            const myFouls = engine.num(context?.myFouls ?? my.fouls);
+
+            if (runtime && (!runtime.baselinePower || minute <= 5)) {
+                runtime.baselinePower = { my: myPower || null, opp: oppPower || null, minute };
+            }
+
+            const previous = runtime?.previousObservation || null;
+            const baseline = runtime?.baselinePower || null;
+            const myPowerDelta = previous ? myPower - engine.num(previous.myPower) : 0;
+            const oppPowerDelta = previous ? oppPower - engine.num(previous.oppPower) : 0;
+            const myXgDelta = previous ? myXg - engine.num(previous.myXg) : 0;
+            const oppXgDelta = previous ? oppXg - engine.num(previous.oppXg) : 0;
+            const myShotsDelta = previous ? myShots - engine.num(previous.myShots) : 0;
+            const oppShotsDelta = previous ? oppShots - engine.num(previous.oppShots) : 0;
+            const myBadDelta = previous ? myBad - engine.num(previous.myBad) : 0;
+            const oppBadDelta = previous ? oppBad - engine.num(previous.oppBad) : 0;
+            const strengthGap = myPower - oppPower;
+            const previousGap = previous ? engine.num(previous.strengthGap) : strengthGap;
+            const strengthGapDelta = strengthGap - previousGap;
+            const myPowerDropPct = baseline?.my > 0 ? Math.max(0, (baseline.my - myPower) / baseline.my * 100) : 0;
+            const oppPowerDropPct = baseline?.opp > 0 ? Math.max(0, (baseline.opp - oppPower) / baseline.opp * 100) : 0;
+            const myDefVectorDelta = previous ? myDefVector - engine.num(previous.myDefVector) : 0;
+            const oppDefVectorDelta = previous ? oppDefVector - engine.num(previous.oppDefVector) : 0;
+            const myPressVectorDelta = previous ? myPressVector - engine.num(previous.myPressVector) : 0;
+            const oppPressVectorDelta = previous ? oppPressVector - engine.num(previous.oppPressVector) : 0;
+
+            const underPressure =
+                oppXg > myXg + 0.4 ||
+                oppXT > myXT + 0.2 ||
+                oppShots > myShots + 3 ||
+                engine.hasSignal(signals, ['under_pressure', 'transition_threat', 'opponent_fast_counter_threat']);
+            const attackingMomentum =
+                myXg > oppXg + 0.3 ||
+                myXT > oppXT + 0.2 ||
+                myShots > oppShots + 3 ||
+                engine.hasSignal(signals, ['attacking_momentum']);
+            const transitionThreat = engine.bool(context?.transitionThreat) || engine.hasSignal(signals, ['transition_threat', 'opponent_fast_counter_threat']) || (oppXT > myXT + 0.35 && oppShots >= myShots);
+            const centerClosed = engine.bool(context?.centerClosed) || engine.hasSignal(signals, ['center_closed', 'opponent_low_block']);
+            const wideQuality = engine.bool(context?.wideQuality) || engine.hasSignal(signals, ['wide_quality', 'wide_advantage', 'attack_left', 'attack_right']);
+            const weakSideAvailable = engine.bool(context?.weakSideAvailable) || engine.hasSignal(signals, ['weak_side_available', 'opponent_flank_weak']);
+            const ownCrossesBad = engine.bool(context?.ownCrossesBad) || engine.hasSignal(signals, ['own_open_play_crosses_bad', 'own_crosses_bad_total']);
+            const opponentCrossesDangerous = engine.bool(context?.opponentCrossesDangerous) || engine.hasSignal(signals, ['opponent_crosses_dangerous']);
+            const ownRedCard = engine.bool(context?.ownRedCard) || engine.hasSignal(signals, ['own_red_card', 'playing_with_ten']);
+            const opponentRedCard = engine.bool(context?.opponentRedCard) || engine.hasSignal(signals, ['opponent_red_card', 'opponent_with_ten']);
+            const highBadActions = myBad >= 20 || engine.hasSignal(signals, ['high_bad_actions']);
+            const lowBadActions = myBad > 0 && myBad <= 16 || engine.hasSignal(signals, ['low_bad_actions']);
+            const pressFatigueRisk =
+                engine.bool(context?.pressFatigueRisk) ||
+                engine.bool(context?.pressFatigue?.active) ||
+                engine.hasSignal(signals, ['press_fatigue_risk', 'own_press_fatigue', 'press_cost_high']) ||
+                myPowerDropPct >= 3.5 ||
+                (myPowerDelta < -25 && myPowerDelta < oppPowerDelta - 10);
+
+            const strengthAdvantage = engine.clamp(50 + strengthGap / 8);
+            const strengthDisadvantage = 100 - strengthAdvantage;
+            const attackNeed = engine.clamp(
+                (scoreState === 'losing' ? 38 : scoreState === 'draw' && minute >= 65 ? 12 : 0) +
+                Math.max(0, -scoreDiff - 1) * 15 +
+                Math.max(0, minute - 50) * (scoreState === 'losing' ? 0.9 : 0.15) +
+                Math.max(0, oppXg - myXg) * 14
+            );
+            const controlNeed = engine.clamp(
+                myBad * 2 +
+                myPowerDropPct * 8 +
+                (scoreState === 'winning' ? Math.max(0, minute - 55) * 0.8 : 0) +
+                (transitionThreat ? 18 : 0) +
+                (ownRedCard ? 25 : 0)
+            );
+            const pressureRisk = engine.clamp(
+                Math.max(0, oppXg - myXg) * 28 +
+                Math.max(0, oppXT - myXT) * 36 +
+                Math.max(0, oppShots - myShots) * 3 +
+                Math.max(0, oppPressVector - myPressVector) * 0.55 +
+                Math.max(0, -strengthGap) / 5 +
+                (transitionThreat ? 24 : 0)
+            );
+            const preservationNeed = engine.clamp(
+                (scoreState === 'winning' ? 20 + Math.max(0, minute - 55) * 1.2 + Math.max(0, scoreDiff - 1) * 8 : 0) +
+                pressureRisk * 0.35 +
+                myPowerDropPct * 6 +
+                (ownRedCard ? 30 : 0)
+            );
+            const widthOpportunity = engine.clamp(
+                (centerClosed ? 32 : 0) +
+                (wideQuality ? 34 : 0) +
+                (weakSideAvailable ? 22 : 0) +
+                (attackingMomentum ? 10 : 0) -
+                (ownCrossesBad ? 45 : 0) -
+                (opponentCrossesDangerous ? 20 : 0) -
+                (underPressure ? 20 : 0)
+            );
+
+            // Vector signs are stored as raw game signals. Until post-5.61 evidence establishes
+            // their direction semantics, effectiveness is inferred from coupled match outcomes;
+            // vector movement only confirms that the tactical state actually changed.
+            const vectorResponseMagnitude = Math.abs(myPressVectorDelta) + Math.abs(myDefVectorDelta) * 0.5;
+            const pressingResponse = engine.clamp(
+                50 +
+                (myXgDelta - oppXgDelta) * 42 +
+                (myShotsDelta - oppShotsDelta) * 3 +
+                oppBadDelta * 0.8 -
+                myBadDelta * 0.6 +
+                Math.min(12, vectorResponseMagnitude * 0.45)
+            );
+            const defensiveStability = engine.clamp(
+                55 -
+                Math.max(0, oppXgDelta - myXgDelta) * 36 -
+                Math.max(0, oppShotsDelta - myShotsDelta) * 3 -
+                Math.max(0, oppXT - myXT) * 20 -
+                (transitionThreat ? 18 : 0)
+            );
+            const pressingCost = engine.clamp(
+                myPowerDropPct * 12 +
+                Math.max(0, -myPowerDelta) * 0.45 +
+                myBad * 1.35 +
+                Math.max(0, -myDefVectorDelta) * 0.8 +
+                myFouls * 1.2
+            );
+            const pressingOpportunity = engine.clamp(
+                strengthAdvantage * 0.35 +
+                (100 - pressureRisk) * 0.2 +
+                (100 - pressingCost) * 0.25 +
+                (opponentRedCard ? 18 : 0) +
+                (minute <= 65 ? 12 : 0) +
+                (lowBadActions ? 10 : 0) +
+                (attackingMomentum ? 12 : 0) +
+                (previous ? (pressingResponse - 50) * 0.2 : 0)
+            );
+
+            let gameMode = 'active_control';
+            if (scoreState === 'winning' && minute >= 82 && (pressureRisk >= 60 || ownRedCard || myPowerDropPct >= 4.5)) gameMode = 'emergency_lock';
+            else if ((strengthGap < -40 || underPressure) && scoreState !== 'losing') gameMode = 'compact_counter_control';
+            else if (strengthGap >= 35 && minute <= 65 && pressingOpportunity >= 62 && scoreState !== 'winning') gameMode = 'front_foot_squeeze';
+            else if (scoreState === 'losing' && attackNeed >= 65) gameMode = 'controlled_chase';
+
+            return {
+                schema: 'slf_match_decision_signals_v1',
+                gameId: snapshot?.gameId || context?.gameId || 'unknown',
+                minute,
+                generationWindowIndex,
+                scoreState,
+                scoreDiff,
+                signals,
+                myXg,
+                oppXg,
+                myXT,
+                oppXT,
+                myShots,
+                oppShots,
+                myPossession,
+                oppPossession,
+                myBad,
+                oppBad,
+                myPower,
+                oppPower,
+                strengthGap,
+                strengthGapDelta,
+                myPowerDelta,
+                oppPowerDelta,
+                myXgDelta: engine.round(myXgDelta, 3),
+                oppXgDelta: engine.round(oppXgDelta, 3),
+                myShotsDelta,
+                oppShotsDelta,
+                myBadDelta: engine.round(myBadDelta),
+                oppBadDelta: engine.round(oppBadDelta),
+                myPowerDropPct: engine.round(myPowerDropPct),
+                oppPowerDropPct: engine.round(oppPowerDropPct),
+                myDefVector,
+                oppDefVector,
+                myPressVector,
+                oppPressVector,
+                myDefVectorDelta,
+                oppDefVectorDelta,
+                myPressVectorDelta,
+                oppPressVectorDelta,
+                underPressure,
+                attackingMomentum,
+                transitionThreat,
+                centerClosed,
+                wideQuality,
+                weakSideAvailable,
+                ownCrossesBad,
+                opponentCrossesDangerous,
+                ownRedCard,
+                opponentRedCard,
+                highBadActions,
+                lowBadActions,
+                pressFatigueRisk,
+                attackNeed: engine.round(attackNeed),
+                controlNeed: engine.round(controlNeed),
+                pressureRisk: engine.round(pressureRisk),
+                preservationNeed: engine.round(preservationNeed),
+                widthOpportunity: engine.round(widthOpportunity),
+                vectorResponseMagnitude: engine.round(vectorResponseMagnitude),
+                pressingResponse: engine.round(pressingResponse),
+                defensiveStability: engine.round(defensiveStability),
+                pressingCost: engine.round(pressingCost),
+                pressingOpportunity: engine.round(pressingOpportunity),
+                strengthAdvantage: engine.round(strengthAdvantage),
+                strengthDisadvantage: engine.round(strengthDisadvantage),
+                gameMode,
+                completeness: engine.round([
+                    myPower > 0, oppPower > 0, minute > 0, scoreState !== 'unknown',
+                    Number.isFinite(myXg), Number.isFinite(oppXg),
+                    Number.isFinite(myDefVector), Number.isFinite(myPressVector)
+                ].filter(Boolean).length / 8, 3)
+            };
+        }
+    },
+
+    PresetRuleScorer: {
+        PROFILES: {
+            Arteta_Control433_bal3: { base: 18, attack: 0.10, control: 0.35, pressureRisk: -0.08, preservation: 0.10, pressOpportunity: 0.10, pressCost: -0.08, strengthAdvantage: 0.08 },
+            Pep_BoxControl_bal2: { base: 15, attack: -0.05, control: 0.52, pressureRisk: 0.13, preservation: 0.22, pressOpportunity: -0.08, pressCost: 0.22, strengthAdvantage: 0.02 },
+            Pep_PressCooldown_bal2: { base: 8, attack: -0.12, control: 0.45, pressureRisk: 0.08, preservation: 0.15, pressOpportunity: -0.22, pressCost: 0.55, strengthAdvantage: 0.00 },
+            Compact_Counter_def3: { base: 7, attack: 0.04, control: 0.12, pressureRisk: 0.46, preservation: 0.22, pressOpportunity: -0.08, pressCost: 0.14, strengthAdvantage: -0.08 },
+            Pep_ControlledPush_att3: { base: 5, attack: 0.48, control: -0.08, pressureRisk: -0.18, preservation: -0.16, pressOpportunity: 0.18, pressCost: -0.12, strengthAdvantage: 0.12 },
+            Pep_TwoThreeFive_att3: { base: 6, attack: 0.56, control: -0.04, pressureRisk: -0.28, preservation: -0.20, pressOpportunity: 0.26, pressCost: -0.18, strengthAdvantage: 0.18 },
+            Conte_WingbackWidth_bal4: { base: 2, attack: 0.22, control: 0.02, pressureRisk: -0.18, preservation: -0.08, pressOpportunity: 0.08, pressCost: -0.10, strengthAdvantage: 0.08, width: 0.55 },
+            Klopp_Gegenpress_att4: { base: -8, attack: 0.66, control: -0.25, pressureRisk: -0.42, preservation: -0.35, pressOpportunity: 0.55, pressCost: -0.48, strengthAdvantage: 0.16 },
+            Simeone_Compact442_def4: { base: 2, attack: -0.20, control: 0.18, pressureRisk: 0.45, preservation: 0.58, pressOpportunity: -0.18, pressCost: 0.15, strengthAdvantage: -0.08 },
+            Simeone_LowBlock_def5: { base: -20, attack: -0.48, control: 0.08, pressureRisk: 0.42, preservation: 0.78, pressOpportunity: -0.35, pressCost: 0.16, strengthAdvantage: -0.16 },
+            Bielsa_ChaosPress_att5: { base: -30, attack: 0.90, control: -0.55, pressureRisk: -0.70, preservation: -0.70, pressOpportunity: 0.70, pressCost: -0.75, strengthAdvantage: 0.12 }
+        },
+
+        hardVeto(name, s = {}) {
+            const reasons = [];
+            const add = reason => { if (reason && !reasons.includes(reason)) reasons.push(reason); };
+            const losing = s.scoreState === 'losing';
+            const winning = s.scoreState === 'winning';
+            const pressPreset = ['Klopp_Gegenpress_att4', 'Bielsa_ChaosPress_att5'].includes(name);
+
+            if (s.ownRedCard && pressPreset) add('удаление у нашей команды запрещает all-in прессинг');
+            if (pressPreset && s.myPowerDropPct >= 5) add('падение силы состава 5%+ запрещает дорогой прессинг');
+            if (pressPreset && s.highBadActions) add('высокий брак запрещает высокий прессинг');
+            if (pressPreset && s.transitionThreat && s.minute < 86) add('угроза переходов запрещает высокий прессинг до emergency-окна');
+
+            if (name === 'Bielsa_ChaosPress_att5' && !(losing && s.minute >= 86 && s.lowBadActions && !s.pressFatigueRisk)) {
+                add('Bielsa разрешён только после 86-й при проигрыше, низком браке и приемлемой цене прессинга');
+            }
+            if (name === 'Klopp_Gegenpress_att4' && !(losing && s.minute >= 78 && s.lowBadActions && !s.pressFatigueRisk)) {
+                add('Klopp разрешён только в поздней погоне после 78-й при низком браке');
+            }
+            if (name === 'Simeone_LowBlock_def5' && !(winning && s.minute >= 82 && (s.pressureRisk >= 55 || s.ownRedCard || s.myPowerDropPct >= 4))) {
+                add('низкий блок разрешён только для позднего удержания под реальной угрозой');
+            }
+            if (name === 'Simeone_Compact442_def4' && !(winning && s.minute >= 65 || s.strengthGap < -35 && s.underPressure)) {
+                add('компактный 4-4-2 нужен для удержания или явного силового/игрового давления');
+            }
+            if (name === 'Conte_WingbackWidth_bal4' && (s.widthOpportunity < 55 || s.ownCrossesBad || s.opponentCrossesDangerous || s.underPressure)) {
+                add('нет подтверждённого безопасного преимущества ширины');
+            }
+            if (name === 'Pep_TwoThreeFive_att3' && (s.myBad >= 22 || s.pressureRisk >= 72 || s.myPowerDropPct >= 4.5)) {
+                add('позиционная атака слишком рискованна при браке, давлении или падении силы');
+            }
+            if (name === 'Pep_ControlledPush_att3' && (s.myBad >= 26 || s.myPowerDropPct >= 6)) {
+                add('даже controlled push запрещён при критическом браке/падении силы');
+            }
+            if (name === 'Pep_PressCooldown_bal2' && losing && s.minute >= 78 && s.attackNeed >= 70) {
+                add('cooldown не должен заменять атаку в финальной погоне');
+            }
+            if (name === 'Compact_Counter_def3' && winning && s.minute >= 82 && s.pressureRisk < 35 && s.strengthGap > 30) {
+                add('при спокойном преимуществе сильной команды контратака слишком пассивна');
+            }
+
+            return { vetoed: reasons.length > 0, reasons };
+        },
+
+        scoreOne(engine, name, s) {
+            const profile = this.PROFILES[name];
+            const veto = this.hardVeto(name, s);
+            const reasons = [];
+            const parts = {};
+            const add = (key, value, reason) => {
+                const delta = engine.round(value);
+                if (!delta) return;
+                parts[key] = engine.round((parts[key] || 0) + delta);
+                reasons.push({ key, delta, reason });
+            };
+
+            if (!profile) return { preset: name, score: -999, vetoed: true, vetoReasons: ['нет экспертного профиля'], reasons, parts };
+
+            let score = profile.base;
+            const apply = (key, signal, weight, reason) => {
+                const delta = engine.num(signal) * engine.num(weight);
+                score += delta;
+                add(key, delta, reason);
+            };
+
+            apply('attackNeed', s.attackNeed, profile.attack, 'соответствие необходимости гола/давления');
+            apply('controlNeed', s.controlNeed, profile.control, 'соответствие потребности в контроле');
+            apply('pressureRisk', s.pressureRisk, profile.pressureRisk, 'реакция на давление и переходный риск');
+            apply('preservationNeed', s.preservationNeed, profile.preservation, 'соответствие удержанию результата');
+            apply('pressingOpportunity', s.pressingOpportunity, profile.pressOpportunity, 'выгода активного прессинга');
+            apply('pressingCost', s.pressingCost, profile.pressCost, 'стоимость прессинга по силе/браку/структуре');
+            apply('strengthAdvantage', s.strengthAdvantage, profile.strengthAdvantage, 'соответствие текущему преимуществу силы');
+            if (profile.width) apply('widthOpportunity', s.widthOpportunity, profile.width, 'подтверждённая возможность игры через ширину');
+
+            if (name === 'Arteta_Control433_bal3' && s.gameMode === 'active_control') add('mode', 12, 'нейтральный structural baseline');
+            if (name === 'Pep_BoxControl_bal2' && s.highBadActions) add('mode', 18, 'высокий брак требует reset');
+            if (name === 'Pep_PressCooldown_bal2' && s.pressFatigueRisk) add('mode', 24, 'падение силы/эффективности прессинга требует cooldown');
+            if (name === 'Compact_Counter_def3' && s.gameMode === 'compact_counter_control') add('mode', 18, 'слабее или под давлением — компактность и выход');
+            if (name === 'Pep_ControlledPush_att3' && s.gameMode === 'controlled_chase') add('mode', 14, 'контролируемое усиление атаки');
+            if (name === 'Pep_TwoThreeFive_att3' && (s.gameMode === 'front_foot_squeeze' || s.attackingMomentum)) add('mode', 18, 'позиционное зажатие слабого/отступающего соперника');
+            if (name === 'Simeone_Compact442_def4' && s.gameMode === 'emergency_lock') add('mode', 16, 'позднее компактное удержание');
+            if (name === 'Simeone_LowBlock_def5' && s.gameMode === 'emergency_lock') add('mode', 25, 'аварийно закрыть штрафную');
+
+            score += Object.values(parts).reduce((sum, value) => sum + value, 0) - reasons
+                .filter(item => ['attackNeed', 'controlNeed', 'pressureRisk', 'preservationNeed', 'pressingOpportunity', 'pressingCost', 'strengthAdvantage', 'widthOpportunity'].includes(item.key))
+                .reduce((sum, item) => sum + item.delta, 0);
+
+            const finalScore = veto.vetoed ? -999 : engine.round(score);
+            return {
+                preset: name,
+                score: finalScore,
+                rawScore: engine.round(score),
+                vetoed: veto.vetoed,
+                vetoReasons: veto.reasons,
+                reasons: reasons.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 8),
+                parts
+            };
+        },
+
+        emergencyOverride(s, candidates) {
+            const available = name => candidates.find(item => item.preset === name && !item.vetoed);
+            if (s.ownRedCard && s.scoreState === 'winning') {
+                return available(s.minute >= 82 ? 'Simeone_LowBlock_def5' : 'Simeone_Compact442_def4') || available('Pep_BoxControl_bal2');
+            }
+            if (s.scoreState === 'winning' && s.minute >= 85 && (s.pressureRisk >= 65 || s.myPowerDropPct >= 5)) {
+                return available('Simeone_LowBlock_def5') || available('Simeone_Compact442_def4');
+            }
+            if (s.scoreState === 'losing' && s.minute >= 86) {
+                return available('Bielsa_ChaosPress_att5') || available('Klopp_Gegenpress_att4') || available('Pep_TwoThreeFive_att3') || available('Pep_ControlledPush_att3');
+            }
+            return null;
+        },
+
+        confidence(engine, top, second, s) {
+            const gap = top && second ? top.score - second.score : 0;
+            const completeness = engine.num(s.completeness);
+            const conflict = s.attackNeed >= 55 && s.preservationNeed >= 55 || s.pressingOpportunity >= 60 && s.pressingCost >= 60;
+            let level = 'low';
+            if (gap >= 18 && completeness >= 0.75 && !conflict) level = 'high';
+            else if (gap >= 8 && completeness >= 0.55) level = 'medium';
+            return { level, gap: engine.round(gap), completeness, conflict };
+        },
+
+        applyHysteresis(engine, ranked, signals, runtime, detectedPreset, emergency) {
+            const top = ranked[0] || null;
+            if (!top || emergency) return { selected: emergency || top, guardType: emergency ? 'emergency_override' : 'top_score', guardReason: emergency ? 'жёсткий emergency override' : 'лучший итоговый балл' };
+
+            const currentName = detectedPreset || runtime?.lastDecision?.action?.preset || '';
+            const current = ranked.find(item => item.preset === currentName && !item.vetoed) || null;
+            if (!current || current.preset === top.preset) return { selected: top, guardType: 'top_score', guardReason: 'лучший итоговый балл' };
+
+            const currentWindow = signals.generationWindowIndex;
+            const since = runtime?.detectedPresetSinceWindow;
+            const heldWindows = Number.isFinite(Number(since)) ? Math.max(0, currentWindow - Number(since)) : 99;
+            const recentRecommendationWindow = runtime?.lastDecision?.telemetry?.observation?.generationWindowIndex;
+            const recommendationCooldown = Number.isFinite(Number(recentRecommendationWindow)) && currentWindow - Number(recentRecommendationWindow) < 1;
+            const requiredMargin = heldWindows < 2 ? 15 : recommendationCooldown ? 14 : 12;
+            const margin = top.score - current.score;
+
+            if (margin < requiredMargin) {
+                return {
+                    selected: current,
+                    guardType: heldWindows < 2 ? 'minimum_hold' : recommendationCooldown ? 'cooldown' : 'hysteresis',
+                    guardReason: `оставляем текущий пресет: преимущество кандидата ${engine.round(margin)} ниже порога ${requiredMargin}`,
+                    requiredMargin,
+                    actualMargin: engine.round(margin),
+                    heldWindows
+                };
+            }
+
+            return {
+                selected: top,
+                guardType: 'margin_passed',
+                guardReason: `смена оправдана: преимущество ${engine.round(margin)} превышает порог ${requiredMargin}`,
+                requiredMargin,
+                actualMargin: engine.round(margin),
+                heldWindows
+            };
+        },
+
+        run(engine, signals, runtime, detectedPreset) {
+            const candidates = engine.ACTIVE_PRESETS.map(name => this.scoreOne(engine, name, signals));
+            const ranked = candidates
+                .filter(item => !item.vetoed)
+                .sort((a, b) => b.score - a.score || a.preset.localeCompare(b.preset));
+            const emergency = this.emergencyOverride(signals, candidates);
+            const guard = this.applyHysteresis(engine, ranked, signals, runtime, detectedPreset, emergency);
+            const selected = guard.selected || ranked[0] || candidates.find(item => item.preset === 'Arteta_Control433_bal3');
+            const second = ranked.find(item => item.preset !== selected?.preset) || null;
+            const confidence = this.confidence(engine, selected, second, signals);
+            const positiveReasons = (selected?.reasons || []).filter(item => item.delta > 0).slice(0, 3);
+            const negativeReasons = (selected?.reasons || []).filter(item => item.delta < 0).slice(0, 2);
+            const reasonParts = positiveReasons.map(item => item.reason);
+            if (guard.guardType !== 'top_score') reasonParts.push(guard.guardReason);
+
+            return {
+                schema: 'slf_preset_rule_score_v1',
+                action: {
+                    preset: selected?.preset || 'Arteta_Control433_bal3',
+                    presetStatus: engine.getPresetStatus(selected?.preset),
+                    decision: signals.gameMode,
+                    risk: ['Klopp_Gegenpress_att4', 'Bielsa_ChaosPress_att5', 'Simeone_LowBlock_def5'].includes(selected?.preset) ? 'high' : 'medium',
+                    score: selected?.score ?? 0,
+                    reason: reasonParts.join('; ') || 'наиболее устойчивый экспертный балл по текущему состоянию',
+                    reasons: positiveReasons,
+                    cautions: negativeReasons,
+                    guardType: guard.guardType,
+                    guardReason: guard.guardReason,
+                    emergency: !!emergency
+                },
+                confidence,
+                margin: confidence.gap,
+                candidates: candidates
+                    .slice()
+                    .sort((a, b) => {
+                        if (a.vetoed !== b.vetoed) return a.vetoed ? 1 : -1;
+                        return b.score - a.score;
+                    })
+                    .map(item => ({
+                        preset: item.preset,
+                        score: item.score,
+                        rawScore: item.rawScore,
+                        vetoed: item.vetoed,
+                        vetoReasons: item.vetoReasons,
+                        reasons: item.reasons.slice(0, 4),
+                        parts: item.parts
+                    })),
+                vetoedPresets: Object.fromEntries(candidates.filter(item => item.vetoed).map(item => [item.preset, item.vetoReasons])),
+                guard
+            };
+        }
     },
 
     classify(snapshot, context = {}) {
-        const c = this.buildContext(snapshot, context);
-        const signals = [];
+        const gameId = snapshot?.gameId || context?.gameId || 'unknown';
+        const runtime = this.getGameRuntime(gameId);
+        const decisionSignals = this.MatchDecisionSignals.build(this, snapshot, context, runtime);
         const reasons = [];
-        const add = (signal, reason) => {
-            if (!signals.includes(signal)) signals.push(signal);
+        const signalNames = [];
+        const add = (name, reason) => {
+            if (name && !signalNames.includes(name)) signalNames.push(name);
             if (reason && !reasons.includes(reason)) reasons.push(reason);
         };
 
-        if (c.needGoal) add('need_goal', 'проигрываем после 55-й минуты');
-        if (c.lateNeedGoal) add('late_need_goal', 'финальная фаза, нужен риск');
-        if (c.protectLead) add('protect_lead', 'ведём после 70-й минуты');
-        if (c.underPressure) add('under_pressure', 'соперник опаснее по xG/xT или давлению');
-        if (c.attackingMomentum) add('attacking_momentum', 'есть атакующий импульс');
-        if (c.highBadActions) add('high_bad_actions', 'высокий процент брака');
-        if (c.lowBadActions) add('low_bad_actions', 'низкий процент брака');
-        if (c.ownHighPress) add('own_high_press', 'собственный прессинг активен');
-        if (c.opponentHighPress) add('opponent_high_press', 'высокий прессинг соперника');
-        if (c.opponentLowBlock) add('opponent_low_block', 'низкий блок соперника');
-        if (c.pressFatigueRisk) add('press_fatigue_risk', 'растёт цена прессинга');
-        if (c.spaceBehind) add('space_behind', 'есть пространство за линией');
-        if (c.weakSideAvailable) add('weak_side_available', 'есть слабая сторона соперника');
-        if (c.centerWeak) add('center_weak', 'центр соперника доступен');
-        if (c.centerClosed) add('center_closed', 'центр закрыт');
-        if (c.wideQuality) add('wide_quality', 'ширина/фланги доступны');
-        if (c.ownCrossesBad) add('own_crosses_bad', 'кроссы/фланговая доставка не работают');
-        if (c.opponentCrossesDangerous) add('opponent_crosses_dangerous', 'кроссы соперника опасны');
-        if (!signals.length) add('balanced_control', 'нет сильного сигнала');
+        if (decisionSignals.attackNeed >= 55) add('need_goal', 'высокая потребность в голе');
+        if (decisionSignals.preservationNeed >= 55) add('protect_lead', 'нужно снижать риск и удерживать результат');
+        if (decisionSignals.pressureRisk >= 55) add('under_pressure', 'давление/переходная угроза соперника высоки');
+        if (decisionSignals.pressingOpportunity >= 60) add('pressing_opportunity', 'есть условия для активного давления');
+        if (decisionSignals.pressingCost >= 55) add('press_cost_high', 'прессинг дорого обходится по силе/браку/структуре');
+        if (decisionSignals.widthOpportunity >= 55) add('wide_opportunity', 'фланговое преимущество подтверждено');
+        if (decisionSignals.highBadActions) add('high_bad_actions', 'высокий процент брака');
+        if (!signalNames.length) add('balanced_control', 'нет сильного аварийного сигнала');
 
         return {
-            minute: c.minute,
-            score: c.scoreState,
-            signals,
+            gameId: String(gameId),
+            minute: decisionSignals.minute,
+            score: decisionSignals.scoreState,
+            signals: signalNames,
             reasons,
-            context: c
+            context: decisionSignals,
+            runtime
         };
     },
 
     decide(classification) {
-        const c = classification?.context || {};
-        const rule = this.HINT_RULES.find(item => item.when(c) && this.isPresetAllowed(item.preset, c)) || this.HINT_RULES[this.HINT_RULES.length - 1];
-        const presetStatus = this.getPresetStatus(rule.preset);
+        const runtime = classification?.runtime || this.getGameRuntime(classification?.gameId || 'unknown');
+        const signals = classification?.context || {};
+        const detectedPreset = runtime?.detectedPreset || runtime?.lastDecision?.action?.preset || '';
+        return this.PresetRuleScorer.run(this, signals, runtime, detectedPreset);
+    },
 
-        return {
-            preset: rule.preset,
-            presetStatus,
-            ruleId: rule.id,
-            decision: rule.decision,
-            risk: rule.risk,
-            reason: rule.reason
+    evaluate(snapshot, context = {}) {
+        if (!snapshot && !context) return null;
+
+        const classification = this.classify(snapshot || {}, context || {});
+        const runtime = classification.runtime;
+        const detectedPreset = this.detectCurrentPreset(snapshot || {}, runtime);
+        if (detectedPreset !== runtime.detectedPreset) {
+            runtime.detectedPreset = detectedPreset;
+            runtime.detectedPresetSinceWindow = classification.context.generationWindowIndex;
+        }
+
+        const scored = this.PresetRuleScorer.run(this, classification.context, runtime, detectedPreset);
+        const result = {
+            schema: this.schema,
+            mode: this.mode,
+            moment: {
+                gameId: classification.gameId,
+                minute: classification.minute,
+                score: classification.score,
+                signals: classification.signals,
+                reasons: classification.reasons,
+                context: classification.context
+            },
+            action: scored.action,
+            confidence: scored.confidence,
+            margin: scored.margin,
+            candidates: scored.candidates,
+            vetoedPresets: scored.vetoedPresets,
+            guard: scored.guard,
+            telemetry: {
+                schema: 'slf_rule_decision_telemetry_v1',
+                observation: classification.context,
+                currentPreset: detectedPreset || null,
+                recommendedPreset: scored.action.preset,
+                recommendedScore: scored.action.score,
+                confidence: scored.confidence,
+                margin: scored.margin,
+                candidateScores: Object.fromEntries(scored.candidates.map(item => [item.preset, item.score])),
+                vetoedPresets: scored.vetoedPresets,
+                generatedAt: Date.now()
+            },
+            generatedAt: Date.now()
         };
+
+        runtime.previousObservation = Object.assign({}, classification.context);
+        runtime.lastDecision = result;
+        return result;
     },
 
     run(snapshot, context = {}) {
-        if (!snapshot) return null;
+        return this.evaluate(snapshot, context);
+    },
 
-        const classification = this.classify(snapshot, context);
-        const action = this.decide(classification);
-
-        return {
-            schema: this.schema,
-            mode: 'button_on_demand_current_state_only',
-            moment: classification,
-            action,
-            generatedAt: Date.now()
-        };
+    getLastDecision(gameId) {
+        return this.getGameRuntime(gameId).lastDecision || null;
     },
 
     toPlanRows(result) {
         if (!result) return [];
+        const topCandidates = (result.candidates || []).filter(item => !item.vetoed).slice(0, 3);
+        const candidateText = topCandidates.map(item => `${item.preset} ${item.score >= 0 ? '+' : ''}${item.score}`).join(' · ');
+        const confidence = result.confidence?.level || 'low';
         return [
-            `Moment: ${result.moment.signals.join(', ')}`,
-            `Decision: ${result.action.decision} → ${result.action.preset}`,
-            `Tier: ${result.action.presetStatus}; rule: ${result.action.ruleId}`,
-            `Reason: ${result.action.reason}`
-        ];
+            `Режим: ${result.action?.decision || result.moment?.context?.gameMode || 'active_control'}`,
+            `Рекомендация: ${result.action?.preset || 'Arteta_Control433_bal3'} (${result.action?.score ?? 0})`,
+            `Уверенность: ${confidence}; разрыв ${result.margin ?? 0}`,
+            `Причина: ${result.action?.reason || 'экспертный score'}`,
+            candidateText ? `Кандидаты: ${candidateText}` : ''
+        ].filter(Boolean);
     }
 };
 
 if (typeof window !== 'undefined') {
     window.SLFCurrentActionHintEngine = CurrentActionHintEngine;
+    window.SLFMatchDecisionSignals = CurrentActionHintEngine.MatchDecisionSignals;
+    window.SLFPresetRuleScorer = CurrentActionHintEngine.PresetRuleScorer;
 }
 // <<< src/modules/strategy-data-recommendations/current-action-hint-engine.js
 
@@ -6539,17 +6992,16 @@ if (typeof window !== 'undefined') {
 
 
 // >>> src/modules/tactics-presets/tactic-preset-direction-policy.js
-// Generator 5.61 Tactical Evidence Policy
+// Generator 5.61 Rule-Scored Tactical Policy
 // ============================================================
-// Conservative runtime policy based on the official 5.61 rule pack and the
-// current mixed-history preset evidence. Historical aggregates are not treated
-// as a clean post-5.61 cohort; high-risk choices remain guarded until the
-// exporter reports enough stable-5.61 effects.
+// Keeps the active preset set and direction policy conservative, while routing
+// recommendation selection through CurrentActionHintEngine's scored rule model.
+// Tactics remain manual: this module only selects and explains a recommendation.
 
 (function tacticPresetDirectionPolicy() {
     'use strict';
 
-    if (typeof window !== 'undefined' && window.SLFTacticDirectionPolicy?.version === '5.61-evidence-v1') return;
+    if (typeof window !== 'undefined' && window.SLFTacticDirectionPolicy?.version === '5.61-rule-score-v2') return;
 
     const REMOVED_PRESETS = new Set(['Xabi_BoxMidfield_bal3']);
     const NEUTRAL_PRIORITY_PRESETS = [
@@ -6569,138 +7021,8 @@ if (typeof window !== 'undefined') {
     const DIRECTION_OVERRIDES = Object.fromEntries(NEUTRAL_PRIORITY_PRESETS.map(name => [name, []]));
     DIRECTION_OVERRIDES.Conte_WingbackWidth_bal4 = ['left', 'right'];
 
-    const AUDIT_TIER_561 = {
-        primary: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Compact_Counter_def3', 'Pep_TwoThreeFive_att3', 'Pep_PressCooldown_bal2'],
-        conditional: ['Pep_ControlledPush_att3', 'Conte_WingbackWidth_bal4', 'Simeone_Compact442_def4'],
-        restricted: ['Klopp_Gegenpress_att4'],
-        emergency: ['Bielsa_ChaosPress_att5', 'Simeone_LowBlock_def5'],
-        removed: ['Mourinho_WeakSide_def3', 'Xabi_VerticalBox_att3', 'Xabi_BoxMidfield_bal3', 'DeZerbi_BaitPress_bal3', 'DeZerbi_Release_att4', 'Nagelsmann_WidePress_att4', 'Henta_LeftTrap_att3'],
-        needsMoreData: [],
-        experimental: [],
-        blocked: []
-    };
-
-    const HINT_RULES_561 = [
-        { id: 'late_goal_emergency_561', preset: 'Bielsa_ChaosPress_att5', decision: 'all_in_attack', risk: 'high', reason: 'после 86-й проигрываем и безопасные варианты недостаточны — финальный all-in', when: c => c.lateNeedGoal && c.minute >= 86 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat },
-        { id: 'late_protect_heavy_pressure_561', preset: 'Simeone_LowBlock_def5', decision: 'protect_lead', risk: 'high', reason: 'после 82-й ведём под тяжёлым давлением — закрыть штрафную', when: c => c.protectLead && c.underPressure && c.minute >= 82 },
-        { id: 'protect_compact_442_561', preset: 'Simeone_Compact442_def4', decision: 'compact_protect', risk: 'medium', reason: 'ведём поздно — компактно защитить преимущество', when: c => c.protectLead && c.minute >= 70 },
-        { id: 'own_press_fatigue_cooldown_561', preset: 'Pep_PressCooldown_bal2', decision: 'cooldown_press', risk: 'low', reason: 'растёт цена прессинга — снизить интенсивность и вернуть структуру', when: c => c.pressFatigueRisk && !c.needGoal },
-        { id: 'bad_actions_control_reset_561', preset: 'Pep_BoxControl_bal2', decision: 'stabilize_control', risk: 'low', reason: 'высокий брак — сначала стабилизировать розыгрыш', when: c => c.highBadActions },
-        { id: 'under_pressure_counter_561', preset: 'Compact_Counter_def3', decision: 'defensive_reset', risk: 'medium', reason: 'соперник опаснее — закрыть переходы и сохранить быстрый выход', when: c => c.underPressure || c.transitionThreat },
-        { id: 'verified_width_561', preset: 'Conte_WingbackWidth_bal4', decision: 'use_width', risk: 'medium', reason: 'фланг подтверждён как преимущество; одного закрытого центра после 5.61 недостаточно', when: c => c.centerClosed && c.wideQuality && (c.weakSideAvailable || c.attackingMomentum) && !c.ownCrossesBad && !c.opponentCrossesDangerous && !c.underPressure },
-        { id: 'late_gegenpress_561', preset: 'Klopp_Gegenpress_att4', decision: 'urgent_pressure', risk: 'high', reason: 'после 78-й нужен гол; высокий прессинг допустим только при низком браке и без fatigue/transition risk', when: c => c.needGoal && c.minute >= 78 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat },
-        { id: 'positional_attack_561', preset: 'Pep_TwoThreeFive_att3', decision: 'controlled_attack', risk: 'medium', reason: 'лучший наблюдаемый атакующий баланс — позиционно дожимать без раннего all-in прессинга', when: c => (c.needGoal || c.attackingMomentum) && c.lowBadActions && !c.underPressure && !c.transitionThreat },
-        { id: 'controlled_push_561', preset: 'Pep_ControlledPush_att3', decision: 'increase_attack', risk: 'medium', reason: 'нужен гол, но качество розыгрыша не позволяет сразу повышать прессинг', when: c => c.needGoal && !c.underPressure && !c.pressFatigueRisk },
-        { id: 'standard_control_561', preset: 'Arteta_Control433_bal3', decision: 'standard_control', risk: 'low', reason: 'нет сильного отрицательного сигнала — держать структурный контроль', when: c => !c.needGoal && !c.underPressure && !c.highBadActions && !c.attackingMomentum },
-        { id: 'safe_default_561', preset: 'Pep_BoxControl_bal2', decision: 'hold_control', risk: 'low', reason: 'нет надёжного сигнала для более рискованной смены — стабилизировать игру', when: () => true }
-    ];
-
     function copy(value) {
         return Array.isArray(value) ? value.slice() : [];
-    }
-
-    function number(value, fallback = 0) {
-        const n = Number(value);
-        return Number.isFinite(n) ? n : fallback;
-    }
-
-    function tagsOf(state = {}) {
-        if (Array.isArray(state.tags)) return state.tags;
-        if (Array.isArray(state.signals)) return state.signals;
-        return [];
-    }
-
-    function hasTag(state, tag) {
-        return tagsOf(state).includes(tag) || state?.[tag] === true;
-    }
-
-    function scoreStateOf(state = {}) {
-        return state?.score?.state || state.scoreState || 'unknown';
-    }
-
-    function isPressFatigue(state = {}) {
-        return !!state.pressFatigue?.active || hasTag(state, 'press_fatigue_risk');
-    }
-
-    function isHighBad(state = {}) {
-        return number(state.myBad, 0) >= 20 || hasTag(state, 'high_bad_actions');
-    }
-
-    function isLowBad(state = {}) {
-        const bad = number(state.myBad, 0);
-        return hasTag(state, 'low_bad_actions') || bad > 0 && bad <= 16;
-    }
-
-    function isUnderPressure(state = {}) {
-        const xgGap = number(state.oppXg, 0) - number(state.myXg, 0);
-        const xtGap = number(state.oppXT, 0) - number(state.myXT, 0);
-        return xgGap > 0.45 || xtGap > 0.25 || hasTag(state, 'under_pressure') || hasTag(state, 'transition_threat');
-    }
-
-    function hasVerifiedWideOpportunity(state = {}) {
-        const wideSignal = hasTag(state, 'wide_quality') || hasTag(state, 'wide_advantage') || hasTag(state, 'attack_left') || hasTag(state, 'attack_right');
-        const weakFullback = hasTag(state, 'opponent_flank_weak') || hasTag(state, 'weak_side_available');
-        const cardPressure = hasTag(state, 'opponent_fullback_yellow') || hasTag(state, 'opponent_wide_defender_booked');
-        const observedMomentum = hasTag(state, 'attacking_momentum');
-        const crossesBad = hasTag(state, 'own_open_play_crosses_bad') || hasTag(state, 'own_crosses_bad_total');
-        const crossesDangerous = hasTag(state, 'opponent_crosses_dangerous');
-        return wideSignal && (weakFullback || cardPressure || observedMomentum) && !crossesBad && !crossesDangerous && !isUnderPressure(state);
-    }
-
-    function selectEvidencePreset(state = {}) {
-        const minute = number(state.minute, 0);
-        const scoreState = scoreStateOf(state);
-        const needGoal = scoreState === 'losing' && minute >= 55 || hasTag(state, 'need_goal');
-        const protectLead = scoreState === 'winning' && minute >= 70 || hasTag(state, 'late_protect_lead');
-        const transitionThreat = isUnderPressure(state);
-        const highBad = isHighBad(state);
-        const lowBad = isLowBad(state);
-        const fatigue = isPressFatigue(state);
-        const attackingMomentum = hasTag(state, 'attacking_momentum');
-        const centerClosed = hasTag(state, 'center_closed') || hasTag(state, 'opponent_low_block');
-
-        if (protectLead && minute >= 82 && transitionThreat) {
-            return { name: 'Simeone_LowBlock_def5', reason: '5.61 policy: поздно ведём под тяжёлым давлением — аварийный низкий блок' };
-        }
-        if (protectLead) {
-            return {
-                name: transitionThreat || hasTag(state, 'opponent_crosses_dangerous') ? 'Simeone_Compact442_def4' : 'Pep_BoxControl_bal2',
-                reason: transitionThreat ? '5.61 policy: защитить преимущество компактной структурой' : '5.61 policy: сохранить преимущество через контроль и низкий риск'
-            };
-        }
-        if (fatigue) {
-            if (needGoal && minute >= 75) {
-                return {
-                    name: lowBad ? 'Pep_TwoThreeFive_att3' : 'Pep_ControlledPush_att3',
-                    reason: '5.61 policy: нужен гол, но цена прессинга высока — атаковать без автоматического gegenpress/chaos'
-                };
-            }
-            return { name: 'Pep_PressCooldown_bal2', reason: '5.61 policy: снизить цену прессинга и восстановить структуру' };
-        }
-        if (highBad) {
-            return { name: 'Pep_BoxControl_bal2', reason: '5.61 policy: высокий брак — сначала стабилизировать розыгрыш' };
-        }
-        if (transitionThreat) {
-            return { name: 'Compact_Counter_def3', reason: '5.61 policy: соперник опаснее — закрыть переходы и сохранить быстрый выход' };
-        }
-        if (needGoal && minute >= 86 && lowBad) {
-            return { name: 'Bielsa_ChaosPress_att5', reason: '5.61 policy: только финальное emergency-окно допускает chaos press' };
-        }
-        if (needGoal && minute >= 78 && lowBad) {
-            return { name: 'Klopp_Gegenpress_att4', reason: '5.61 policy: поздняя погоня допускает gegenpress только при низком браке и без fatigue/transition risk' };
-        }
-        if (needGoal || attackingMomentum) {
-            return {
-                name: lowBad || attackingMomentum ? 'Pep_TwoThreeFive_att3' : 'Pep_ControlledPush_att3',
-                reason: lowBad || attackingMomentum
-                    ? 'наблюдаемая выборка лучше поддерживает контролируемую позиционную атаку, чем ранний высокий прессинг'
-                    : 'нужен гол, но качество розыгрыша не позволяет сразу повышать прессинг'
-            };
-        }
-        if (centerClosed && hasVerifiedWideOpportunity(state)) {
-            return { name: 'Conte_WingbackWidth_bal4', reason: '5.61 policy: ширина подтверждена не только закрытым центром, но и фактическим преимуществом на фланге' };
-        }
-        return { name: 'Arteta_Control433_bal3', reason: '5.61 policy: структурный контроль является нейтральным baseline' };
     }
 
     function removePresetFromMap(map) {
@@ -6722,7 +7044,9 @@ if (typeof window !== 'undefined') {
         ['meta', 'traits', 'schemeStates', 'presetSchemeState'].forEach(key => removePresetFromMap(TacticPresetLibrary[key]));
         Object.entries(DIRECTION_OVERRIDES).forEach(([name, attackLanes]) => {
             if (!TacticPresetLibrary.traits?.[name]) return;
-            TacticPresetLibrary.traits[name] = Object.assign({}, TacticPresetLibrary.traits[name], { attackLanes: copy(attackLanes) });
+            TacticPresetLibrary.traits[name] = Object.assign({}, TacticPresetLibrary.traits[name], {
+                attackLanes: copy(attackLanes)
+            });
         });
     }
 
@@ -6730,29 +7054,67 @@ if (typeof window !== 'undefined') {
         return typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
     }
 
+    function evaluateRuleDecision(snapshot = {}, state = {}) {
+        const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
+        if (!engine?.evaluate) return null;
+        return engine.evaluate(snapshot, state);
+    }
+
+    function selectEvidencePreset(state = {}, snapshot = {}) {
+        const decision = evaluateRuleDecision(snapshot, state);
+        if (decision?.action?.preset && !REMOVED_PRESETS.has(decision.action.preset)) {
+            return {
+                name: decision.action.preset,
+                reason: decision.action.reason,
+                ruleDecision: decision,
+                progressionAction: decision.action.guardType || 'rule_scored'
+            };
+        }
+
+        return {
+            name: 'Arteta_Control433_bal3',
+            reason: '5.61 fallback: структурный контроль является нейтральным baseline',
+            progressionAction: 'rule_fallback'
+        };
+    }
+
     function patchActiveRegistry() {
         const registry = getActiveRegistry();
         if (!registry) return;
         registry.active = (registry.active || []).filter(name => !REMOVED_PRESETS.has(name));
         registry.removed = Array.from(new Set([...(registry.removed || []), ...REMOVED_PRESETS]));
-        registry.choosePreset = selectEvidencePreset;
+        registry.choosePreset = function chooseScoredPreset(state = {}, snapshot = {}) {
+            return selectEvidencePreset(state, snapshot);
+        };
+        registry.ruleDecisionSchema = 'slf_rule_decision_v3';
     }
 
     function patchRecommendationSelection() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__generator561SelectionApplied) return;
-        RecommendationEngine.selectRawPreset = function selectGenerator561Preset(snapshot, state = {}) {
-            const candidate = selectEvidencePreset(state);
-            const fused = this.applyPresetDecisionFusion ? this.applyPresetDecisionFusion(candidate, state) : candidate;
-            return REMOVED_PRESETS.has(fused?.name) ? candidate : fused;
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__generator561RuleScorerApplied) return;
+
+        RecommendationEngine.selectRawPreset = function selectGenerator561ScoredPreset(snapshot, state = {}) {
+            const candidate = selectEvidencePreset(state, snapshot || {});
+            if (snapshot && candidate?.ruleDecision) snapshot.ruleDecision = candidate.ruleDecision;
+            return REMOVED_PRESETS.has(candidate?.name)
+                ? { name: 'Arteta_Control433_bal3', reason: 'removed preset guard', progressionAction: 'removed_preset_guard' }
+                : candidate;
         };
+
+        if (typeof RecommendationEngine.applyProgressionGuard === 'function') {
+            const originalProgressionGuard = RecommendationEngine.applyProgressionGuard;
+            RecommendationEngine.applyProgressionGuard = function applyRuleScorerProgressionGuard(candidate, snapshot, context = {}) {
+                if (candidate?.ruleDecision) {
+                    return Object.assign({}, candidate, {
+                        progressionAction: candidate.ruleDecision.action?.guardType || candidate.progressionAction || 'rule_scored'
+                    });
+                }
+                return originalProgressionGuard.call(this, candidate, snapshot, context);
+            };
+        }
+
         RecommendationEngine.__directionPolicySelectRawPresetApplied = true;
         RecommendationEngine.__generator561SelectionApplied = true;
-    }
-
-    function patchHintRules() {
-        const registry = getActiveRegistry();
-        if (!registry?.applyHintPolicy) return;
-        registry.applyHintPolicy(AUDIT_TIER_561, HINT_RULES_561);
+        RecommendationEngine.__generator561RuleScorerApplied = true;
     }
 
     function applyPolicy() {
@@ -6760,7 +7122,6 @@ if (typeof window !== 'undefined') {
         patchLibrary();
         patchActiveRegistry();
         patchRecommendationSelection();
-        patchHintRules();
     }
 
     applyPolicy();
@@ -6768,13 +7129,17 @@ if (typeof window !== 'undefined') {
     if (typeof window !== 'undefined') {
         window.SLFTacticDirectionPolicy = {
             applied: true,
-            version: '5.61-evidence-v1',
+            version: '5.61-rule-score-v2',
             generatorVersion: '5.61',
+            autoApply: false,
             removedPresets: Array.from(REMOVED_PRESETS),
             directionOverrides: Object.assign({}, DIRECTION_OVERRIDES),
-            hasVerifiedWideOpportunity,
             selectEvidencePreset,
-            refresh() { applyPolicy(); return true; }
+            evaluateRuleDecision,
+            refresh() {
+                applyPolicy();
+                return true;
+            }
         };
     }
 })();
@@ -8336,40 +8701,35 @@ if (!isTacticPage) return;
     }
 
     function patchLateLosingPressCooldownGuard() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuardV2) return;
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuardV3) return;
+        // The scored 4.4.246 policy already handles late losing, fatigue, vetoes and emergency overrides.
+        // Do not wrap it with the legacy first-match override.
+        if (RecommendationEngine.__generator561RuleScorerApplied) {
+            RecommendationEngine.__lateLosingPressCooldownGuardV3 = true;
+            return;
+        }
         if (typeof RecommendationEngine.selectRawPreset !== 'function') return;
 
         const original = RecommendationEngine.selectRawPreset;
-
         RecommendationEngine.selectRawPreset = function(snapshot, state) {
             const candidate = original.apply(this, arguments);
-
             if (candidate?.name !== 'Pep_PressCooldown_bal2') return candidate;
             if (!state?.pressFatigue?.active) return candidate;
 
             const score = state.score || this.getScoreState(snapshot);
             const minute = Number(state.minute ?? this.getEffectiveMinute(snapshot));
-
-            if (score?.state !== 'losing' || !Number.isFinite(minute) || minute < 75) {
-                return candidate;
-            }
+            if (score?.state !== 'losing' || !Number.isFinite(minute) || minute < 75) return candidate;
 
             const myBad = Number(state.myBad || 0);
-            if (minute >= 86 && myBad > 0 && myBad <= 12) {
-                return {
-                    name: 'Klopp_Gegenpress_att4',
-                    reason: '5.61 late override: финальное окно допускает высокий прессинг только при очень низком браке'
-                };
-            }
-
             return {
                 name: myBad > 0 && myBad <= 16 ? 'Pep_TwoThreeFive_att3' : 'Pep_ControlledPush_att3',
-                reason: '5.61 late override: нужен гол, но fatigue исключает автоматический chaos press'
+                reason: 'legacy late override: нужен гол, но fatigue исключает автоматический chaos press'
             };
         };
 
         RecommendationEngine.__lateLosingPressCooldownGuard = true;
         RecommendationEngine.__lateLosingPressCooldownGuardV2 = true;
+        RecommendationEngine.__lateLosingPressCooldownGuardV3 = true;
     }
 
     function finiteNumber(value) {
@@ -8391,6 +8751,7 @@ if (!isTacticPage) return;
         const opp = pack?.opp?.stats || null;
         const score = RecommendationEngine.getScoreState(snapshot);
         const minute = RecommendationEngine.getEffectiveMinute(snapshot);
+        const decisionSignals = snapshot?.ruleDecision?.moment?.context || null;
         const parts = [];
 
         if (minute) parts.push(`${minute}'`);
@@ -8404,7 +8765,18 @@ if (!isTacticPage) return;
         const oppPower = statValue(opp, ['power']);
         if (myPower !== null && oppPower !== null) {
             const gap = myPower - oppPower;
-            parts.push(`сила ${Math.round(myPower)}–${Math.round(oppPower)} (${gap >= 0 ? '+' : ''}${Math.round(gap)})`);
+            const drop = finiteNumber(decisionSignals?.myPowerDropPct);
+            const dropText = drop !== null && drop > 0 ? `; падение ${drop.toFixed(1)}%` : '';
+            parts.push(`сила ${Math.round(myPower)}–${Math.round(oppPower)} (${gap >= 0 ? '+' : ''}${Math.round(gap)}${dropText})`);
+        }
+
+        const myDef = statValue(my, ['defVector']);
+        const myPress = statValue(my, ['pressVector']);
+        const oppDef = statValue(opp, ['defVector']);
+        const oppPress = statValue(opp, ['pressVector']);
+        if (myDef !== null && myPress !== null) {
+            const opponentText = oppDef !== null && oppPress !== null ? `; соп. ${Math.round(oppDef)}/${Math.round(oppPress)}` : '';
+            parts.push(`векторы об/пр ${Math.round(myDef)}/${Math.round(myPress)}${opponentText}`);
         }
 
         const bad = statValue(my, ['badActionsPct', 'defective']);
@@ -8425,6 +8797,7 @@ if (!isTacticPage) return;
     }
 
     function resolveRecommendedPresetName(snapshot, primaryPresetName) {
+        if (snapshot?.ruleDecision?.action?.preset) return snapshot.ruleDecision.action.preset;
         if (primaryPresetName) return primaryPresetName;
         const progression = STATE?.presetProgression || null;
         if (!progression) return '';
@@ -8441,14 +8814,53 @@ if (!isTacticPage) return;
         return scheme ? `${title}. Схема: ${scheme}.` : `${title}.`;
     }
 
+    function formatDecisionReason(reason) {
+        const text = String(reason || '').trim();
+        return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+    }
+
+    function buildDecisionExplanation(snapshot) {
+        const decision = snapshot?.ruleDecision;
+        if (!decision?.action) return '';
+
+        const confidence = decision.confidence?.level || 'low';
+        const confidenceLabel = confidence === 'high' ? 'высокая' : confidence === 'medium' ? 'средняя' : 'низкая';
+        const modeLabels = {
+            front_foot_squeeze: 'раннее давление',
+            active_control: 'активный контроль',
+            compact_counter_control: 'компактность и контратака',
+            controlled_chase: 'контролируемая погоня',
+            emergency_lock: 'аварийное удержание'
+        };
+        const mode = modeLabels[decision.action.decision] || decision.action.decision || 'активный контроль';
+        const reason = formatDecisionReason(decision.action.reason);
+        const guard = decision.action.guardType && decision.action.guardType !== 'top_score'
+            ? ` Ограничитель: ${decision.action.guardReason}.`
+            : '';
+        return `Режим: ${mode}. Уверенность: ${confidenceLabel}; разрыв ${Number(decision.margin || 0).toFixed(1)}. ${reason}.${guard}`;
+    }
+
+    function buildCandidateSummary(snapshot) {
+        const rows = (snapshot?.ruleDecision?.candidates || [])
+            .filter(item => !item.vetoed)
+            .slice(0, 3);
+        if (!rows.length) return '';
+        return rows.map(item => {
+            const title = RecommendationEngine.getPresetTitle(item.preset) || item.preset;
+            return `${title} ${item.score >= 0 ? '+' : ''}${Number(item.score || 0).toFixed(1)}`;
+        }).join(' · ');
+    }
+
     function patchCompactCoachMode() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__compactCoachModePatchedV3) return;
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__compactCoachModePatchedV4) return;
 
         RecommendationEngine.compactPlan = function compactCoachPlan(plan, snapshot, primaryPresetName = '') {
             const clean = this.normalizePlan(plan);
             const context = buildCompactContext(snapshot);
             const signalText = pickGeneratorSignals(clean.developer).join(' ');
             const actionText = buildRecommendedAction(snapshot, primaryPresetName);
+            const decisionText = buildDecisionExplanation(snapshot);
+            const candidateText = buildCandidateSummary(snapshot);
 
             return `
                 <div data-slf-rec-priority="1" data-slf-rec-section="combined" style="margin:5px 0;background:#151515;border:1px solid #444;border-radius:5px;color:#ddd;padding:9px;">
@@ -8456,19 +8868,21 @@ if (!isTacticPage) return;
                     ${context ? `<div style="line-height:1.4;"><b style="color:#8fd3ff;">Ситуация:</b> ${this.escapeHtml(context)}</div>` : ''}
                     ${signalText ? `<div style="line-height:1.4;margin-top:5px;"><b style="color:#c8ff7a;">Сигналы:</b> ${this.escapeHtml(signalText)}</div>` : ''}
                     <div style="line-height:1.4;margin-top:5px;"><b style="color:#75ff75;">Действие:</b> ${this.escapeHtml(actionText)}</div>
+                    ${decisionText ? `<div style="line-height:1.4;margin-top:5px;"><b style="color:#ffd76a;">Решение:</b> ${this.escapeHtml(decisionText)}</div>` : ''}
+                    ${candidateText ? `<div style="line-height:1.4;margin-top:5px;opacity:.85;"><b>Кандидаты:</b> ${this.escapeHtml(candidateText)}</div>` : ''}
                 </div>`;
         };
 
         RecommendationEngine.__compactCoachModePatched = true;
         RecommendationEngine.__compactCoachModePatchedV2 = true;
         RecommendationEngine.__compactCoachModePatchedV3 = true;
+        RecommendationEngine.__compactCoachModePatchedV4 = true;
     }
 
     function resetLiveOnlyRecommendationState() {
         if (typeof STATE === 'undefined') return;
         STATE.recommendationFreeze = null;
         // Keep pendingPresetEvent until the target generation window is reached.
-        // Clearing it here prevented current preset effects from being recorded.
         STATE.liveWaitStatus = null;
     }
 
@@ -8490,14 +8904,18 @@ if (!isTacticPage) return;
         if (RecommendationEngine.isPlaceholderHtml && RecommendationEngine.isPlaceholderHtml(html)) return;
 
         STATE.lastRecommendationHtml = html;
+        STATE.lastRuleDecision = snapshot?.ruleDecision || STATE.lastRuleDecision || null;
         STATE.lastRecommendationMeta = {
-            schema: 'slf_manual_hint_render_v1',
+            schema: 'slf_manual_hint_render_v2',
             savedAt: Date.now(),
             gameId: snapshot?.gameId || MatchStateParser.getGameId(),
             bucket: snapshot?.bucket || '',
             minute: snapshot?.minute ?? null,
             source: 'manual_hint_button',
-            generatorVersion: GENERATOR_VERSION
+            generatorVersion: GENERATOR_VERSION,
+            recommendedPreset: snapshot?.ruleDecision?.action?.preset || null,
+            confidence: snapshot?.ruleDecision?.confidence || null,
+            margin: snapshot?.ruleDecision?.margin ?? null
         };
     }
 
@@ -8515,13 +8933,13 @@ if (!isTacticPage) return;
             SnapshotEngine.rememberLiveSnapshot(snapshot);
         }
 
-        submitManualTelemetry(snapshot);
-
         const el = document.getElementById('slf-parser-recommendation');
+        // Build the scored recommendation before sending telemetry so the same snapshot
+        // contains candidate scores, veto reasons, vectors and confidence.
         const html = buildManualRecommendationHtml(snapshot);
-
         if (el) el.innerHTML = html;
         rememberManualRecommendation(html, snapshot);
+        submitManualTelemetry(snapshot);
 
         UI.addParserLog('Подсказка обновлена по текущему snapshot');
         UI.updateParserStatus('Подсказка обновлена вручную');
@@ -8536,7 +8954,7 @@ if (!isTacticPage) return;
         btn.id = 'slf-manual-recommendation-btn';
         btn.type = 'button';
         btn.textContent = '↻ Подсказка';
-        btn.title = 'Собрать текущий snapshot и показать подсказку по текущему состоянию';
+        btn.title = 'Собрать текущий snapshot и показать rule-based подсказку по текущему состоянию';
         btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
         btn.onclick = () => {
             btn.disabled = true;
@@ -19559,15 +19977,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.245',
-        scriptVersion: '4.4.245',
+        version: '4.4.246',
+        scriptVersion: '4.4.246',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.245',
+        scriptVersion: '4.4.246',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

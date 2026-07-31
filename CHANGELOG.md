@@ -1,5 +1,35 @@
 # Changelog
 
+## 4.4.246
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- docs/audit/rule-decision-44246.md
+- src/modules/live-parser/event-tracker.js
+- src/modules/strategy-data-recommendations/current-action-hint-engine.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- src/modules/tactics-presets/tactic-preset-direction-policy.js
+- vps/ops/PURGE_TACTICAL_DATA.md
+- vps/ops/purge_tactical_data.py
+- vps/ops/tests/README.md
+- vps/ops/tests/__init__.py
+- vps/ops/tests/test_purge_tactical_data.py
+
+Approved base commit:
+- a49d122f077d62a388dda3b295543aeeb2405777
+
+Approved commit:
+- 50fe858c5862e6d1c32fccdf3f1791ec5164039b
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.245
 
 ### Automatic latest-only build
