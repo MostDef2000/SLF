@@ -28,6 +28,32 @@
     const DIRECTION_OVERRIDES = Object.fromEntries(NEUTRAL_PRIORITY_PRESETS.map(name => [name, []]));
     DIRECTION_OVERRIDES.Conte_WingbackWidth_bal4 = ['left', 'right'];
 
+    const AUDIT_TIER_561 = {
+        primary: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Compact_Counter_def3', 'Pep_TwoThreeFive_att3', 'Pep_PressCooldown_bal2'],
+        conditional: ['Pep_ControlledPush_att3', 'Conte_WingbackWidth_bal4', 'Simeone_Compact442_def4'],
+        restricted: ['Klopp_Gegenpress_att4'],
+        emergency: ['Bielsa_ChaosPress_att5', 'Simeone_LowBlock_def5'],
+        removed: ['Mourinho_WeakSide_def3', 'Xabi_VerticalBox_att3', 'Xabi_BoxMidfield_bal3', 'DeZerbi_BaitPress_bal3', 'DeZerbi_Release_att4', 'Nagelsmann_WidePress_att4', 'Henta_LeftTrap_att3'],
+        needsMoreData: [],
+        experimental: [],
+        blocked: []
+    };
+
+    const HINT_RULES_561 = [
+        { id: 'late_goal_emergency_561', preset: 'Bielsa_ChaosPress_att5', decision: 'all_in_attack', risk: 'high', reason: 'после 86-й проигрываем и безопасные варианты недостаточны — финальный all-in', when: c => c.lateNeedGoal && c.minute >= 86 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat },
+        { id: 'late_protect_heavy_pressure_561', preset: 'Simeone_LowBlock_def5', decision: 'protect_lead', risk: 'high', reason: 'после 82-й ведём под тяжёлым давлением — закрыть штрафную', when: c => c.protectLead && c.underPressure && c.minute >= 82 },
+        { id: 'protect_compact_442_561', preset: 'Simeone_Compact442_def4', decision: 'compact_protect', risk: 'medium', reason: 'ведём поздно — компактно защитить преимущество', when: c => c.protectLead && c.minute >= 70 },
+        { id: 'own_press_fatigue_cooldown_561', preset: 'Pep_PressCooldown_bal2', decision: 'cooldown_press', risk: 'low', reason: 'растёт цена прессинга — снизить интенсивность и вернуть структуру', when: c => c.pressFatigueRisk && !c.needGoal },
+        { id: 'bad_actions_control_reset_561', preset: 'Pep_BoxControl_bal2', decision: 'stabilize_control', risk: 'low', reason: 'высокий брак — сначала стабилизировать розыгрыш', when: c => c.highBadActions },
+        { id: 'under_pressure_counter_561', preset: 'Compact_Counter_def3', decision: 'defensive_reset', risk: 'medium', reason: 'соперник опаснее — закрыть переходы и сохранить быстрый выход', when: c => c.underPressure || c.transitionThreat },
+        { id: 'verified_width_561', preset: 'Conte_WingbackWidth_bal4', decision: 'use_width', risk: 'medium', reason: 'фланг подтверждён как преимущество; одного закрытого центра после 5.61 недостаточно', when: c => c.centerClosed && c.wideQuality && (c.weakSideAvailable || c.attackingMomentum) && !c.ownCrossesBad && !c.opponentCrossesDangerous && !c.underPressure },
+        { id: 'late_gegenpress_561', preset: 'Klopp_Gegenpress_att4', decision: 'urgent_pressure', risk: 'high', reason: 'после 78-й нужен гол; высокий прессинг допустим только при низком браке и без fatigue/transition risk', when: c => c.needGoal && c.minute >= 78 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat },
+        { id: 'positional_attack_561', preset: 'Pep_TwoThreeFive_att3', decision: 'controlled_attack', risk: 'medium', reason: 'лучший наблюдаемый атакующий баланс — позиционно дожимать без раннего all-in прессинга', when: c => (c.needGoal || c.attackingMomentum) && c.lowBadActions && !c.underPressure && !c.transitionThreat },
+        { id: 'controlled_push_561', preset: 'Pep_ControlledPush_att3', decision: 'increase_attack', risk: 'medium', reason: 'нужен гол, но качество розыгрыша не позволяет сразу повышать прессинг', when: c => c.needGoal && !c.underPressure && !c.pressFatigueRisk },
+        { id: 'standard_control_561', preset: 'Arteta_Control433_bal3', decision: 'standard_control', risk: 'low', reason: 'нет сильного отрицательного сигнала — держать структурный контроль', when: c => !c.needGoal && !c.underPressure && !c.highBadActions && !c.attackingMomentum },
+        { id: 'safe_default_561', preset: 'Pep_BoxControl_bal2', decision: 'hold_control', risk: 'low', reason: 'нет надёжного сигнала для более рискованной смены — стабилизировать игру', when: () => true }
+    ];
+
     function copy(value) {
         return Array.isArray(value) ? value.slice() : [];
     }
@@ -159,22 +185,12 @@
         });
     }
 
-    function patchPresetStorage() {
-        if (typeof PresetStorage === 'undefined' || PresetStorage.__generator561FilterApplied) return;
-        ['getAllPresets', 'getAllLabels'].forEach(method => {
-            if (typeof PresetStorage[method] !== 'function') return;
-            const original = PresetStorage[method].bind(PresetStorage);
-            PresetStorage[method] = function filteredGenerator561Storage() {
-                const value = Object.assign({}, original.apply(PresetStorage, arguments) || {});
-                removePresetFromMap(value);
-                return value;
-            };
-        });
-        PresetStorage.__generator561FilterApplied = true;
+    function getActiveRegistry() {
+        return typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
     }
 
     function patchActiveRegistry() {
-        const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+        const registry = getActiveRegistry();
         if (!registry) return;
         registry.active = (registry.active || []).filter(name => !REMOVED_PRESETS.has(name));
         registry.removed = Array.from(new Set([...(registry.removed || []), ...REMOVED_PRESETS]));
@@ -193,35 +209,14 @@
     }
 
     function patchHintRules() {
-        if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
-        CurrentActionHintEngine.PRESET_AUDIT_TIER = {
-            primary: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Compact_Counter_def3', 'Pep_TwoThreeFive_att3', 'Pep_PressCooldown_bal2'],
-            conditional: ['Pep_ControlledPush_att3', 'Conte_WingbackWidth_bal4', 'Simeone_Compact442_def4'],
-            restricted: ['Klopp_Gegenpress_att4'],
-            emergency: ['Bielsa_ChaosPress_att5', 'Simeone_LowBlock_def5'],
-            removed: ['Mourinho_WeakSide_def3', 'Xabi_VerticalBox_att3', 'Xabi_BoxMidfield_bal3', 'DeZerbi_BaitPress_bal3', 'DeZerbi_Release_att4', 'Nagelsmann_WidePress_att4', 'Henta_LeftTrap_att3'],
-            needsMoreData: [], experimental: [], blocked: []
-        };
-        CurrentActionHintEngine.HINT_RULES = [
-            { id: 'late_goal_emergency_561', preset: 'Bielsa_ChaosPress_att5', decision: 'all_in_attack', risk: 'high', reason: 'после 86-й проигрываем и безопасные варианты недостаточны — финальный all-in', when: c => c.lateNeedGoal && c.minute >= 86 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat },
-            { id: 'late_protect_heavy_pressure_561', preset: 'Simeone_LowBlock_def5', decision: 'protect_lead', risk: 'high', reason: 'после 82-й ведём под тяжёлым давлением — закрыть штрафную', when: c => c.protectLead && c.underPressure && c.minute >= 82 },
-            { id: 'protect_compact_442_561', preset: 'Simeone_Compact442_def4', decision: 'compact_protect', risk: 'medium', reason: 'ведём поздно — компактно защитить преимущество', when: c => c.protectLead && c.minute >= 70 },
-            { id: 'own_press_fatigue_cooldown_561', preset: 'Pep_PressCooldown_bal2', decision: 'cooldown_press', risk: 'low', reason: 'растёт цена прессинга — снизить интенсивность и вернуть структуру', when: c => c.pressFatigueRisk && !c.needGoal },
-            { id: 'bad_actions_control_reset_561', preset: 'Pep_BoxControl_bal2', decision: 'stabilize_control', risk: 'low', reason: 'высокий брак — сначала стабилизировать розыгрыш', when: c => c.highBadActions },
-            { id: 'under_pressure_counter_561', preset: 'Compact_Counter_def3', decision: 'defensive_reset', risk: 'medium', reason: 'соперник опаснее — закрыть переходы и сохранить быстрый выход', when: c => c.underPressure || c.transitionThreat },
-            { id: 'verified_width_561', preset: 'Conte_WingbackWidth_bal4', decision: 'use_width', risk: 'medium', reason: 'фланг подтверждён как преимущество; одного закрытого центра после 5.61 недостаточно', when: c => c.centerClosed && c.wideQuality && (c.weakSideAvailable || c.attackingMomentum) && !c.ownCrossesBad && !c.opponentCrossesDangerous && !c.underPressure },
-            { id: 'late_gegenpress_561', preset: 'Klopp_Gegenpress_att4', decision: 'urgent_pressure', risk: 'high', reason: 'после 78-й нужен гол; высокий прессинг допустим только при низком браке и без fatigue/transition risk', when: c => c.needGoal && c.minute >= 78 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat },
-            { id: 'positional_attack_561', preset: 'Pep_TwoThreeFive_att3', decision: 'controlled_attack', risk: 'medium', reason: 'лучший наблюдаемый атакующий баланс — позиционно дожимать без раннего all-in прессинга', when: c => (c.needGoal || c.attackingMomentum) && c.lowBadActions && !c.underPressure && !c.transitionThreat },
-            { id: 'controlled_push_561', preset: 'Pep_ControlledPush_att3', decision: 'increase_attack', risk: 'medium', reason: 'нужен гол, но качество розыгрыша не позволяет сразу повышать прессинг', when: c => c.needGoal && !c.underPressure && !c.pressFatigueRisk },
-            { id: 'standard_control_561', preset: 'Arteta_Control433_bal3', decision: 'standard_control', risk: 'low', reason: 'нет сильного отрицательного сигнала — держать структурный контроль', when: c => !c.needGoal && !c.underPressure && !c.highBadActions && !c.attackingMomentum },
-            { id: 'safe_default_561', preset: 'Pep_BoxControl_bal2', decision: 'hold_control', risk: 'low', reason: 'нет надёжного сигнала для более рискованной смены — стабилизировать игру', when: () => true }
-        ];
+        const registry = getActiveRegistry();
+        if (!registry?.applyHintPolicy) return;
+        registry.applyHintPolicy(AUDIT_TIER_561, HINT_RULES_561);
     }
 
     function applyPolicy() {
         patchBasePresets();
         patchLibrary();
-        patchPresetStorage();
         patchActiveRegistry();
         patchRecommendationSelection();
         patchHintRules();
