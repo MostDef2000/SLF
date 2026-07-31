@@ -61,8 +61,9 @@
     }
 
     function evaluateRuleDecision(snapshot = {}, state = {}) {
-        if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine?.evaluate) return null;
-        return CurrentActionHintEngine.evaluate(snapshot, state);
+        const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
+        if (!engine?.evaluate) return null;
+        return engine.evaluate(snapshot, state);
     }
 
     function selectEvidencePreset(state = {}, snapshot = {}) {
