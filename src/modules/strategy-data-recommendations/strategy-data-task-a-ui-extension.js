@@ -57,40 +57,35 @@
     }
 
     function patchLateLosingPressCooldownGuard() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuardV2) return;
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuardV3) return;
+        // The scored 4.4.246 policy already handles late losing, fatigue, vetoes and emergency overrides.
+        // Do not wrap it with the legacy first-match override.
+        if (RecommendationEngine.__generator561RuleScorerApplied) {
+            RecommendationEngine.__lateLosingPressCooldownGuardV3 = true;
+            return;
+        }
         if (typeof RecommendationEngine.selectRawPreset !== 'function') return;
 
         const original = RecommendationEngine.selectRawPreset;
-
         RecommendationEngine.selectRawPreset = function(snapshot, state) {
             const candidate = original.apply(this, arguments);
-
             if (candidate?.name !== 'Pep_PressCooldown_bal2') return candidate;
             if (!state?.pressFatigue?.active) return candidate;
 
             const score = state.score || this.getScoreState(snapshot);
             const minute = Number(state.minute ?? this.getEffectiveMinute(snapshot));
-
-            if (score?.state !== 'losing' || !Number.isFinite(minute) || minute < 75) {
-                return candidate;
-            }
+            if (score?.state !== 'losing' || !Number.isFinite(minute) || minute < 75) return candidate;
 
             const myBad = Number(state.myBad || 0);
-            if (minute >= 86 && myBad > 0 && myBad <= 12) {
-                return {
-                    name: 'Klopp_Gegenpress_att4',
-                    reason: '5.61 late override: финальное окно допускает высокий прессинг только при очень низком браке'
-                };
-            }
-
             return {
                 name: myBad > 0 && myBad <= 16 ? 'Pep_TwoThreeFive_att3' : 'Pep_ControlledPush_att3',
-                reason: '5.61 late override: нужен гол, но fatigue исключает автоматический chaos press'
+                reason: 'legacy late override: нужен гол, но fatigue исключает автоматический chaos press'
             };
         };
 
         RecommendationEngine.__lateLosingPressCooldownGuard = true;
         RecommendationEngine.__lateLosingPressCooldownGuardV2 = true;
+        RecommendationEngine.__lateLosingPressCooldownGuardV3 = true;
     }
 
     function finiteNumber(value) {
@@ -112,6 +107,7 @@
         const opp = pack?.opp?.stats || null;
         const score = RecommendationEngine.getScoreState(snapshot);
         const minute = RecommendationEngine.getEffectiveMinute(snapshot);
+        const decisionSignals = snapshot?.ruleDecision?.moment?.context || null;
         const parts = [];
 
         if (minute) parts.push(`${minute}'`);
@@ -125,7 +121,18 @@
         const oppPower = statValue(opp, ['power']);
         if (myPower !== null && oppPower !== null) {
             const gap = myPower - oppPower;
-            parts.push(`сила ${Math.round(myPower)}–${Math.round(oppPower)} (${gap >= 0 ? '+' : ''}${Math.round(gap)})`);
+            const drop = finiteNumber(decisionSignals?.myPowerDropPct);
+            const dropText = drop !== null && drop > 0 ? `; падение ${drop.toFixed(1)}%` : '';
+            parts.push(`сила ${Math.round(myPower)}–${Math.round(oppPower)} (${gap >= 0 ? '+' : ''}${Math.round(gap)}${dropText})`);
+        }
+
+        const myDef = statValue(my, ['defVector']);
+        const myPress = statValue(my, ['pressVector']);
+        const oppDef = statValue(opp, ['defVector']);
+        const oppPress = statValue(opp, ['pressVector']);
+        if (myDef !== null && myPress !== null) {
+            const opponentText = oppDef !== null && oppPress !== null ? `; соп. ${Math.round(oppDef)}/${Math.round(oppPress)}` : '';
+            parts.push(`векторы об/пр ${Math.round(myDef)}/${Math.round(myPress)}${opponentText}`);
         }
 
         const bad = statValue(my, ['badActionsPct', 'defective']);
@@ -146,6 +153,7 @@
     }
 
     function resolveRecommendedPresetName(snapshot, primaryPresetName) {
+        if (snapshot?.ruleDecision?.action?.preset) return snapshot.ruleDecision.action.preset;
         if (primaryPresetName) return primaryPresetName;
         const progression = STATE?.presetProgression || null;
         if (!progression) return '';
@@ -162,14 +170,53 @@
         return scheme ? `${title}. Схема: ${scheme}.` : `${title}.`;
     }
 
+    function formatDecisionReason(reason) {
+        const text = String(reason || '').trim();
+        return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+    }
+
+    function buildDecisionExplanation(snapshot) {
+        const decision = snapshot?.ruleDecision;
+        if (!decision?.action) return '';
+
+        const confidence = decision.confidence?.level || 'low';
+        const confidenceLabel = confidence === 'high' ? 'высокая' : confidence === 'medium' ? 'средняя' : 'низкая';
+        const modeLabels = {
+            front_foot_squeeze: 'раннее давление',
+            active_control: 'активный контроль',
+            compact_counter_control: 'компактность и контратака',
+            controlled_chase: 'контролируемая погоня',
+            emergency_lock: 'аварийное удержание'
+        };
+        const mode = modeLabels[decision.action.decision] || decision.action.decision || 'активный контроль';
+        const reason = formatDecisionReason(decision.action.reason);
+        const guard = decision.action.guardType && decision.action.guardType !== 'top_score'
+            ? ` Ограничитель: ${decision.action.guardReason}.`
+            : '';
+        return `Режим: ${mode}. Уверенность: ${confidenceLabel}; разрыв ${Number(decision.margin || 0).toFixed(1)}. ${reason}.${guard}`;
+    }
+
+    function buildCandidateSummary(snapshot) {
+        const rows = (snapshot?.ruleDecision?.candidates || [])
+            .filter(item => !item.vetoed)
+            .slice(0, 3);
+        if (!rows.length) return '';
+        return rows.map(item => {
+            const title = RecommendationEngine.getPresetTitle(item.preset) || item.preset;
+            return `${title} ${item.score >= 0 ? '+' : ''}${Number(item.score || 0).toFixed(1)}`;
+        }).join(' · ');
+    }
+
     function patchCompactCoachMode() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__compactCoachModePatchedV3) return;
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__compactCoachModePatchedV4) return;
 
         RecommendationEngine.compactPlan = function compactCoachPlan(plan, snapshot, primaryPresetName = '') {
             const clean = this.normalizePlan(plan);
             const context = buildCompactContext(snapshot);
             const signalText = pickGeneratorSignals(clean.developer).join(' ');
             const actionText = buildRecommendedAction(snapshot, primaryPresetName);
+            const decisionText = buildDecisionExplanation(snapshot);
+            const candidateText = buildCandidateSummary(snapshot);
 
             return `
                 <div data-slf-rec-priority="1" data-slf-rec-section="combined" style="margin:5px 0;background:#151515;border:1px solid #444;border-radius:5px;color:#ddd;padding:9px;">
@@ -177,19 +224,21 @@
                     ${context ? `<div style="line-height:1.4;"><b style="color:#8fd3ff;">Ситуация:</b> ${this.escapeHtml(context)}</div>` : ''}
                     ${signalText ? `<div style="line-height:1.4;margin-top:5px;"><b style="color:#c8ff7a;">Сигналы:</b> ${this.escapeHtml(signalText)}</div>` : ''}
                     <div style="line-height:1.4;margin-top:5px;"><b style="color:#75ff75;">Действие:</b> ${this.escapeHtml(actionText)}</div>
+                    ${decisionText ? `<div style="line-height:1.4;margin-top:5px;"><b style="color:#ffd76a;">Решение:</b> ${this.escapeHtml(decisionText)}</div>` : ''}
+                    ${candidateText ? `<div style="line-height:1.4;margin-top:5px;opacity:.85;"><b>Кандидаты:</b> ${this.escapeHtml(candidateText)}</div>` : ''}
                 </div>`;
         };
 
         RecommendationEngine.__compactCoachModePatched = true;
         RecommendationEngine.__compactCoachModePatchedV2 = true;
         RecommendationEngine.__compactCoachModePatchedV3 = true;
+        RecommendationEngine.__compactCoachModePatchedV4 = true;
     }
 
     function resetLiveOnlyRecommendationState() {
         if (typeof STATE === 'undefined') return;
         STATE.recommendationFreeze = null;
         // Keep pendingPresetEvent until the target generation window is reached.
-        // Clearing it here prevented current preset effects from being recorded.
         STATE.liveWaitStatus = null;
     }
 
@@ -211,14 +260,18 @@
         if (RecommendationEngine.isPlaceholderHtml && RecommendationEngine.isPlaceholderHtml(html)) return;
 
         STATE.lastRecommendationHtml = html;
+        STATE.lastRuleDecision = snapshot?.ruleDecision || STATE.lastRuleDecision || null;
         STATE.lastRecommendationMeta = {
-            schema: 'slf_manual_hint_render_v1',
+            schema: 'slf_manual_hint_render_v2',
             savedAt: Date.now(),
             gameId: snapshot?.gameId || MatchStateParser.getGameId(),
             bucket: snapshot?.bucket || '',
             minute: snapshot?.minute ?? null,
             source: 'manual_hint_button',
-            generatorVersion: GENERATOR_VERSION
+            generatorVersion: GENERATOR_VERSION,
+            recommendedPreset: snapshot?.ruleDecision?.action?.preset || null,
+            confidence: snapshot?.ruleDecision?.confidence || null,
+            margin: snapshot?.ruleDecision?.margin ?? null
         };
     }
 
@@ -236,13 +289,13 @@
             SnapshotEngine.rememberLiveSnapshot(snapshot);
         }
 
-        submitManualTelemetry(snapshot);
-
         const el = document.getElementById('slf-parser-recommendation');
+        // Build the scored recommendation before sending telemetry so the same snapshot
+        // contains candidate scores, veto reasons, vectors and confidence.
         const html = buildManualRecommendationHtml(snapshot);
-
         if (el) el.innerHTML = html;
         rememberManualRecommendation(html, snapshot);
+        submitManualTelemetry(snapshot);
 
         UI.addParserLog('Подсказка обновлена по текущему snapshot');
         UI.updateParserStatus('Подсказка обновлена вручную');
@@ -257,7 +310,7 @@
         btn.id = 'slf-manual-recommendation-btn';
         btn.type = 'button';
         btn.textContent = '↻ Подсказка';
-        btn.title = 'Собрать текущий snapshot и показать подсказку по текущему состоянию';
+        btn.title = 'Собрать текущий snapshot и показать rule-based подсказку по текущему состоянию';
         btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
         btn.onclick = () => {
             btn.disabled = true;
