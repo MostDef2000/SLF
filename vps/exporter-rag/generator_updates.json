@@ -1,0 +1,276 @@
+{
+  "schema": "slf_generator_update_pack_v1",
+  "id": "generator_5_61_2026_07",
+  "generatorVersion": "5.61",
+  "publishedAt": "2026-07-13",
+  "expectationsResetAt": "2026-07-22",
+  "status": "active",
+  "source": {
+    "type": "user_supplied_official_changelog",
+    "authority": "official_changelog_claimed_by_user",
+    "sourceUrl": null,
+    "verificationStatus": "pending_source_url",
+    "receivedAt": "2026-07-31",
+    "language": "ru",
+    "note": "Structured from the official generator 5.61 changelog text supplied by the project owner. Add the public source URL later without changing rule IDs."
+  },
+  "rules": [
+    {
+      "id": "generator_561_release",
+      "schema": "slf_generator_rule_v1",
+      "kind": "release_context",
+      "authority": "user_supplied_official_changelog",
+      "confidence": "official_text_user_supplied",
+      "status": "active",
+      "effectiveFrom": "2026-07-13",
+      "effectiveUntil": null,
+      "topic": "generator_version",
+      "title": "Generator 5.61 became the active match model",
+      "text": "The match generator was updated to version 5.61 during the 2026 offseason. Match evidence should be interpreted against this version boundary.",
+      "facts": [
+        "Generator version 5.61 was introduced in the 2026 offseason.",
+        "The announced package included rating/form calculation, visualization, and targeted balance changes."
+      ],
+      "implications": [
+        "Segment historical evidence before and after generator 5.61 when a timestamp is available.",
+        "Do not assume that pre-5.61 rating, dribbling, flank, card, or set-piece patterns remain directly comparable."
+      ],
+      "useFor": [
+        "historical_segmentation",
+        "generator_context",
+        "evidence_weighting"
+      ],
+      "runtime": {
+        "safe": true,
+        "type": "analysis_context",
+        "action": "tag_current_generator_version_5_61"
+      }
+    },
+    {
+      "id": "generator_561_rating_form_model",
+      "schema": "slf_generator_rule_v1",
+      "kind": "mechanic",
+      "authority": "user_supplied_official_changelog",
+      "confidence": "official_text_user_supplied",
+      "status": "active",
+      "effectiveFrom": "2026-07-13",
+      "effectiveUntil": null,
+      "topic": "ratings_form",
+      "title": "Rating and form calculation was rebalanced",
+      "text": "Ratings moved toward a SofaScore/WhoScored-style distribution, with most values between 6.0 and 8.0. Defensive actions matter more for defenders and DM, goalkeeper saves are rewarded more, ordinary safe passing matters less, and repeated goals or assists have diminishing value.",
+      "facts": [
+        "Most player ratings now fall in the 6.0 to 8.0 range instead of the previous wider 5 to 9 range.",
+        "Defenders and defensive midfielders receive larger rewards for defensive actions.",
+        "Goalkeepers receive larger save bonuses and smaller penalties for conceded goals.",
+        "Ordinary passes have less influence on the final rating.",
+        "Goals and assists have regressive value: the first contribution is worth more than later contributions."
+      ],
+      "implications": [
+        "A rating near 6.x is not automatically evidence of a poor match under version 5.61.",
+        "Do not evaluate possession tactics by pass volume alone.",
+        "Do not expect repeated scoring against a weak opponent to create the same extreme form gains as before."
+      ],
+      "useFor": [
+        "ratings_interpretation",
+        "form_analysis",
+        "player_evaluation"
+      ],
+      "runtime": {
+        "safe": true,
+        "type": "interpretation_guard",
+        "action": "use_generator_561_rating_scale"
+      }
+    },
+    {
+      "id": "generator_561_defense_form_transition",
+      "schema": "slf_generator_rule_v1",
+      "kind": "temporal_balance_event",
+      "authority": "user_supplied_official_changelog",
+      "confidence": "official_text_user_supplied",
+      "status": "historical_transition",
+      "effectiveFrom": "2026-07-13",
+      "effectiveUntil": "2026-07-22",
+      "topic": "fatigue_form",
+      "title": "Temporary defensive dominance after the rating update",
+      "text": "The new rating expectations temporarily increased form for defenders and goalkeepers while reducing form for midfielders and attackers. Expectations were reset on 2026-07-22, so this is a transition event rather than a permanent tactical rule.",
+      "facts": [
+        "Defenders and goalkeepers temporarily gained form because their previous expectations were lower than their new ratings.",
+        "Midfielders and attackers temporarily lost form because their previous expectations were higher.",
+        "Expectations were reset on 2026-07-22."
+      ],
+      "implications": [
+        "Do not encode the temporary scoring decline as a permanent bias toward attacking tactics.",
+        "Treat matches from 2026-07-13 through the reset period as a distinct transition cohort."
+      ],
+      "useFor": [
+        "historical_segmentation",
+        "temporary_balance_context",
+        "form_analysis"
+      ],
+      "runtime": {
+        "safe": false,
+        "type": "historical_only",
+        "action": "exclude_from_persistent_tactical_bias"
+      }
+    },
+    {
+      "id": "generator_561_fullback_flank_defense",
+      "schema": "slf_generator_rule_v1",
+      "kind": "mechanic",
+      "authority": "user_supplied_official_changelog",
+      "confidence": "official_text_user_supplied",
+      "status": "active",
+      "effectiveFrom": "2026-07-13",
+      "effectiveUntil": null,
+      "topic": "wide_play",
+      "title": "LD and RD defend wide threats more reliably",
+      "text": "Fullbacks now step out more consistently against wide threats, making default LW/RW attacks less universally effective. Fullback skill matters more, and weak wide defenders can be exposed through yellow cards.",
+      "facts": [
+        "LD and RD more reliably close wide attackers instead of ignoring the flank threat.",
+        "The default wide attacking pattern is less universal.",
+        "The quality of LD, RD, LB, and RB matters more.",
+        "Weak wide defenders can accumulate yellow cards more easily."
+      ],
+      "implications": [
+        "Before recommending a wide attack, consider the opponent fullbacks, their cards, and observed winger efficiency.",
+        "A closed center alone is no longer sufficient evidence for a wide-attack recommendation."
+      ],
+      "useFor": [
+        "attack_direction",
+        "wide_play",
+        "card_targeting",
+        "preset_guard"
+      ],
+      "runtime": {
+        "safe": true,
+        "type": "tactical_guard",
+        "action": "require_wide_quality_or_card_advantage"
+      }
+    },
+    {
+      "id": "generator_561_red_cards",
+      "schema": "slf_generator_rule_v1",
+      "kind": "mechanic",
+      "authority": "user_supplied_official_changelog",
+      "confidence": "official_text_user_supplied",
+      "status": "active",
+      "effectiveFrom": "2026-07-13",
+      "effectiveUntil": null,
+      "topic": "cards_discipline",
+      "title": "Red cards returned as a meaningful match event",
+      "text": "Red cards occur again at an announced average of about 0.13 per match. Very early dismissals were reduced, but can still occur after penalties.",
+      "facts": [
+        "The announced average is approximately 0.13 red cards per match.",
+        "Early dismissals were adjusted after the initial update.",
+        "A very early red card remains possible after a penalty incident."
+      ],
+      "implications": [
+        "A red card should invalidate ordinary recommendation hold periods and trigger immediate reassessment.",
+        "Own-team and opponent red cards must be treated as separate tactical states."
+      ],
+      "useFor": [
+        "hard_trigger",
+        "match_state",
+        "tactical_reassessment"
+      ],
+      "runtime": {
+        "safe": true,
+        "type": "hard_trigger",
+        "action": "reset_recommendation_hold_on_red_card"
+      }
+    },
+    {
+      "id": "generator_561_own_half_dribbling",
+      "schema": "slf_generator_rule_v1",
+      "kind": "visual_and_behavioral_fix",
+      "authority": "user_supplied_official_changelog",
+      "confidence": "official_text_user_supplied",
+      "status": "active",
+      "effectiveFrom": "2026-07-13",
+      "effectiveUntil": null,
+      "topic": "dribbling_passing",
+      "title": "Players dribble less often in their own half",
+      "text": "Players now choose a pass more often instead of dribbling in their own half, reducing repeated loss-recovery-loss sequences in that zone.",
+      "facts": [
+        "Own-half dribbling frequency was reduced.",
+        "Passing is selected more often in those situations.",
+        "The change was described as a visual logic fix for the 2D match view."
+      ],
+      "implications": [
+        "Pre-5.61 own-half dribbling and turnover patterns should not be compared directly with current data.",
+        "Do not infer a new tactical instruction solely from fewer own-half dribbles."
+      ],
+      "useFor": [
+        "historical_segmentation",
+        "dribbling_analysis",
+        "turnover_analysis"
+      ],
+      "runtime": {
+        "safe": true,
+        "type": "analysis_guard",
+        "action": "segment_own_half_dribbling_by_generator_version"
+      }
+    },
+    {
+      "id": "generator_561_cd_pressing_role_disabled",
+      "schema": "slf_generator_rule_v1",
+      "kind": "hard_role_constraint",
+      "authority": "user_supplied_official_changelog",
+      "confidence": "official_text_user_supplied",
+      "status": "active",
+      "effectiveFrom": "2026-07-13",
+      "effectiveUntil": null,
+      "topic": "roles_pressing",
+      "title": "Pressing-player role is disabled for central defenders",
+      "text": "The pressing-player role for CD was disabled because it was a weak tactical tool and could be used as a hidden manipulation mechanism.",
+      "facts": [
+        "CD can no longer use the pressing-player role under generator 5.61 rules."
+      ],
+      "implications": [
+        "Never recommend the pressing-player role for a central defender.",
+        "Treat old records that depend on this role as legacy evidence."
+      ],
+      "useFor": [
+        "role_validation",
+        "hard_constraint",
+        "legacy_rule_filter"
+      ],
+      "runtime": {
+        "safe": true,
+        "type": "hard_constraint",
+        "action": "forbid_pressing_player_role_for_cd"
+      }
+    },
+    {
+      "id": "generator_561_st_set_piece_magnetism_disabled",
+      "schema": "slf_generator_rule_v1",
+      "kind": "hard_mechanic_change",
+      "authority": "user_supplied_official_changelog",
+      "confidence": "official_text_user_supplied",
+      "status": "active",
+      "effectiveFrom": "2026-07-13",
+      "effectiveUntil": null,
+      "topic": "set_pieces",
+      "title": "ST no longer magnetizes set-piece crosses",
+      "text": "The hidden set-piece magnetism for a striker with the target-player role was disabled. Open-play finishing remains centered on ST, while set-piece crosses are more likely to target central defenders.",
+      "facts": [
+        "The target-player role on ST no longer creates a hidden priority for set-piece crosses.",
+        "Central defenders are now more relevant set-piece aerial targets."
+      ],
+      "implications": [
+        "Do not recommend a striker role as a method for concentrating set-piece deliveries.",
+        "Evaluate central defenders and delivery quality when reasoning about attacking set pieces."
+      ],
+      "useFor": [
+        "set_piece_reasoning",
+        "role_validation",
+        "legacy_rule_filter"
+      ],
+      "runtime": {
+        "safe": true,
+        "type": "hard_constraint",
+        "action": "ignore_st_target_role_for_set_piece_targeting"
+      }
+    }
+  ]
+}
