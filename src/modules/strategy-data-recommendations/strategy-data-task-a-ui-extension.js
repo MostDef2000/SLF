@@ -4,6 +4,8 @@
 (function strategyDataTaskAExtension() {
     'use strict';
 
+    const GENERATOR_VERSION = '5.61';
+
     function getFallbackTargetTeam(snapshot) {
         const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
         if (!teams.length) return null;
@@ -55,7 +57,7 @@
     }
 
     function patchLateLosingPressCooldownGuard() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuard) return;
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__lateLosingPressCooldownGuardV2) return;
         if (typeof RecommendationEngine.selectRawPreset !== 'function') return;
 
         const original = RecommendationEngine.selectRawPreset;
@@ -74,31 +76,21 @@
             }
 
             const myBad = Number(state.myBad || 0);
-            const finalLosing = minute >= 80;
-            const lastApplied = STATE?.presetProgression?.lastAppliedPreset || '';
-            const currentIsChaos = lastApplied === 'Bielsa_ChaosPress_att5';
-
-            if (finalLosing && currentIsChaos && myBad < 26) {
+            if (minute >= 86 && myBad > 0 && myBad <= 12) {
                 return {
-                    name: 'Bielsa_ChaosPress_att5',
-                    reason: 'late game override: preserve chaos press'
-                };
-            }
-
-            if (finalLosing) {
-                return {
-                    name: myBad >= 24 ? 'Klopp_Gegenpress_att4' : 'Bielsa_ChaosPress_att5',
-                    reason: 'final losing state adjustment'
+                    name: 'Klopp_Gegenpress_att4',
+                    reason: '5.61 late override: финальное окно допускает высокий прессинг только при очень низком браке'
                 };
             }
 
             return {
-                name: myBad >= 24 ? 'Pep_ControlledPush_att3' : 'Klopp_Gegenpress_att4',
-                reason: 'late losing override'
+                name: myBad > 0 && myBad <= 16 ? 'Pep_TwoThreeFive_att3' : 'Pep_ControlledPush_att3',
+                reason: '5.61 late override: нужен гол, но fatigue исключает автоматический chaos press'
             };
         };
 
         RecommendationEngine.__lateLosingPressCooldownGuard = true;
+        RecommendationEngine.__lateLosingPressCooldownGuardV2 = true;
     }
 
     function finiteNumber(value) {
@@ -196,8 +188,14 @@
     function resetLiveOnlyRecommendationState() {
         if (typeof STATE === 'undefined') return;
         STATE.recommendationFreeze = null;
-        STATE.pendingPresetEvent = null;
+        // Keep pendingPresetEvent until the target generation window is reached.
+        // Clearing it here prevented current preset effects from being recorded.
         STATE.liveWaitStatus = null;
+    }
+
+    function submitManualTelemetry(snapshot) {
+        if (typeof SnapshotEngine?.submitManualTelemetry !== 'function') return;
+        SnapshotEngine.submitManualTelemetry(snapshot, GENERATOR_VERSION);
     }
 
     function buildManualRecommendationHtml(snapshot) {
@@ -219,7 +217,8 @@
             gameId: snapshot?.gameId || MatchStateParser.getGameId(),
             bucket: snapshot?.bucket || '',
             minute: snapshot?.minute ?? null,
-            source: 'manual_hint_button'
+            source: 'manual_hint_button',
+            generatorVersion: GENERATOR_VERSION
         };
     }
 
@@ -231,10 +230,13 @@
 
         snapshot.recommendationSource = 'manual_hint_button';
         snapshot.manualRecommendationRefresh = true;
+        snapshot.generatorVersion = GENERATOR_VERSION;
 
         if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.rememberLiveSnapshot) {
             SnapshotEngine.rememberLiveSnapshot(snapshot);
         }
+
+        submitManualTelemetry(snapshot);
 
         const el = document.getElementById('slf-parser-recommendation');
         const html = buildManualRecommendationHtml(snapshot);
