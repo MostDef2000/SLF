@@ -56,23 +56,36 @@ case "$component" in
     EXPORT_DIR='/opt/slf_ai_exporter_v2/slf_ai_exporter_v2'
     VENV_PY="$EXPORT_DIR/.venv/bin/python"
     VENV_PIP="$EXPORT_DIR/.venv/bin/pip"
+    FILES='slf_ai_export.py slf_rag_build.py slf_generator_update_rag.py generator_updates.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
     [ -x "$VENV_PY" ] || { echo "Missing exporter Python: $VENV_PY" >&2; exit 1; }
     [ -x "$VENV_PIP" ] || { echo "Missing exporter pip: $VENV_PIP" >&2; exit 1; }
 
-    for file in slf_ai_export.py slf_rag_build.py run_daily_export.sh slf_drive_filter.txt requirements.txt; do
-      [ -f "$BACKUP_DIR/$file" ] || continue
-      mode=0644
-      [ "$file" = 'run_daily_export.sh' ] && mode=0755
-      install -m "$mode" "$BACKUP_DIR/$file" "$EXPORT_DIR/$file"
+    for file in $FILES; do
+      if [ -f "$BACKUP_DIR/$file" ]; then
+        mode=0644
+        [ "$file" = 'run_daily_export.sh' ] && mode=0755
+        install -m "$mode" "$BACKUP_DIR/$file" "$EXPORT_DIR/$file"
+      elif [ "$file" = 'slf_generator_update_rag.py' ] || [ "$file" = 'generator_updates.json' ]; then
+        rm -f "$EXPORT_DIR/$file"
+      fi
     done
     [ -f "$BACKUP_DIR/requirements.txt" ] && "$VENV_PIP" install -r "$EXPORT_DIR/requirements.txt"
     rm -f "$EXPORT_DIR/DEPLOYED_GIT_COMMIT"
 
-    "$VENV_PY" -m py_compile "$EXPORT_DIR/slf_ai_export.py" "$EXPORT_DIR/slf_rag_build.py"
+    PY_FILES="$EXPORT_DIR/slf_ai_export.py $EXPORT_DIR/slf_rag_build.py"
+    [ -f "$EXPORT_DIR/slf_generator_update_rag.py" ] && PY_FILES="$PY_FILES $EXPORT_DIR/slf_generator_update_rag.py"
+    "$VENV_PY" -m py_compile $PY_FILES
+    if [ -f "$EXPORT_DIR/generator_updates.json" ]; then
+      "$VENV_PY" -c 'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); assert p.get("schema") == "slf_generator_update_pack_v1"; assert p.get("rules")' "$EXPORT_DIR/generator_updates.json"
+    fi
     bash -n "$EXPORT_DIR/run_daily_export.sh"
     (cd "$EXPORT_DIR" && ./run_daily_export.sh)
     [ -s /var/www/html/slf_ai/manifest.json ] || { echo 'manifest.json verification failed after rollback' >&2; exit 1; }
     [ -s /var/www/html/slf_ai/rag/catalog.json ] || { echo 'RAG catalog verification failed after rollback' >&2; exit 1; }
+    if [ -f "$EXPORT_DIR/slf_generator_update_rag.py" ] && [ -f "$EXPORT_DIR/generator_updates.json" ]; then
+      [ -s /var/www/html/slf_ai/rag/generator_update_pack.json ] || { echo 'generator update pack verification failed after rollback' >&2; exit 1; }
+      [ -s /var/www/html/slf_ai/rag/generator_updates.jsonl ] || { echo 'generator updates verification failed after rollback' >&2; exit 1; }
+    fi
     ;;
 
   *) echo "Unsupported component in backup manifest: ${component:-missing}" >&2; exit 1 ;;
