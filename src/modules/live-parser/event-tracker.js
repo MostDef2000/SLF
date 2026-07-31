@@ -159,6 +159,47 @@
             return effect;
         },
 
+        getManualTelemetryFingerprint(snapshot) {
+            const score = snapshot?.score || {};
+            return [
+                snapshot?.gameId || '',
+                snapshot?.status || '',
+                snapshot?.minute ?? '',
+                snapshot?.bucket || '',
+                score.home ?? '',
+                score.away ?? '',
+                snapshot?.myTeam || ''
+            ].join('|');
+        },
+
+        submitManualTelemetry(snapshot, generatorVersion = '') {
+            if (!snapshot?.myTeam || snapshot.matchOwnership === 'foreign') return;
+
+            const effect = this.buildPresetEffect(snapshot);
+            if (effect) {
+                effect.source = Object.assign({}, effect.source || {}, {
+                    page: 'game',
+                    collectedAt: Date.now(),
+                    generatorVersion: generatorVersion || snapshot.generatorVersion || null,
+                    trigger: 'manual_hint_button'
+                });
+                void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EFFECTS, effect, 'preset effect history')
+                    .then(() => UI.addParserLog(`Эффект пресета сохранён: ${effect.presetName || 'unknown'}`))
+                    .catch(error => UI.addParserLog(`Эффект пресета: ошибка ${error?.kind || 'unknown'}`));
+            }
+
+            if (snapshot.status === 'finished') return;
+            const fingerprint = this.getManualTelemetryFingerprint(snapshot);
+            if (STATE.lastManualTelemetryFingerprint === fingerprint) return;
+            STATE.lastManualTelemetryFingerprint = fingerprint;
+
+            snapshot.generatorVersion = generatorVersion || snapshot.generatorVersion || null;
+            snapshot.recommendationSource = 'manual_hint_button';
+            void SnapshotEngine.sendSnapshot(snapshot)
+                .then(() => UI.addParserLog(`Snapshot ${snapshot.generatorVersion || ''} сохранён`.trim()))
+                .catch(error => UI.addParserLog(`Snapshot: ошибка ${error?.kind || 'unknown'}`));
+        },
+
         diffTactic(oldTactic, newTactic) {
             const diff = {};
 
@@ -273,5 +314,9 @@
 
             UI.addParserLog('Manual tactic watcher активен');
         }
+    };
+
+    SnapshotEngine.submitManualTelemetry = function submitManualTelemetry(snapshot, generatorVersion = '') {
+        return EventTracker.submitManualTelemetry(snapshot, generatorVersion);
     };
     // ============================================================
