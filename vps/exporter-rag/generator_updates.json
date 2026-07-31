@@ -12,7 +12,7 @@
     "verificationStatus": "pending_source_url",
     "receivedAt": "2026-07-31",
     "language": "ru",
-    "note": "Structured from the official generator 5.61 changelog text supplied by the project owner. Add the public source URL later without changing rule IDs."
+    "note": "Структурировано из текста официального анонса генератора 5.61, предоставленного владельцем проекта. Публичную ссылку можно добавить позднее без изменения идентификаторов правил."
   },
   "rules": [
     {
@@ -25,15 +25,15 @@
       "effectiveFrom": "2026-07-13",
       "effectiveUntil": null,
       "topic": "generator_version",
-      "title": "Generator 5.61 became the active match model",
-      "text": "The match generator was updated to version 5.61 during the 2026 offseason. Match evidence should be interpreted against this version boundary.",
+      "title": "Генератор 5.61 стал активной моделью матчей",
+      "text": "В межсезонье 2026 года генератор матчей обновлён до версии 5.61. Исторические данные нужно интерпретировать с учётом этой границы версии.",
       "facts": [
-        "Generator version 5.61 was introduced in the 2026 offseason.",
-        "The announced package included rating/form calculation, visualization, and targeted balance changes."
+        "Версия генератора 5.61 введена в межсезонье 2026 года.",
+        "Пакет изменений включал расчёт оценки и формы, визуализацию и точечные правки баланса."
       ],
       "implications": [
-        "Segment historical evidence before and after generator 5.61 when a timestamp is available.",
-        "Do not assume that pre-5.61 rating, dribbling, flank, card, or set-piece patterns remain directly comparable."
+        "При наличии даты разделять исторические данные на периоды до и после генератора 5.61.",
+        "Не считать напрямую сопоставимыми старые и новые паттерны оценок, обводок, фланговой игры, карточек и стандартов."
       ],
       "useFor": [
         "historical_segmentation",
@@ -56,19 +56,19 @@
       "effectiveFrom": "2026-07-13",
       "effectiveUntil": null,
       "topic": "ratings_form",
-      "title": "Rating and form calculation was rebalanced",
-      "text": "Ratings moved toward a SofaScore/WhoScored-style distribution, with most values between 6.0 and 8.0. Defensive actions matter more for defenders and DM, goalkeeper saves are rewarded more, ordinary safe passing matters less, and repeated goals or assists have diminishing value.",
+      "title": "Расчёт оценки и формы перебалансирован",
+      "text": "Оценки переведены на модель, близкую к SofaScore и WhoScored: большинство значений находится в диапазоне 6.0–8.0. Защитные действия стали важнее для защитников и DM, сейвы сильнее влияют на оценку вратаря, обычные передачи дают меньше, а повторные голы и ассисты имеют убывающую ценность.",
       "facts": [
-        "Most player ratings now fall in the 6.0 to 8.0 range instead of the previous wider 5 to 9 range.",
-        "Defenders and defensive midfielders receive larger rewards for defensive actions.",
-        "Goalkeepers receive larger save bonuses and smaller penalties for conceded goals.",
-        "Ordinary passes have less influence on the final rating.",
-        "Goals and assists have regressive value: the first contribution is worth more than later contributions."
+        "Большинство оценок теперь находится в диапазоне 6.0–8.0 вместо прежнего диапазона примерно 5–9.",
+        "Защитники и DM получают повышенный вклад за оборонительные действия.",
+        "Вратари получают больший бонус за сейвы и меньший штраф за пропущенные голы.",
+        "Обычные передачи меньше влияют на итоговую оценку.",
+        "Результативные действия имеют регрессивную ценность: первый гол или ассист важнее последующих."
       ],
       "implications": [
-        "A rating near 6.x is not automatically evidence of a poor match under version 5.61.",
-        "Do not evaluate possession tactics by pass volume alone.",
-        "Do not expect repeated scoring against a weak opponent to create the same extreme form gains as before."
+        "Оценка около 6.x в генераторе 5.61 не означает автоматически плохой матч.",
+        "Нельзя оценивать тактику владения только по количеству передач.",
+        "Не ожидать прежнего экстремального роста формы от большого числа голов слабому сопернику."
       ],
       "useFor": [
         "ratings_interpretation",
@@ -91,16 +91,16 @@
       "effectiveFrom": "2026-07-13",
       "effectiveUntil": "2026-07-22",
       "topic": "fatigue_form",
-      "title": "Temporary defensive dominance after the rating update",
-      "text": "The new rating expectations temporarily increased form for defenders and goalkeepers while reducing form for midfielders and attackers. Expectations were reset on 2026-07-22, so this is a transition event rather than a permanent tactical rule.",
+      "title": "Временное доминирование защиты после обновления оценок",
+      "text": "Новые ожидания временно подняли форму защитникам и вратарям и снизили её полузащите и атаке. 22 июля ожидания были обнулены, поэтому это переходное событие, а не постоянное правило баланса.",
       "facts": [
-        "Defenders and goalkeepers temporarily gained form because their previous expectations were lower than their new ratings.",
-        "Midfielders and attackers temporarily lost form because their previous expectations were higher.",
-        "Expectations were reset on 2026-07-22."
+        "Защитники и вратари временно набрали форму, поскольку их прежние ожидания были ниже новых оценок.",
+        "Полузащитники и атакующие игроки временно потеряли форму, поскольку их прежние ожидания были выше.",
+        "22 июля 2026 года ожидания были обнулены."
       ],
       "implications": [
-        "Do not encode the temporary scoring decline as a permanent bias toward attacking tactics.",
-        "Treat matches from 2026-07-13 through the reset period as a distinct transition cohort."
+        "Не превращать временное снижение результативности в постоянное усиление атакующих тактик.",
+        "Матчи переходного периода с 13 по 22 июля учитывать отдельной когортой."
       ],
       "useFor": [
         "historical_segmentation",
@@ -123,17 +123,17 @@
       "effectiveFrom": "2026-07-13",
       "effectiveUntil": null,
       "topic": "wide_play",
-      "title": "LD and RD defend wide threats more reliably",
-      "text": "Fullbacks now step out more consistently against wide threats, making default LW/RW attacks less universally effective. Fullback skill matters more, and weak wide defenders can be exposed through yellow cards.",
+      "title": "LD и RD качественнее перекрывают фланговые угрозы",
+      "text": "Крайние защитники теперь стабильнее выдвигаются на фланговую угрозу. Дефолтная атака через LW/RW стала менее универсальной, выросла чувствительность к качеству LD/RD/LB/RB, а слабые крайние защитники легче получают жёлтые карточки.",
       "facts": [
-        "LD and RD more reliably close wide attackers instead of ignoring the flank threat.",
-        "The default wide attacking pattern is less universal.",
-        "The quality of LD, RD, LB, and RB matters more.",
-        "Weak wide defenders can accumulate yellow cards more easily."
+        "LD и RD чаще корректно закрывают крайних атакующих и не игнорируют угрозу на фланге.",
+        "Дефолтная игра через LW/RW стала менее универсальной.",
+        "Качество LD, RD, LB и RB сильнее влияет на результат эпизодов.",
+        "Слабые крайние защитники легче подсаживаются на жёлтые карточки."
       ],
       "implications": [
-        "Before recommending a wide attack, consider the opponent fullbacks, their cards, and observed winger efficiency.",
-        "A closed center alone is no longer sufficient evidence for a wide-attack recommendation."
+        "Перед рекомендацией широкой атаки учитывать качество крайних защитников соперника, их карточки и фактическую эффективность наших вингеров.",
+        "Закрытый центр сам по себе больше не является достаточным основанием для перехода на фланговую атаку."
       ],
       "useFor": [
         "attack_direction",
@@ -157,16 +157,16 @@
       "effectiveFrom": "2026-07-13",
       "effectiveUntil": null,
       "topic": "cards_discipline",
-      "title": "Red cards returned as a meaningful match event",
-      "text": "Red cards occur again at an announced average of about 0.13 per match. Very early dismissals were reduced, but can still occur after penalties.",
+      "title": "Красные карточки снова стали значимым событием матча",
+      "text": "Красные карточки вернулись со заявленной средней частотой около 0.13 за матч. Удаления в первые минуты были дополнительно исправлены, но раннее удаление всё ещё возможно после пенальти.",
       "facts": [
-        "The announced average is approximately 0.13 red cards per match.",
-        "Early dismissals were adjusted after the initial update.",
-        "A very early red card remains possible after a penalty incident."
+        "Заявленная средняя частота составляет примерно 0.13 красной карточки за матч.",
+        "Слишком частые ранние удаления были скорректированы после обновления.",
+        "Очень раннее удаление остаётся возможным после эпизода с пенальти."
       ],
       "implications": [
-        "A red card should invalidate ordinary recommendation hold periods and trigger immediate reassessment.",
-        "Own-team and opponent red cards must be treated as separate tactical states."
+        "Красная карточка должна отменять обычный holdMinutes и вызывать немедленную переоценку рекомендации.",
+        "Удаление у своей команды и у соперника необходимо считать разными тактическими состояниями."
       ],
       "useFor": [
         "hard_trigger",
@@ -189,16 +189,16 @@
       "effectiveFrom": "2026-07-13",
       "effectiveUntil": null,
       "topic": "dribbling_passing",
-      "title": "Players dribble less often in their own half",
-      "text": "Players now choose a pass more often instead of dribbling in their own half, reducing repeated loss-recovery-loss sequences in that zone.",
+      "title": "Игроки реже идут в обводку на своей половине",
+      "text": "На своей половине игроки теперь чаще выбирают передачу вместо обводки, что должно сокращать каскады потерь и отборов в этой зоне.",
       "facts": [
-        "Own-half dribbling frequency was reduced.",
-        "Passing is selected more often in those situations.",
-        "The change was described as a visual logic fix for the 2D match view."
+        "Частота обводок на своей половине снижена.",
+        "В этих ситуациях игроки чаще выбирают передачу.",
+        "Изменение описано как визуальный фикс логики 2D."
       ],
       "implications": [
-        "Pre-5.61 own-half dribbling and turnover patterns should not be compared directly with current data.",
-        "Do not infer a new tactical instruction solely from fewer own-half dribbles."
+        "Старые и новые данные по обводкам и потерям на своей половине нельзя сравнивать напрямую.",
+        "Нельзя выводить новую тактическую инструкцию только из снижения числа обводок на своей половине."
       ],
       "useFor": [
         "historical_segmentation",
@@ -221,14 +221,14 @@
       "effectiveFrom": "2026-07-13",
       "effectiveUntil": null,
       "topic": "roles_pressing",
-      "title": "Pressing-player role is disabled for central defenders",
-      "text": "The pressing-player role for CD was disabled because it was a weak tactical tool and could be used as a hidden manipulation mechanism.",
+      "title": "Роль «прессинг игрок» отключена для CD",
+      "text": "Роль «прессинг игрок» для центральных защитников отключена как слабый тактический инструмент и скрытый механизм для возможных махинаций.",
       "facts": [
-        "CD can no longer use the pressing-player role under generator 5.61 rules."
+        "В правилах генератора 5.61 позиция CD больше не может использовать роль «прессинг игрок»."
       ],
       "implications": [
-        "Never recommend the pressing-player role for a central defender.",
-        "Treat old records that depend on this role as legacy evidence."
+        "Никогда не рекомендовать роль «прессинг игрок» центральному защитнику.",
+        "Старые записи, зависящие от этой роли, считать legacy-данными."
       ],
       "useFor": [
         "role_validation",
@@ -251,15 +251,15 @@
       "effectiveFrom": "2026-07-13",
       "effectiveUntil": null,
       "topic": "set_pieces",
-      "title": "ST no longer magnetizes set-piece crosses",
-      "text": "The hidden set-piece magnetism for a striker with the target-player role was disabled. Open-play finishing remains centered on ST, while set-piece crosses are more likely to target central defenders.",
+      "title": "ST больше не «магнитит» навесы на стандартах",
+      "text": "Скрытый приоритет навесов на ST с ролью ПУ отключён. С игры основными завершителями остаются ST, а на стандартах навесы чаще ориентируются на центральных защитников.",
       "facts": [
-        "The target-player role on ST no longer creates a hidden priority for set-piece crosses.",
-        "Central defenders are now more relevant set-piece aerial targets."
+        "Роль ПУ у ST больше не создаёт скрытый приоритет для навесов со стандартов.",
+        "Центральные защитники стали более значимыми верховыми целями на стандартах."
       ],
       "implications": [
-        "Do not recommend a striker role as a method for concentrating set-piece deliveries.",
-        "Evaluate central defenders and delivery quality when reasoning about attacking set pieces."
+        "Не рекомендовать роль нападающего как способ сосредоточить подачи со стандартов на одном ST.",
+        "При анализе атакующих стандартов учитывать верховую силу CD и качество подающего."
       ],
       "useFor": [
         "set_piece_reasoning",
