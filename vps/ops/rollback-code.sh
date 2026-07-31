@@ -56,7 +56,7 @@ case "$component" in
     EXPORT_DIR='/opt/slf_ai_exporter_v2/slf_ai_exporter_v2'
     VENV_PY="$EXPORT_DIR/.venv/bin/python"
     VENV_PIP="$EXPORT_DIR/.venv/bin/pip"
-    FILES='slf_ai_export.py slf_rag_build.py slf_generator_update_rag.py generator_updates.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
+    FILES='slf_ai_export.py slf_rag_build.py slf_generator_update_rag.py slf_preset_evidence_561.py generator_updates.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
     [ -x "$VENV_PY" ] || { echo "Missing exporter Python: $VENV_PY" >&2; exit 1; }
     [ -x "$VENV_PIP" ] || { echo "Missing exporter pip: $VENV_PIP" >&2; exit 1; }
 
@@ -65,7 +65,7 @@ case "$component" in
         mode=0644
         [ "$file" = 'run_daily_export.sh' ] && mode=0755
         install -m "$mode" "$BACKUP_DIR/$file" "$EXPORT_DIR/$file"
-      elif [ "$file" = 'slf_generator_update_rag.py' ] || [ "$file" = 'generator_updates.json' ]; then
+      elif [ "$file" = 'slf_generator_update_rag.py' ] || [ "$file" = 'generator_updates.json' ] || [ "$file" = 'slf_preset_evidence_561.py' ]; then
         rm -f "$EXPORT_DIR/$file"
       fi
     done
@@ -74,6 +74,7 @@ case "$component" in
 
     PY_FILES="$EXPORT_DIR/slf_ai_export.py $EXPORT_DIR/slf_rag_build.py"
     [ -f "$EXPORT_DIR/slf_generator_update_rag.py" ] && PY_FILES="$PY_FILES $EXPORT_DIR/slf_generator_update_rag.py"
+    [ -f "$EXPORT_DIR/slf_preset_evidence_561.py" ] && PY_FILES="$PY_FILES $EXPORT_DIR/slf_preset_evidence_561.py"
     "$VENV_PY" -m py_compile $PY_FILES
     if [ -f "$EXPORT_DIR/generator_updates.json" ]; then
       "$VENV_PY" -c 'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); assert p.get("schema") == "slf_generator_update_pack_v1"; assert p.get("rules")' "$EXPORT_DIR/generator_updates.json"
@@ -85,6 +86,9 @@ case "$component" in
     if [ -f "$EXPORT_DIR/slf_generator_update_rag.py" ] && [ -f "$EXPORT_DIR/generator_updates.json" ]; then
       [ -s /var/www/html/slf_ai/rag/generator_update_pack.json ] || { echo 'generator update pack verification failed after rollback' >&2; exit 1; }
       [ -s /var/www/html/slf_ai/rag/generator_updates.jsonl ] || { echo 'generator updates verification failed after rollback' >&2; exit 1; }
+    fi
+    if [ -f "$EXPORT_DIR/slf_preset_evidence_561.py" ]; then
+      [ -s /var/www/html/slf_ai/data/preset_evidence_561.json ] || { echo 'preset evidence verification failed after rollback' >&2; exit 1; }
     fi
     ;;
 
