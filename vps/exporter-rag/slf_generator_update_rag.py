@@ -4,6 +4,8 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import slf_preset_evidence_561
+
 BASE_DIR = Path(__file__).resolve().parent
 OUT = Path(os.environ.get("SLF_AI_OUT", "/var/www/html/slf_ai"))
 SOURCE_FILE = Path(
@@ -288,6 +290,7 @@ def main():
     safe_count = update_knowledge_pack(pack, rows)
     update_catalog(pack, len(rows), safe_count)
     update_ai_context(pack, len(rows), safe_count)
+    slf_preset_evidence_561.main()
 
     print(json.dumps({
         "ok": True,
@@ -296,6 +299,7 @@ def main():
         "generator_version": pack["generatorVersion"],
         "generator_updates": len(rows),
         "generator_safe_rules": safe_count,
+        "preset_evidence": "data/preset_evidence_561.json",
         "verification_status": pack["source"].get("verificationStatus")
     }, ensure_ascii=False, indent=2))
 
