@@ -92,7 +92,7 @@ case "$COMPONENT" in
     EXPORT_DIR='/opt/slf_ai_exporter_v2/slf_ai_exporter_v2'
     VENV_PY="$EXPORT_DIR/.venv/bin/python"
     VENV_PIP="$EXPORT_DIR/.venv/bin/pip"
-    FILES='slf_ai_export.py slf_rag_build.py slf_generator_update_rag.py generator_updates.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
+    FILES='slf_ai_export.py slf_rag_build.py slf_generator_update_rag.py slf_preset_evidence_561.py generator_updates.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
     [ -d "$EXPORT_DIR" ] || { echo "Missing exporter directory: $EXPORT_DIR" >&2; exit 1; }
     [ -x "$VENV_PY" ] || { echo "Missing exporter Python: $VENV_PY" >&2; exit 1; }
     [ -x "$VENV_PIP" ] || { echo "Missing exporter pip: $VENV_PIP" >&2; exit 1; }
@@ -103,7 +103,8 @@ case "$COMPONENT" in
     "$VENV_PY" -m py_compile \
       "$STAGE_DIR/slf_ai_export.py" \
       "$STAGE_DIR/slf_rag_build.py" \
-      "$STAGE_DIR/slf_generator_update_rag.py"
+      "$STAGE_DIR/slf_generator_update_rag.py" \
+      "$STAGE_DIR/slf_preset_evidence_561.py"
     "$VENV_PY" -c 'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); assert p.get("schema") == "slf_generator_update_pack_v1"; assert p.get("generatorVersion") == "5.61"; assert p.get("rules")' "$STAGE_DIR/generator_updates.json"
     bash -n "$STAGE_DIR/run_daily_export.sh"
 
@@ -118,6 +119,7 @@ case "$COMPONENT" in
     install -m 0644 "$STAGE_DIR/slf_ai_export.py" "$EXPORT_DIR/slf_ai_export.py"
     install -m 0644 "$STAGE_DIR/slf_rag_build.py" "$EXPORT_DIR/slf_rag_build.py"
     install -m 0644 "$STAGE_DIR/slf_generator_update_rag.py" "$EXPORT_DIR/slf_generator_update_rag.py"
+    install -m 0644 "$STAGE_DIR/slf_preset_evidence_561.py" "$EXPORT_DIR/slf_preset_evidence_561.py"
     install -m 0644 "$STAGE_DIR/generator_updates.json" "$EXPORT_DIR/generator_updates.json"
     install -m 0755 "$STAGE_DIR/run_daily_export.sh" "$EXPORT_DIR/run_daily_export.sh"
     install -m 0644 "$STAGE_DIR/slf_drive_filter.txt" "$EXPORT_DIR/slf_drive_filter.txt"
@@ -127,7 +129,8 @@ case "$COMPONENT" in
     [ -s /var/www/html/slf_ai/rag/catalog.json ] || { echo 'RAG catalog verification failed' >&2; exit 1; }
     [ -s /var/www/html/slf_ai/rag/generator_update_pack.json ] || { echo 'generator update pack verification failed' >&2; exit 1; }
     [ -s /var/www/html/slf_ai/rag/generator_updates.jsonl ] || { echo 'generator updates verification failed' >&2; exit 1; }
-    "$VENV_PY" -c 'import json; c=json.load(open("/var/www/html/slf_ai/rag/catalog.json", encoding="utf-8")); assert c.get("generatorContext", {}).get("version") == "5.61"; assert any(s.get("id") == "generator_updates" for s in c.get("sources", []))'
+    [ -s /var/www/html/slf_ai/data/preset_evidence_561.json ] || { echo 'preset evidence 5.61 verification failed' >&2; exit 1; }
+    "$VENV_PY" -c 'import json; c=json.load(open("/var/www/html/slf_ai/rag/catalog.json", encoding="utf-8")); assert c.get("generatorContext", {}).get("version") == "5.61"; assert any(s.get("id") == "generator_updates" for s in c.get("sources", [])); assert any(s.get("id") == "preset_evidence_561" for s in c.get("sources", []))'
     printf '%s\n' "$RESOLVED_COMMIT" > "$EXPORT_DIR/DEPLOYED_GIT_COMMIT"
     ;;
 esac
