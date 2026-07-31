@@ -6,6 +6,7 @@ OUT_DIR="/var/www/html/slf_ai"
 FORUM_DIR="/root/slf-server/forum_faq"
 ENV_FILE="/root/slf-server/slf_api.env"
 FILTER_FILE="${BASE_DIR}/slf_drive_filter.txt"
+GENERATOR_UPDATES_FILE="${BASE_DIR}/generator_updates.json"
 
 cd "$BASE_DIR"
 . .venv/bin/activate
@@ -29,6 +30,10 @@ SLF_AI_OUT="$OUT_DIR" \
 SLF_FORUM_FAQ_DIR="$FORUM_DIR" \
 python slf_rag_build.py
 
+SLF_AI_OUT="$OUT_DIR" \
+SLF_GENERATOR_UPDATES_FILE="$GENERATOR_UPDATES_FILE" \
+python slf_generator_update_rag.py
+
 if command -v rclone >/dev/null 2>&1; then
   echo "Starting Google Drive sync"
   if ! rclone sync "$OUT_DIR" gdrive:"SLF AI RAG/current" \
@@ -43,4 +48,4 @@ else
   echo "WARN: rclone not found; Google Drive sync skipped"
 fi
 
-echo "SLF daily export + RAG build + Drive current sync completed"
+echo "SLF daily export + RAG build + generator context + Drive current sync completed"
