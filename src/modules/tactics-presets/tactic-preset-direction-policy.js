@@ -144,7 +144,6 @@
     function patchBasePresets() {
         if (typeof BASE_PRESETS === 'undefined' || !BASE_PRESETS) return;
         removePresetFromMap(BASE_PRESETS);
-        if (typeof BASE_LABELS !== 'undefined') removePresetFromMap(BASE_LABELS);
         Object.entries(DIRECTION_OVERRIDES).forEach(([name, priority]) => {
             if (!BASE_PRESETS[name]) return;
             BASE_PRESETS[name] = Object.assign({}, BASE_PRESETS[name], { priority: copy(priority) });
