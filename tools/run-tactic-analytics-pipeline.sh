@@ -26,6 +26,10 @@ node "$ROOT_DIR/tools/aggregate-tactic-performance.mjs" \
   --contract "$ROOT_DIR/data/tactics/tactic-evaluation-contract-v1.json" \
   --output "$REPORT_DIR/tactic-performance-report.json" \
   --markdown "$REPORT_DIR/tactic-performance-report.md"
+node "$ROOT_DIR/tools/enrich-tactic-match-outcomes.mjs" \
+  --report "$REPORT_DIR/tactic-performance-report.json" \
+  --results "$EXPORT_DIR/match_results_v2.json" \
+  --output "$REPORT_DIR/tactic-performance-report.json"
 node "$ROOT_DIR/tools/generate-tactic-policy-proposals.mjs" \
   --input "$REPORT_DIR/tactic-performance-report.json" \
   --output "$REPORT_DIR/tactic-policy-proposals.json" \
@@ -70,7 +74,9 @@ const manifest = {
     presetEffects: quality.checks?.presetEffectsCount ?? null,
     snapshots: quality.checks?.snapshotsCount ?? null,
     eligiblePhases: performance.summary?.eligiblePhases ?? null,
-    rankingGroups: performance.summary?.rankingGroups ?? null
+    rankingGroups: performance.summary?.rankingGroups ?? null,
+    validMatchOutcomes: performance.matchOutcomeSummary?.validOutcomes ?? null,
+    joinedPhaseGames: performance.matchOutcomeSummary?.joinedPhaseGames ?? null
   },
   reportFiles: Object.keys(checksums),
   reportChecksums: checksums,
