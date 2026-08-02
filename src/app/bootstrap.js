@@ -27,7 +27,11 @@ function applyTacticsDropdownUiPolicy() {
             ? PresetStorage.getAllLabels()
             : {};
         return Object.entries(labels)
-            .map(([key, label]) => ({ key, label: String(label || key), trainer: getTrainerSortKey(key, label) }))
+            .map(([key, label]) => ({
+                key,
+                label: String(label || key),
+                trainer: getTrainerSortKey(key, label)
+            }))
             .sort((a, b) => {
                 const trainerCmp = a.trainer.localeCompare(b.trainer, 'ru', { sensitivity: 'base' });
                 if (trainerCmp !== 0) return trainerCmp;
@@ -48,6 +52,7 @@ function applyTacticsDropdownUiPolicy() {
         const items = getSortedTacticItems();
         const current = select.value;
         if (hasSameFlatOptions(select, items)) return;
+
         select.dataset.slfFlatPresetRewrite = '1';
         select.innerHTML = '';
         items.forEach(item => {
@@ -56,15 +61,20 @@ function applyTacticsDropdownUiPolicy() {
             option.textContent = item.label;
             select.appendChild(option);
         });
+
         if (items.some(item => item.key === current)) select.value = current;
         else if (items.length) select.value = items[0].key;
-        setTimeout(() => { delete select.dataset.slfFlatPresetRewrite; }, 0);
+
+        setTimeout(() => {
+            delete select.dataset.slfFlatPresetRewrite;
+        }, 0);
     }
 
     function normalizeDropdown() {
         const select = document.querySelector('#slf-tactics-dropdown select');
         if (!select) return;
         rewriteSelectFlat(select);
+
         if (select.dataset.slfFlatPresetObserver === '1') return;
         const observer = new MutationObserver(() => {
             if (select.dataset.slfFlatPresetRewrite === '1') return;
@@ -83,48 +93,32 @@ function applyTacticsDropdownUiPolicy() {
     UI.__flatSortedTacticDropdownApplied = true;
 }
 
-function installFinishedResultGuard() {
-    if (typeof SnapshotEngine === 'undefined' || SnapshotEngine.__finishedResultGuardInstalled) return;
-    const originalSendMatchResult = SnapshotEngine.sendMatchResult.bind(SnapshotEngine);
-    SnapshotEngine.sendMatchResult = function sendFinishedMatchResult(snapshot) {
-        if (!snapshot || snapshot.status !== 'finished') {
-            const error = new Error('Match result can be sent only after the match is finished');
-            error.name = 'SLFMatchStateError';
-            error.kind = 'invalid_match_state';
-            return Promise.reject(error);
-        }
-        return originalSendMatchResult(snapshot);
-    };
-    SnapshotEngine.__finishedResultGuardInstalled = true;
-}
-
-function installTelemetryObservers() {
-    installFinishedResultGuard();
-    if (typeof EventTracker !== 'undefined' && EventTracker.startManualTacticWatcher) {
-        EventTracker.startManualTacticWatcher();
-    }
-}
-
 applyTacticsDropdownUiPolicy();
-installFinishedResultGuard();
 
 const App = {
     mountUI() {
-        UI.addMatchParserPanel();
-        // Coach Hint and tactic application remain manual. The manual tactic watcher is
-        // telemetry-only: it observes owned-match controls and never applies a tactic,
-        // starts the live parser or refreshes recommendations.
-        installTelemetryObservers();
-        void TacticPresetLibraryPanel;
-        TrainingGuidePanel.mount();
-        LoanLimitPanel.mount();
-        if (!document.getElementById('slf-tactics-dropdown')) {
-            UI.addDropdown();
-        }
-    },
+    UI.addMatchParserPanel();
+    // Manual-only Coach Hint mode:
+    // - no live parser auto-resume;
+    // - no manual tactic watcher freeze/status loop;
+    // - tactical blocks are rebuilt only when the user presses "Подсказка".
+    // Keep the library module loaded for preset metadata, but do not mount its visible reference panel.
+    void TacticPresetLibraryPanel;
+    TrainingGuidePanel.mount();
+    LoanLimitPanel.mount();
+
+
+    if (!document.getElementById('slf-tactics-dropdown')) {
+        UI.addDropdown();
+    }
+},
 
     start() {
+        // Важно: трансферный анализатор живёт отдельно от общего UI.
+        // В 4.4.4 при удалении Team4 Analyzer этот вызов был случайно потерян,
+        // поэтому панель на transfers.php не монтировалась.
         TransferMarketAnalyzer.start();
+
         PresetStorage.loadFromServerAndMerge(() => {
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', () => {
