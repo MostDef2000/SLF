@@ -9,6 +9,7 @@ const option = (name, fallback = null) => {
 };
 const inputDir = option('--input', 'var/tactics/export');
 const output = option('--output', path.join(inputDir, 'quality-report.json'));
+const allowEmpty = args.includes('--allow-empty');
 
 function load(name) {
   const file = path.join(inputDir, name);
@@ -42,6 +43,7 @@ for (const [key, value] of Object.entries(rows)) {
 const effects = rows.presetEffects || [];
 const results = rows.matchResults || [];
 const checks = {
+  allowEmpty,
   matchResultsCount: results.length,
   presetEffectsCount: effects.length,
   resultGameIdCoverage: round(ratio(results, row => row?.gameId != null)),
@@ -51,7 +53,10 @@ const checks = {
   decisionCoverage: round(ratio(effects, row => row?.decisionContext || row?.tacticTelemetry?.latestDecision)),
   deltaCoverage: round(ratio(effects, row => row?.delta && typeof row.delta === 'object'))
 };
-if (effects.length === 0) warnings.push('no_preset_effects');
+if (effects.length === 0) {
+  if (allowEmpty) warnings.push('no_preset_effects_allowed');
+  else errors.push('no_preset_effects');
+}
 if (checks.effectGameIdCoverage < 0.95 && effects.length) errors.push('low_effect_game_id_coverage');
 if (checks.deltaCoverage < 0.9 && effects.length) errors.push('low_delta_coverage');
 if (checks.telemetryCoverage < 0.55 && effects.length) warnings.push('low_telemetry_coverage');
@@ -61,11 +66,12 @@ if (checks.decisionCoverage < 0.55 && effects.length) warnings.push('low_decisio
 const report = {
   schema: 'slf_tactic_data_quality_v1',
   generatedAt: new Date().toISOString(),
+  mode: allowEmpty ? 'bootstrap' : 'production',
   status: errors.length ? 'failed' : warnings.length ? 'warning' : 'passed',
   checks,
   errors,
   warnings
 };
 write(output, report);
-console.log(`[tactic-quality] ${report.status}`);
+console.log(`[tactic-quality] ${report.status} (${report.mode})`);
 if (errors.length) process.exit(1);
