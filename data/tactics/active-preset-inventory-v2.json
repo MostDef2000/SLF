@@ -1,0 +1,40 @@
+{
+  "schema": "slf_active_preset_inventory_v2",
+  "generatedFrom": "src/modules/tactics-presets/active-preset-registry.js",
+  "generatorVersion": "5.61",
+  "presetCount": 11,
+  "distanceMetric": {
+    "name": "unweighted_manhattan",
+    "fields": ["def_line","press_line","def_width","press_intense","build_type","build_temp","build_long","build_fast","style","pass_risk","dribble","cross","corner","shot"]
+  },
+  "presets": [
+    {"id":"Arteta_Control433_bal3","settings":{"def_line":2,"press_line":3,"def_width":2,"press_intense":3,"build_type":2,"build_temp":2,"build_long":1,"build_fast":2,"style":3,"pass_risk":3,"dribble":2,"cross":2,"corner":1,"shot":2}},
+    {"id":"Pep_BoxControl_bal2","settings":{"def_line":2,"press_line":1,"def_width":1,"press_intense":1,"build_type":2,"build_temp":1,"build_long":1,"build_fast":1,"style":2,"pass_risk":1,"dribble":1,"cross":1,"corner":1,"shot":1}},
+    {"id":"Pep_PressCooldown_bal2","settings":{"def_line":1,"press_line":2,"def_width":3,"press_intense":1,"build_type":1,"build_temp":2,"build_long":3,"build_fast":2,"style":2,"pass_risk":2,"dribble":1,"cross":2,"corner":1,"shot":1}},
+    {"id":"Compact_Counter_def3","settings":{"def_line":1,"press_line":1,"def_width":2,"press_intense":2,"build_type":1,"build_temp":3,"build_long":5,"build_fast":5,"style":3,"pass_risk":3,"dribble":4,"cross":2,"corner":1,"shot":3}},
+    {"id":"Pep_ControlledPush_att3","settings":{"def_line":3,"press_line":3,"def_width":2,"press_intense":3,"build_type":2,"build_temp":3,"build_long":1,"build_fast":4,"style":4,"pass_risk":4,"dribble":3,"cross":2,"corner":1,"shot":3}},
+    {"id":"Pep_TwoThreeFive_att3","settings":{"def_line":4,"press_line":4,"def_width":4,"press_intense":4,"build_type":2,"build_temp":2,"build_long":1,"build_fast":3,"style":5,"pass_risk":5,"dribble":4,"cross":2,"corner":1,"shot":4}},
+    {"id":"Conte_WingbackWidth_bal4","settings":{"def_line":2,"press_line":2,"def_width":5,"press_intense":3,"build_type":3,"build_temp":2,"build_long":3,"build_fast":3,"style":4,"pass_risk":3,"dribble":4,"cross":5,"corner":1,"shot":2}},
+    {"id":"Klopp_Gegenpress_att4","settings":{"def_line":4,"press_line":5,"def_width":3,"press_intense":5,"build_type":3,"build_temp":3,"build_long":2,"build_fast":5,"style":5,"pass_risk":4,"dribble":4,"cross":3,"corner":1,"shot":4}},
+    {"id":"Simeone_Compact442_def4","settings":{"def_line":1,"press_line":2,"def_width":1,"press_intense":4,"build_type":1,"build_temp":1,"build_long":3,"build_fast":2,"style":1,"pass_risk":2,"dribble":1,"cross":2,"corner":1,"shot":1}},
+    {"id":"Simeone_LowBlock_def5","settings":{"def_line":1,"press_line":1,"def_width":1,"press_intense":1,"build_type":1,"build_temp":1,"build_long":5,"build_fast":1,"style":1,"pass_risk":1,"dribble":1,"cross":1,"corner":1,"shot":1}},
+    {"id":"Bielsa_ChaosPress_att5","settings":{"def_line":5,"press_line":5,"def_width":5,"press_intense":5,"build_type":3,"build_temp":3,"build_long":4,"build_fast":5,"style":5,"pass_risk":5,"dribble":5,"cross":5,"corner":1,"shot":5}}
+  ],
+  "nearestPairs": [
+    {"distance":7,"a":"Pep_BoxControl_bal2","b":"Simeone_LowBlock_def5"},
+    {"distance":7,"a":"Pep_PressCooldown_bal2","b":"Simeone_Compact442_def4"},
+    {"distance":8,"a":"Arteta_Control433_bal3","b":"Pep_ControlledPush_att3"},
+    {"distance":9,"a":"Simeone_Compact442_def4","b":"Simeone_LowBlock_def5"},
+    {"distance":10,"a":"Pep_PressCooldown_bal2","b":"Simeone_LowBlock_def5"},
+    {"distance":10,"a":"Klopp_Gegenpress_att4","b":"Bielsa_ChaosPress_att5"},
+    {"distance":10,"a":"Pep_TwoThreeFive_att3","b":"Klopp_Gegenpress_att4"}
+  ],
+  "comparisonToV1": {
+    "minimumDistanceBefore": 3,
+    "minimumDistanceAfter": 7,
+    "pairsAtOrBelowDistance8Before": 13,
+    "pairsAtOrBelowDistance8After": 3,
+    "nearDuplicatePairsAfter": 0,
+    "conclusion": "The retuned library removes the near-duplicate cluster and creates materially different tactical endpoints while preserving all 11 preset identities."
+  }
+}
