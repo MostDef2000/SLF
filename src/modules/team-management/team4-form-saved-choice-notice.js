@@ -117,6 +117,7 @@ SLFTeam4FormSavedChoiceNotice.start();
 (() => {
     const PANEL_ID = 'slf-team4-championship-table';
     const STYLE_ID = 'slf-team4-championship-table-style';
+    const LAYOUT_ID = 'slf-team4-roster-championship-layout';
 
     function norm(value) {
         return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
@@ -148,14 +149,17 @@ SLFTeam4FormSavedChoiceNotice.start();
         return { teamId, teamName };
     }
 
-    function getChampionshipUrl() {
+    function getChampionshipContext() {
         const link = document.querySelector('.tf3 .champ-url a[href*="/champ.php"]') ||
             document.querySelector('.tf3 a[href*="/champ.php?action=view"]');
         if (!link) return null;
         const url = new URL(link.getAttribute('href'), location.origin);
         const id = parsePositiveId(url.searchParams.get('id'));
         if (url.origin !== location.origin || !/\/champ\.php$/i.test(url.pathname) || url.searchParams.get('action') !== 'view' || !id) return null;
-        return url;
+        return {
+            url,
+            title: norm(link.textContent) || 'Таблица чемпионата'
+        };
     }
 
     function headerIndex(headers, patterns, fallback = -1) {
@@ -202,12 +206,9 @@ SLFTeam4FormSavedChoiceNotice.start();
         }).filter(Boolean);
 
         if (!dataRows.length) throw new Error('no championship rows parsed');
-        const heading = [...doc.querySelectorAll('h1,h2,.h1,.h2,.title,.header')]
-            .map(node => norm(node.textContent))
-            .find(text => text && text.length < 120 && /лига|дивизион|чемпионат|league/i.test(text)) || 'Таблица чемпионата';
         const pageText = norm(doc.body?.textContent || '');
         const season = pageText.match(/(?:сезон\s*)?(\d{4}\s*[\/]\s*\d{1,4}|\d{4}\s*[-–]\s*\d{2,4})/i)?.[1] || '';
-        return { heading, season, rows: dataRows };
+        return { season, rows: dataRows };
     }
 
     function ensureStyle() {
@@ -215,35 +216,36 @@ SLFTeam4FormSavedChoiceNotice.start();
         const style = document.createElement('style');
         style.id = STYLE_ID;
         style.textContent = `
-            #${PANEL_ID} { display:none; }
-            @media (min-width: 1280px) {
-                #${PANEL_ID} {
-                    display:block;
-                    position:fixed;
-                    z-index:30;
-                    right:12px;
-                    top:105px;
-                    width:300px;
-                    max-height:calc(100vh - 125px);
-                    overflow:auto;
-                    box-sizing:border-box;
-                    padding:8px;
-                    border:1px solid #555;
-                    border-radius:6px;
-                    background:rgba(24,24,24,.96);
-                    color:#ddd;
-                    box-shadow:0 2px 10px rgba(0,0,0,.35);
-                    font:11px Verdana,Arial,sans-serif;
-                }
-                #${PANEL_ID} .slf-champ-title { margin-bottom:7px; text-align:center; line-height:1.35; }
-                #${PANEL_ID} .slf-champ-title a { color:#9cff57; font-weight:700; text-decoration:none; }
-                #${PANEL_ID} .slf-champ-season { color:#aaa; font-size:10px; }
-                #${PANEL_ID} table { width:100%; border-collapse:collapse; table-layout:fixed; }
-                #${PANEL_ID} th, #${PANEL_ID} td { padding:3px 2px; border-bottom:1px solid #383838; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-                #${PANEL_ID} th:nth-child(2), #${PANEL_ID} td:nth-child(2) { text-align:left; width:58%; }
-                #${PANEL_ID} tr.slf-active-team { background:#34451f; color:#fff; font-weight:700; }
-                #${PANEL_ID} .slf-champ-state { padding:12px 5px; text-align:center; color:#aaa; line-height:1.4; }
+            #${LAYOUT_ID} {
+                display:flex;
+                align-items:flex-start;
+                gap:12px;
+                width:max-content;
+                max-width:100%;
             }
+            #${LAYOUT_ID} > .slf-team4-roster-slot {
+                min-width:0;
+            }
+            #${PANEL_ID} {
+                flex:0 0 300px;
+                width:300px;
+                box-sizing:border-box;
+                padding:8px;
+                border:1px solid #555;
+                border-radius:6px;
+                background:#181818;
+                color:#ddd;
+                box-shadow:0 2px 10px rgba(0,0,0,.35);
+                font:11px Verdana,Arial,sans-serif;
+            }
+            #${PANEL_ID} .slf-champ-title { margin-bottom:7px; text-align:center; line-height:1.35; }
+            #${PANEL_ID} .slf-champ-title a { color:#9cff57; font-weight:700; text-decoration:none; }
+            #${PANEL_ID} .slf-champ-season { color:#aaa; font-size:10px; }
+            #${PANEL_ID} table { width:100%; border-collapse:collapse; table-layout:fixed; }
+            #${PANEL_ID} th, #${PANEL_ID} td { padding:3px 2px; border-bottom:1px solid #383838; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+            #${PANEL_ID} th:nth-child(2), #${PANEL_ID} td:nth-child(2) { text-align:left; width:58%; }
+            #${PANEL_ID} tr.slf-active-team { background:#34451f; color:#fff; font-weight:700; }
+            #${PANEL_ID} .slf-champ-state { padding:12px 5px; text-align:center; color:#aaa; line-height:1.4; }
         `;
         document.head.appendChild(style);
     }
@@ -252,19 +254,37 @@ SLFTeam4FormSavedChoiceNotice.start();
         return String(value || '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
     }
 
-    function ensurePanel(url) {
+    function findRosterContainer() {
+        const rosterTable = document.querySelector('tr[id^="pltr-"]')?.closest('table');
+        if (!rosterTable) return null;
+        return rosterTable.parentElement || rosterTable;
+    }
+
+    function ensurePanel(context) {
         ensureStyle();
         let panel = document.getElementById(PANEL_ID);
-        if (!panel) {
-            panel = document.createElement('aside');
-            panel.id = PANEL_ID;
-            document.body.appendChild(panel);
-        }
-        panel.innerHTML = `<div class="slf-champ-title"><a href="${escapeHtml(url?.pathname + url?.search || '#')}">Таблица чемпионата</a></div><div class="slf-champ-state">Загрузка…</div>`;
+        if (panel) return panel;
+
+        const rosterContainer = findRosterContainer();
+        if (!rosterContainer || !rosterContainer.parentElement) return null;
+
+        const layout = document.createElement('div');
+        layout.id = LAYOUT_ID;
+        const rosterSlot = document.createElement('div');
+        rosterSlot.className = 'slf-team4-roster-slot';
+
+        rosterContainer.parentElement.insertBefore(layout, rosterContainer);
+        layout.appendChild(rosterSlot);
+        rosterSlot.appendChild(rosterContainer);
+
+        panel = document.createElement('aside');
+        panel.id = PANEL_ID;
+        panel.innerHTML = `<div class="slf-champ-title"><a href="${escapeHtml(context.url.pathname + context.url.search)}">${escapeHtml(context.title)}</a></div><div class="slf-champ-state">Загрузка…</div>`;
+        layout.appendChild(panel);
         return panel;
     }
 
-    function render(panel, url, data) {
+    function render(panel, context, data) {
         const rows = data.rows.map(row => `
             <tr class="${row.active ? 'slf-active-team' : ''}">
                 <td>${escapeHtml(row.position)}</td>
@@ -274,7 +294,7 @@ SLFTeam4FormSavedChoiceNotice.start();
             </tr>`).join('');
         panel.innerHTML = `
             <div class="slf-champ-title">
-                <a href="${escapeHtml(url.pathname + url.search)}">${escapeHtml(data.heading)}</a>
+                <a href="${escapeHtml(context.url.pathname + context.url.search)}">${escapeHtml(context.title)}</a>
                 ${data.season ? `<div class="slf-champ-season">${escapeHtml(data.season)}</div>` : ''}
             </div>
             <table>
@@ -284,20 +304,21 @@ SLFTeam4FormSavedChoiceNotice.start();
     }
 
     async function start() {
-        if (!isTeam4MainPage() || document.getElementById(PANEL_ID)) return;
-        const url = getChampionshipUrl();
-        if (!url) return;
-        const panel = ensurePanel(url);
+        if (!isTeam4MainPage() || !matchMedia('(min-width: 1280px)').matches || document.getElementById(PANEL_ID)) return;
+        const context = getChampionshipContext();
+        if (!context) return;
+        const panel = ensurePanel(context);
+        if (!panel) return;
         try {
-            const response = await fetch(url.href, { credentials: 'include', cache: 'no-store' });
+            const response = await fetch(context.url.href, { credentials: 'include', cache: 'no-store' });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const html = await response.text();
             const doc = new DOMParser().parseFromString(html, 'text/html');
             const data = parseTableDocument(doc, getActiveTeam());
-            render(panel, url, data);
+            render(panel, context, data);
         } catch (error) {
             console.warn('[SLF Team4 Championship Table] failed', error);
-            panel.innerHTML = `<div class="slf-champ-title"><a href="${escapeHtml(url.pathname + url.search)}">Открыть чемпионат</a></div><div class="slf-champ-state">Таблица чемпионата недоступна.</div>`;
+            panel.innerHTML = `<div class="slf-champ-title"><a href="${escapeHtml(context.url.pathname + context.url.search)}">${escapeHtml(context.title)}</a></div><div class="slf-champ-state">Таблица чемпионата недоступна.</div>`;
         }
     }
 
