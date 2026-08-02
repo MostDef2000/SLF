@@ -112,12 +112,10 @@
             const normalized = normalizePresets(customPresets);
             const deleteKeys = Object.keys(previous).filter(key => !Object.prototype.hasOwnProperty.call(normalized, key));
             this.saveLocalOnly(normalized);
-            const payload = {
-                schema: 'slf_tactics_merge_v1',
-                upsert: normalized,
-                deleteKeys
-            };
-            void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=merge`, payload, 'tactics merge').catch(() => {});
+            deleteKeys.forEach(key => {
+                void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=delete-key`, { key }, 'tactics delete').catch(() => {});
+            });
+            void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=merge`, normalized, 'tactics merge').catch(() => {});
         },
 
         loadFromServerAndMerge(callback) {
