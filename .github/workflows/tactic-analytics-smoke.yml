@@ -7,11 +7,13 @@ on:
       - 'src/app/bundle-order.json'
       - 'tools/test-runtime-telemetry-integrity.mjs'
       - 'tools/aggregate-tactic-performance.mjs'
+      - 'tools/enrich-tactic-match-outcomes.mjs'
       - 'tools/export-tactic-telemetry.mjs'
       - 'tools/validate-tactic-data-quality.mjs'
       - 'tools/generate-tactic-policy-proposals.mjs'
       - 'tools/run-tactic-analytics-pipeline.sh'
       - 'tools/test-tactic-analytics-pipeline.mjs'
+      - 'tools/test-tactic-match-outcomes.mjs'
       - 'data/tactics/tactic-evaluation-contract-v1.json'
       - 'vps/api/server.py'
       - 'vps/api/test_server.py'
@@ -37,10 +39,12 @@ jobs:
           node --check src/modules/live-parser/runtime-telemetry-integrity.js
           node --check tools/test-runtime-telemetry-integrity.mjs
           node --check tools/aggregate-tactic-performance.mjs
+          node --check tools/enrich-tactic-match-outcomes.mjs
           node --check tools/export-tactic-telemetry.mjs
           node --check tools/validate-tactic-data-quality.mjs
           node --check tools/generate-tactic-policy-proposals.mjs
           node --check tools/test-tactic-analytics-pipeline.mjs
+          node --check tools/test-tactic-match-outcomes.mjs
           bash -n tools/run-tactic-analytics-pipeline.sh
           python -m py_compile vps/api/server.py vps/api/test_server.py
       - name: Validate bundle contract
@@ -49,5 +53,7 @@ jobs:
         run: node tools/test-runtime-telemetry-integrity.mjs
       - name: Run deterministic analytics smoke test
         run: node tools/test-tactic-analytics-pipeline.mjs
+      - name: Run match outcome join test
+        run: node tools/test-tactic-match-outcomes.mjs
       - name: Run VPS API storage tests
         run: python -m unittest vps/api/test_server.py -v
