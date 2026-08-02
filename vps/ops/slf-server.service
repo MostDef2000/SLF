@@ -3,11 +3,15 @@ Description=SLF Data Server
 After=network.target
 
 [Service]
+Type=simple
 User=root
 WorkingDirectory=/root/slf-server
 EnvironmentFile=/root/slf-server/slf_api.env
-ExecStart=/root/slf-server/venv/bin/python /root/slf-server/server.py
-Restart=always
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/root/slf-server/venv/bin/python -m gunicorn --workers 1 --threads 4 --bind 127.0.0.1:5000 --timeout 30 --graceful-timeout 30 --access-logfile - --error-logfile - server:app
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=35
 
 [Install]
 WantedBy=multi-user.target
