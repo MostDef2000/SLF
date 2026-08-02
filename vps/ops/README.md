@@ -46,6 +46,40 @@ The script:
 
 Authenticated read/write verification remains a separate operator check. Never put the bearer value in the command line, logs, Issue, PR, or chat.
 
+## Verify an API deployment
+
+Run the verification utility on the VPS after an approved API deployment. The token is read only from `SLF_API_TOKEN`; it is not accepted as a command-line argument and is not written to evidence.
+
+Read-only verification:
+
+```bash
+export SLF_API_TOKEN='...'
+python vps/ops/verify_api_deployment.py \
+  --expected-commit <full-approved-commit-sha> \
+  --evidence /root/slf-server/api-verification.json
+```
+
+The utility verifies:
+
+- `/root/slf-server/DEPLOYED_GIT_COMMIT` exactly matches the approved SHA;
+- the protected analysis endpoint returns `401` without credentials;
+- authenticated `/api/analysis` reports `status: ok`;
+- all four canonical tactical collections exist, are valid, and return JSON arrays;
+- collection counts and bounded health statistics can be captured without raw records.
+
+Optional write/read verification uses one dedicated operations collection and never writes to canonical tactical collections:
+
+```bash
+python vps/ops/verify_api_deployment.py \
+  --expected-commit <full-approved-commit-sha> \
+  --evidence /root/slf-server/api-verification.json \
+  --write-canary
+```
+
+The canary collection defaults to `ops_api_verification`. A custom name must start with `ops_`. The operation replaces one bounded canary object, reads it back, and verifies its nonce and expected commit. It cannot target `match_results_v2`, `preset_events_v2`, `preset_effects_v2`, or `match_snapshots_v2`.
+
+The evidence file uses schema `slf_api_deployment_verification_v1`, is written atomically with mode `0600`, and contains no bearer token or raw collection payloads. A failed verification writes `result: failed` and exits nonzero. Do not treat repository CI as proof that this production verification ran.
+
 ## Deploy exporter/RAG code
 
 ```bash
