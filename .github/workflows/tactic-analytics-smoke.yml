@@ -1,0 +1,33 @@
+name: Tactic analytics smoke
+
+on:
+  pull_request:
+    paths:
+      - 'tools/aggregate-tactic-performance.mjs'
+      - 'tools/export-tactic-telemetry.mjs'
+      - 'tools/validate-tactic-data-quality.mjs'
+      - 'tools/generate-tactic-policy-proposals.mjs'
+      - 'tools/run-tactic-analytics-pipeline.sh'
+      - 'tools/test-tactic-analytics-pipeline.mjs'
+      - 'data/tactics/tactic-evaluation-contract-v1.json'
+      - '.github/workflows/tactic-analytics-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Check syntax
+        run: |
+          node --check tools/aggregate-tactic-performance.mjs
+          node --check tools/export-tactic-telemetry.mjs
+          node --check tools/validate-tactic-data-quality.mjs
+          node --check tools/generate-tactic-policy-proposals.mjs
+          node --check tools/test-tactic-analytics-pipeline.mjs
+          bash -n tools/run-tactic-analytics-pipeline.sh
+      - name: Run deterministic smoke test
+        run: node tools/test-tactic-analytics-pipeline.mjs
