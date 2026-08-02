@@ -86,10 +86,7 @@
             ? payload?.[pendingEffectEvent] || null
             : null;
         return originalPostAppend(collection, payload, label).catch(error => {
-            if (
-                recoverable &&
-                (!STATE.pendingPresetEvent || String(STATE.pendingPresetEvent.gameId || '') === String(recoverable.gameId || ''))
-            ) {
+            if (recoverable && !STATE.pendingPresetEvent) {
                 STATE.pendingPresetEvent = recoverable;
                 SnapshotEngine.persistLiveState({
                     active: !!STATE.liveParserTimer,

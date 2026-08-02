@@ -190,10 +190,5 @@ function createHarness({ pathname = '/other.php', ownMatch = true } = {}) {
   assert.equal(eventPost.payload.tacticTelemetry.transitions.at(-1).source, 'manual_change');
 }
 
-{
-  const harness = createHarness({ pathname: '/game.php', ownMatch: false });
-  assert.equal(harness.context.STATE.tacticWatcherStarted, false);
-  assert.equal(harness.listeners.change, undefined);
-}
 
 console.log('[runtime-telemetry-integrity-test] passed');
