@@ -83,8 +83,30 @@ case "$COMPONENT" in
     systemctl daemon-reload
     systemctl restart slf-server.service
     systemctl is-active --quiet slf-server.service
-    HTTP_STATUS=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:5000/api/analysis)
-    [ "$HTTP_STATUS" = '401' ] || { echo "Expected authenticated endpoint to return 401 without credentials, got $HTTP_STATUS" >&2; exit 1; }
+
+    HTTP_STATUS=''
+    API_READY=0
+    ATTEMPT=1
+    while [ "$ATTEMPT" -le 30 ]; do
+      if HTTP_STATUS=$(curl \
+        --silent \
+        --output /dev/null \
+        --write-out '%{http_code}' \
+        --connect-timeout 2 \
+        --max-time 5 \
+        http://127.0.0.1:5000/api/analysis); then
+        if [ "$HTTP_STATUS" = '401' ]; then
+          API_READY=1
+          break
+        fi
+      fi
+      sleep 1
+      ATTEMPT=$((ATTEMPT + 1))
+    done
+    [ "$API_READY" -eq 1 ] || {
+      echo "API readiness verification failed after 30 attempts; last HTTP status: ${HTTP_STATUS:-connection_failed}" >&2
+      exit 1
+    }
     printf '%s\n' "$RESOLVED_COMMIT" > "$API_DIR/DEPLOYED_GIT_COMMIT"
     ;;
 
