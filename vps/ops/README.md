@@ -44,6 +44,8 @@ The script:
 8. verifies that the service is active and the protected endpoint returns `401` without credentials;
 9. writes `/root/slf-server/DEPLOYED_GIT_COMMIT` only after verification succeeds.
 
+The systemd unit serves `server:app` through Gunicorn rather than Flask's development server. It intentionally uses one worker with multiple threads. Collection locks are process-local, so increasing the worker count would permit cross-process read-modify-write races even though each worker is internally locked. Do not raise `--workers` above `1` until storage uses an OS-level or external cross-process lock. Thread concurrency is supported by the existing per-collection `RLock` implementation.
+
 Authenticated read/write verification remains a separate operator check. Never put the bearer value in the command line, logs, Issue, PR, or chat.
 
 ## Verify an API deployment
