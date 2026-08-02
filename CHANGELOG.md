@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.251
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- docs/audit/bold-recommendation-policy-v3.md
+- src/modules/tactics-presets/tactic-preset-direction-policy.js
+
+Approved base commit:
+- 29841daabf8e9c1c5f799d481efd40f598c0a12c
+
+Approved commit:
+- 4860665f690eb01f282220be9b44f0f0f4788446
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.250
 
 ### Automatic latest-only build

@@ -1,27 +1,23 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.250",
+  "scriptVersion": "4.4.251",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_250_published",
+  "status": "release_4_4_251_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "399c93c8fcbdc91f798dbfda16fd682e6f61a61e90e39aac8d75778d33d17c49",
     "bundleFileCount": 55,
-    "approvedBaseCommit": "06d701f94806c3e68c87f49621dffe64ea996fdd",
-    "approvedCommit": "eeed1504aa18ba92d96b8282bae8efb9bb6cbdc0",
+    "approvedBaseCommit": "29841daabf8e9c1c5f799d481efd40f598c0a12c",
+    "approvedCommit": "4860665f690eb01f282220be9b44f0f0f4788446",
     "approvedFiles": [
-      "README.md",
-      "data/tactics/active-preset-inventory-v1.json",
-      "data/tactics/active-preset-inventory-v2.json",
-      "docs/audit/active-tactics-inventory-v1.md",
-      "docs/audit/active-tactics-retune-v2.md",
-      "src/modules/tactics-presets/active-preset-registry.js"
+      "docs/audit/bold-recommendation-policy-v3.md",
+      "src/modules/tactics-presets/tactic-preset-direction-policy.js"
     ],
     "sourceBranch": "main",
     "releaseNotesProvided": false,
