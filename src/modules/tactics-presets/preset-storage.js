@@ -108,9 +108,16 @@
         },
 
         saveCustom(customPresets) {
+            const previous = this.loadLocalRaw() || {};
             const normalized = normalizePresets(customPresets);
+            const deleteKeys = Object.keys(previous).filter(key => !Object.prototype.hasOwnProperty.call(normalized, key));
             this.saveLocalOnly(normalized);
-            void Api.post(CONFIG.COLLECTIONS.TACTICS, normalized, 'tactics').catch(() => {});
+            const payload = {
+                schema: 'slf_tactics_merge_v1',
+                upsert: normalized,
+                deleteKeys
+            };
+            void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=merge`, payload, 'tactics merge').catch(() => {});
         },
 
         loadFromServerAndMerge(callback) {
