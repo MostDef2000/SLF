@@ -8,11 +8,17 @@ The job is standalone and uses only the Node.js standard library. It is intended
 
 ## Input
 
-Create an input directory containing one of these filenames:
+The canonical input filename is:
+
+- `preset_effects_v2.json`
+
+Legacy filenames remain supported for historical rebuilds, in this fallback order:
 
 - `preset_effects.json`
 - `preset-effects.json`
 - `preset_effect.json`
+
+When more than one file is present, `preset_effects_v2.json` always takes precedence. The selected filename is recorded in `sources.presetEffectsFile` in the JSON report and in the Markdown report header.
 
 The file may be a JSON array or an object containing the array in `data`, `rows`, or `items`.
 
@@ -38,7 +44,7 @@ For deterministic testing or historical rebuilds, pass an explicit timestamp:
 
 The JSON report uses schema `slf_tactic_performance_report_v1` and contains:
 
-- source counts and eligibility totals;
+- selected source filename and source counts;
 - normalized tactical-phase rows;
 - rankings grouped by preset, exact fingerprint, risk appetite, strength context, score state, minute bucket, and exploration cohort;
 - raw and recency-weighted sample counts;
@@ -51,13 +57,13 @@ The Markdown report provides an operational ranking table suitable for review.
 
 ## Scheduling
 
-Example daily cron entry:
+The preferred production entrypoint is the full pipeline:
 
 ```cron
-15 4 * * * cd /srv/slf/SLF && /usr/bin/node tools/aggregate-tactic-performance.mjs --input /srv/slf/export --output /srv/slf/reports/tactic-performance-report.json --markdown /srv/slf/reports/tactic-performance-report.md >> /var/log/slf-tactic-aggregator.log 2>&1
+15 4 * * * cd /srv/slf/SLF && SLF_TACTIC_STATE_DIR=/srv/slf/tactic-analytics /usr/bin/bash tools/run-tactic-analytics-pipeline.sh >> /var/log/slf-tactic-analytics.log 2>&1
 ```
 
-The export step remains deployment-specific because the VPS database/API implementation is not stored in this repository.
+The deployable VPS API source is stored under `vps/api`. Live data, credentials, environment values, cron state and the deployed revision remain VPS operational state and are not inferred from the repository.
 
 ## Safety boundary
 
