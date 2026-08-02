@@ -1,5 +1,40 @@
 # Changelog
 
+## 4.4.253
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/tactic-analytics-smoke.yml
+- data/tactics/tactic-evaluation-contract-v1.json
+- docs/audit/tactic-evaluation-contract-v1.md
+- docs/operations/tactic-analytics-pipeline.md
+- docs/operations/tactic-performance-aggregator.md
+- docs/scope/tactics-remaining-stages.md
+- src/modules/tactics-presets/preset-storage.js
+- tools/aggregate-tactic-performance.mjs
+- tools/export-tactic-telemetry.mjs
+- tools/generate-tactic-policy-proposals.mjs
+- tools/run-tactic-analytics-pipeline.sh
+- tools/test-tactic-analytics-pipeline.mjs
+- tools/validate-tactic-data-quality.mjs
+- vps/api/server.py
+- vps/api/test_server.py
+
+Approved base commit:
+- 451cc0f0625c9da345edb20fe362e4c730c72a3e
+
+Approved commit:
+- 926aa8922d6b7efa8a7e739a8ff107ee38776798
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.252
 
 ### Automatic latest-only build
