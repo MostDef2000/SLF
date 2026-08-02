@@ -1,0 +1,148 @@
+{
+  "schema": "slf_active_preset_inventory_v1",
+  "generatedFrom": "src/modules/tactics-presets/active-preset-registry.js",
+  "generatorVersion": "5.61",
+  "presetCount": 11,
+  "distanceMetric": {
+    "name": "unweighted_manhattan",
+    "fields": [
+      "def_line",
+      "press_line",
+      "def_width",
+      "press_intense",
+      "build_type",
+      "build_temp",
+      "build_long",
+      "build_fast",
+      "style",
+      "pass_risk",
+      "dribble",
+      "cross",
+      "corner",
+      "shot"
+    ],
+    "notes": "Priority lanes, formation and semantic metadata are excluded from the numeric distance. Lower values indicate more similar team settings."
+  },
+  "presets": [
+    {
+      "id": "Arteta_Control433_bal3",
+      "label": "Arteta Control 4-3-3",
+      "group": "balance",
+      "rank": 3,
+      "scheme": "4-3-3 control",
+      "settings": {"def_line":2,"press_line":3,"def_width":2,"press_intense":3,"build_type":2,"build_temp":2,"build_long":1,"build_fast":2,"style":4,"pass_risk":3,"dribble":2,"cross":2,"corner":1,"shot":2},
+      "priority": []
+    },
+    {
+      "id": "Pep_BoxControl_bal2",
+      "label": "Pep Box Control",
+      "group": "balance",
+      "rank": 2,
+      "scheme": "4-2-2-2 box control",
+      "settings": {"def_line":2,"press_line":2,"def_width":1,"press_intense":2,"build_type":2,"build_temp":1,"build_long":1,"build_fast":1,"style":3,"pass_risk":2,"dribble":1,"cross":1,"corner":1,"shot":1},
+      "priority": []
+    },
+    {
+      "id": "Pep_PressCooldown_bal2",
+      "label": "Pep Press Cooldown",
+      "group": "balance",
+      "rank": 2,
+      "scheme": "4-1-4-1 cooldown",
+      "settings": {"def_line":2,"press_line":2,"def_width":2,"press_intense":2,"build_type":2,"build_temp":2,"build_long":1,"build_fast":2,"style":3,"pass_risk":2,"dribble":1,"cross":1,"corner":1,"shot":1},
+      "priority": []
+    },
+    {
+      "id": "Compact_Counter_def3",
+      "label": "Compact Counter",
+      "group": "defensive",
+      "rank": 3,
+      "scheme": "4-5-1 compact counter",
+      "settings": {"def_line":1,"press_line":2,"def_width":2,"press_intense":3,"build_type":1,"build_temp":2,"build_long":3,"build_fast":4,"style":3,"pass_risk":2,"dribble":3,"cross":3,"corner":1,"shot":2},
+      "priority": ["left","right"]
+    },
+    {
+      "id": "Pep_ControlledPush_att3",
+      "label": "Pep Controlled Push",
+      "group": "attack",
+      "rank": 3,
+      "scheme": "4-2-3-1 controlled push",
+      "settings": {"def_line":2,"press_line":2,"def_width":2,"press_intense":3,"build_type":2,"build_temp":3,"build_long":1,"build_fast":3,"style":4,"pass_risk":3,"dribble":3,"cross":2,"corner":1,"shot":2},
+      "priority": ["left","right"]
+    },
+    {
+      "id": "Pep_TwoThreeFive_att3",
+      "label": "Pep Positional Attack",
+      "group": "attack",
+      "rank": 4,
+      "scheme": "4-2-3-1 positional",
+      "settings": {"def_line":2,"press_line":3,"def_width":3,"press_intense":3,"build_type":2,"build_temp":3,"build_long":1,"build_fast":3,"style":5,"pass_risk":4,"dribble":3,"cross":2,"corner":1,"shot":3},
+      "priority": ["left","right"]
+    },
+    {
+      "id": "Conte_WingbackWidth_bal4",
+      "label": "Conte Wingback Width",
+      "group": "balance",
+      "rank": 4,
+      "scheme": "3-4-3 wingback width",
+      "settings": {"def_line":2,"press_line":2,"def_width":3,"press_intense":3,"build_type":2,"build_temp":2,"build_long":2,"build_fast":2,"style":3,"pass_risk":3,"dribble":3,"cross":3,"corner":1,"shot":2},
+      "priority": ["left","right"]
+    },
+    {
+      "id": "Klopp_Gegenpress_att4",
+      "label": "Klopp Gegenpress",
+      "group": "attack",
+      "rank": 4,
+      "scheme": "4-3-3 gegenpress",
+      "settings": {"def_line":3,"press_line":4,"def_width":3,"press_intense":4,"build_type":3,"build_temp":3,"build_long":2,"build_fast":3,"style":5,"pass_risk":3,"dribble":3,"cross":3,"corner":1,"shot":3},
+      "priority": ["left","right"]
+    },
+    {
+      "id": "Simeone_Compact442_def4",
+      "label": "Simeone Compact 4-4-2",
+      "group": "defensive",
+      "rank": 4,
+      "scheme": "4-4-2 compact",
+      "settings": {"def_line":1,"press_line":2,"def_width":1,"press_intense":3,"build_type":2,"build_temp":1,"build_long":2,"build_fast":1,"style":2,"pass_risk":2,"dribble":1,"cross":2,"corner":1,"shot":1},
+      "priority": ["left","right"]
+    },
+    {
+      "id": "Simeone_LowBlock_def5",
+      "label": "Simeone Low Block",
+      "group": "defensive",
+      "rank": 5,
+      "scheme": "5-4-1 low block",
+      "settings": {"def_line":1,"press_line":1,"def_width":1,"press_intense":2,"build_type":1,"build_temp":1,"build_long":2,"build_fast":1,"style":1,"pass_risk":1,"dribble":1,"cross":1,"corner":1,"shot":1},
+      "priority": ["right"]
+    },
+    {
+      "id": "Bielsa_ChaosPress_att5",
+      "label": "Bielsa Chaos Press",
+      "group": "attack",
+      "rank": 5,
+      "scheme": "3-3-4 chaos press",
+      "settings": {"def_line":4,"press_line":5,"def_width":4,"press_intense":5,"build_type":3,"build_temp":3,"build_long":3,"build_fast":5,"style":5,"pass_risk":5,"dribble":5,"cross":4,"corner":1,"shot":4},
+      "priority": ["left","right"]
+    }
+  ],
+  "nearestPairs": [
+    {"distance":3,"a":"Pep_BoxControl_bal2","b":"Pep_PressCooldown_bal2","classification":"near_duplicate"},
+    {"distance":4,"a":"Arteta_Control433_bal3","b":"Pep_ControlledPush_att3","classification":"overlap"},
+    {"distance":5,"a":"Pep_BoxControl_bal2","b":"Simeone_Compact442_def4","classification":"overlap"},
+    {"distance":5,"a":"Pep_ControlledPush_att3","b":"Pep_TwoThreeFive_att3","classification":"overlap"},
+    {"distance":6,"a":"Arteta_Control433_bal3","b":"Conte_WingbackWidth_bal4","classification":"overlap"},
+    {"distance":6,"a":"Pep_ControlledPush_att3","b":"Conte_WingbackWidth_bal4","classification":"overlap"},
+    {"distance":6,"a":"Simeone_Compact442_def4","b":"Simeone_LowBlock_def5","classification":"overlap"},
+    {"distance":7,"a":"Arteta_Control433_bal3","b":"Pep_PressCooldown_bal2","classification":"close"},
+    {"distance":7,"a":"Arteta_Control433_bal3","b":"Pep_TwoThreeFive_att3","classification":"close"},
+    {"distance":7,"a":"Pep_BoxControl_bal2","b":"Simeone_LowBlock_def5","classification":"close"},
+    {"distance":7,"a":"Compact_Counter_def3","b":"Conte_WingbackWidth_bal4","classification":"close"},
+    {"distance":7,"a":"Pep_TwoThreeFive_att3","b":"Klopp_Gegenpress_att4","classification":"close"}
+  ],
+  "baselineFindings": {
+    "nearDuplicateCount": 1,
+    "pairsAtOrBelowDistance8": 13,
+    "mostIsolatedPreset": "Bielsa_ChaosPress_att5",
+    "mostIsolatedNearestDistance": 13,
+    "conclusion": "The current library has a dense neutral-to-medium cluster and only a small number of strongly separated endpoints. Redesign should increase profile separation while retaining explicit scenario guards."
+  }
+}
