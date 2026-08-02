@@ -37,6 +37,7 @@
     "src/app/ui-layer.js",
     "src/app/version-badge.js",
     "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
+    "src/modules/live-parser/runtime-telemetry-integrity.js",
     "src/modules/transfer-analyzer/tm-enrichment-layer.js",
     "src/modules/transfer-analyzer/slf-alter-layer.js",
     "src/modules/transfer-analyzer/transfer-market-analyzer.js",
@@ -63,7 +64,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 55,
+    "expectedModuleCount": 56,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -1203,6 +1204,66 @@
           "document",
           "location",
           "console"
+        ]
+      },
+      {
+        "file": "src/modules/live-parser/runtime-telemetry-integrity.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "CONFIG",
+              "STATE"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/api.js",
+            "symbols": [
+              "Api"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-control-engine.js",
+            "symbols": [
+              "applyPresetAsync",
+              "getCurrentTactic"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/match-state-parser.js",
+            "symbols": [
+              "MatchStateParser",
+              "MatchTimingModel"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/snapshot-engine.js",
+            "symbols": [
+              "SnapshotEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/live-parser/event-tracker.js",
+            "symbols": [
+              "EventTracker"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document",
+          "location",
+          "setTimeout",
+          "clearTimeout",
+          "setInterval",
+          "clearInterval"
         ]
       },
       {
