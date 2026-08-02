@@ -1,110 +1,61 @@
 {
   "schema": "slf_tactic_evaluation_contract_v1",
   "version": 1,
-  "unitOfAnalysis": [
-    "match",
-    "tactical_phase",
-    "preset_switch"
-  ],
+  "unitOfAnalysis": ["match", "tactical_phase", "preset_switch"],
   "identity": {
-    "required": [
-      "gameId",
-      "presetId",
-      "tacticFingerprint",
-      "libraryVersion",
-      "recommendationSchema",
-      "riskAppetite"
-    ]
+    "required": ["gameId", "presetId", "tacticFingerprint", "libraryVersion", "recommendationSchema", "riskAppetite"]
   },
   "eligibility": {
     "minimumPhaseMinutes": 5,
     "minimumCompleteness": 0.55,
     "excludeEarlyRedCardBeforeMinute": 20,
-    "markButDoNotDiscard": [
-      "injury",
-      "lateRedCard",
-      "manualOverride",
-      "missingExpectedPerformance"
-    ]
+    "markButDoNotDiscard": ["injury", "lateRedCard", "manualOverride", "missingExpectedPerformance"]
   },
-  "contextDimensions": [
-    "homeAway",
-    "strengthGapBucket",
-    "scoreStateAtStart",
-    "minuteBucket",
-    "opponentStyle",
-    "riskAppetite",
-    "explorationApplied"
-  ],
+  "contextDimensions": ["homeAway", "strengthGapBucket", "scoreStateAtStart", "minuteBucket", "opponentStyle", "riskAppetite", "explorationApplied"],
   "outcomes": {
-    "result": {
-      "points": 1.0,
-      "goalDifference": 0.35,
-      "resultVsExpected": 1.25
-    },
-    "chanceCreation": {
-      "xGDifference": 1.0,
-      "shotDifference": 0.2,
-      "shotsOnTargetDifference": 0.35,
-      "xTAdvantage": 0.6
-    },
-    "control": {
-      "badActionsDelta": -0.25,
-      "strengthGapDelta": 0.2,
-      "transitionThreatConceded": -0.7
-    },
-    "gameState": {
-      "leadHeld": 1.0,
-      "leadLost": -1.2,
-      "comebackAchieved": 1.2,
-      "equalizerCreated": 0.7
-    },
-    "cost": {
-      "powerDropPct": -0.45,
-      "cardsAfterSwitch": -0.35,
-      "injuriesAfterSwitch": -0.5
-    }
+    "result": {"points": 1.0, "goalDifference": 0.35, "resultVsExpected": 1.25},
+    "chanceCreation": {"xGDifference": 1.0, "shotDifference": 0.2, "shotsOnTargetDifference": 0.35, "xTAdvantage": 0.6},
+    "control": {"badActionsDelta": -0.25, "strengthGapDelta": 0.2, "transitionThreatConceded": -0.7},
+    "gameState": {"leadHeld": 1.0, "leadLost": -1.2, "comebackAchieved": 1.2, "equalizerCreated": 0.7},
+    "cost": {"powerDropPct": -0.45, "cardsAfterSwitch": -0.35, "injuriesAfterSwitch": -0.5}
   },
   "normalization": {
     "strengthGapBuckets": [
-      { "id": "much_weaker", "max": -151 },
-      { "id": "weaker", "min": -150, "max": -51 },
-      { "id": "even", "min": -50, "max": 50 },
-      { "id": "stronger", "min": 51, "max": 150 },
-      { "id": "much_stronger", "min": 151 }
+      {"id": "much_weaker", "max": -151},
+      {"id": "weaker", "min": -150, "max": -51},
+      {"id": "even", "min": -50, "max": 50},
+      {"id": "stronger", "min": 51, "max": 150},
+      {"id": "much_stronger", "min": 151}
     ],
     "minuteBuckets": [
-      { "id": "early", "min": 0, "max": 29 },
-      { "id": "middle", "min": 30, "max": 59 },
-      { "id": "late", "min": 60, "max": 79 },
-      { "id": "emergency", "min": 80, "max": 120 }
+      {"id": "early", "min": 0, "max": 29},
+      {"id": "middle", "min": 30, "max": 59},
+      {"id": "late", "min": 60, "max": 79},
+      {"id": "emergency", "min": 80, "max": 120}
     ]
   },
   "confidence": {
     "minimumSamplesForRanking": 8,
     "minimumSamplesForPromotion": 20,
     "minimumSamplesForAutomaticPolicyChange": 40,
+    "effectiveSamples": {
+      "minimumForRanking": 6,
+      "minimumForPromotion": 15,
+      "minimumForAutomaticPolicyChange": 30
+    },
     "priorWeight": 8,
     "oldMatchHalfLifeDays": 60,
     "reportWilsonInterval": true
   },
+  "implementation": {
+    "implementedMetrics": ["xGDifference", "shotDifference", "xTAdvantage", "badActionsDelta", "strengthGapDelta", "leadHeld", "leadLost", "comebackAchieved", "equalizerCreated", "powerDropPct"],
+    "deferredMetrics": ["points", "goalDifference", "resultVsExpected", "shotsOnTargetDifference", "transitionThreatConceded", "cardsAfterSwitch", "injuriesAfterSwitch"],
+    "missingMetricsMustNotDefaultToObservedZero": true
+  },
   "comparison": {
     "primary": "risk_adjusted_effect_score",
-    "secondary": [
-      "result_vs_expected",
-      "xg_difference_per_30",
-      "lead_hold_rate",
-      "comeback_rate",
-      "power_cost_per_30"
-    ],
-    "groupBy": [
-      "presetId",
-      "tacticFingerprint",
-      "riskAppetite",
-      "strengthGapBucket",
-      "scoreStateAtStart",
-      "minuteBucket"
-    ]
+    "secondary": ["result_vs_expected", "xg_difference_per_30", "lead_hold_rate", "comeback_rate", "power_cost_per_30"],
+    "groupBy": ["presetId", "tacticFingerprint", "riskAppetite", "strengthGapBucket", "scoreStateAtStart", "minuteBucket"]
   },
   "safety": {
     "clientDoesNotAutoTrain": true,
