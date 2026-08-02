@@ -1,5 +1,30 @@
 # Changelog
 
+## 4.4.254
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/tactic-analytics-smoke.yml
+- docs/audit/tactic-telemetry-envelope-v1.md
+- src/app/bundle-order.json
+- src/modules/live-parser/runtime-telemetry-integrity.js
+- tools/test-runtime-telemetry-integrity.mjs
+
+Approved base commit:
+- f3d56b1851b4f687442c9cba1859906d0a80a9ba
+
+Approved commit:
+- 2f92ca42736b5d10d7c032494617955d27167f48
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.253
 
 ### Automatic latest-only build
