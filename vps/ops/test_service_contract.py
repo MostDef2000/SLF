@@ -70,7 +70,6 @@ class ApiServiceContractTest(unittest.TestCase):
         self.assertIn("--connect-timeout 2", self.deploy_script)
         self.assertIn("--max-time 5", self.deploy_script)
         self.assertIn("sleep 1", self.deploy_script)
-        self.assertIn("Expected authenticated endpoint", self.deploy_script) if False else None
         self.assertIn("API readiness verification failed after 30 attempts", self.deploy_script)
 
 
