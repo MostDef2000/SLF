@@ -104,7 +104,7 @@ SLFTeam4FormSavedChoiceNotice.start();
         const headerRow = sourceRows.find(row => row.querySelectorAll('th,td').length >= 4 && /команд|team|и\b|игр|очк|points/i.test(norm(row.textContent)));
         if (!headerRow) throw new Error('table header not found');
         const headers = [...headerRow.children].map(cell => norm(cell.textContent).toLowerCase());
-        const positionIndex = headerIndex(headers, [/^№$/, /^#$/, /мест/, /^п$/], 0);
+        const positionIndex = headerIndex(headers, [/^поз\.?$/, /^позиц/, /^№$/, /^#$/, /мест/], 0);
         const teamIndex = headerIndex(headers, [/команд/, /team/], 1);
         const playedIndex = headerIndex(headers, [/^и$/, /игр/, /played/, /^p$/], 2);
         const pointsIndex = headerIndex(headers, [/очк/, /points?/, /^о$/], headers.length - 1);
