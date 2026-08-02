@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.4.252
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- docs/audit/tactic-telemetry-envelope-v1.md
+- src/app/bootstrap.js
+- src/modules/live-parser/event-tracker.js
+
+Approved base commit:
+- c2161fdbb5cb04bf1172664015983a2f78885bff
+
+Approved commit:
+- c753c33a368599aab4a1b1fa928992c04f9ca070
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.251
 
 ### Automatic latest-only build

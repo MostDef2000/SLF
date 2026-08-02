@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.251
+// @version      4.4.252
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.251',
-        scriptVersion: '4.4.251',
+        version: '4.4.252',
+        scriptVersion: '4.4.252',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.251',
+        scriptVersion: '4.4.252',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -2506,18 +2506,29 @@ const SnapshotEngine = {
                 schema: decision.schema || 'slf_rule_decision_v3',
                 generatedAt: decision.generatedAt || Date.now(),
                 mode: decision.mode || null,
+                riskAppetite: decision.riskAppetite || decision.action.riskAppetite || null,
                 action: {
                     preset: decision.action.preset || null,
                     decision: decision.action.decision || null,
+                    risk: decision.action.risk || null,
                     score: Number(decision.action.score || 0),
                     reason: decision.action.reason || '',
                     guardType: decision.action.guardType || null,
                     guardReason: decision.action.guardReason || '',
-                    emergency: !!decision.action.emergency
+                    emergency: !!decision.action.emergency,
+                    exploration: !!decision.action.exploration
                 },
                 confidence: decision.confidence || null,
                 margin: Number(decision.margin || 0),
+                exploration: decision.exploration || null,
                 signals: decision.moment?.context || null,
+                candidates: (decision.candidates || []).map(item => ({
+                    preset: item.preset,
+                    score: Number(item.score || 0),
+                    rawScore: Number(item.rawScore || 0),
+                    vetoed: !!item.vetoed,
+                    vetoReasons: Array.isArray(item.vetoReasons) ? item.vetoReasons.slice() : []
+                })),
                 candidateScores: Object.fromEntries((decision.candidates || []).map(item => [item.preset, item.score])),
                 vetoedPresets: decision.vetoedPresets || {}
             };
@@ -2531,8 +2542,8 @@ const SnapshotEngine = {
             const event = {
                 ts,
                 recordType: 'preset_event',
-                schemaVersion: 2,
-                parserVersion: 'preset_event_generation_v3_rule_decision',
+                schemaVersion: 3,
+                parserVersion: 'preset_event_generation_v4_tactic_telemetry',
                 eventKey: ['preset_event', MatchStateParser.getGameId(), beforeSnapshot.minute ?? '', beforeSnapshot.bucket || '', name || '', ts].join('|'),
                 type: 'preset',
                 gameId: MatchStateParser.getGameId(),
@@ -2545,6 +2556,7 @@ const SnapshotEngine = {
                 presetName: name,
                 tactic: preset,
                 ruleDecision,
+                tacticTelemetry: beforeSnapshot?.tacticTelemetry || null,
                 beforeSnapshot
             };
 
@@ -2563,7 +2575,6 @@ const SnapshotEngine = {
 
         buildPresetEffect(afterSnapshot) {
             const pending = STATE.pendingPresetEvent;
-
             if (!pending || !afterSnapshot) return null;
             if (String(pending.gameId || '') !== String(afterSnapshot.gameId || '')) return null;
             if (!afterSnapshot.myTeam) return null;
@@ -2572,7 +2583,6 @@ const SnapshotEngine = {
             const pendingWindow = pending.generationWindow || before?.generationWindow || MatchTimingModel.getWindow(before?.minute);
             const targetWindow = pending.targetGenerationWindow || MatchTimingModel.getTargetWindowAfterChange(before?.minute);
             const afterWindow = afterSnapshot.generationWindow || MatchTimingModel.getWindow(afterSnapshot.minute);
-
             if (!afterWindow || !targetWindow) return null;
             if ((afterWindow.index || 0) < (targetWindow.index || 0)) return null;
             if ((afterWindow.index || 0) === (pendingWindow.index || 0)) return null;
@@ -2582,7 +2592,6 @@ const SnapshotEngine = {
             const beforeOpp = before?.stats?.find(x => Number(x.teamId) !== Number(myTeam))?.stats;
             const afterMy = this.findTeamStats(afterSnapshot, myTeam);
             const afterOpp = afterSnapshot?.stats?.find(x => Number(x.teamId) !== Number(myTeam))?.stats;
-
             if (!beforeMy || !beforeOpp || !afterMy || !afterOpp) return null;
 
             const beforeQualitySignal = before.generatorQualitySignal || DeveloperHintParser.getGeneratorQualitySignal(before.developerHints || []);
@@ -2602,8 +2611,8 @@ const SnapshotEngine = {
             const effect = {
                 ts,
                 recordType: 'preset_effect',
-                schemaVersion: 2,
-                parserVersion: 'preset_effect_generation_v3_rule_decision',
+                schemaVersion: 3,
+                parserVersion: 'preset_effect_generation_v4_tactic_telemetry',
                 effectKey: ['preset_effect', afterSnapshot.gameId || '', pending.presetName || pending.type || 'manual_change', before.bucket || '', afterSnapshot.bucket || '', ts].join('|'),
                 gameId: afterSnapshot.gameId,
                 presetName: pending.presetName || pending.type || 'manual_change',
@@ -2623,6 +2632,7 @@ const SnapshotEngine = {
                     appliedTactic: pending.tactic || before.currentTactic || null,
                     currentTacticAfter: afterSnapshot.currentTactic || null
                 },
+                tacticTelemetry: afterSnapshot.tacticTelemetry || pending.tacticTelemetry || null,
                 decisionContext: ruleDecision,
                 delta: {
                     myXG: num(afterMy.xG) - num(beforeMy.xG),
@@ -2644,21 +2654,11 @@ const SnapshotEngine = {
                     oppXT: afterXT.oppXT - beforeXT.oppXT
                 },
                 vectorContext: {
-                    before: {
-                        myDefense: num(beforeMy.defVector),
-                        myPressing: num(beforeMy.pressVector),
-                        oppDefense: num(beforeOpp.defVector),
-                        oppPressing: num(beforeOpp.pressVector)
-                    },
-                    after: {
-                        myDefense: num(afterMy.defVector),
-                        myPressing: num(afterMy.pressVector),
-                        oppDefense: num(afterOpp.defVector),
-                        oppPressing: num(afterOpp.pressVector)
-                    }
+                    before: { myDefense: num(beforeMy.defVector), myPressing: num(beforeMy.pressVector), oppDefense: num(beforeOpp.defVector), oppPressing: num(beforeOpp.pressVector) },
+                    after: { myDefense: num(afterMy.defVector), myPressing: num(afterMy.pressVector), oppDefense: num(afterOpp.defVector), oppPressing: num(afterOpp.pressVector) }
                 },
                 varianceContext: {
-                    model: 'variance_tracking_v2_rule_decision',
+                    model: 'variance_tracking_v3_tactic_telemetry',
                     scoreBefore: before.score || null,
                     scoreAfter: afterSnapshot.score || null,
                     strengthGap: beforePower - beforeOppPower,
@@ -2694,9 +2694,8 @@ const SnapshotEngine = {
                     (Number(effect.delta.myShots || 0) * 0.5) -
                     (Number(effect.delta.oppShots || 0) * 0.5) -
                     (Number(effect.delta.myBadActionsPct || 0) * 0.3);
-
                 STATE.presetProgression.lastEffect = {
-                    schema: 'slf_preset_effect_score_v2',
+                    schema: 'slf_preset_effect_score_v3_tactic_telemetry',
                     presetName: effect.presetName,
                     effectScore: Number(effectScore.toFixed(2)),
                     fromBucket: effect.fromBucket,
@@ -2705,10 +2704,10 @@ const SnapshotEngine = {
                     delta: effect.delta,
                     vectorContext: effect.vectorContext,
                     decisionContext: effect.decisionContext,
+                    tacticTelemetry: effect.tacticTelemetry,
                     generatorQualitySignal: afterQualitySignal,
                     evaluatedAt: Date.now()
                 };
-
                 SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer });
             }
 
@@ -2720,45 +2719,22 @@ const SnapshotEngine = {
             const score = snapshot?.score || {};
             const my = this.findTeamStats(snapshot, snapshot?.myTeam) || {};
             const opp = snapshot?.stats?.find(x => Number(x.teamId) !== Number(snapshot?.myTeam))?.stats || {};
-            return [
-                snapshot?.gameId || '',
-                snapshot?.status || '',
-                snapshot?.minute ?? '',
-                snapshot?.bucket || '',
-                score.home ?? '',
-                score.away ?? '',
-                snapshot?.myTeam || '',
-                my.power ?? '',
-                opp.power ?? '',
-                my.defVector ?? '',
-                my.pressVector ?? '',
-                opp.defVector ?? '',
-                opp.pressVector ?? '',
-                snapshot?.ruleDecision?.action?.preset || ''
-            ].join('|');
+            return [snapshot?.gameId || '', snapshot?.status || '', snapshot?.minute ?? '', snapshot?.bucket || '', score.home ?? '', score.away ?? '', snapshot?.myTeam || '', my.power ?? '', opp.power ?? '', my.defVector ?? '', my.pressVector ?? '', opp.defVector ?? '', opp.pressVector ?? '', snapshot?.ruleDecision?.action?.preset || ''].join('|');
         },
 
         submitManualTelemetry(snapshot, generatorVersion = '') {
             if (!snapshot?.myTeam || snapshot.matchOwnership === 'foreign') return;
-
             const effect = this.buildPresetEffect(snapshot);
             if (effect) {
-                effect.source = Object.assign({}, effect.source || {}, {
-                    page: 'game',
-                    collectedAt: Date.now(),
-                    generatorVersion: generatorVersion || snapshot.generatorVersion || null,
-                    trigger: 'manual_hint_button'
-                });
+                effect.source = Object.assign({}, effect.source || {}, { page: 'game', collectedAt: Date.now(), generatorVersion: generatorVersion || snapshot.generatorVersion || null, trigger: 'manual_hint_button' });
                 void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EFFECTS, effect, 'preset effect history')
                     .then(() => UI.addParserLog(`Эффект пресета сохранён: ${effect.presetName || 'unknown'}`))
                     .catch(error => UI.addParserLog(`Эффект пресета: ошибка ${error?.kind || 'unknown'}`));
             }
-
             if (snapshot.status === 'finished') return;
             const fingerprint = this.getManualTelemetryFingerprint(snapshot);
             if (STATE.lastManualTelemetryFingerprint === fingerprint) return;
             STATE.lastManualTelemetryFingerprint = fingerprint;
-
             snapshot.generatorVersion = generatorVersion || snapshot.generatorVersion || null;
             snapshot.recommendationSource = 'manual_hint_button';
             snapshot.ruleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
@@ -2769,70 +2745,36 @@ const SnapshotEngine = {
 
         diffTactic(oldTactic, newTactic) {
             const diff = {};
-            const keys = new Set([
-                ...Object.keys(oldTactic || {}),
-                ...Object.keys(newTactic || {})
-            ]);
-
+            const keys = new Set([...Object.keys(oldTactic || {}), ...Object.keys(newTactic || {})]);
             keys.forEach(key => {
                 const oldVal = JSON.stringify(oldTactic?.[key] ?? null);
                 const newVal = JSON.stringify(newTactic?.[key] ?? null);
-                if (oldVal !== newVal) {
-                    diff[key] = {
-                        from: oldTactic?.[key] ?? null,
-                        to: newTactic?.[key] ?? null
-                    };
-                }
+                if (oldVal !== newVal) diff[key] = { from: oldTactic?.[key] ?? null, to: newTactic?.[key] ?? null };
             });
-
             return diff;
         },
 
         startManualTacticWatcher() {
             if (STATE.tacticWatcherStarted) return;
             if (!location.pathname.includes('/game.php')) return;
-
             const ids = MatchStatsParser.getAllTeamIds();
             if (!MatchStatsParser.detectMyTeamId(ids, MatchStatsParser.readTeamNames())) return;
-
             STATE.tacticWatcherStarted = true;
             STATE.lastManualTactic = getCurrentTactic();
-
             document.body.addEventListener('change', e => {
                 const el = e.target;
                 if (!el || !el.name) return;
-
-                const isTacticInput =
-                    el.matches('input[type="radio"], input[type="checkbox"]') &&
-                    (
-                        el.name === 'def_line' ||
-                        el.name === 'press_line' ||
-                        el.name === 'def_width' ||
-                        el.name === 'press_intense' ||
-                        el.name === 'build_type' ||
-                        el.name === 'build_temp' ||
-                        el.name === 'build_long' ||
-                        el.name === 'build_fast' ||
-                        el.name === 'style' ||
-                        el.name === 'pass_risk' ||
-                        el.name === 'dribble' ||
-                        el.name === 'cross' ||
-                        el.name === 'corner' ||
-                        el.name === 'shot' ||
-                        el.name.startsWith('priority_')
-                    );
-
+                const isTacticInput = el.matches('input[type="radio"], input[type="checkbox"]') && (
+                    ['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot'].includes(el.name) || el.name.startsWith('priority_')
+                );
                 if (!isTacticInput) return;
                 if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
-
                 clearTimeout(STATE.manualChangeTimer);
                 STATE.manualChangeTimer = setTimeout(() => {
                     if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
-
                     const current = getCurrentTactic();
                     const changed = this.diffTactic(STATE.lastManualTactic, current);
                     if (!Object.keys(changed).length) return;
-
                     const snapshot = SnapshotEngine.build();
                     snapshot.ruleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
                     const ts = Date.now();
@@ -2841,8 +2783,8 @@ const SnapshotEngine = {
                     const event = {
                         ts,
                         recordType: 'preset_event',
-                        schemaVersion: 2,
-                        parserVersion: 'manual_tactic_event_generation_v3_rule_decision',
+                        schemaVersion: 3,
+                        parserVersion: 'manual_tactic_event_generation_v4_tactic_telemetry',
                         eventKey: ['manual_tactic_event', MatchStateParser.getGameId(), snapshot.minute ?? '', snapshot.bucket || '', ts].join('|'),
                         type: 'manual_change',
                         gameId: MatchStateParser.getGameId(),
@@ -2856,23 +2798,108 @@ const SnapshotEngine = {
                         changed,
                         tactic: current,
                         ruleDecision: this.compactRuleDecision(snapshot.ruleDecision),
+                        tacticTelemetry: snapshot.tacticTelemetry || null,
                         beforeSnapshot: snapshot,
                         snapshot
                     };
-
                     STATE.pendingPresetEvent = event;
                     SnapshotEngine.freezeRecommendationsAfterTacticChange('manual_change', snapshot);
                     void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, event, 'manual tactic event history')
                         .then(() => UI.addParserLog('Ручное изменение тактики сохранено'))
                         .catch(error => UI.addParserLog(`Ошибка сохранения изменения тактики: ${error?.kind || 'unknown'}`));
-
                     STATE.lastManualTactic = current;
                 }, 500);
             }, true);
-
             UI.addParserLog('Manual tactic watcher активен');
         }
     };
+
+    (function installTacticTelemetryEnvelope() {
+        if (SnapshotEngine.__tacticTelemetryEnvelopeInstalled) return;
+        const sessions = new Map();
+        const maxTransitions = 40;
+        const clone = value => {
+            if (value == null) return null;
+            try { return JSON.parse(JSON.stringify(value)); } catch (_) { return null; }
+        };
+        const fingerprint = tactic => {
+            if (!tactic || typeof tactic !== 'object') return '';
+            const keys = ['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot','priority'];
+            return keys.map(key => `${key}:${JSON.stringify(tactic[key] ?? null)}`).join('|');
+        };
+        const detectPreset = tactic => {
+            const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
+            const signatures = engine?.TACTIC_SIGNATURES || {};
+            return Object.keys(signatures).find(name => engine.tacticMatches(signatures[name], tactic)) || null;
+        };
+        const getSession = snapshot => {
+            const gameId = String(snapshot?.gameId || 'unknown');
+            if (!sessions.has(gameId)) sessions.set(gameId, { initialTactic: null, initialPreset: null, lastFingerprint: '', lastPreset: null, transitions: [] });
+            if (sessions.size > 8) sessions.delete(sessions.keys().next().value);
+            return sessions.get(gameId);
+        };
+        const enrich = (snapshot, source) => {
+            if (!snapshot || typeof snapshot !== 'object') return snapshot;
+            const session = getSession(snapshot);
+            const currentFingerprint = fingerprint(snapshot.currentTactic);
+            const currentPreset = detectPreset(snapshot.currentTactic);
+            if (!session.initialTactic && snapshot.currentTactic) {
+                session.initialTactic = clone(snapshot.currentTactic);
+                session.initialPreset = currentPreset;
+            }
+            if (currentFingerprint && currentFingerprint !== session.lastFingerprint) {
+                session.transitions.push({
+                    ts: Date.now(),
+                    minute: snapshot.minute ?? null,
+                    bucket: snapshot.bucket || null,
+                    score: clone(snapshot.score),
+                    source,
+                    fromPreset: session.lastPreset,
+                    toPreset: currentPreset,
+                    tactic: clone(snapshot.currentTactic),
+                    tacticFingerprint: currentFingerprint,
+                    recommendation: EventTracker.compactRuleDecision(snapshot.ruleDecision || STATE.lastRuleDecision || null)
+                });
+                session.transitions = session.transitions.slice(-maxTransitions);
+                session.lastFingerprint = currentFingerprint;
+                session.lastPreset = currentPreset;
+            }
+            const decision = EventTracker.compactRuleDecision(snapshot.ruleDecision || STATE.lastRuleDecision || null);
+            let riskAppetite = decision?.riskAppetite || decision?.action?.riskAppetite || null;
+            try { riskAppetite = riskAppetite || localStorage.getItem('slf:tactics:risk-appetite'); } catch (_) {}
+            snapshot.tacticTelemetry = {
+                schema: 'slf_tactic_telemetry_v1',
+                libraryVersion: 'active_presets_v2_bold_policy_v3',
+                recommendationSchema: decision?.schema || null,
+                riskAppetite: riskAppetite || 'bold',
+                currentPreset,
+                currentTactic: clone(snapshot.currentTactic),
+                currentTacticFingerprint: currentFingerprint,
+                initialPreset: session.initialPreset,
+                initialTactic: clone(session.initialTactic),
+                transitionCount: session.transitions.length,
+                transitions: clone(session.transitions) || [],
+                latestDecision: decision,
+                activePresetIds: Array.isArray(window.SLFActivePresetRegistry?.active) ? window.SLFActivePresetRegistry.active.slice() : [],
+                capturedAt: Date.now()
+            };
+            return snapshot;
+        };
+
+        const originalBuild = SnapshotEngine.build.bind(SnapshotEngine);
+        SnapshotEngine.build = function buildWithTacticTelemetry() { return enrich(originalBuild(), 'snapshot_build'); };
+        const originalBuildSnapshotRecord = SnapshotEngine.buildSnapshotRecord.bind(SnapshotEngine);
+        SnapshotEngine.buildSnapshotRecord = function buildSnapshotRecordWithTacticTelemetry(snapshot) { return originalBuildSnapshotRecord(enrich(snapshot, 'match_snapshot')); };
+        const originalSendMatchResult = SnapshotEngine.sendMatchResult.bind(SnapshotEngine);
+        SnapshotEngine.sendMatchResult = function sendMatchResultWithTacticTelemetry(snapshot) { return originalSendMatchResult(enrich(snapshot, 'match_result')); };
+        const originalCompactSnapshot = SnapshotEngine.compactSnapshotForStorage.bind(SnapshotEngine);
+        SnapshotEngine.compactSnapshotForStorage = function compactSnapshotWithTacticTelemetry(snapshot) {
+            const compact = originalCompactSnapshot(enrich(snapshot, 'live_state'));
+            if (compact) compact.tacticTelemetry = clone(snapshot.tacticTelemetry);
+            return compact;
+        };
+        SnapshotEngine.__tacticTelemetryEnvelopeInstalled = true;
+    })();
 
     SnapshotEngine.submitManualTelemetry = function submitManualTelemetry(snapshot, generatorVersion = '') {
         return EventTracker.submitManualTelemetry(snapshot, generatorVersion);
@@ -20152,15 +20179,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.251',
-        scriptVersion: '4.4.251',
+        version: '4.4.252',
+        scriptVersion: '4.4.252',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.251',
+        scriptVersion: '4.4.252',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

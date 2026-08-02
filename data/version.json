@@ -1,23 +1,24 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.251",
+  "scriptVersion": "4.4.252",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_251_published",
+  "status": "release_4_4_252_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "399c93c8fcbdc91f798dbfda16fd682e6f61a61e90e39aac8d75778d33d17c49",
     "bundleFileCount": 55,
-    "approvedBaseCommit": "29841daabf8e9c1c5f799d481efd40f598c0a12c",
-    "approvedCommit": "4860665f690eb01f282220be9b44f0f0f4788446",
+    "approvedBaseCommit": "c2161fdbb5cb04bf1172664015983a2f78885bff",
+    "approvedCommit": "c753c33a368599aab4a1b1fa928992c04f9ca070",
     "approvedFiles": [
-      "docs/audit/bold-recommendation-policy-v3.md",
-      "src/modules/tactics-presets/tactic-preset-direction-policy.js"
+      "docs/audit/tactic-telemetry-envelope-v1.md",
+      "src/app/bootstrap.js",
+      "src/modules/live-parser/event-tracker.js"
     ],
     "sourceBranch": "main",
     "releaseNotesProvided": false,
