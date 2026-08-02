@@ -27,15 +27,10 @@ function applyTacticsDropdownUiPolicy() {
             ? PresetStorage.getAllLabels()
             : {};
         return Object.entries(labels)
-            .map(([key, label]) => ({
-                key,
-                label: String(label || key),
-                trainer: getTrainerSortKey(key, label)
-            }))
+            .map(([key, label]) => ({ key, label: String(label || key), trainer: getTrainerSortKey(key, label) }))
             .sort((a, b) => {
                 const trainerCmp = a.trainer.localeCompare(b.trainer, 'ru', { sensitivity: 'base' });
-                if (trainerCmp !== 0) return trainerCmp;
-                return a.label.localeCompare(b.label, 'ru', { sensitivity: 'base' });
+                return trainerCmp !== 0 ? trainerCmp : a.label.localeCompare(b.label, 'ru', { sensitivity: 'base' });
             });
     }
 
@@ -52,7 +47,6 @@ function applyTacticsDropdownUiPolicy() {
         const items = getSortedTacticItems();
         const current = select.value;
         if (hasSameFlatOptions(select, items)) return;
-
         select.dataset.slfFlatPresetRewrite = '1';
         select.innerHTML = '';
         items.forEach(item => {
@@ -61,20 +55,15 @@ function applyTacticsDropdownUiPolicy() {
             option.textContent = item.label;
             select.appendChild(option);
         });
-
         if (items.some(item => item.key === current)) select.value = current;
         else if (items.length) select.value = items[0].key;
-
-        setTimeout(() => {
-            delete select.dataset.slfFlatPresetRewrite;
-        }, 0);
+        setTimeout(() => { delete select.dataset.slfFlatPresetRewrite; }, 0);
     }
 
     function normalizeDropdown() {
         const select = document.querySelector('#slf-tactics-dropdown select');
         if (!select) return;
         rewriteSelectFlat(select);
-
         if (select.dataset.slfFlatPresetObserver === '1') return;
         const observer = new MutationObserver(() => {
             if (select.dataset.slfFlatPresetRewrite === '1') return;
@@ -93,7 +82,9 @@ function applyTacticsDropdownUiPolicy() {
     UI.__flatSortedTacticDropdownApplied = true;
 }
 
-function installTacticsTelemetryEnvelope() {
+applyTacticsDropdownUiPolicy();
+
+(function installTacticsTelemetryEnvelope() {
     if (typeof SnapshotEngine === 'undefined' || !SnapshotEngine || SnapshotEngine.__tacticsTelemetryEnvelopeInstalled) return;
 
     const TELEMETRY_SCHEMA = 'slf_tactic_telemetry_v1';
@@ -123,11 +114,8 @@ function installTacticsTelemetryEnvelope() {
     function getRiskAppetite(snapshot, decision) {
         const explicit = decision?.riskAppetite || decision?.action?.riskAppetite || snapshot?.riskAppetite;
         if (explicit) return String(explicit);
-        try {
-            return localStorage.getItem('slf:tactics:risk-appetite') || window.SLFTacticDirectionPolicy?.defaultRiskAppetite || 'bold';
-        } catch (_) {
-            return window.SLFTacticDirectionPolicy?.defaultRiskAppetite || 'bold';
-        }
+        try { return localStorage.getItem('slf:tactics:risk-appetite') || window.SLFTacticDirectionPolicy?.defaultRiskAppetite || 'bold'; }
+        catch (_) { return window.SLFTacticDirectionPolicy?.defaultRiskAppetite || 'bold'; }
     }
 
     function compactDecision(decision) {
@@ -164,15 +152,7 @@ function installTacticsTelemetryEnvelope() {
     function getSession(snapshot) {
         const gameId = String(snapshot?.gameId || 'unknown');
         if (!sessions.has(gameId)) {
-            sessions.set(gameId, {
-                gameId,
-                startedAt: Date.now(),
-                initialTactic: null,
-                initialPreset: null,
-                lastFingerprint: '',
-                lastPreset: null,
-                transitions: []
-            });
+            sessions.set(gameId, { gameId, startedAt: Date.now(), initialTactic: null, initialPreset: null, lastFingerprint: '', lastPreset: null, transitions: [] });
         }
         if (sessions.size > 8) {
             const oldest = sessions.keys().next().value;
@@ -228,9 +208,7 @@ function installTacticsTelemetryEnvelope() {
             transitionCount: session?.transitions?.length || 0,
             transitions: clone(session?.transitions) || [],
             latestDecision: decision,
-            activePresetIds: Array.isArray(window.SLFActivePresetRegistry?.active)
-                ? window.SLFActivePresetRegistry.active.slice()
-                : [],
+            activePresetIds: Array.isArray(window.SLFActivePresetRegistry?.active) ? window.SLFActivePresetRegistry.active.slice() : [],
             capturedAt: Date.now()
         };
     }
@@ -242,19 +220,13 @@ function installTacticsTelemetryEnvelope() {
     }
 
     const originalBuild = SnapshotEngine.build.bind(SnapshotEngine);
-    SnapshotEngine.build = function buildWithTacticTelemetry() {
-        return enrich(originalBuild(), 'snapshot_build');
-    };
+    SnapshotEngine.build = function buildWithTacticTelemetry() { return enrich(originalBuild(), 'snapshot_build'); };
 
     const originalBuildSnapshotRecord = SnapshotEngine.buildSnapshotRecord.bind(SnapshotEngine);
-    SnapshotEngine.buildSnapshotRecord = function buildSnapshotRecordWithTactics(snapshot) {
-        return originalBuildSnapshotRecord(enrich(snapshot, 'match_snapshot'));
-    };
+    SnapshotEngine.buildSnapshotRecord = function buildSnapshotRecordWithTactics(snapshot) { return originalBuildSnapshotRecord(enrich(snapshot, 'match_snapshot')); };
 
     const originalSendMatchResult = SnapshotEngine.sendMatchResult.bind(SnapshotEngine);
-    SnapshotEngine.sendMatchResult = function sendMatchResultWithTactics(snapshot) {
-        return originalSendMatchResult(enrich(snapshot, 'match_result'));
-    };
+    SnapshotEngine.sendMatchResult = function sendMatchResultWithTactics(snapshot) { return originalSendMatchResult(enrich(snapshot, 'match_result')); };
 
     const originalCompactStorage = SnapshotEngine.compactSnapshotForStorage.bind(SnapshotEngine);
     SnapshotEngine.compactSnapshotForStorage = function compactSnapshotWithTactics(snapshot) {
@@ -265,9 +237,7 @@ function installTacticsTelemetryEnvelope() {
 
     if (typeof EventTracker !== 'undefined' && EventTracker) {
         const originalCompactRuleDecision = EventTracker.compactRuleDecision.bind(EventTracker);
-        EventTracker.compactRuleDecision = function compactRuleDecisionWithBoldTelemetry(decision) {
-            return compactDecision(decision) || originalCompactRuleDecision(decision);
-        };
+        EventTracker.compactRuleDecision = function compactRuleDecisionWithBoldTelemetry(decision) { return compactDecision(decision) || originalCompactRuleDecision(decision); };
 
         const originalSavePresetEvent = EventTracker.savePresetEvent.bind(EventTracker);
         EventTracker.savePresetEvent = function savePresetEventWithTelemetry(name, preset, beforeSnapshot) {
@@ -297,10 +267,7 @@ function installTacticsTelemetryEnvelope() {
 
     SnapshotEngine.__tacticsTelemetryEnvelopeInstalled = true;
     SnapshotEngine.getTacticsTelemetry = snapshot => buildEnvelope(snapshot || SnapshotEngine.build(), 'explicit_read');
-}
-
-applyTacticsDropdownUiPolicy();
-installTacticsTelemetryEnvelope();
+})();
 
 const App = {
     mountUI() {
@@ -314,18 +281,11 @@ const App = {
     TrainingGuidePanel.mount();
     LoanLimitPanel.mount();
 
-
-    if (!document.getElementById('slf-tactics-dropdown')) {
-        UI.addDropdown();
-    }
+    if (!document.getElementById('slf-tactics-dropdown')) UI.addDropdown();
 },
 
     start() {
-        // Важно: трансферный анализатор живёт отдельно от общего UI.
-        // В 4.4.4 при удалении Team4 Analyzer этот вызов был случайно потерян,
-        // поэтому панель на transfers.php не монтировалась.
         TransferMarketAnalyzer.start();
-
         PresetStorage.loadFromServerAndMerge(() => {
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', () => {
