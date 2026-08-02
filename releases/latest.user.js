@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.249
+// @version      4.4.250
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.249',
-        scriptVersion: '4.4.249',
+        version: '4.4.250',
+        scriptVersion: '4.4.250',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.249',
+        scriptVersion: '4.4.250',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -6790,17 +6790,17 @@ if (typeof window !== 'undefined') {
     const ACTIVE = new Set(['standard', ...ACTIVE_PRESET_NAMES]);
 
     const PRESETS = {
-        Arteta_Control433_bal3: { def_line: '2', press_line: '3', def_width: '2', press_intense: '3', build_type: '2', build_temp: '2', build_long: '1', build_fast: '2', style: '4', pass_risk: '3', dribble: '2', cross: '2', corner: '1', shot: '2', priority: [] },
-        Pep_BoxControl_bal2: { def_line: '2', press_line: '2', def_width: '1', press_intense: '2', build_type: '2', build_temp: '1', build_long: '1', build_fast: '1', style: '3', pass_risk: '2', dribble: '1', cross: '1', corner: '1', shot: '1', priority: [] },
-        Pep_PressCooldown_bal2: { def_line: '2', press_line: '2', def_width: '2', press_intense: '2', build_type: '2', build_temp: '2', build_long: '1', build_fast: '2', style: '3', pass_risk: '2', dribble: '1', cross: '1', corner: '1', shot: '1', priority: [] },
-        Compact_Counter_def3: { def_line: '1', press_line: '2', def_width: '2', press_intense: '3', build_type: '1', build_temp: '2', build_long: '3', build_fast: '4', style: '3', pass_risk: '2', dribble: '3', cross: '3', corner: '1', shot: '2', priority: ['left', 'right'] },
-        Pep_ControlledPush_att3: { def_line: '2', press_line: '2', def_width: '2', press_intense: '3', build_type: '2', build_temp: '3', build_long: '1', build_fast: '3', style: '4', pass_risk: '3', dribble: '3', cross: '2', corner: '1', shot: '2', priority: ['left', 'right'] },
-        Pep_TwoThreeFive_att3: { def_line: '2', press_line: '3', def_width: '3', press_intense: '3', build_type: '2', build_temp: '3', build_long: '1', build_fast: '3', style: '5', pass_risk: '4', dribble: '3', cross: '2', corner: '1', shot: '3', priority: ['left', 'right'] },
-        Conte_WingbackWidth_bal4: { def_line: '2', press_line: '2', def_width: '3', press_intense: '3', build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3', pass_risk: '3', dribble: '3', cross: '3', corner: '1', shot: '2', priority: ['left', 'right'] },
-        Klopp_Gegenpress_att4: { def_line: '3', press_line: '4', def_width: '3', press_intense: '4', build_type: '3', build_temp: '3', build_long: '2', build_fast: '3', style: '5', pass_risk: '3', dribble: '3', cross: '3', corner: '1', shot: '3', priority: ['left', 'right'] },
-        Simeone_Compact442_def4: { def_line: '1', press_line: '2', def_width: '1', press_intense: '3', build_type: '2', build_temp: '1', build_long: '2', build_fast: '1', style: '2', pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1', priority: ['left', 'right'] },
-        Simeone_LowBlock_def5: { def_line: '1', press_line: '1', def_width: '1', press_intense: '2', build_type: '1', build_temp: '1', build_long: '2', build_fast: '1', style: '1', pass_risk: '1', dribble: '1', cross: '1', corner: '1', shot: '1', priority: ['right'] },
-        Bielsa_ChaosPress_att5: { def_line: '4', press_line: '5', def_width: '4', press_intense: '5', build_type: '3', build_temp: '3', build_long: '3', build_fast: '5', style: '5', pass_risk: '5', dribble: '5', cross: '4', corner: '1', shot: '4', priority: ['left', 'right'] }
+        Arteta_Control433_bal3: { def_line: '2', press_line: '3', def_width: '2', press_intense: '3', build_type: '2', build_temp: '2', build_long: '1', build_fast: '2', style: '3', pass_risk: '3', dribble: '2', cross: '2', corner: '1', shot: '2', priority: [] },
+        Pep_BoxControl_bal2: { def_line: '2', press_line: '1', def_width: '1', press_intense: '1', build_type: '2', build_temp: '1', build_long: '1', build_fast: '1', style: '2', pass_risk: '1', dribble: '1', cross: '1', corner: '1', shot: '1', priority: [] },
+        Pep_PressCooldown_bal2: { def_line: '1', press_line: '2', def_width: '3', press_intense: '1', build_type: '1', build_temp: '2', build_long: '3', build_fast: '2', style: '2', pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1', priority: [] },
+        Compact_Counter_def3: { def_line: '1', press_line: '1', def_width: '2', press_intense: '2', build_type: '1', build_temp: '3', build_long: '5', build_fast: '5', style: '3', pass_risk: '3', dribble: '4', cross: '2', corner: '1', shot: '3', priority: ['left', 'right'] },
+        Pep_ControlledPush_att3: { def_line: '3', press_line: '3', def_width: '2', press_intense: '3', build_type: '2', build_temp: '3', build_long: '1', build_fast: '4', style: '4', pass_risk: '4', dribble: '3', cross: '2', corner: '1', shot: '3', priority: ['left', 'right'] },
+        Pep_TwoThreeFive_att3: { def_line: '4', press_line: '4', def_width: '4', press_intense: '4', build_type: '2', build_temp: '2', build_long: '1', build_fast: '3', style: '5', pass_risk: '5', dribble: '4', cross: '2', corner: '1', shot: '4', priority: ['left', 'right'] },
+        Conte_WingbackWidth_bal4: { def_line: '2', press_line: '2', def_width: '5', press_intense: '3', build_type: '3', build_temp: '2', build_long: '3', build_fast: '3', style: '4', pass_risk: '3', dribble: '4', cross: '5', corner: '1', shot: '2', priority: ['left', 'right'] },
+        Klopp_Gegenpress_att4: { def_line: '4', press_line: '5', def_width: '3', press_intense: '5', build_type: '3', build_temp: '3', build_long: '2', build_fast: '5', style: '5', pass_risk: '4', dribble: '4', cross: '3', corner: '1', shot: '4', priority: ['left', 'right'] },
+        Simeone_Compact442_def4: { def_line: '1', press_line: '2', def_width: '1', press_intense: '4', build_type: '1', build_temp: '1', build_long: '3', build_fast: '2', style: '1', pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1', priority: ['left', 'right'] },
+        Simeone_LowBlock_def5: { def_line: '1', press_line: '1', def_width: '1', press_intense: '1', build_type: '1', build_temp: '1', build_long: '5', build_fast: '1', style: '1', pass_risk: '1', dribble: '1', cross: '1', corner: '1', shot: '1', priority: ['right'] },
+        Bielsa_ChaosPress_att5: { def_line: '5', press_line: '5', def_width: '5', press_intense: '5', build_type: '3', build_temp: '3', build_long: '4', build_fast: '5', style: '5', pass_risk: '5', dribble: '5', cross: '5', corner: '1', shot: '5', priority: ['left', 'right'] }
     };
 
     const LABELS = {
@@ -6818,17 +6818,17 @@ if (typeof window !== 'undefined') {
     };
 
     const META = {
-        Arteta_Control433_bal3: { group: 'balance', rank: 3, title: LABELS.Arteta_Control433_bal3, idea: 'основной структурный контроль без принудительного направления атаки', use: 'равная игра без сильного аварийного сигнала', risk: 'может быть слишком нейтрально, когда уже нужен гол' },
-        Pep_BoxControl_bal2: { group: 'balance', rank: 2, title: LABELS.Pep_BoxControl_bal2, idea: 'снизить хаос и стабилизировать владение', use: 'высокий брак, оба канала недобирают или нужен короткий reset', risk: 'может стать стерильным против активного прессинга' },
-        Pep_PressCooldown_bal2: { group: 'balance', rank: 2, title: LABELS.Pep_PressCooldown_bal2, idea: 'снизить цену прессинга и вернуть структуру', use: 'растут усталость, фолы или брак после давления', risk: 'не подходит для финальной погони за голом' },
-        Compact_Counter_def3: { group: 'defensive', rank: 3, title: LABELS.Compact_Counter_def3, idea: 'закрыть переходы и сохранить быстрый выход', use: 'соперник опаснее, давит или угрожает контратаками', risk: 'можно потерять устойчивое территориальное давление' },
-        Pep_ControlledPush_att3: { group: 'attack', rank: 3, title: LABELS.Pep_ControlledPush_att3, idea: 'добавить продвижение без all-in прессинга', use: 'нужен гол, но структура обороны ещё работает', risk: 'при высоком браке усиление превращается в потери' },
-        Pep_TwoThreeFive_att3: { group: 'attack', rank: 4, title: LABELS.Pep_TwoThreeFive_att3, idea: 'позиционно дожимать при сохранённом transition guard', use: 'есть атакующий импульс и соперник не угрожает быстрыми переходами', risk: 'увеличивает встречную активность соперника' },
-        Conte_WingbackWidth_bal4: { group: 'balance', rank: 4, title: LABELS.Conte_WingbackWidth_bal4, idea: 'растянуть закрытый центр через фланги без навесного all-in', use: 'центр закрыт, фланги сильны, кроссы не проваливаются', risk: 'без качества на флангах создаёт шум и открывает переходы' },
-        Klopp_Gegenpress_att4: { group: 'attack', rank: 4, title: LABELS.Klopp_Gegenpress_att4, idea: 'срочно поднять давление без перехода в полный хаос', use: 'проигрываем поздно, брак низкий, усталость и transition risk контролируются', risk: 'фолы, усталость и пространство за высокой линией' },
-        Simeone_Compact442_def4: { group: 'defensive', rank: 4, title: LABELS.Simeone_Compact442_def4, idea: 'компактно защищать преимущество без полного автобуса', use: 'ведём после 70-й и давление соперника растёт', risk: 'при слишком раннем включении отдаёт инициативу' },
-        Simeone_LowBlock_def5: { group: 'defensive', rank: 5, title: LABELS.Simeone_LowBlock_def5, idea: 'аварийно закрыть штрафную и пережить концовку', use: 'ведём после 80-й под тяжёлым давлением', risk: 'полностью отдаёт инициативу и выход из обороны' },
-        Bielsa_ChaosPress_att5: { group: 'attack', rank: 5, title: LABELS.Bielsa_ChaosPress_att5, idea: 'последняя all-in попытка спасти матч', use: 'проигрываем после 80-й и безопасные варианты уже недостаточны', risk: 'может окончательно разрушить оборонительную структуру' }
+        Arteta_Control433_bal3: { group: 'balance', rank: 3, title: LABELS.Arteta_Control433_bal3, idea: 'структурный контроль с умеренным прессингом и ограниченным риском', use: 'равная игра без сильного аварийного сигнала', risk: 'не даёт резкого роста давления, когда уже нужен гол' },
+        Pep_BoxControl_bal2: { group: 'balance', rank: 2, title: LABELS.Pep_BoxControl_bal2, idea: 'максимально замедлить игру, сократить потери и собрать владение в центре', use: 'высокий брак, потеря структуры или короткий контрольный reset', risk: 'может стать стерильным и почти отказаться от продвижения' },
+        Pep_PressCooldown_bal2: { group: 'balance', rank: 2, title: LABELS.Pep_PressCooldown_bal2, idea: 'снять прессинг, опустить блок и выходить длиннее через свободные зоны', use: 'усталость, фолы или падение эффективности высокого давления', risk: 'отдаёт территорию и не подходит для финальной погони' },
+        Compact_Counter_def3: { group: 'defensive', rank: 3, title: LABELS.Compact_Counter_def3, idea: 'низко встретить и максимально быстро атаковать освободившееся пространство', use: 'соперник давит высоко или опаснее по переходам', risk: 'длинные передачи и высокий темп повышают число потерь' },
+        Pep_ControlledPush_att3: { group: 'attack', rank: 3, title: LABELS.Pep_ControlledPush_att3, idea: 'поднять линию и резко ускорить продвижение без полного all-in прессинга', use: 'нужен гол, но оборонительная структура ещё сохраняется', risk: 'при высоком браке ускорение превращается в серию потерь' },
+        Pep_TwoThreeFive_att3: { group: 'attack', rank: 4, title: LABELS.Pep_TwoThreeFive_att3, idea: 'зажать соперника высокой линией, широкой позиционной структурой и максимальным риском передач', use: 'есть атакующий импульс и переходы соперника контролируются', risk: 'оставляет большие зоны за высокой линией и требует качественного владения' },
+        Conte_WingbackWidth_bal4: { group: 'balance', rank: 4, title: LABELS.Conte_WingbackWidth_bal4, idea: 'растянуть блок до максимальной ширины и постоянно доставлять мяч через фланги', use: 'центр закрыт, фланги сильны и навесы дают качество', risk: 'без сильных крайних игроков раскрывает полуфланги и создаёт пустые подачи' },
+        Klopp_Gegenpress_att4: { group: 'attack', rank: 4, title: LABELS.Klopp_Gegenpress_att4, idea: 'включить почти максимальную высоту, темп и давление после потери', use: 'нужен срочный рост давления при достаточной физике и низком браке', risk: 'резко увеличивает усталость, фолы и пространство за линией' },
+        Simeone_Compact442_def4: { group: 'defensive', rank: 4, title: LABELS.Simeone_Compact442_def4, idea: 'низкий узкий блок с жёстким локальным прессингом и редкими выходами', use: 'защита преимущества под устойчивым давлением', risk: 'слишком рано отдаёт инициативу и ограничивает создание моментов' },
+        Simeone_LowBlock_def5: { group: 'defensive', rank: 5, title: LABELS.Simeone_LowBlock_def5, idea: 'крайний низкий блок с минимальным риском и длинным выносом из опасной зоны', use: 'последние минуты при преимуществе и тяжёлом давлении', risk: 'почти полностью отказывается от владения и повторной атаки' },
+        Bielsa_ChaosPress_att5: { group: 'attack', rank: 5, title: LABELS.Bielsa_ChaosPress_att5, idea: 'максимальная линия, ширина, прессинг, темп и риск ради одного последнего шанса', use: 'проигрываем поздно и более безопасные варианты уже недостаточны', risk: 'может окончательно разрушить оборонительную структуру и увеличить разницу в счёте' }
     };
 
     const SCHEME_STATES = {
@@ -6851,16 +6851,16 @@ if (typeof window !== 'undefined') {
 
     const TRAITS = {
         Arteta_Control433_bal3: { attackLanes: [], build: 'control433', tempo: 'medium', press: 'medium_high', risk: 'medium', requires: ['low_noise'], avoids: ['late_emergency_chase'] },
-        Pep_BoxControl_bal2: { attackLanes: [], build: 'box_control', tempo: 'low', press: 'medium_low', risk: 'low', requires: ['need_stability'], avoids: ['urgent_chase', 'opponent_high_press'] },
-        Pep_PressCooldown_bal2: { attackLanes: [], build: 'cooldown', tempo: 'medium', press: 'medium_low', risk: 'low', requires: ['press_fatigue'], avoids: ['emergency_chase'] },
-        Compact_Counter_def3: { attackLanes: ['left', 'right'], build: 'compact_counter', tempo: 'medium_high', press: 'medium', risk: 'medium', requires: ['under_pressure'], avoids: ['sustained_positional_attack_needed'] },
-        Pep_ControlledPush_att3: { attackLanes: ['left', 'right'], build: 'controlled_push', tempo: 'medium_high', press: 'medium', risk: 'medium', requires: ['need_goal'], avoids: ['high_bad_actions', 'transition_threat'] },
-        Pep_TwoThreeFive_att3: { attackLanes: ['left', 'right'], build: 'positional_attack', tempo: 'medium_high', press: 'medium', risk: 'medium_high', requires: ['attacking_momentum'], avoids: ['transition_threat', 'under_pressure'] },
-        Conte_WingbackWidth_bal4: { attackLanes: ['left', 'right'], build: 'wingback_width', tempo: 'medium', press: 'medium', risk: 'medium', requires: ['wide_quality'], avoids: ['own_crosses_bad', 'opponent_crosses_dangerous'] },
-        Klopp_Gegenpress_att4: { attackLanes: ['left', 'right'], build: 'gegenpress', tempo: 'high', press: 'high', risk: 'high', requires: ['need_pressure'], avoids: ['press_fatigue', 'high_bad_actions', 'transition_threat'] },
-        Simeone_Compact442_def4: { attackLanes: ['left', 'right'], build: 'compact442', tempo: 'low', press: 'medium', risk: 'low', requires: ['protect_lead'], avoids: ['urgent_chase'] },
-        Simeone_LowBlock_def5: { attackLanes: ['right'], build: 'low_block', tempo: 'low', press: 'low', risk: 'very_low', requires: ['protect_lead_heavy_pressure'], avoids: ['need_goal'] },
-        Bielsa_ChaosPress_att5: { attackLanes: ['left', 'right'], build: 'chaos_press', tempo: 'very_high', press: 'very_high', risk: 'very_high', requires: ['emergency_need_goal'], avoids: ['early_match'] }
+        Pep_BoxControl_bal2: { attackLanes: [], build: 'box_control', tempo: 'very_low', press: 'very_low', risk: 'very_low', requires: ['need_stability'], avoids: ['urgent_chase', 'opponent_high_press'] },
+        Pep_PressCooldown_bal2: { attackLanes: [], build: 'cooldown_outlet', tempo: 'low', press: 'low', risk: 'low', requires: ['press_fatigue'], avoids: ['emergency_chase'] },
+        Compact_Counter_def3: { attackLanes: ['left', 'right'], build: 'direct_counter', tempo: 'very_high', press: 'low', risk: 'medium_high', requires: ['under_pressure'], avoids: ['sustained_positional_attack_needed'] },
+        Pep_ControlledPush_att3: { attackLanes: ['left', 'right'], build: 'controlled_push', tempo: 'high', press: 'medium_high', risk: 'high', requires: ['need_goal'], avoids: ['high_bad_actions', 'transition_threat'] },
+        Pep_TwoThreeFive_att3: { attackLanes: ['left', 'right'], build: 'positional_siege', tempo: 'medium_high', press: 'high', risk: 'very_high', requires: ['attacking_momentum'], avoids: ['transition_threat', 'under_pressure'] },
+        Conte_WingbackWidth_bal4: { attackLanes: ['left', 'right'], build: 'maximum_width', tempo: 'medium_high', press: 'medium', risk: 'high', requires: ['wide_quality'], avoids: ['own_crosses_bad', 'opponent_crosses_dangerous'] },
+        Klopp_Gegenpress_att4: { attackLanes: ['left', 'right'], build: 'gegenpress', tempo: 'very_high', press: 'very_high', risk: 'very_high', requires: ['need_pressure'], avoids: ['press_fatigue', 'high_bad_actions', 'transition_threat'] },
+        Simeone_Compact442_def4: { attackLanes: ['left', 'right'], build: 'compact442', tempo: 'low', press: 'high_local', risk: 'low', requires: ['protect_lead'], avoids: ['urgent_chase'] },
+        Simeone_LowBlock_def5: { attackLanes: ['right'], build: 'emergency_low_block', tempo: 'very_low', press: 'very_low', risk: 'very_low', requires: ['protect_lead_heavy_pressure'], avoids: ['need_goal'] },
+        Bielsa_ChaosPress_att5: { attackLanes: ['left', 'right'], build: 'chaos_press', tempo: 'maximum', press: 'maximum', risk: 'maximum', requires: ['emergency_need_goal'], avoids: ['early_match'] }
     };
 
     const LADDERS = {
@@ -20055,15 +20055,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.249',
-        scriptVersion: '4.4.249',
+        version: '4.4.250',
+        scriptVersion: '4.4.250',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.249',
+        scriptVersion: '4.4.250',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

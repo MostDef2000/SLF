@@ -1,5 +1,31 @@
 # Changelog
 
+## 4.4.250
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- README.md
+- data/tactics/active-preset-inventory-v1.json
+- data/tactics/active-preset-inventory-v2.json
+- docs/audit/active-tactics-inventory-v1.md
+- docs/audit/active-tactics-retune-v2.md
+- src/modules/tactics-presets/active-preset-registry.js
+
+Approved base commit:
+- 06d701f94806c3e68c87f49621dffe64ea996fdd
+
+Approved commit:
+- eeed1504aa18ba92d96b8282bae8efb9bb6cbdc0
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.249
 
 ### Automatic latest-only build
