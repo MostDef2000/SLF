@@ -39,9 +39,9 @@ function rows(value) {
 function loadCollection(names) {
   for (const name of names) {
     const file = path.join(inputDir, name);
-    if (fs.existsSync(file)) return rows(readJson(file));
+    if (fs.existsSync(file)) return { name, rows: rows(readJson(file)) };
   }
-  return [];
+  return { name: null, rows: [] };
 }
 
 function number(value, fallback = 0) {
@@ -213,6 +213,8 @@ function markdown(report) {
     '',
     `Generated: ${report.generatedAt}`,
     '',
+    `Effects source: ${report.sources.presetEffectsFile || 'not found'}`,
+    '',
     `Eligible phases: ${report.summary.eligiblePhases} / ${report.summary.totalPhases}`,
     '',
     '| # | Preset | Risk | Context | Samples | Score | xGD/30 | Power cost/30 | Status |',
@@ -226,14 +228,15 @@ function markdown(report) {
 
 const contract = readJson(contractPath);
 if (contract.schema !== 'slf_tactic_evaluation_contract_v1') fail(`unsupported contract schema: ${contract.schema}`);
-const effects = loadCollection(['preset_effects.json', 'preset-effects.json', 'preset_effect.json']);
+const effectsSource = loadCollection(['preset_effects_v2.json', 'preset_effects.json', 'preset-effects.json', 'preset_effect.json']);
+const effects = effectsSource.rows;
 const phases = effects.map(effect => derivePhaseRow(effect, contract));
 const rankings = aggregate(phases, contract);
 const report = {
   schema: 'slf_tactic_performance_report_v1',
   generatedAt: now.toISOString(),
   contract: { schema: contract.schema, version: contract.version },
-  sources: { inputDir, presetEffects: effects.length },
+  sources: { inputDir, presetEffectsFile: effectsSource.name, presetEffects: effects.length },
   summary: {
     totalPhases: phases.length,
     eligiblePhases: phases.filter(row => row.eligible).length,
@@ -248,4 +251,4 @@ fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 fs.mkdirSync(path.dirname(markdownPath), { recursive: true });
 fs.writeFileSync(markdownPath, markdown(report), 'utf8');
-console.log(`[tactic-aggregator] wrote ${outputPath} and ${markdownPath}; ${rankings.length} ranking groups from ${effects.length} effects`);
+console.log(`[tactic-aggregator] wrote ${outputPath} and ${markdownPath}; ${rankings.length} ranking groups from ${effects.length} effects (${effectsSource.name || 'no source file'})`);
