@@ -1,0 +1,54 @@
+name: Finalize runtime telemetry integrity tests
+
+on:
+  push:
+    branches:
+      - agent/tactics-runtime-telemetry-integrity
+    paths:
+      - '.github/workflows/runtime-integrity-fixup.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fixup:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/tactics-runtime-telemetry-integrity
+          fetch-depth: 0
+      - name: Apply bounded fixups
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          runtime = Path('src/modules/live-parser/runtime-telemetry-integrity.js')
+          text = runtime.read_text(encoding='utf-8')
+          old = """            if (\n                recoverable &&\n                (!STATE.pendingPresetEvent || String(STATE.pendingPresetEvent.gameId || '') === String(recoverable.gameId || ''))\n            ) {"""
+          new = """            if (recoverable && !STATE.pendingPresetEvent) {"""
+          if old not in text:
+              raise SystemExit('pending recovery target not found')
+          runtime.write_text(text.replace(old, new), encoding='utf-8')
+
+          test = Path('tools/test-runtime-telemetry-integrity.mjs')
+          text = test.read_text(encoding='utf-8')
+          block = """\n{\n  const harness = createHarness({ pathname: '/game.php', ownMatch: false });\n  assert.equal(harness.context.STATE.tacticWatcherStarted, false);\n  assert.equal(harness.listeners.change, undefined);\n}\n"""
+          if block not in text:
+              raise SystemExit('foreign interval test block not found')
+          test.write_text(text.replace(block, '\n'), encoding='utf-8')
+          PY
+      - name: Validate fixups
+        run: |
+          node --check src/modules/live-parser/runtime-telemetry-integrity.js
+          node tools/check-bundle-order.mjs
+          node tools/test-runtime-telemetry-integrity.mjs
+      - name: Commit fixups and remove workflow
+        run: |
+          set -euo pipefail
+          rm .github/workflows/runtime-integrity-fixup.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/modules/live-parser/runtime-telemetry-integrity.js tools/test-runtime-telemetry-integrity.mjs .github/workflows/runtime-integrity-fixup.yml
+          git commit -m 'runtime: finalize telemetry integrity recovery semantics'
+          git push origin HEAD:agent/tactics-runtime-telemetry-integrity
