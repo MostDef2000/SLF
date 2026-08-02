@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.4.248
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/team-management/team4-form-saved-choice-notice.js
+
+Approved base commit:
+- 8a71b284fb2e2b9c8b6b2de17a8e4548b5f1ed24
+
+Approved commit:
+- 2f2f4f3b6c2c73dd6b70e60af512ded0c43dee2b
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.247
 
 ### Automatic latest-only build

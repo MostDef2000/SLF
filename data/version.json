@@ -1,20 +1,20 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.247",
+  "scriptVersion": "4.4.248",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_247_published",
+  "status": "release_4_4_248_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "399c93c8fcbdc91f798dbfda16fd682e6f61a61e90e39aac8d75778d33d17c49",
     "bundleFileCount": 55,
-    "approvedBaseCommit": "823e63f4ec37c184f823bdcc3ce32e0aea68b440",
-    "approvedCommit": "4b640debf2a5b704057437fc739e917608bbcf11",
+    "approvedBaseCommit": "8a71b284fb2e2b9c8b6b2de17a8e4548b5f1ed24",
+    "approvedCommit": "2f2f4f3b6c2c73dd6b70e60af512ded0c43dee2b",
     "approvedFiles": [
       "src/modules/team-management/team4-form-saved-choice-notice.js"
     ],
