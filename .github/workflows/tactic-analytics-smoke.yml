@@ -18,6 +18,9 @@ on:
       - 'vps/api/server.py'
       - 'vps/api/test_server.py'
       - 'vps/api/requirements.txt'
+      - 'vps/ops/verify_api_deployment.py'
+      - 'vps/ops/test_verify_api_deployment.py'
+      - 'vps/ops/README.md'
       - '.github/workflows/tactic-analytics-smoke.yml'
   workflow_dispatch:
 
@@ -46,7 +49,11 @@ jobs:
           node --check tools/test-tactic-analytics-pipeline.mjs
           node --check tools/test-tactic-match-outcomes.mjs
           bash -n tools/run-tactic-analytics-pipeline.sh
-          python -m py_compile vps/api/server.py vps/api/test_server.py
+          python -m py_compile \
+            vps/api/server.py \
+            vps/api/test_server.py \
+            vps/ops/verify_api_deployment.py \
+            vps/ops/test_verify_api_deployment.py
       - name: Validate bundle contract
         run: node tools/check-bundle-order.mjs
       - name: Run runtime telemetry integrity test
@@ -57,3 +64,5 @@ jobs:
         run: node tools/test-tactic-match-outcomes.mjs
       - name: Run VPS API storage tests
         run: python -m unittest vps/api/test_server.py -v
+      - name: Run API deployment verification tests
+        run: python -m unittest vps/ops/test_verify_api_deployment.py -v
