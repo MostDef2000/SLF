@@ -6,9 +6,11 @@ const root = process.cwd();
 const args = new Set(process.argv.slice(2));
 const jsonOnly = args.has('--json');
 const failOnMissing = !args.has('--allow-missing');
+const validateReview = args.has('--validate-review');
 
 const manifestPath = path.join(root, 'src/app/bundle-order.json');
 const releasePath = path.join(root, 'releases/latest.user.js');
+const manualReviewPath = path.join(root, 'data/audit/runtime-reachability-review-v1.json');
 
 function readText(filePath) {
   return fs.readFileSync(filePath, 'utf8');
@@ -32,13 +34,21 @@ if (!fs.existsSync(manifestPath)) {
 if (!fs.existsSync(releasePath)) {
   throw new Error(`Missing release bundle: ${path.relative(root, releasePath)}`);
 }
+if (!fs.existsSync(manualReviewPath)) {
+  throw new Error(`Missing manual review: ${path.relative(root, manualReviewPath)}`);
+}
 
 const manifest = JSON.parse(readText(manifestPath));
+const manualReview = JSON.parse(readText(manualReviewPath));
 const files = Array.isArray(manifest.files) ? manifest.files : [];
 const dependencyModules = Array.isArray(manifest.dependencyAudit?.modules)
   ? manifest.dependencyAudit.modules
   : [];
 const dependencyByFile = new Map(dependencyModules.map(item => [item.file, item]));
+const manualModuleReviews = Array.isArray(manualReview.moduleReviews)
+  ? manualReview.moduleReviews
+  : [];
+const manualReviewByFile = new Map(manualModuleReviews.map(item => [item.file, item]));
 const release = readText(releasePath);
 const sourceByFile = new Map();
 const missingFiles = [];
@@ -83,6 +93,12 @@ const legacyPatterns = {
   deprecatedNaming: /\bdeprecated\b|\blegacy\b/gi
 };
 
+const candidateStatuses = new Set([
+  'ACTIVE_WITH_LEGACY_MARKERS',
+  'LEGACY_CANDIDATE',
+  'UNREFERENCED_CANDIDATE'
+]);
+
 const allSource = [...sourceByFile.values()].join('\n');
 const modules = files.map((file, bundleIndex) => {
   const source = sourceByFile.get(file) || '';
@@ -124,6 +140,8 @@ const modules = files.map((file, bundleIndex) => {
   else if (legacyMarkerCount) reviewStatus = 'LEGACY_CANDIDATE';
   else reviewStatus = 'UNREFERENCED_CANDIDATE';
 
+  const manual = manualReviewByFile.get(file) || null;
+
   return {
     file,
     bundleIndex,
@@ -137,7 +155,13 @@ const modules = files.map((file, bundleIndex) => {
     hooks,
     legacyMarkers,
     activeEvidence: unique(activeEvidence),
-    reviewStatus
+    reviewStatus,
+    manualReview: manual
+      ? {
+          classification: manual.classification || null,
+          evidenceCount: Array.isArray(manual.evidence) ? manual.evidence.length : 0
+        }
+      : null
   };
 });
 
@@ -148,13 +172,23 @@ const statusCounts = Object.fromEntries(
   ])
 );
 
+const reviewCandidates = modules.filter(item => candidateStatuses.has(item.reviewStatus));
+const unreviewedCandidates = reviewCandidates
+  .filter(item => !item.manualReview?.classification || item.manualReview.evidenceCount < 1)
+  .map(item => item.file);
+const staleManualReviews = manualModuleReviews
+  .map(item => item.file)
+  .filter(file => !files.includes(file));
+
 const report = {
   schema: 'slf_runtime_reachability_audit_v1',
   generatedAt: new Date().toISOString(),
   inputs: {
     manifest: path.relative(root, manifestPath),
     release: path.relative(root, releasePath),
+    manualReview: path.relative(root, manualReviewPath),
     manifestSchema: manifest.schema || null,
+    manualReviewSchema: manualReview.schema || null,
     expectedModuleCount: manifest.dependencyAudit?.expectedModuleCount ?? null
   },
   summary: {
@@ -163,7 +197,11 @@ const report = {
     sourceFilesRead: sourceByFile.size,
     missingFiles,
     releaseMarkerMismatches: modules.filter(item => !item.includedInRelease).map(item => item.file),
-    statusCounts
+    statusCounts,
+    reviewCandidateCount: reviewCandidates.length,
+    reviewedCandidateCount: reviewCandidates.length - unreviewedCandidates.length,
+    unreviewedCandidates,
+    staleManualReviews
   },
   limitations: [
     'Static evidence does not prove runtime reachability.',
@@ -186,8 +224,18 @@ if (jsonOnly) {
   for (const [status, count] of Object.entries(statusCounts)) {
     console.log(`${status}: ${count}`);
   }
+  console.log(`review candidates: ${report.summary.reviewCandidateCount}`);
+  console.log(`reviewed candidates: ${report.summary.reviewedCandidateCount}`);
+  console.log(`unreviewed candidates: ${unreviewedCandidates.length}`);
+  for (const item of reviewCandidates) {
+    const classification = item.manualReview?.classification || 'UNREVIEWED';
+    console.log(`candidate ${item.reviewStatus} ${classification} ${item.file}`);
+  }
 }
 
 if (failOnMissing && (missingFiles.length || report.summary.releaseMarkerMismatches.length)) {
+  process.exitCode = 1;
+}
+if (validateReview && (unreviewedCandidates.length || staleManualReviews.length)) {
   process.exitCode = 1;
 }
