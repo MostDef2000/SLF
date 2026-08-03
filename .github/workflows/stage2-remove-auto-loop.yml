@@ -1,0 +1,44 @@
+name: Apply Stage 2 automatic loop removal
+
+on:
+  push:
+    branches:
+      - agent/stage2-remove-auto-loop
+    paths:
+      - 'tools/apply-stage2-remove-auto-loop.py'
+      - '.github/workflows/stage2-remove-auto-loop.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/stage2-remove-auto-loop
+          fetch-depth: 0
+      - name: Apply exact runtime deletion
+        run: python tools/apply-stage2-remove-auto-loop.py
+      - name: Remove one-time migration machinery
+        run: rm tools/apply-stage2-remove-auto-loop.py .github/workflows/stage2-remove-auto-loop.yml
+      - name: Check runtime and repository contracts
+        run: |
+          node --check src/modules/live-parser/snapshot-engine.js
+          node --check src/modules/live-parser/event-tracker.js
+          node --check tools/test-legacy-live-parser-boundary.mjs
+          node tools/test-runtime-telemetry-integrity.mjs
+          node tools/test-manual-match-workflow.mjs
+          node tools/test-manual-match-state-bridge.mjs
+          node tools/test-legacy-live-parser-boundary.mjs
+          node tools/audit-runtime-reachability.mjs --validate-review
+          node tools/check-bundle-order.mjs
+      - name: Commit Stage 2
+        run: |
+          git config user.name 'SLF Refactor Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Remove automatic live parser runtime'
+          git push origin HEAD:agent/stage2-remove-auto-loop
