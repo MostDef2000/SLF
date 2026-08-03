@@ -54,6 +54,7 @@ The first complete run reports:
 - 17 total review candidates;
 - 17 manually classified candidates;
 - zero unreviewed candidates;
+- zero stale manual reviews;
 - zero release marker mismatches.
 
 ## Candidate inventory
@@ -127,6 +128,10 @@ A later removal PR must provide all of the following for each deleted symbol:
 4. Extract active manual telemetry into clearly named modules without behavior changes.
 5. Delete only the confirmed automatic-loop symbols in a separate PR.
 6. Audit transfer side-effect modules, collection aliases, deprecated presets and compatibility wrappers as separate scopes.
+
+## Readiness
+
+The audit baseline is ready for review when the workflow reports all 17 candidates classified with zero unreviewed or stale entries. Readiness does not authorize deletion and does not authorize merging without explicit approval.
 
 ## Non-goals
 
