@@ -5,6 +5,7 @@ on:
     paths:
       - 'tools/apply-stage5-sunset-legacy-state.py'
       - 'tools/apply-stage5-test-harness-fix.py'
+      - 'tools/apply-stage5-manifest-fix.py'
       - '.github/workflows/stage5-sunset-legacy-state.yml'
 
 permissions:
@@ -22,8 +23,9 @@ jobs:
         run: |
           python tools/apply-stage5-sunset-legacy-state.py
           python tools/apply-stage5-test-harness-fix.py
+          python tools/apply-stage5-manifest-fix.py
       - name: Remove one-time migration machinery
-        run: rm tools/apply-stage5-sunset-legacy-state.py tools/apply-stage5-test-harness-fix.py .github/workflows/stage5-sunset-legacy-state.yml
+        run: rm tools/apply-stage5-sunset-legacy-state.py tools/apply-stage5-test-harness-fix.py tools/apply-stage5-manifest-fix.py .github/workflows/stage5-sunset-legacy-state.yml
       - name: Check sunset contracts
         run: |
           node --check src/core/config.js
