@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.260
+// @version      4.4.261
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.260',
-        scriptVersion: '4.4.260',
+        version: '4.4.261',
+        scriptVersion: '4.4.261',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.260',
+        scriptVersion: '4.4.261',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -412,7 +412,6 @@ const STATE = {
 
 };
 
-const LIVE_PARSER_STATE_PREFIX = "slf_live_parser_state_v2";
 const LIVE_RECOMMENDATION_HISTORY_LIMIT = 8;
 
 const LAST_PRESET_STORAGE_KEY = "slf_last_selected_preset_v1";
@@ -2015,98 +2014,6 @@ const SnapshotEngine = {
 
         void this.sendPlayerObservations(snapshot).catch(() => {});
         return request;
-    },
-
-    getLiveStorageKey(gameId = MatchStateParser.getGameId()) {
-        return `${LIVE_PARSER_STATE_PREFIX}:${gameId || 'unknown'}`;
-    },
-
-    compactSnapshotForStorage(snapshot) {
-        if (!snapshot) return null;
-
-        return {
-            ts: snapshot.ts || Date.now(),
-            gameId: snapshot.gameId || null,
-            status: snapshot.status || null,
-            rawStatus: snapshot.rawStatus || null,
-            minute: snapshot.minute ?? null,
-            minuteRaw: snapshot.minuteRaw || null,
-            baseMinute: snapshot.baseMinute ?? null,
-            bucket: snapshot.bucket || '',
-            legacyBucket: snapshot.legacyBucket || '',
-            generationWindow: snapshot.generationWindow || null,
-            score: snapshot.score || null,
-            xT: snapshot.xT || null,
-            teams: Array.isArray(snapshot.teams) ? snapshot.teams : [],
-            teamNames: snapshot.teamNames || {},
-            myTeam: snapshot.myTeam || null,
-            stats: Array.isArray(snapshot.stats) ? snapshot.stats : [],
-            eventsText: Array.isArray(snapshot.eventsText) ? snapshot.eventsText.slice(0, 12) : [],
-            developerHints: Array.isArray(snapshot.developerHints) ? snapshot.developerHints.slice(0, 8) : [],
-            generatorQualitySignal: snapshot.generatorQualitySignal || DeveloperHintParser.getGeneratorQualitySignal(snapshot.developerHints || []),
-            generatorExpectedPerformance: snapshot.generatorExpectedPerformance || (typeof GeneratorExpectedPerformanceParser !== 'undefined' ? GeneratorExpectedPerformanceParser.parse(snapshot.developerHints || []) : null),
-            currentTactic: snapshot.currentTactic || null
-        };
-    },
-
-    persistLiveState(extra = {}) {
-        const gameId = MatchStateParser.getGameId();
-        if (!gameId) return;
-
-        const allowedExtra = {};
-        [
-            'pendingPresetEvent',
-            'pendingEffectRetry',
-            'consumedPresetEventKey',
-            'manualTacticEventPending',
-            'recommendationFreeze',
-            'presetProgression',
-            'lastRecommendationHtml',
-            'lastRecommendationMeta',
-            'migratedFrom'
-        ].forEach(key => {
-            if (Object.prototype.hasOwnProperty.call(extra || {}, key)) allowedExtra[key] = extra[key];
-        });
-
-        const payload = Object.assign({
-            schema: 'slf_live_parser_state_v2',
-            gameId,
-            ts: Date.now(),
-            url: location.href,
-            recommendationFreeze: STATE.recommendationFreeze || null,
-            pendingPresetEvent: STATE.pendingPresetEvent || null,
-            presetProgression: STATE.presetProgression || null,
-            lastRecommendationHtml: STATE.lastRecommendationHtml || null,
-            lastRecommendationMeta: STATE.lastRecommendationMeta || null
-        }, allowedExtra);
-
-        try {
-            localStorage.setItem(this.getLiveStorageKey(gameId), JSON.stringify(payload));
-        } catch (error) {
-            debugWarn('[SLF] Legacy manual-state compatibility persist failed', error);
-        }
-    },
-
-    loadLiveState(gameId = MatchStateParser.getGameId()) {
-        if (!gameId) return null;
-
-        try {
-            const raw = localStorage.getItem(this.getLiveStorageKey(gameId));
-            if (!raw) return null;
-            const data = JSON.parse(raw);
-            if (!data || data.schema !== 'slf_live_parser_state_v2') return null;
-            if (String(data.gameId) !== String(gameId)) return null;
-            return data;
-        } catch (e) {
-            return null;
-        }
-    },
-
-    clearLiveState(gameId = MatchStateParser.getGameId()) {
-        if (!gameId) return;
-        try {
-            localStorage.removeItem(this.getLiveStorageKey(gameId));
-        } catch (e) {}
     },
 
     freezeRecommendationsAfterTacticChange(presetName, snapshot) {
@@ -8961,15 +8868,6 @@ if (!isTacticPage) return;
     const manualStateSchema = 'slf_manual_match_state_v1';
     const manualStatePrefix = 'slf_manual_match_state_v1';
     const legacyStatePrefix = 'slf_live_parser_state_v2';
-    const originalPersistLiveState = typeof SnapshotEngine.persistLiveState === 'function'
-        ? SnapshotEngine.persistLiveState.bind(SnapshotEngine)
-        : null;
-    const originalLoadLiveState = typeof SnapshotEngine.loadLiveState === 'function'
-        ? SnapshotEngine.loadLiveState.bind(SnapshotEngine)
-        : null;
-    const originalClearLiveState = typeof SnapshotEngine.clearLiveState === 'function'
-        ? SnapshotEngine.clearLiveState.bind(SnapshotEngine)
-        : null;
     const tacticalInputNames = new Set([
         'def_line', 'press_line', 'def_width', 'press_intense',
         'build_type', 'build_temp', 'build_long', 'build_fast',
@@ -9038,14 +8936,14 @@ if (!isTacticPage) return;
             return getStateKey(manualStatePrefix, resolveGameId(gameId));
         },
 
-        load(gameId = null, legacyState = null) {
+        load(gameId = null) {
             gameId = resolveGameId(gameId);
             if (!gameId) return null;
 
             const stored = readStoredState(manualStatePrefix, gameId);
             if (stored?.schema === manualStateSchema) return stored;
 
-            const legacy = legacyState || readStoredState(legacyStatePrefix, gameId);
+            const legacy = readStoredState(legacyStatePrefix, gameId);
             const migrated = normalizeLegacyManualState(legacy, gameId);
             if (!migrated) return null;
 
@@ -9107,45 +9005,20 @@ if (!isTacticPage) return;
             if (!gameId || typeof localStorage === 'undefined') return;
             try {
                 localStorage.removeItem(this.getStorageKey(gameId));
+                localStorage.removeItem(getStateKey(legacyStatePrefix, gameId));
             } catch (_) {}
         }
     };
 
     SnapshotEngine.manualMatchState = ManualMatchState;
     SnapshotEngine.persistManualState = function persistManualState(extra = {}) {
-        if (originalPersistLiveState) originalPersistLiveState(extra);
         return ManualMatchState.persist(extra);
     };
     SnapshotEngine.loadManualState = function loadManualState(gameId = null) {
-        gameId = resolveGameId(gameId);
-        const legacy = originalLoadLiveState ? originalLoadLiveState(gameId) : null;
-        return ManualMatchState.load(gameId, legacy);
+        return ManualMatchState.load(resolveGameId(gameId));
     };
     SnapshotEngine.clearManualState = function clearManualState(gameId = null) {
-        gameId = resolveGameId(gameId);
-        if (originalClearLiveState) originalClearLiveState(gameId);
-        ManualMatchState.clear(gameId);
-    };
-
-    SnapshotEngine.persistLiveState = function persistLiveStateCompatibilityBridge(extra = {}) {
-        return SnapshotEngine.persistManualState(extra);
-    };
-    SnapshotEngine.loadLiveState = function loadLiveStateCompatibilityBridge(gameId = null) {
-        gameId = resolveGameId(gameId);
-        const legacy = originalLoadLiveState ? originalLoadLiveState(gameId) : null;
-        const manual = ManualMatchState.load(gameId, legacy);
-        if (!manual) return legacy;
-        if (!legacy) return manual;
-
-        return Object.assign({}, legacy, manual, {
-            schema: legacy.schema || manual.schema,
-            active: !!legacy.active,
-            gameId: manual.gameId || legacy.gameId
-        });
-    };
-    SnapshotEngine.clearLiveState = function clearLiveStateCompatibilityBridge(gameId = null) {
-        gameId = resolveGameId(gameId);
-        SnapshotEngine.clearManualState(gameId);
+        ManualMatchState.clear(resolveGameId(gameId));
     };
 
     function setTransitionSourceHint(source, ttlMs = 5000) {
@@ -20418,15 +20291,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.260',
-        scriptVersion: '4.4.260',
+        version: '4.4.261',
+        scriptVersion: '4.4.261',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.260',
+        scriptVersion: '4.4.261',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

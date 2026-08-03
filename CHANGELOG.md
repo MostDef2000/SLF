@@ -1,5 +1,36 @@
 # Changelog
 
+## 4.4.261
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/manual-match-symbol-review-v1.json
+- data/audit/manual-state-envelope-v1.json
+- docs/audit/legacy-live-parser-stage5-2026-08-03.md
+- src/app/bundle-order.json
+- src/core/config.js
+- src/modules/manual-match-telemetry/manual-match-runtime.js
+- src/modules/manual-match-telemetry/snapshot-engine.js
+- tools/test-legacy-live-parser-boundary.mjs
+- tools/test-manual-match-runtime.mjs
+- tools/test-manual-match-state-bridge.mjs
+- tools/test-manual-match-workflow.mjs
+
+Approved base commit:
+- 4b640fb869ab663b7fa7b826da19a79c37517db3
+
+Approved commit:
+- ab47c7e31bdc6bfbf606772c5fe26b64834902c4
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.260
 
 ### Automatic latest-only build
