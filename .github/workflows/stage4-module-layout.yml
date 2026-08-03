@@ -19,8 +19,8 @@ jobs:
           fetch-depth: 0
       - name: Apply exact module layout migration
         run: python tools/apply-stage4-module-layout.py
-      - name: Remove one-time migration machinery
-        run: rm tools/apply-stage4-module-layout.py .github/workflows/stage4-module-layout.yml
+      - name: Remove one-time patch script
+        run: rm tools/apply-stage4-module-layout.py
       - name: Check renamed runtime and repository contracts
         run: |
           test ! -e src/modules/live-parser/match-state-parser.js
@@ -42,7 +42,11 @@ jobs:
           node tools/test-legacy-live-parser-boundary.mjs
           node tools/audit-runtime-reachability.mjs --validate-review
           node tools/check-bundle-order.mjs
-      - name: Commit Stage 4
+      - name: Restore connector-owned workflow files
+        run: |
+          git checkout HEAD -- .github/workflows
+          rm .github/workflows/stage4-module-layout.yml
+      - name: Commit Stage 4 runtime and path migration
         run: |
           git config user.name 'SLF Refactor Bot'
           git config user.email 'actions@users.noreply.github.com'
