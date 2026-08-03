@@ -3,9 +3,14 @@ name: Tactic runtime, analytics and API smoke
 on:
   pull_request:
     paths:
+      - 'src/modules/live-parser/snapshot-engine.js'
+      - 'src/modules/live-parser/event-tracker.js'
       - 'src/modules/live-parser/runtime-telemetry-integrity.js'
       - 'src/app/bundle-order.json'
+      - 'releases/latest.user.js'
       - 'tools/test-runtime-telemetry-integrity.mjs'
+      - 'tools/test-tactic-telemetry-envelope.mjs'
+      - 'tools/test-tactical-record-keys.mjs'
       - 'tools/aggregate-tactic-performance.mjs'
       - 'tools/enrich-tactic-match-outcomes.mjs'
       - 'tools/export-tactic-telemetry.mjs'
@@ -15,6 +20,7 @@ on:
       - 'tools/test-tactic-analytics-pipeline.mjs'
       - 'tools/test-tactic-match-outcomes.mjs'
       - 'data/tactics/tactic-evaluation-contract-v1.json'
+      - 'docs/audit/tactical-data-quality-provenance-2026-08-03.md'
       - 'vps/api/server.py'
       - 'vps/api/test_server.py'
       - 'vps/api/requirements.txt'
@@ -43,6 +49,8 @@ jobs:
         run: |
           node --check src/modules/live-parser/runtime-telemetry-integrity.js
           node --check tools/test-runtime-telemetry-integrity.mjs
+          node --check tools/test-tactic-telemetry-envelope.mjs
+          node --check tools/test-tactical-record-keys.mjs
           node --check tools/aggregate-tactic-performance.mjs
           node --check tools/enrich-tactic-match-outcomes.mjs
           node --check tools/export-tactic-telemetry.mjs
@@ -60,6 +68,10 @@ jobs:
           python -m gunicorn --version
       - name: Validate bundle contract
         run: node tools/check-bundle-order.mjs
+      - name: Run tactic telemetry envelope test
+        run: node tools/test-tactic-telemetry-envelope.mjs
+      - name: Run tactical record key test
+        run: node tools/test-tactical-record-keys.mjs
       - name: Run runtime telemetry integrity test
         run: node tools/test-runtime-telemetry-integrity.mjs
       - name: Run deterministic analytics smoke test
