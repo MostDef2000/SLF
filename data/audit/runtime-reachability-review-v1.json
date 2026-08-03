@@ -1,6 +1,7 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
   "reviewedAt": "2026-08-03",
+  "reviewCandidateCount": 17,
   "scope": "Audit-only review of all modules emitted as ACTIVE_WITH_LEGACY_MARKERS, LEGACY_CANDIDATE or UNREFERENCED_CANDIDATE. No deletion approval is granted by this file.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
