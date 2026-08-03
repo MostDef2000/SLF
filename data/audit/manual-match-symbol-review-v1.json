@@ -140,14 +140,10 @@
       "token": "LIVE_PARSER_STATE_PREFIX",
       "owner": "src/core/config.js",
       "classification": "LEGACY_NAMED_ACTIVE_STATE",
-      "allowedFiles": [
-        "src/core/config.js",
-        "src/modules/live-parser/snapshot-engine.js",
-        "src/modules/live-parser/runtime-telemetry-integrity.js"
-      ],
+      "allowedFiles": ["src/core/config.js", "src/modules/live-parser/snapshot-engine.js"],
       "evidence": [
-        "The legacy key still stores pending-event recovery state for older userscripts.",
-        "The manual state bridge reads this prefix for migration fallback and dual-write compatibility."
+        "The original snapshot engine still owns the legacy state-key constant.",
+        "The manual bridge uses the frozen legacy key string without adding a new manifest dependency."
       ],
       "deletionStatus": "KEEP_UNTIL_MIGRATED",
       "removalBlockedBy": ["published transition window", "legacy fallback removal PR"]
