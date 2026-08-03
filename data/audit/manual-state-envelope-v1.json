@@ -30,26 +30,29 @@
     "storagePrefix": "slf_live_parser_state_v2",
     "readFallback": true,
     "migrateOnRead": true,
-    "dualWrite": true,
+    "dualWrite": false,
     "deleteLegacyOnMigration": false,
     "clearBothKeys": true,
     "reason": "Older published userscripts and in-progress pending events must remain recoverable during the transition.",
-    "payloadScope": "manual_fields_only"
+    "payloadScope": "manual_fields_only",
+    "writeLegacy": false,
+    "publishedTransitionVersion": "4.4.260",
+    "status": "read_only_fallback",
+    "removedApi": [
+      "SnapshotEngine.persistLiveState",
+      "SnapshotEngine.loadLiveState",
+      "SnapshotEngine.clearLiveState"
+    ]
   },
   "activeApi": [
     "SnapshotEngine.persistManualState",
     "SnapshotEngine.loadManualState",
     "SnapshotEngine.clearManualState"
   ],
-  "compatibilityApi": [
-    "SnapshotEngine.persistLiveState",
-    "SnapshotEngine.loadLiveState",
-    "SnapshotEngine.clearLiveState"
-  ],
+  "compatibilityApi": [],
   "nextRemovalGate": [
-    "Verify a published userscript contains the manual-state envelope and renamed module layout.",
-    "Verify one production manual event-to-effect path after upgrade.",
-    "Remove legacy-key dual-write and compatibility APIs in the sunset PR."
+    "Verify one production manual event-to-effect path on the post-sunset published userscript.",
+    "Decide whether the read-only legacy fallback can be removed in the final audit PR."
   ],
   "automaticLoop": {
     "status": "removed",
@@ -75,5 +78,10 @@
     "trackingIssue": 151,
     "matchReading": "src/modules/match-reading",
     "manualTelemetry": "src/modules/manual-match-telemetry"
+  },
+  "stage5": {
+    "status": "implemented",
+    "trackingIssue": 151,
+    "publishedTransitionVersion": "4.4.260"
   }
 }

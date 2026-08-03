@@ -324,7 +324,6 @@ const STATE = {
 
 };
 
-const LIVE_PARSER_STATE_PREFIX = "slf_live_parser_state_v2";
 const LIVE_RECOMMENDATION_HISTORY_LIMIT = 8;
 
 const LAST_PRESET_STORAGE_KEY = "slf_last_selected_preset_v1";

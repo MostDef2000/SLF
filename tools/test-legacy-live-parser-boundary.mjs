@@ -104,6 +104,11 @@ for (const token of ['liveParserTimer', 'lastSavedBucket', 'liveWaitStatus', 'li
 }
 assert.doesNotMatch(snapshotEngine, /compactSegmentSnapshotsForStorage/);
 
+assert.doesNotMatch(configSource, /LIVE_PARSER_STATE_PREFIX/);
+assert.doesNotMatch(snapshotEngine, /persistLiveState|loadLiveState|clearLiveState|getLiveStorageKey/);
+assert.doesNotMatch(runtimeIntegrity, /persistLiveState|loadLiveState|clearLiveState|originalPersistLiveState|originalLoadLiveState|originalClearLiveState/);
+assert.match(runtimeIntegrity, /legacyStatePrefix = 'slf_live_parser_state_v2'/);
+
 console.log('[legacy-live-parser-boundary-test] passed');
 for (const finding of findings) {
   console.log(`${finding.classification} ${finding.symbol} occurrences=${finding.totalOccurrences} files=${finding.files.join(',')}`);

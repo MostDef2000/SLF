@@ -11,15 +11,6 @@
     const manualStateSchema = 'slf_manual_match_state_v1';
     const manualStatePrefix = 'slf_manual_match_state_v1';
     const legacyStatePrefix = 'slf_live_parser_state_v2';
-    const originalPersistLiveState = typeof SnapshotEngine.persistLiveState === 'function'
-        ? SnapshotEngine.persistLiveState.bind(SnapshotEngine)
-        : null;
-    const originalLoadLiveState = typeof SnapshotEngine.loadLiveState === 'function'
-        ? SnapshotEngine.loadLiveState.bind(SnapshotEngine)
-        : null;
-    const originalClearLiveState = typeof SnapshotEngine.clearLiveState === 'function'
-        ? SnapshotEngine.clearLiveState.bind(SnapshotEngine)
-        : null;
     const tacticalInputNames = new Set([
         'def_line', 'press_line', 'def_width', 'press_intense',
         'build_type', 'build_temp', 'build_long', 'build_fast',
@@ -88,14 +79,14 @@
             return getStateKey(manualStatePrefix, resolveGameId(gameId));
         },
 
-        load(gameId = null, legacyState = null) {
+        load(gameId = null) {
             gameId = resolveGameId(gameId);
             if (!gameId) return null;
 
             const stored = readStoredState(manualStatePrefix, gameId);
             if (stored?.schema === manualStateSchema) return stored;
 
-            const legacy = legacyState || readStoredState(legacyStatePrefix, gameId);
+            const legacy = readStoredState(legacyStatePrefix, gameId);
             const migrated = normalizeLegacyManualState(legacy, gameId);
             if (!migrated) return null;
 
@@ -157,45 +148,20 @@
             if (!gameId || typeof localStorage === 'undefined') return;
             try {
                 localStorage.removeItem(this.getStorageKey(gameId));
+                localStorage.removeItem(getStateKey(legacyStatePrefix, gameId));
             } catch (_) {}
         }
     };
 
     SnapshotEngine.manualMatchState = ManualMatchState;
     SnapshotEngine.persistManualState = function persistManualState(extra = {}) {
-        if (originalPersistLiveState) originalPersistLiveState(extra);
         return ManualMatchState.persist(extra);
     };
     SnapshotEngine.loadManualState = function loadManualState(gameId = null) {
-        gameId = resolveGameId(gameId);
-        const legacy = originalLoadLiveState ? originalLoadLiveState(gameId) : null;
-        return ManualMatchState.load(gameId, legacy);
+        return ManualMatchState.load(resolveGameId(gameId));
     };
     SnapshotEngine.clearManualState = function clearManualState(gameId = null) {
-        gameId = resolveGameId(gameId);
-        if (originalClearLiveState) originalClearLiveState(gameId);
-        ManualMatchState.clear(gameId);
-    };
-
-    SnapshotEngine.persistLiveState = function persistLiveStateCompatibilityBridge(extra = {}) {
-        return SnapshotEngine.persistManualState(extra);
-    };
-    SnapshotEngine.loadLiveState = function loadLiveStateCompatibilityBridge(gameId = null) {
-        gameId = resolveGameId(gameId);
-        const legacy = originalLoadLiveState ? originalLoadLiveState(gameId) : null;
-        const manual = ManualMatchState.load(gameId, legacy);
-        if (!manual) return legacy;
-        if (!legacy) return manual;
-
-        return Object.assign({}, legacy, manual, {
-            schema: legacy.schema || manual.schema,
-            active: !!legacy.active,
-            gameId: manual.gameId || legacy.gameId
-        });
-    };
-    SnapshotEngine.clearLiveState = function clearLiveStateCompatibilityBridge(gameId = null) {
-        gameId = resolveGameId(gameId);
-        SnapshotEngine.clearManualState(gameId);
+        ManualMatchState.clear(resolveGameId(gameId));
     };
 
     function setTransitionSourceHint(source, ttlMs = 5000) {

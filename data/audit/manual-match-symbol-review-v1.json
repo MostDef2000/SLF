@@ -40,54 +40,6 @@
       "deletionStatus": "KEEP"
     },
     {
-      "symbol": "LIVE_PARSER_STATE_PREFIX",
-      "token": "LIVE_PARSER_STATE_PREFIX",
-      "owner": "src/core/config.js",
-      "classification": "LEGACY_NAMED_ACTIVE_STATE",
-      "allowedFiles": [
-        "src/core/config.js",
-        "src/modules/manual-match-telemetry/snapshot-engine.js"
-      ],
-      "evidence": [
-        "The original snapshot engine still owns the legacy state-key constant.",
-        "The manual bridge uses the frozen legacy key string without adding a new manifest dependency."
-      ],
-      "deletionStatus": "KEEP_UNTIL_MIGRATED",
-      "removalBlockedBy": [
-        "published transition window",
-        "legacy fallback removal PR"
-      ]
-    },
-    {
-      "symbol": "SnapshotEngine.persistLiveState",
-      "token": "persistLiveState",
-      "owner": "src/modules/manual-match-telemetry/snapshot-engine.js",
-      "classification": "ACTIVE_MANUAL_BOUNDARY",
-      "allowedFiles": [
-        "src/modules/manual-match-telemetry/snapshot-engine.js",
-        "src/modules/manual-match-telemetry/manual-match-runtime.js"
-      ],
-      "evidence": [
-        "The original method is retained for the legacy interval and dual-write compatibility bridge only.",
-        "Active recommendation, effect and freeze callers use persistManualState."
-      ],
-      "deletionStatus": "KEEP_UNTIL_MIGRATED"
-    },
-    {
-      "symbol": "SnapshotEngine.loadLiveState",
-      "token": "loadLiveState",
-      "owner": "src/modules/manual-match-telemetry/snapshot-engine.js",
-      "classification": "ACTIVE_MANUAL_BOUNDARY",
-      "allowedFiles": [
-        "src/modules/manual-match-telemetry/snapshot-engine.js",
-        "src/modules/manual-match-telemetry/manual-match-runtime.js"
-      ],
-      "evidence": [
-        "The method remains a compatibility bridge while loadManualState handles active pending-event recovery."
-      ],
-      "deletionStatus": "KEEP_UNTIL_MIGRATED"
-    },
-    {
       "symbol": "SnapshotEngine.persistManualState",
       "token": "persistManualState",
       "owner": "src/modules/manual-match-telemetry/manual-match-runtime.js",
@@ -220,6 +172,24 @@
       "removedInStage": 3,
       "trackingIssue": 151,
       "reason": "Loop-only state removed after deletion of the automatic runtime."
+    },
+    {
+      "symbol": "LIVE_PARSER_STATE_PREFIX",
+      "removedInStage": 5,
+      "trackingIssue": 151,
+      "reason": "Legacy state write and compatibility API removed after published transition release 4.4.260."
+    },
+    {
+      "symbol": "SnapshotEngine.persistLiveState",
+      "removedInStage": 5,
+      "trackingIssue": 151,
+      "reason": "Legacy state write and compatibility API removed after published transition release 4.4.260."
+    },
+    {
+      "symbol": "SnapshotEngine.loadLiveState",
+      "removedInStage": 5,
+      "trackingIssue": 151,
+      "reason": "Legacy state write and compatibility API removed after published transition release 4.4.260."
     }
   ],
   "stage2": {
@@ -240,5 +210,11 @@
       "matchReading": "src/modules/match-reading",
       "manualTelemetry": "src/modules/manual-match-telemetry"
     }
+  },
+  "stage5": {
+    "issue": 151,
+    "status": "implemented",
+    "publishedTransitionVersion": "4.4.260",
+    "exitCriterion": "Only the new manual-state key is written; legacy state is read-only migration input and compatibility APIs are absent."
   }
 }
