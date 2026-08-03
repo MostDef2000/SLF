@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.263
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/manual-match-telemetry/event-tracker.js
+- tools/test-tactic-telemetry-envelope.mjs
+
+Approved base commit:
+- 5137d7ef5645c7312d63f9f4dcaf3f89d389b692
+
+Approved commit:
+- 7e2eeb25e295ee81e530bec2423eadc8a72eec09
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.262
 
 ### Automatic latest-only build

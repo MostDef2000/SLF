@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.262
+// @version      4.4.263
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.262',
-        scriptVersion: '4.4.262',
+        version: '4.4.263',
+        scriptVersion: '4.4.263',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.262',
+        scriptVersion: '4.4.263',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -2607,12 +2607,6 @@ const SnapshotEngine = {
         SnapshotEngine.buildSnapshotRecord = function buildSnapshotRecordWithTacticTelemetry(snapshot) { return originalBuildSnapshotRecord(enrich(snapshot, 'match_snapshot')); };
         const originalSendMatchResult = SnapshotEngine.sendMatchResult.bind(SnapshotEngine);
         SnapshotEngine.sendMatchResult = function sendMatchResultWithTacticTelemetry(snapshot) { return originalSendMatchResult(enrich(snapshot, 'match_result')); };
-        const originalCompactSnapshot = SnapshotEngine.compactSnapshotForStorage.bind(SnapshotEngine);
-        SnapshotEngine.compactSnapshotForStorage = function compactSnapshotWithTacticTelemetry(snapshot) {
-            const compact = originalCompactSnapshot(enrich(snapshot, 'live_state'));
-            if (compact) compact.tacticTelemetry = clone(snapshot.tacticTelemetry);
-            return compact;
-        };
         SnapshotEngine.__tacticTelemetryEnvelopeInstalled = true;
     })();
 
@@ -20289,15 +20283,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.262',
-        scriptVersion: '4.4.262',
+        version: '4.4.263',
+        scriptVersion: '4.4.263',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.262',
+        scriptVersion: '4.4.263',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
