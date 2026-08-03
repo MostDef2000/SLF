@@ -25,6 +25,8 @@ jobs:
           fetch-depth: 0
       - name: Apply exact runtime deletion
         run: python tools/apply-stage2-remove-auto-loop.py
+      - name: Align bundle host capabilities
+        run: python -c "import json; from pathlib import Path; p=Path('src/app/bundle-order.json'); d=json.loads(p.read_text()); m=next(x for x in d['dependencyAudit']['modules'] if x['file']=='src/modules/live-parser/snapshot-engine.js'); m['hostCapabilities']=[x for x in m.get('hostCapabilities',[]) if x not in ('setInterval','clearInterval')]; p.write_text(json.dumps(d,ensure_ascii=False,indent=2)+'\n')"
       - name: Remove one-time migration machinery
         run: rm tools/apply-stage2-remove-auto-loop.py .github/workflows/stage2-remove-auto-loop.yml
       - name: Check runtime and repository contracts
