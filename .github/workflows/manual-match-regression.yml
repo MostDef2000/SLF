@@ -8,18 +8,21 @@ on:
       - 'src/modules/manual-match-telemetry/**'
       - 'src/app/bootstrap.js'
       - 'src/app/ui-layer.js'
+      - 'src/app/userscript-header.js'
       - 'src/app/bundle-order.json'
       - 'releases/latest.user.js'
       - 'tools/test-manual-match-runtime.mjs'
       - 'tools/test-manual-match-workflow.mjs'
       - 'tools/test-manual-match-state-bridge.mjs'
-      - 'tools/test-legacy-live-parser-boundary.mjs'
+      - 'tools/test-manual-telemetry-legacy-boundary.mjs'
+      - 'tools/test-manual-telemetry-final-boundary.mjs'
       - 'tools/audit-runtime-reachability.mjs'
       - 'data/audit/runtime-reachability-review-v1.json'
       - 'data/audit/manual-match-symbol-review-v1.json'
       - 'data/audit/manual-state-envelope-v1.json'
       - 'docs/audit/manual-match-regression-boundary-2026-08-03.md'
       - 'docs/audit/manual-state-envelope-2026-08-03.md'
+      - 'docs/audit/legacy-live-parser-stage6-final-2026-08-03.md'
       - '.github/workflows/manual-match-regression.yml'
   workflow_dispatch:
 
@@ -36,7 +39,8 @@ jobs:
           node --check tools/test-manual-match-runtime.mjs
           node --check tools/test-manual-match-workflow.mjs
           node --check tools/test-manual-match-state-bridge.mjs
-          node --check tools/test-legacy-live-parser-boundary.mjs
+          node --check tools/test-manual-telemetry-legacy-boundary.mjs
+          node --check tools/test-manual-telemetry-final-boundary.mjs
           node -e "JSON.parse(require('node:fs').readFileSync('data/audit/manual-match-symbol-review-v1.json', 'utf8'))"
           node -e "JSON.parse(require('node:fs').readFileSync('data/audit/manual-state-envelope-v1.json', 'utf8'))"
       - name: Run manual match runtime regression
@@ -45,7 +49,9 @@ jobs:
         run: node tools/test-manual-match-workflow.mjs
       - name: Run manual state migration regression
         run: node tools/test-manual-match-state-bridge.mjs
-      - name: Enforce legacy boundary
-        run: node tools/test-legacy-live-parser-boundary.mjs
+      - name: Enforce legacy migration boundary
+        run: node tools/test-manual-telemetry-legacy-boundary.mjs
+      - name: Enforce final removal boundary
+        run: node tools/test-manual-telemetry-final-boundary.mjs
       - name: Revalidate reachability inventory
         run: node tools/audit-runtime-reachability.mjs --validate-review
