@@ -214,7 +214,7 @@
                     generatorQualitySignal: afterQualitySignal,
                     evaluatedAt: Date.now()
                 };
-                SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer });
+                SnapshotEngine.persistManualState();
             }
 
             STATE.pendingPresetEvent = null;

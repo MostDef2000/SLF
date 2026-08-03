@@ -75,6 +75,8 @@ const uiLayer = sourceByFile.get('src/app/ui-layer.js') || '';
 const snapshotEngine = sourceByFile.get('src/modules/live-parser/snapshot-engine.js') || '';
 const eventTracker = sourceByFile.get('src/modules/live-parser/event-tracker.js') || '';
 const runtimeIntegrity = sourceByFile.get('src/modules/live-parser/runtime-telemetry-integrity.js') || '';
+const recommendationEngine = sourceByFile.get('src/modules/strategy-data-recommendations/recommendation-engine.js') || '';
+const strategyUi = sourceByFile.get('src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js') || '';
 
 assert.match(bootstrap, /Manual-only Coach Hint mode/);
 assert.doesNotMatch(bootstrap, /SnapshotEngine\.(?:startLive|stopLive|autoResumeIfNeeded)\s*\(/);
@@ -87,6 +89,14 @@ assert.match(runtimeIntegrity, /function\s+installManualWatcher\s*\(/);
 assert.match(runtimeIntegrity, /scheduleManualWatcher\s*\(\)/);
 assert.match(runtimeIntegrity, /pendingPresetEvent/);
 assert.match(runtimeIntegrity, /consumedPresetEventKey/);
+assert.doesNotMatch(runtimeIntegrity, /active:\s*!!STATE\.liveParserTimer/);
+assert.doesNotMatch(recommendationEngine, /persistLiveState/);
+assert.match(recommendationEngine, /persistManualState/);
+assert.doesNotMatch(eventTracker, /persistLiveState/);
+assert.match(eventTracker, /persistManualState/);
+assert.doesNotMatch(strategyUi, /liveWaitStatus|rememberLiveSnapshot/);
+assert.match(strategyUi, /rememberManualSnapshot/);
+assert.match(snapshotEngine, /rememberManualSnapshot\s*\(snapshot\)/);
 
 console.log('[legacy-live-parser-boundary-test] passed');
 for (const finding of findings) {

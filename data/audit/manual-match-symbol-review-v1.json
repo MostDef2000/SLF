@@ -14,139 +14,248 @@
       "token": "startLive",
       "owner": "src/modules/live-parser/snapshot-engine.js",
       "classification": "LEGACY_AUTOMATIC_LOOP",
-      "allowedFiles": ["src/modules/live-parser/snapshot-engine.js"],
-      "forbiddenCallPatterns": ["SnapshotEngine\\.startLive\\s*\\("],
+      "allowedFiles": [
+        "src/modules/live-parser/snapshot-engine.js"
+      ],
+      "forbiddenCallPatterns": [
+        "SnapshotEngine\\.startLive\\s*\\("
+      ],
       "evidence": [
         "The method creates the historical 15-second interval.",
         "Current bootstrap and UI do not call it."
       ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["manual workflow regression coverage", "active state-envelope extraction", "separate deletion PR"]
+      "removalBlockedBy": [
+        "manual workflow regression coverage",
+        "active state-envelope extraction",
+        "separate deletion PR"
+      ]
     },
     {
       "symbol": "SnapshotEngine.stopLive",
       "token": "stopLive",
       "owner": "src/modules/live-parser/snapshot-engine.js",
       "classification": "LEGACY_AUTOMATIC_LOOP",
-      "allowedFiles": ["src/modules/live-parser/snapshot-engine.js"],
-      "forbiddenCallPatterns": ["SnapshotEngine\\.stopLive\\s*\\("],
-      "evidence": ["The method only manages the historical interval and its persisted active flag."],
+      "allowedFiles": [
+        "src/modules/live-parser/snapshot-engine.js"
+      ],
+      "forbiddenCallPatterns": [
+        "SnapshotEngine\\.stopLive\\s*\\("
+      ],
+      "evidence": [
+        "The method only manages the historical interval and its persisted active flag."
+      ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["startLive removal", "state-envelope extraction"]
+      "removalBlockedBy": [
+        "startLive removal",
+        "state-envelope extraction"
+      ]
     },
     {
       "symbol": "SnapshotEngine.autoResumeIfNeeded",
       "token": "autoResumeIfNeeded",
       "owner": "src/modules/live-parser/snapshot-engine.js",
       "classification": "LEGACY_AUTOMATIC_LOOP",
-      "allowedFiles": ["src/modules/live-parser/snapshot-engine.js"],
-      "forbiddenCallPatterns": ["SnapshotEngine\\.autoResumeIfNeeded\\s*\\("],
-      "evidence": ["The current bootstrap explicitly selects manual-only mode and does not invoke auto-resume."],
+      "allowedFiles": [
+        "src/modules/live-parser/snapshot-engine.js"
+      ],
+      "forbiddenCallPatterns": [
+        "SnapshotEngine\\.autoResumeIfNeeded\\s*\\("
+      ],
+      "evidence": [
+        "The current bootstrap explicitly selects manual-only mode and does not invoke auto-resume."
+      ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["persisted-state split", "separate deletion PR"]
+      "removalBlockedBy": [
+        "persisted-state split",
+        "separate deletion PR"
+      ]
     },
     {
       "symbol": "EventTracker.startManualTacticWatcher",
       "token": "startManualTacticWatcher",
       "owner": "src/modules/live-parser/event-tracker.js",
       "classification": "LEGACY_DUPLICATE_WATCHER",
-      "allowedFiles": ["src/modules/live-parser/event-tracker.js"],
-      "forbiddenCallPatterns": ["EventTracker\\.startManualTacticWatcher\\s*\\("],
+      "allowedFiles": [
+        "src/modules/live-parser/event-tracker.js"
+      ],
+      "forbiddenCallPatterns": [
+        "EventTracker\\.startManualTacticWatcher\\s*\\("
+      ],
       "evidence": [
         "No current bootstrap path calls this method.",
         "runtime-telemetry-integrity.js installs the active watcher through installManualWatcher()."
       ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["manual watcher regression coverage", "separate deletion PR"]
+      "removalBlockedBy": [
+        "manual watcher regression coverage",
+        "separate deletion PR"
+      ]
     },
     {
       "symbol": "STATE.liveParserTimer",
       "token": "liveParserTimer",
       "owner": "src/core/config.js",
-      "classification": "LEGACY_NAMED_ACTIVE_STATE",
+      "classification": "LEGACY_AUTOMATIC_LOOP",
       "allowedFiles": [
         "src/core/config.js",
-        "src/modules/live-parser/snapshot-engine.js",
-        "src/modules/live-parser/event-tracker.js",
-        "src/modules/live-parser/runtime-telemetry-integrity.js",
-        "src/modules/strategy-data-recommendations/recommendation-engine.js"
+        "src/modules/live-parser/snapshot-engine.js"
       ],
       "evidence": [
-        "The timer itself belongs to the old loop, while active compatibility persistence still serializes an active flag from this field.",
-        "RecommendationEngine persists manual recommendation state through the compatibility bridge."
+        "Only the historical automatic interval reads or writes this field after active caller migration."
       ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["migrate remaining active callers to persistManualState"]
+      "removalBlockedBy": [
+        "automatic-loop deletion PR"
+      ]
     },
     {
       "symbol": "STATE.lastSavedBucket",
       "token": "lastSavedBucket",
       "owner": "src/core/config.js",
       "classification": "LEGACY_AUTOMATIC_LOOP",
-      "allowedFiles": ["src/core/config.js", "src/modules/live-parser/snapshot-engine.js"],
-      "evidence": ["Used by automatic per-generation snapshot suppression."],
+      "allowedFiles": [
+        "src/core/config.js",
+        "src/modules/live-parser/snapshot-engine.js"
+      ],
+      "evidence": [
+        "Used by automatic per-generation snapshot suppression."
+      ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["automatic-loop deletion PR"]
+      "removalBlockedBy": [
+        "automatic-loop deletion PR"
+      ]
     },
     {
       "symbol": "STATE.liveWaitStatus",
       "token": "liveWaitStatus",
       "owner": "src/core/config.js",
-      "classification": "LEGACY_NAMED_ACTIVE_STATE",
+      "classification": "LEGACY_AUTOMATIC_LOOP",
       "allowedFiles": [
         "src/core/config.js",
+        "src/modules/live-parser/snapshot-engine.js"
+      ],
+      "evidence": [
+        "Only the historical interval wait path uses this field after the manual hint reset was removed."
+      ],
+      "deletionStatus": "BLOCKED",
+      "removalBlockedBy": [
+        "automatic-loop deletion PR"
+      ]
+    },
+    {
+      "symbol": "STATE.manualSegmentSnapshots",
+      "token": "manualSegmentSnapshots",
+      "owner": "src/core/config.js",
+      "classification": "ACTIVE_MANUAL_BOUNDARY",
+      "allowedFiles": [
+        "src/core/config.js",
+        "src/modules/live-parser/snapshot-engine.js"
+      ],
+      "evidence": [
+        "Stores in-memory samples created only by explicit manual hint requests."
+      ],
+      "deletionStatus": "KEEP"
+    },
+    {
+      "symbol": "SnapshotEngine.rememberManualSnapshot",
+      "token": "rememberManualSnapshot",
+      "owner": "src/modules/live-parser/snapshot-engine.js",
+      "classification": "ACTIVE_MANUAL_BOUNDARY",
+      "allowedFiles": [
         "src/modules/live-parser/snapshot-engine.js",
         "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js"
       ],
       "evidence": [
-        "The historical loop uses this field for pause messaging.",
-        "The active manual hint path clears it to prevent stale live-only state before rendering a new recommendation."
+        "The manual hint button records the current explicit snapshot through this method."
+      ],
+      "deletionStatus": "KEEP"
+    },
+    {
+      "symbol": "SnapshotEngine.rememberLiveSnapshot",
+      "token": "rememberLiveSnapshot",
+      "owner": "src/modules/live-parser/snapshot-engine.js",
+      "classification": "LEGACY_AUTOMATIC_LOOP",
+      "allowedFiles": [
+        "src/modules/live-parser/snapshot-engine.js"
+      ],
+      "evidence": [
+        "After caller migration this method is referenced only by the historical automatic interval."
       ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["replace manual reset semantics during caller migration"]
+      "removalBlockedBy": [
+        "automatic-loop deletion PR"
+      ]
     },
     {
       "symbol": "STATE.liveSegmentSnapshots",
       "token": "liveSegmentSnapshots",
       "owner": "src/core/config.js",
       "classification": "LEGACY_AUTOMATIC_LOOP",
-      "allowedFiles": ["src/core/config.js", "src/modules/live-parser/snapshot-engine.js"],
-      "evidence": ["Maintains rolling segment samples for the historical loop."],
+      "allowedFiles": [
+        "src/core/config.js",
+        "src/modules/live-parser/snapshot-engine.js"
+      ],
+      "evidence": [
+        "Maintains rolling segment samples for the historical loop."
+      ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["confirm no recommendation consumer requires segmentAggregate"]
+      "removalBlockedBy": [
+        "confirm no recommendation consumer requires segmentAggregate"
+      ]
     },
     {
       "symbol": "STATE.liveStartedAt",
       "token": "liveStartedAt",
       "owner": "src/core/config.js",
       "classification": "LEGACY_AUTOMATIC_LOOP",
-      "allowedFiles": ["src/core/config.js", "src/modules/live-parser/snapshot-engine.js"],
-      "evidence": ["Records start time for the historical run state."],
+      "allowedFiles": [
+        "src/core/config.js",
+        "src/modules/live-parser/snapshot-engine.js"
+      ],
+      "evidence": [
+        "Records start time for the historical run state."
+      ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["persisted-state schema migration decision"]
+      "removalBlockedBy": [
+        "persisted-state schema migration decision"
+      ]
     },
     {
       "symbol": "STATE.liveAutoResumeChecked",
       "token": "liveAutoResumeChecked",
       "owner": "src/core/config.js",
       "classification": "LEGACY_AUTOMATIC_LOOP",
-      "allowedFiles": ["src/core/config.js", "src/modules/live-parser/snapshot-engine.js"],
-      "evidence": ["Guards the unused auto-resume path."],
+      "allowedFiles": [
+        "src/core/config.js",
+        "src/modules/live-parser/snapshot-engine.js"
+      ],
+      "evidence": [
+        "Guards the unused auto-resume path."
+      ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["autoResumeIfNeeded deletion"]
+      "removalBlockedBy": [
+        "autoResumeIfNeeded deletion"
+      ]
     },
     {
       "symbol": "LIVE_PARSER_STATE_PREFIX",
       "token": "LIVE_PARSER_STATE_PREFIX",
       "owner": "src/core/config.js",
       "classification": "LEGACY_NAMED_ACTIVE_STATE",
-      "allowedFiles": ["src/core/config.js", "src/modules/live-parser/snapshot-engine.js"],
+      "allowedFiles": [
+        "src/core/config.js",
+        "src/modules/live-parser/snapshot-engine.js"
+      ],
       "evidence": [
         "The original snapshot engine still owns the legacy state-key constant.",
         "The manual bridge uses the frozen legacy key string without adding a new manifest dependency."
       ],
       "deletionStatus": "KEEP_UNTIL_MIGRATED",
-      "removalBlockedBy": ["published transition window", "legacy fallback removal PR"]
+      "removalBlockedBy": [
+        "published transition window",
+        "legacy fallback removal PR"
+      ]
     },
     {
       "symbol": "SnapshotEngine.persistLiveState",
@@ -155,13 +264,11 @@
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
         "src/modules/live-parser/snapshot-engine.js",
-        "src/modules/live-parser/event-tracker.js",
-        "src/modules/live-parser/runtime-telemetry-integrity.js",
-        "src/modules/strategy-data-recommendations/recommendation-engine.js"
+        "src/modules/live-parser/runtime-telemetry-integrity.js"
       ],
       "evidence": [
-        "The method remains a compatibility bridge that dual-writes legacy and manual state.",
-        "Remaining active callers must migrate before the bridge can be removed."
+        "The original method is retained for the legacy interval and dual-write compatibility bridge only.",
+        "Active recommendation, effect and freeze callers use persistManualState."
       ],
       "deletionStatus": "KEEP_UNTIL_MIGRATED"
     },
@@ -170,8 +277,13 @@
       "token": "loadLiveState",
       "owner": "src/modules/live-parser/snapshot-engine.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
-      "allowedFiles": ["src/modules/live-parser/snapshot-engine.js", "src/modules/live-parser/runtime-telemetry-integrity.js"],
-      "evidence": ["The method remains a compatibility bridge while loadManualState handles active pending-event recovery."],
+      "allowedFiles": [
+        "src/modules/live-parser/snapshot-engine.js",
+        "src/modules/live-parser/runtime-telemetry-integrity.js"
+      ],
+      "evidence": [
+        "The method remains a compatibility bridge while loadManualState handles active pending-event recovery."
+      ],
       "deletionStatus": "KEEP_UNTIL_MIGRATED"
     },
     {
@@ -179,8 +291,15 @@
       "token": "persistManualState",
       "owner": "src/modules/live-parser/runtime-telemetry-integrity.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
-      "allowedFiles": ["src/modules/live-parser/runtime-telemetry-integrity.js"],
-      "evidence": ["Dual-writes active manual state to the new envelope and the legacy compatibility key."],
+      "allowedFiles": [
+        "src/modules/live-parser/snapshot-engine.js",
+        "src/modules/live-parser/event-tracker.js",
+        "src/modules/live-parser/runtime-telemetry-integrity.js",
+        "src/modules/strategy-data-recommendations/recommendation-engine.js"
+      ],
+      "evidence": [
+        "All active recommendation, freeze, effect and manual watcher persistence uses the manual-state API."
+      ],
       "deletionStatus": "KEEP"
     },
     {
@@ -188,8 +307,12 @@
       "token": "loadManualState",
       "owner": "src/modules/live-parser/runtime-telemetry-integrity.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
-      "allowedFiles": ["src/modules/live-parser/runtime-telemetry-integrity.js"],
-      "evidence": ["Prefers the new manual key and migrates a valid legacy record on read."],
+      "allowedFiles": [
+        "src/modules/live-parser/runtime-telemetry-integrity.js"
+      ],
+      "evidence": [
+        "Prefers the new manual key and migrates a valid legacy record on read."
+      ],
       "deletionStatus": "KEEP"
     },
     {
@@ -197,8 +320,12 @@
       "token": "clearManualState",
       "owner": "src/modules/live-parser/runtime-telemetry-integrity.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
-      "allowedFiles": ["src/modules/live-parser/runtime-telemetry-integrity.js"],
-      "evidence": ["Clears both the manual and legacy keys during the compatibility window."],
+      "allowedFiles": [
+        "src/modules/live-parser/runtime-telemetry-integrity.js"
+      ],
+      "evidence": [
+        "Clears both the manual and legacy keys during the compatibility window."
+      ],
       "deletionStatus": "KEEP"
     },
     {
@@ -206,8 +333,12 @@
       "token": "installManualWatcher",
       "owner": "src/modules/live-parser/runtime-telemetry-integrity.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
-      "allowedFiles": ["src/modules/live-parser/runtime-telemetry-integrity.js"],
-      "evidence": ["This is the active manual tactic watcher installation path."],
+      "allowedFiles": [
+        "src/modules/live-parser/runtime-telemetry-integrity.js"
+      ],
+      "evidence": [
+        "This is the active manual tactic watcher installation path."
+      ],
       "deletionStatus": "KEEP"
     }
   ],
@@ -216,5 +347,10 @@
     "No userscript version is changed directly by the PR.",
     "No legacy state key is deleted during migration.",
     "No tactical recommendation policy is changed."
-  ]
+  ],
+  "stage1": {
+    "issue": 151,
+    "status": "implemented",
+    "exitCriterion": "Compatibility persistence and live-only wait state have no active callers."
+  }
 }
