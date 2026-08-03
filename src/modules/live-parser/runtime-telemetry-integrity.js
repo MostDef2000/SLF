@@ -299,7 +299,6 @@
         return request.then(result => {
             if (!STATE.pendingPresetEvent) {
                 SnapshotEngine.persistManualState({
-                    active: !!STATE.liveParserTimer,
                     pendingPresetEvent: null,
                     pendingEffectRetry: false,
                     consumedPresetEventKey: recoverable.eventKey || null
@@ -310,7 +309,6 @@
             if (!STATE.pendingPresetEvent) {
                 STATE.pendingPresetEvent = recoverable;
                 SnapshotEngine.persistManualState({
-                    active: !!STATE.liveParserTimer,
                     pendingEffectRetry: true
                 });
             }
@@ -395,7 +393,6 @@
 
                 STATE.pendingPresetEvent = eventRecord;
                 SnapshotEngine.persistManualState({
-                    active: !!STATE.liveParserTimer,
                     manualTacticEventPending: true
                 });
                 void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, eventRecord, 'manual tactic event history')

@@ -314,13 +314,13 @@ const SnapshotEngine = {
         const waitText = `Пресет применён: ${label}. Ждём следующий snapshot/отрезок ${STATE.recommendationFreeze.targetBucket || ''}.`;
         UI.updateParserStatus(waitText);
         UI.addParserLog(waitText);
-        this.persistLiveState({ active: true });
+        this.persistManualState();
     },
 
     clearRecommendationFreeze(reason = 'cleared') {
         if (!STATE.recommendationFreeze) return;
         STATE.recommendationFreeze = null;
-        this.persistLiveState({ active: !!STATE.liveParserTimer, freezeClearedReason: reason });
+        this.persistManualState({ freezeClearedReason: reason });
     },
 
     getRecommendationFreezeStatus(snapshot) {
@@ -376,6 +376,21 @@ const SnapshotEngine = {
 
         STATE.liveAutoResumeChecked = true;
         this.startLive({ autoResume: true, persistedState: saved });
+    },
+
+    rememberManualSnapshot(snapshot) {
+        if (!snapshot || !snapshot.gameId || !snapshot.bucket) return snapshot;
+
+        const key = `${snapshot.gameId}|${snapshot.bucket}`;
+        const store = STATE.manualSegmentSnapshots && typeof STATE.manualSegmentSnapshots === 'object'
+            ? STATE.manualSegmentSnapshots
+            : (STATE.manualSegmentSnapshots = {});
+        const list = Array.isArray(store[key]) ? store[key] : [];
+        list.push(snapshot);
+        store[key] = list.slice(-12);
+
+        snapshot.segmentAggregate = this.buildSegmentAggregate(store[key], snapshot);
+        return snapshot;
     },
 
     rememberLiveSnapshot(snapshot) {

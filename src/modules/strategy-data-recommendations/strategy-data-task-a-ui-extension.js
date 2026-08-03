@@ -235,11 +235,10 @@
         RecommendationEngine.__compactCoachModePatchedV4 = true;
     }
 
-    function resetLiveOnlyRecommendationState() {
+    function resetManualRecommendationState() {
         if (typeof STATE === 'undefined') return;
         STATE.recommendationFreeze = null;
         // Keep pendingPresetEvent until the target generation window is reached.
-        STATE.liveWaitStatus = null;
     }
 
     function submitManualTelemetry(snapshot) {
@@ -276,7 +275,7 @@
     }
 
     function renderManualRecommendation() {
-        resetLiveOnlyRecommendationState();
+        resetManualRecommendationState();
 
         const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
         if (!snapshot) return;
@@ -285,8 +284,8 @@
         snapshot.manualRecommendationRefresh = true;
         snapshot.generatorVersion = GENERATOR_VERSION;
 
-        if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.rememberLiveSnapshot) {
-            SnapshotEngine.rememberLiveSnapshot(snapshot);
+        if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.rememberManualSnapshot) {
+            SnapshotEngine.rememberManualSnapshot(snapshot);
         }
 
         const el = document.getElementById('slf-parser-recommendation');

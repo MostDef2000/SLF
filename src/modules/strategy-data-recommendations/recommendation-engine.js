@@ -938,8 +938,8 @@ const RecommendationEngine = {
             minute: snapshot?.minute ?? null
         }, meta || {});
 
-        if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.persistLiveState) {
-            SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer });
+        if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.persistManualState) {
+            SnapshotEngine.persistManualState();
         }
     },
 

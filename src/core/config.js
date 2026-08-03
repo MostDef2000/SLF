@@ -313,6 +313,7 @@ const STATE = {
     liveWaitStatus: null,
     liveStartedAt: null,
     pendingPresetEvent: null,
+    manualSegmentSnapshots: {},
     liveSegmentSnapshots: {},
     recommendationFreeze: null,
     recommendationHistory: [],
