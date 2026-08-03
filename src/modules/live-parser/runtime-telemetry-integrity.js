@@ -10,9 +10,7 @@
     const pendingEffectEvent = Symbol('slfPendingEffectEvent');
     const manualStateSchema = 'slf_manual_match_state_v1';
     const manualStatePrefix = 'slf_manual_match_state_v1';
-    const legacyStatePrefix = typeof LIVE_PARSER_STATE_PREFIX !== 'undefined'
-        ? LIVE_PARSER_STATE_PREFIX
-        : 'slf_live_parser_state_v2';
+    const legacyStatePrefix = 'slf_live_parser_state_v2';
     const originalPersistLiveState = typeof SnapshotEngine.persistLiveState === 'function'
         ? SnapshotEngine.persistLiveState.bind(SnapshotEngine)
         : null;
@@ -39,6 +37,13 @@
         } catch (_) {
             return null;
         }
+    }
+
+    function resolveGameId(gameId = null) {
+        if (gameId) return gameId;
+        return typeof MatchStateParser?.getGameId === 'function'
+            ? MatchStateParser.getGameId()
+            : null;
     }
 
     function getStateKey(prefix, gameId) {
@@ -79,11 +84,12 @@
     }
 
     const ManualMatchState = {
-        getStorageKey(gameId = MatchStateParser.getGameId()) {
-            return getStateKey(manualStatePrefix, gameId);
+        getStorageKey(gameId = null) {
+            return getStateKey(manualStatePrefix, resolveGameId(gameId));
         },
 
-        load(gameId = MatchStateParser.getGameId(), legacyState = null) {
+        load(gameId = null, legacyState = null) {
+            gameId = resolveGameId(gameId);
             if (!gameId) return null;
 
             const stored = readStoredState(manualStatePrefix, gameId);
@@ -106,8 +112,9 @@
         },
 
         persist(extra = {}, options = {}) {
-            const gameId = options.gameId || MatchStateParser.getGameId();
-            if (!gameId || typeof localStorage === 'undefined') return null;
+            if (typeof localStorage === 'undefined') return null;
+            const gameId = resolveGameId(options.gameId);
+            if (!gameId) return null;
 
             const existing = options.existing || readStoredState(manualStatePrefix, gameId) || {};
             const stateValue = (key, fallback = null) => hasOwn(STATE, key)
@@ -152,7 +159,8 @@
             }
         },
 
-        clear(gameId = MatchStateParser.getGameId()) {
+        clear(gameId = null) {
+            gameId = resolveGameId(gameId);
             if (!gameId || typeof localStorage === 'undefined') return;
             try {
                 localStorage.removeItem(this.getStorageKey(gameId));
@@ -165,11 +173,13 @@
         if (originalPersistLiveState) originalPersistLiveState(extra);
         return ManualMatchState.persist(extra);
     };
-    SnapshotEngine.loadManualState = function loadManualState(gameId = MatchStateParser.getGameId()) {
+    SnapshotEngine.loadManualState = function loadManualState(gameId = null) {
+        gameId = resolveGameId(gameId);
         const legacy = originalLoadLiveState ? originalLoadLiveState(gameId) : null;
         return ManualMatchState.load(gameId, legacy);
     };
-    SnapshotEngine.clearManualState = function clearManualState(gameId = MatchStateParser.getGameId()) {
+    SnapshotEngine.clearManualState = function clearManualState(gameId = null) {
+        gameId = resolveGameId(gameId);
         if (originalClearLiveState) originalClearLiveState(gameId);
         ManualMatchState.clear(gameId);
     };
@@ -177,7 +187,8 @@
     SnapshotEngine.persistLiveState = function persistLiveStateCompatibilityBridge(extra = {}) {
         return SnapshotEngine.persistManualState(extra);
     };
-    SnapshotEngine.loadLiveState = function loadLiveStateCompatibilityBridge(gameId = MatchStateParser.getGameId()) {
+    SnapshotEngine.loadLiveState = function loadLiveStateCompatibilityBridge(gameId = null) {
+        gameId = resolveGameId(gameId);
         const legacy = originalLoadLiveState ? originalLoadLiveState(gameId) : null;
         const manual = ManualMatchState.load(gameId, legacy);
         if (!manual) return legacy;
@@ -189,7 +200,8 @@
             gameId: manual.gameId || legacy.gameId
         });
     };
-    SnapshotEngine.clearLiveState = function clearLiveStateCompatibilityBridge(gameId = MatchStateParser.getGameId()) {
+    SnapshotEngine.clearLiveState = function clearLiveStateCompatibilityBridge(gameId = null) {
+        gameId = resolveGameId(gameId);
         SnapshotEngine.clearManualState(gameId);
     };
 
