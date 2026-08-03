@@ -59,7 +59,8 @@
     }
 
     function normalizeLegacyManualState(legacy, gameId) {
-        if (!legacy || String(legacy.gameId || '') !== String(gameId || '')) return null;
+        if (!legacy || legacy.schema !== 'slf_live_parser_state_v2') return null;
+        if (String(legacy.gameId || '') !== String(gameId || '')) return null;
         return {
             schema: manualStateSchema,
             gameId: legacy.gameId,
@@ -112,24 +113,27 @@
             const stateValue = (key, fallback = null) => hasOwn(STATE, key)
                 ? cloneForStorage(STATE[key])
                 : cloneForStorage(existing[key] ?? fallback);
+            const pendingPresetEvent = hasOwn(extra, 'pendingPresetEvent')
+                ? cloneForStorage(extra.pendingPresetEvent)
+                : stateValue('pendingPresetEvent');
+            const pendingEventChanged = !!pendingPresetEvent?.eventKey
+                && String(pendingPresetEvent.eventKey) !== String(existing.pendingPresetEvent?.eventKey || '');
 
             const payload = {
                 schema: manualStateSchema,
                 gameId,
                 ts: Date.now(),
                 url: typeof location !== 'undefined' ? (location.href || '') : '',
-                pendingPresetEvent: hasOwn(extra, 'pendingPresetEvent')
-                    ? cloneForStorage(extra.pendingPresetEvent)
-                    : stateValue('pendingPresetEvent'),
+                pendingPresetEvent,
                 pendingEffectRetry: hasOwn(extra, 'pendingEffectRetry')
                     ? !!extra.pendingEffectRetry
-                    : !!existing.pendingEffectRetry,
+                    : (pendingEventChanged ? false : !!existing.pendingEffectRetry),
                 consumedPresetEventKey: hasOwn(extra, 'consumedPresetEventKey')
                     ? (extra.consumedPresetEventKey || null)
                     : (existing.consumedPresetEventKey || null),
                 manualTacticEventPending: hasOwn(extra, 'manualTacticEventPending')
                     ? !!extra.manualTacticEventPending
-                    : !!existing.manualTacticEventPending,
+                    : (pendingPresetEvent ? !!existing.manualTacticEventPending : false),
                 recommendationFreeze: stateValue('recommendationFreeze'),
                 presetProgression: stateValue('presetProgression'),
                 lastRecommendationHtml: stateValue('lastRecommendationHtml'),
