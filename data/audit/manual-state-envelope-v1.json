@@ -33,7 +33,8 @@
     "dualWrite": true,
     "deleteLegacyOnMigration": false,
     "clearBothKeys": true,
-    "reason": "Older published userscripts and in-progress pending events must remain recoverable during the transition."
+    "reason": "Older published userscripts and in-progress pending events must remain recoverable during the transition.",
+    "payloadScope": "manual_fields_only"
   },
   "activeApi": [
     "SnapshotEngine.persistManualState",
@@ -46,12 +47,25 @@
     "SnapshotEngine.clearLiveState"
   ],
   "nextRemovalGate": [
-    "Remove loop-only STATE declarations and legacy serialization fields.",
-    "Retain legacy-key migration and dual-write through the published transition release."
+    "Move active modules out of the live-parser directory and update dependency paths.",
+    "Retain the legacy storage key and compatibility bridge through the published transition window."
   ],
   "automaticLoop": {
     "status": "removed",
     "stage": 2,
     "trackingIssue": 151
+  },
+  "loopOnlyState": {
+    "status": "removed",
+    "stage": 3,
+    "trackingIssue": 151,
+    "removedFields": [
+      "active",
+      "lastSavedBucket",
+      "liveWaitStatus",
+      "liveStartedAt",
+      "liveSegmentSnapshots",
+      "liveAutoResumeChecked"
+    ]
   }
 }

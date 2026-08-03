@@ -12,57 +12,6 @@
   },
   "symbols": [
     {
-      "symbol": "STATE.liveParserTimer",
-      "token": "liveParserTimer",
-      "owner": "src/core/config.js",
-      "classification": "LEGACY_STATE_RESIDUE",
-      "allowedFiles": [
-        "src/core/config.js",
-        "src/modules/live-parser/snapshot-engine.js"
-      ],
-      "evidence": [
-        "No timer is created after Stage 2; the field remains only in the old persistence envelope until Stage 3."
-      ],
-      "deletionStatus": "BLOCKED",
-      "removalBlockedBy": [
-        "loop-only state cleanup PR"
-      ]
-    },
-    {
-      "symbol": "STATE.lastSavedBucket",
-      "token": "lastSavedBucket",
-      "owner": "src/core/config.js",
-      "classification": "LEGACY_STATE_RESIDUE",
-      "allowedFiles": [
-        "src/core/config.js",
-        "src/modules/live-parser/snapshot-engine.js"
-      ],
-      "evidence": [
-        "No bucket auto-save loop remains; the field is serialized only by the old state envelope."
-      ],
-      "deletionStatus": "BLOCKED",
-      "removalBlockedBy": [
-        "loop-only state cleanup PR"
-      ]
-    },
-    {
-      "symbol": "STATE.liveWaitStatus",
-      "token": "liveWaitStatus",
-      "owner": "src/core/config.js",
-      "classification": "LEGACY_STATE_RESIDUE",
-      "allowedFiles": [
-        "src/core/config.js",
-        "src/modules/live-parser/snapshot-engine.js"
-      ],
-      "evidence": [
-        "No wait loop remains; the field is serialized only by the old state envelope."
-      ],
-      "deletionStatus": "BLOCKED",
-      "removalBlockedBy": [
-        "loop-only state cleanup PR"
-      ]
-    },
-    {
       "symbol": "STATE.manualSegmentSnapshots",
       "token": "manualSegmentSnapshots",
       "owner": "src/core/config.js",
@@ -89,56 +38,6 @@
         "The manual hint button records the current explicit snapshot through this method."
       ],
       "deletionStatus": "KEEP"
-    },
-    {
-      "symbol": "STATE.liveSegmentSnapshots",
-      "token": "liveSegmentSnapshots",
-      "owner": "src/core/config.js",
-      "classification": "LEGACY_STATE_RESIDUE",
-      "allowedFiles": [
-        "src/core/config.js",
-        "src/modules/live-parser/snapshot-engine.js"
-      ],
-      "evidence": [
-        "The active manual workflow uses manualSegmentSnapshots; this field remains only in old state serialization."
-      ],
-      "deletionStatus": "BLOCKED",
-      "removalBlockedBy": [
-        "loop-only state cleanup PR"
-      ]
-    },
-    {
-      "symbol": "STATE.liveStartedAt",
-      "token": "liveStartedAt",
-      "owner": "src/core/config.js",
-      "classification": "LEGACY_STATE_RESIDUE",
-      "allowedFiles": [
-        "src/core/config.js",
-        "src/modules/live-parser/snapshot-engine.js"
-      ],
-      "evidence": [
-        "No automatic run start remains; the field is serialized only by the old state envelope."
-      ],
-      "deletionStatus": "BLOCKED",
-      "removalBlockedBy": [
-        "loop-only state cleanup PR"
-      ]
-    },
-    {
-      "symbol": "STATE.liveAutoResumeChecked",
-      "token": "liveAutoResumeChecked",
-      "owner": "src/core/config.js",
-      "classification": "UNREFERENCED_CANDIDATE",
-      "allowedFiles": [
-        "src/core/config.js"
-      ],
-      "evidence": [
-        "The auto-resume method was removed; only the declaration remains."
-      ],
-      "deletionStatus": "BLOCKED",
-      "removalBlockedBy": [
-        "loop-only state cleanup PR"
-      ]
     },
     {
       "symbol": "LIVE_PARSER_STATE_PREFIX",
@@ -285,11 +184,52 @@
       "removedInStage": 2,
       "trackingIssue": 151,
       "reason": "Historical automatic loop or superseded watcher removed after active callers were migrated."
+    },
+    {
+      "symbol": "STATE.liveParserTimer",
+      "removedInStage": 3,
+      "trackingIssue": 151,
+      "reason": "Loop-only state removed after deletion of the automatic runtime."
+    },
+    {
+      "symbol": "STATE.lastSavedBucket",
+      "removedInStage": 3,
+      "trackingIssue": 151,
+      "reason": "Loop-only state removed after deletion of the automatic runtime."
+    },
+    {
+      "symbol": "STATE.liveWaitStatus",
+      "removedInStage": 3,
+      "trackingIssue": 151,
+      "reason": "Loop-only state removed after deletion of the automatic runtime."
+    },
+    {
+      "symbol": "STATE.liveSegmentSnapshots",
+      "removedInStage": 3,
+      "trackingIssue": 151,
+      "reason": "Loop-only state removed after deletion of the automatic runtime."
+    },
+    {
+      "symbol": "STATE.liveStartedAt",
+      "removedInStage": 3,
+      "trackingIssue": 151,
+      "reason": "Loop-only state removed after deletion of the automatic runtime."
+    },
+    {
+      "symbol": "STATE.liveAutoResumeChecked",
+      "removedInStage": 3,
+      "trackingIssue": 151,
+      "reason": "Loop-only state removed after deletion of the automatic runtime."
     }
   ],
   "stage2": {
     "issue": 151,
     "status": "implemented",
     "exitCriterion": "No automatic interval, auto-resume path, stop/start API, legacy snapshot collector or duplicate watcher remains."
+  },
+  "stage3": {
+    "issue": 151,
+    "status": "implemented",
+    "exitCriterion": "Runtime STATE and legacy compatibility payload contain manual-workflow concepts only."
   }
 }

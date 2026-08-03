@@ -187,53 +187,41 @@ const SnapshotEngine = {
         };
     },
 
-    compactSegmentSnapshotsForStorage() {
-        const result = {};
-        const source = STATE.liveSegmentSnapshots || {};
-
-        Object.keys(source).forEach(key => {
-            const rows = Array.isArray(source[key]) ? source[key] : [];
-            const compactRows = rows
-                .slice(-4)
-                .map(snapshot => this.compactSnapshotForStorage(snapshot))
-                .filter(Boolean);
-
-            if (compactRows.length) result[key] = compactRows;
-        });
-
-        return result;
-    },
-
     persistLiveState(extra = {}) {
         const gameId = MatchStateParser.getGameId();
         if (!gameId) return;
 
+        const allowedExtra = {};
+        [
+            'pendingPresetEvent',
+            'pendingEffectRetry',
+            'consumedPresetEventKey',
+            'manualTacticEventPending',
+            'recommendationFreeze',
+            'presetProgression',
+            'lastRecommendationHtml',
+            'lastRecommendationMeta',
+            'migratedFrom'
+        ].forEach(key => {
+            if (Object.prototype.hasOwnProperty.call(extra || {}, key)) allowedExtra[key] = extra[key];
+        });
+
         const payload = Object.assign({
             schema: 'slf_live_parser_state_v2',
-            active: !!STATE.liveParserTimer || !!extra.active,
             gameId,
             ts: Date.now(),
             url: location.href,
-            lastSavedBucket: STATE.lastSavedBucket || null,
-            liveWaitStatus: STATE.liveWaitStatus || null,
-            liveStartedAt: STATE.liveStartedAt || Date.now(),
             recommendationFreeze: STATE.recommendationFreeze || null,
             pendingPresetEvent: STATE.pendingPresetEvent || null,
             presetProgression: STATE.presetProgression || null,
             lastRecommendationHtml: STATE.lastRecommendationHtml || null,
-            lastRecommendationMeta: STATE.lastRecommendationMeta || null,
-            liveSegmentSnapshots: this.compactSegmentSnapshotsForStorage()
-        }, extra || {});
+            lastRecommendationMeta: STATE.lastRecommendationMeta || null
+        }, allowedExtra);
 
         try {
             localStorage.setItem(this.getLiveStorageKey(gameId), JSON.stringify(payload));
-        } catch (e) {
-            try {
-                delete payload.liveSegmentSnapshots;
-                localStorage.setItem(this.getLiveStorageKey(gameId), JSON.stringify(payload));
-            } catch (inner) {
-                debugWarn('[SLF] Live parser state persist failed', inner);
-            }
+        } catch (error) {
+            debugWarn('[SLF] Legacy manual-state compatibility persist failed', error);
         }
     },
 

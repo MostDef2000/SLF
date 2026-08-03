@@ -308,19 +308,13 @@ const DEFAULT_CUSTOM_PRESETS = {
 };
 
 const STATE = {
-    liveParserTimer: null,
-    lastSavedBucket: null,
-    liveWaitStatus: null,
-    liveStartedAt: null,
     pendingPresetEvent: null,
     manualSegmentSnapshots: {},
-    liveSegmentSnapshots: {},
     recommendationFreeze: null,
     recommendationHistory: [],
     lastRecommendationHtml: null,
     lastRecommendationMeta: null,
     presetProgression: null,
-    liveAutoResumeChecked: false,
 
     tacticWatcherStarted: false,
     lastManualTactic: null,
