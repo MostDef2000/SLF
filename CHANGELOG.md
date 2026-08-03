@@ -13,7 +13,7 @@ Changed files:
 - src/core/config.js
 - src/modules/manual-match-telemetry/manual-match-runtime.js
 - src/modules/manual-match-telemetry/snapshot-engine.js
-- tools/test-legacy-live-parser-boundary.mjs
+- tools/test-manual-telemetry-legacy-boundary.mjs
 - tools/test-manual-match-runtime.mjs
 - tools/test-manual-match-state-bridge.mjs
 - tools/test-manual-match-workflow.mjs
@@ -66,7 +66,7 @@ Changed files:
 - docs/audit/legacy-live-parser-stage3-2026-08-03.md
 - src/core/config.js
 - src/modules/manual-match-telemetry/snapshot-engine.js
-- tools/test-legacy-live-parser-boundary.mjs
+- tools/test-manual-telemetry-legacy-boundary.mjs
 
 Approved base commit:
 - 98d2aeddd5589bf67faeb12aaf7b7eb85d242ad0
@@ -93,7 +93,7 @@ Changed files:
 - src/app/bundle-order.json
 - src/modules/manual-match-telemetry/event-tracker.js
 - src/modules/manual-match-telemetry/snapshot-engine.js
-- tools/test-legacy-live-parser-boundary.mjs
+- tools/test-manual-telemetry-legacy-boundary.mjs
 
 Approved base commit:
 - 6441e1792ca78525ba02bd457b94311536c386e2
@@ -122,7 +122,7 @@ Changed files:
 - src/modules/manual-match-telemetry/snapshot-engine.js
 - src/modules/strategy-data-recommendations/recommendation-engine.js
 - src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
-- tools/test-legacy-live-parser-boundary.mjs
+- tools/test-manual-telemetry-legacy-boundary.mjs
 
 Approved base commit:
 - 5910c7107b6be3b81763fa97b5bac40437021c59
@@ -153,7 +153,7 @@ Changed files:
 - docs/audit/runtime-reachability-audit-2026-08-03.md
 - src/modules/manual-match-telemetry/manual-match-runtime.js
 - tools/audit-runtime-reachability.mjs
-- tools/test-legacy-live-parser-boundary.mjs
+- tools/test-manual-telemetry-legacy-boundary.mjs
 - tools/test-manual-match-state-bridge.mjs
 - tools/test-manual-match-workflow.mjs
 - tools/test-manual-match-runtime.mjs
