@@ -340,12 +340,6 @@
         SnapshotEngine.buildSnapshotRecord = function buildSnapshotRecordWithTacticTelemetry(snapshot) { return originalBuildSnapshotRecord(enrich(snapshot, 'match_snapshot')); };
         const originalSendMatchResult = SnapshotEngine.sendMatchResult.bind(SnapshotEngine);
         SnapshotEngine.sendMatchResult = function sendMatchResultWithTacticTelemetry(snapshot) { return originalSendMatchResult(enrich(snapshot, 'match_result')); };
-        const originalCompactSnapshot = SnapshotEngine.compactSnapshotForStorage.bind(SnapshotEngine);
-        SnapshotEngine.compactSnapshotForStorage = function compactSnapshotWithTacticTelemetry(snapshot) {
-            const compact = originalCompactSnapshot(enrich(snapshot, 'live_state'));
-            if (compact) compact.tacticTelemetry = clone(snapshot.tacticTelemetry);
-            return compact;
-        };
         SnapshotEngine.__tacticTelemetryEnvelopeInstalled = true;
     })();
 
