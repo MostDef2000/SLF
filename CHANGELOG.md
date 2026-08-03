@@ -10,7 +10,7 @@ Changed files:
 - data/audit/manual-state-envelope-v1.json
 - docs/audit/legacy-live-parser-stage3-2026-08-03.md
 - src/core/config.js
-- src/modules/live-parser/snapshot-engine.js
+- src/modules/manual-match-telemetry/snapshot-engine.js
 - tools/test-legacy-live-parser-boundary.mjs
 
 Approved base commit:
@@ -36,8 +36,8 @@ Changed files:
 - data/audit/manual-state-envelope-v1.json
 - docs/audit/legacy-live-parser-stage2-2026-08-03.md
 - src/app/bundle-order.json
-- src/modules/live-parser/event-tracker.js
-- src/modules/live-parser/snapshot-engine.js
+- src/modules/manual-match-telemetry/event-tracker.js
+- src/modules/manual-match-telemetry/snapshot-engine.js
 - tools/test-legacy-live-parser-boundary.mjs
 
 Approved base commit:
@@ -62,9 +62,9 @@ Changed files:
 - data/audit/manual-match-symbol-review-v1.json
 - docs/audit/legacy-live-parser-stage1-2026-08-03.md
 - src/core/config.js
-- src/modules/live-parser/event-tracker.js
-- src/modules/live-parser/runtime-telemetry-integrity.js
-- src/modules/live-parser/snapshot-engine.js
+- src/modules/manual-match-telemetry/event-tracker.js
+- src/modules/manual-match-telemetry/manual-match-runtime.js
+- src/modules/manual-match-telemetry/snapshot-engine.js
 - src/modules/strategy-data-recommendations/recommendation-engine.js
 - src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
 - tools/test-legacy-live-parser-boundary.mjs
@@ -96,12 +96,12 @@ Changed files:
 - docs/audit/manual-match-regression-boundary-2026-08-03.md
 - docs/audit/manual-state-envelope-2026-08-03.md
 - docs/audit/runtime-reachability-audit-2026-08-03.md
-- src/modules/live-parser/runtime-telemetry-integrity.js
+- src/modules/manual-match-telemetry/manual-match-runtime.js
 - tools/audit-runtime-reachability.mjs
 - tools/test-legacy-live-parser-boundary.mjs
 - tools/test-manual-match-state-bridge.mjs
 - tools/test-manual-match-workflow.mjs
-- tools/test-runtime-telemetry-integrity.mjs
+- tools/test-manual-match-runtime.mjs
 
 Approved base commit:
 - 69492a052538cb40f5ad6e0da4b81b0cb3bc17bc
@@ -125,10 +125,10 @@ Changed files:
 - .github/workflows/tactic-analytics-smoke.yml
 - docs/audit/tactical-data-quality-provenance-2026-08-03.md
 - docs/operations/tactic-match-outcomes.md
-- src/modules/live-parser/runtime-telemetry-integrity.js
+- src/modules/manual-match-telemetry/manual-match-runtime.js
 - tools/enrich-tactic-match-outcomes.mjs
 - tools/run-tactic-analytics-pipeline.sh
-- tools/test-runtime-telemetry-integrity.mjs
+- tools/test-manual-match-runtime.mjs
 - tools/test-tactic-match-outcomes.mjs
 - tools/test-tactic-telemetry-envelope.mjs
 - tools/test-tactical-record-keys.mjs
@@ -163,8 +163,8 @@ Changed files:
 - .github/workflows/tactic-analytics-smoke.yml
 - docs/audit/tactic-telemetry-envelope-v1.md
 - src/app/bundle-order.json
-- src/modules/live-parser/runtime-telemetry-integrity.js
-- tools/test-runtime-telemetry-integrity.mjs
+- src/modules/manual-match-telemetry/manual-match-runtime.js
+- tools/test-manual-match-runtime.mjs
 
 Approved base commit:
 - f3d56b1851b4f687442c9cba1859906d0a80a9ba
@@ -222,7 +222,7 @@ Safety notes:
 Changed files:
 - docs/audit/tactic-telemetry-envelope-v1.md
 - src/app/bootstrap.js
-- src/modules/live-parser/event-tracker.js
+- src/modules/manual-match-telemetry/event-tracker.js
 
 Approved base commit:
 - c2161fdbb5cb04bf1172664015983a2f78885bff
@@ -355,7 +355,7 @@ Safety notes:
 
 Changed files:
 - docs/audit/rule-decision-44246.md
-- src/modules/live-parser/event-tracker.js
+- src/modules/manual-match-telemetry/event-tracker.js
 - src/modules/strategy-data-recommendations/current-action-hint-engine.js
 - src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
 - src/modules/tactics-presets/tactic-preset-direction-policy.js
@@ -385,7 +385,7 @@ Safety notes:
 
 Changed files:
 - docs/audit/generator-561-tactic-rebuild-2026-07.md
-- src/modules/live-parser/event-tracker.js
+- src/modules/manual-match-telemetry/event-tracker.js
 - src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
 - src/modules/tactics-presets/active-preset-registry.js
 - src/modules/tactics-presets/tactic-preset-direction-policy.js
@@ -893,8 +893,8 @@ Changed files:
 - docs/architecture/slf-system-contract.md
 - src/app/ui-layer.js
 - src/core/api.js
-- src/modules/live-parser/event-tracker.js
-- src/modules/live-parser/snapshot-engine.js
+- src/modules/manual-match-telemetry/event-tracker.js
+- src/modules/manual-match-telemetry/snapshot-engine.js
 - src/modules/tactics-presets/preset-storage.js
 - src/modules/transfer-analyzer/transfer-market-analyzer.js
 - tools/check-bundle-order.mjs
@@ -1009,7 +1009,7 @@ Changed files:
 - src/app/bootstrap.js
 - src/app/bundle-order.json
 - src/app/userscript-header.js
-- src/modules/live-parser/snapshot-engine.js
+- src/modules/manual-match-telemetry/snapshot-engine.js
 - src/modules/transfer-analyzer/transfer-market-analyzer.js
 - tools/build-latest-userscript.mjs
 - tools/validate-release-provenance.mjs

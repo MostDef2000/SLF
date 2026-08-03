@@ -2,7 +2,7 @@
 
 ## Role
 
-High-frequency product branch for match data, strategy/tactic presets, live parser snapshots, and recommendation logic.
+High-frequency product branch for match data, strategy/tactic presets, manual match telemetry, and recommendation logic.
 
 ## Shared governance policies
 
@@ -107,7 +107,7 @@ If API access is unavailable in the current environment, Strategy Data Agent mus
 This branch owns:
 
 - uploaded or parsed match data workflows;
-- live parser snapshots and match result parsing;
+- manual match snapshots, tactic telemetry, and match result parsing;
 - strategy and tactic preset library;
 - recommendation engine and tactical decision model;
 - game.php recommendation UI;
@@ -116,7 +116,8 @@ This branch owns:
 ## Allowed areas
 
 - `src/modules/strategy-data-recommendations/**`
-- `src/modules/live-parser/**`
+- `src/modules/match-reading/**`
+- `src/modules/manual-match-telemetry/**`
 - `src/modules/tactics-presets/**`
 
 ## Forbidden areas

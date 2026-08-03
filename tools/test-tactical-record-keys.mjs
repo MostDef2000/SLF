@@ -6,7 +6,7 @@ import vm from 'node:vm';
 
 const root = process.cwd();
 const source = fs.readFileSync(
-  path.join(root, 'src/modules/live-parser/snapshot-engine.js'),
+  path.join(root, 'src/modules/manual-match-telemetry/snapshot-engine.js'),
   'utf8'
 );
 

@@ -1382,7 +1382,7 @@ const DomUtils = {
 // <<< src/modules/tactics-presets/tactic-control-engine.js
 
 
-// >>> src/modules/live-parser/match-state-parser.js
+// >>> src/modules/match-reading/match-state-parser.js
     // 5. Match State Parser
     // ============================================================
 
@@ -1522,10 +1522,10 @@ const DomUtils = {
     };
 
     // ============================================================
-// <<< src/modules/live-parser/match-state-parser.js
+// <<< src/modules/match-reading/match-state-parser.js
 
 
-// >>> src/modules/live-parser/match-stats-parser.js
+// >>> src/modules/match-reading/match-stats-parser.js
 // 6. Match Stats Parser
 // ============================================================
 
@@ -1623,10 +1623,10 @@ const MatchStatsParser = {
 };
 
     // ============================================================
-// <<< src/modules/live-parser/match-stats-parser.js
+// <<< src/modules/match-reading/match-stats-parser.js
 
 
-// >>> src/modules/live-parser/squad-parser.js
+// >>> src/modules/match-reading/squad-parser.js
     // 7. Lineup / Squad Parser
     // ============================================================
 
@@ -1856,10 +1856,10 @@ return {
     };
 
    // ============================================================
-// <<< src/modules/live-parser/squad-parser.js
+// <<< src/modules/match-reading/squad-parser.js
 
 
-// >>> src/modules/live-parser/snapshot-engine.js
+// >>> src/modules/manual-match-telemetry/snapshot-engine.js
 // 8. Snapshot Engine
 // ============================================================
 
@@ -2356,10 +2356,10 @@ const SnapshotEngine = {
 };
 
     // ============================================================
-// <<< src/modules/live-parser/snapshot-engine.js
+// <<< src/modules/manual-match-telemetry/snapshot-engine.js
 
 
-// >>> src/modules/live-parser/event-tracker.js
+// >>> src/modules/manual-match-telemetry/event-tracker.js
     // 9. Event / Effect Tracking
     // ============================================================
 
@@ -2715,7 +2715,7 @@ const SnapshotEngine = {
         return EventTracker.submitManualTelemetry(snapshot, generatorVersion);
     };
     // ============================================================
-// <<< src/modules/live-parser/event-tracker.js
+// <<< src/modules/manual-match-telemetry/event-tracker.js
 
 
 // >>> src/modules/strategy-data-recommendations/developer-hint-parser.js
@@ -8947,7 +8947,7 @@ if (!isTacticPage) return;
 // <<< src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
 
 
-// >>> src/modules/live-parser/runtime-telemetry-integrity.js
+// >>> src/modules/manual-match-telemetry/manual-match-runtime.js
 // Runtime telemetry integrity and result submission guards
 // ============================================================
 
@@ -9374,7 +9374,7 @@ if (!isTacticPage) return;
 })();
 
 // ============================================================
-// <<< src/modules/live-parser/runtime-telemetry-integrity.js
+// <<< src/modules/manual-match-telemetry/manual-match-runtime.js
 
 
 // >>> src/modules/transfer-analyzer/tm-enrichment-layer.js

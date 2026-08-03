@@ -20,7 +20,7 @@
       "data/audit/manual-state-envelope-v1.json",
       "docs/audit/legacy-live-parser-stage3-2026-08-03.md",
       "src/core/config.js",
-      "src/modules/live-parser/snapshot-engine.js",
+      "src/modules/manual-match-telemetry/snapshot-engine.js",
       "tools/test-legacy-live-parser-boundary.mjs"
     ],
     "sourceBranch": "main",

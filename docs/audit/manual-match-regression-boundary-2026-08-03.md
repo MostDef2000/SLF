@@ -19,7 +19,7 @@ The historical automatic loop remains present in source but is not invoked by th
 
 ### Manual workflow regression
 
-`tools/test-manual-match-workflow.mjs` executes the real `event-tracker.js` and `runtime-telemetry-integrity.js` modules in a controlled browser-like VM harness. It verifies:
+`tools/test-manual-match-workflow.mjs` executes the real `event-tracker.js` and `manual-match-runtime.js` modules in a controlled browser-like VM harness. It verifies:
 
 - first manual hint snapshot submission;
 - duplicate manual fingerprint suppression;
@@ -43,7 +43,7 @@ It fails when:
 - an owner no longer contains its reviewed token;
 - a forbidden active call to `SnapshotEngine.startLive`, `stopLive`, `autoResumeIfNeeded` or the older `EventTracker.startManualTacticWatcher` appears;
 - bootstrap stops declaring manual-only mode;
-- the active watcher disappears from `runtime-telemetry-integrity.js`;
+- the active watcher disappears from `manual-match-runtime.js`;
 - the pending-effect recovery markers disappear.
 
 ## Symbol conclusions
@@ -63,7 +63,7 @@ These identifiers remain removal candidates, but are not deleted here:
 
 ### Duplicate watcher
 
-`EventTracker.startManualTacticWatcher` is the older implementation. The active path is `installManualWatcher()` in `runtime-telemetry-integrity.js`.
+`EventTracker.startManualTacticWatcher` is the older implementation. The active path is `installManualWatcher()` in `manual-match-runtime.js`.
 
 ### Active state that is only historically named
 

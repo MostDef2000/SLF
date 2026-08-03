@@ -5,7 +5,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const root = process.cwd();
-const source = fs.readFileSync(path.join(root, 'src/modules/live-parser/runtime-telemetry-integrity.js'), 'utf8');
+const source = fs.readFileSync(path.join(root, 'src/modules/manual-match-telemetry/manual-match-runtime.js'), 'utf8');
 
 function createStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -119,7 +119,7 @@ function createHarness(initialStorage = {}) {
   };
 
   vm.createContext(context);
-  vm.runInContext(source, context, { filename: 'runtime-telemetry-integrity.js' });
+  vm.runInContext(source, context, { filename: 'manual-match-runtime.js' });
   return { context, localStorage };
 }
 

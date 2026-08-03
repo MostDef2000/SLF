@@ -5,7 +5,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const root = process.cwd();
-const sourcePath = path.join(root, 'src/modules/live-parser/event-tracker.js');
+const sourcePath = path.join(root, 'src/modules/manual-match-telemetry/event-tracker.js');
 const releasePath = path.join(root, 'releases/latest.user.js');
 const source = fs.readFileSync(sourcePath, 'utf8');
 const release = fs.readFileSync(releasePath, 'utf8');
@@ -240,8 +240,8 @@ for (const marker of [
   'SnapshotEngine.build = function buildWithTacticTelemetry()',
   'currentTacticFingerprint: currentFingerprint',
   'tacticTelemetry: afterSnapshot.tacticTelemetry || pending.tacticTelemetry || null',
-  '// >>> src/modules/live-parser/event-tracker.js',
-  '// >>> src/modules/live-parser/runtime-telemetry-integrity.js'
+  '// >>> src/modules/manual-match-telemetry/event-tracker.js',
+  '// >>> src/modules/manual-match-telemetry/manual-match-runtime.js'
 ]) {
   assert.ok(release.includes(marker), `published userscript is missing: ${marker}`);
 }

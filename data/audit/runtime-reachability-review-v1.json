@@ -56,28 +56,28 @@
       ]
     },
     {
-      "file": "src/modules/live-parser/match-state-parser.js",
+      "file": "src/modules/match-reading/match-state-parser.js",
       "classification": "ACTIVE_BUT_MISNAMED",
       "evidence": [
         "Provides gameId, match status, minute and generation-window parsing used by the manual workflow."
       ]
     },
     {
-      "file": "src/modules/live-parser/match-stats-parser.js",
+      "file": "src/modules/match-reading/match-stats-parser.js",
       "classification": "ACTIVE_BUT_MISNAMED",
       "evidence": [
         "Provides current page statistics used to build manual snapshots and recommendations."
       ]
     },
     {
-      "file": "src/modules/live-parser/squad-parser.js",
+      "file": "src/modules/match-reading/squad-parser.js",
       "classification": "ACTIVE_BUT_MISNAMED",
       "evidence": [
         "Provides lineup and formation data included in manually built snapshots."
       ]
     },
     {
-      "file": "src/modules/live-parser/snapshot-engine.js",
+      "file": "src/modules/manual-match-telemetry/snapshot-engine.js",
       "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
       "classification": "MIXED_ACTIVE_LEGACY",
       "evidence": [
@@ -86,7 +86,7 @@
       ]
     },
     {
-      "file": "src/modules/live-parser/event-tracker.js",
+      "file": "src/modules/manual-match-telemetry/event-tracker.js",
       "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
       "classification": "MIXED_ACTIVE_LEGACY",
       "evidence": [
@@ -123,7 +123,7 @@
       ]
     },
     {
-      "file": "src/modules/live-parser/runtime-telemetry-integrity.js",
+      "file": "src/modules/manual-match-telemetry/manual-match-runtime.js",
       "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
       "classification": "ACTIVE_BUT_MISNAMED",
       "evidence": [
@@ -206,7 +206,7 @@
   ],
   "symbolReviewQueue": [
     {
-      "owner": "src/modules/live-parser/snapshot-engine.js",
+      "owner": "src/modules/manual-match-telemetry/snapshot-engine.js",
       "identifiers": [
         "startLive",
         "stopLive",
@@ -224,12 +224,12 @@
       ]
     },
     {
-      "owner": "src/modules/live-parser/event-tracker.js",
+      "owner": "src/modules/manual-match-telemetry/event-tracker.js",
       "identifiers": [
         "startManualTacticWatcher"
       ],
       "classification": "LEGACY_CANDIDATE",
-      "notes": "A separate active watcher exists in runtime-telemetry-integrity.js; verify that no bootstrap or extension path calls this older implementation."
+      "notes": "A separate active watcher exists in manual-match-runtime.js; verify that no bootstrap or extension path calls this older implementation."
     },
     {
       "owner": "src/core/config.js",

@@ -72,9 +72,9 @@ for (const item of review.symbols || []) {
 
 const bootstrap = sourceByFile.get('src/app/bootstrap.js') || '';
 const uiLayer = sourceByFile.get('src/app/ui-layer.js') || '';
-const snapshotEngine = sourceByFile.get('src/modules/live-parser/snapshot-engine.js') || '';
-const eventTracker = sourceByFile.get('src/modules/live-parser/event-tracker.js') || '';
-const runtimeIntegrity = sourceByFile.get('src/modules/live-parser/runtime-telemetry-integrity.js') || '';
+const snapshotEngine = sourceByFile.get('src/modules/manual-match-telemetry/snapshot-engine.js') || '';
+const eventTracker = sourceByFile.get('src/modules/manual-match-telemetry/event-tracker.js') || '';
+const runtimeIntegrity = sourceByFile.get('src/modules/manual-match-telemetry/manual-match-runtime.js') || '';
 const recommendationEngine = sourceByFile.get('src/modules/strategy-data-recommendations/recommendation-engine.js') || '';
 const strategyUi = sourceByFile.get('src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js') || '';
 

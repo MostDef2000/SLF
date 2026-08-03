@@ -65,11 +65,11 @@ These modules are active and cannot be deleted at module granularity:
 
 - `src/core/config.js` — active central configuration/state mixed with historical live-parser naming;
 - `src/core/api.js` — active API client mixed with legacy collection compatibility;
-- `src/modules/live-parser/snapshot-engine.js` — active manual snapshots/results/state recovery mixed with the old automatic loop;
-- `src/modules/live-parser/event-tracker.js` — active manual events/effects mixed with an older watcher implementation;
+- `src/modules/manual-match-telemetry/snapshot-engine.js` — active manual snapshots/results/state recovery mixed with the old automatic loop;
+- `src/modules/manual-match-telemetry/event-tracker.js` — active manual events/effects mixed with an older watcher implementation;
 - `src/modules/strategy-data-recommendations/recommendation-engine.js` — active recommendation engine containing compatibility markers;
 - `src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js` — active extension requiring symbol-level separation;
-- `src/modules/live-parser/runtime-telemetry-integrity.js` — active pending-event recovery and manual watcher under a historical namespace.
+- `src/modules/manual-match-telemetry/manual-match-runtime.js` — active pending-event recovery and manual watcher under a historical namespace.
 
 ### Modules with insufficient positive static reachability evidence
 
@@ -124,7 +124,7 @@ A later removal PR must provide all of the following for each deleted symbol:
 ## Proposed follow-up sequence
 
 1. Merge this audit-only baseline.
-2. Complete symbol-level call-path evidence for `snapshot-engine.js`, `event-tracker.js`, `config.js`, `runtime-telemetry-integrity.js`, `bootstrap.js` and `ui-layer.js`.
+2. Complete symbol-level call-path evidence for `snapshot-engine.js`, `event-tracker.js`, `config.js`, `manual-match-runtime.js`, `bootstrap.js` and `ui-layer.js`.
 3. Add browser-oriented regression coverage for the manual buttons and pending-event lifecycle.
 4. Extract active manual telemetry into clearly named modules without behavior changes.
 5. Delete only the confirmed automatic-loop symbols in a separate PR.
