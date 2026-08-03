@@ -49,6 +49,28 @@
         return snapshot;
     }
 
+    function restorePersistedPendingPresetEvent(afterSnapshot) {
+        if (STATE.pendingPresetEvent || !afterSnapshot?.gameId) return null;
+        if (typeof SnapshotEngine.loadLiveState !== 'function') return null;
+
+        const persisted = SnapshotEngine.loadLiveState(afterSnapshot.gameId);
+        const pending = persisted?.pendingPresetEvent || null;
+        if (!pending) return null;
+        if (String(pending.gameId || '') !== String(afterSnapshot.gameId || '')) return null;
+
+        STATE.pendingPresetEvent = pending;
+        return pending;
+    }
+
+    function getDeterministicEffectKey(effect, pending) {
+        if (!effect || !pending?.eventKey) return effect?.effectKey;
+        return [
+            'preset_effect',
+            effect.gameId || pending.gameId || '',
+            pending.eventKey
+        ].join('|');
+    }
+
     const originalBuild = SnapshotEngine.build.bind(SnapshotEngine);
     SnapshotEngine.build = function buildWithNormalizedTransitionSource() {
         const hint = consumeTransitionSourceHint();
@@ -68,9 +90,11 @@
 
     const originalBuildPresetEffect = EventTracker.buildPresetEffect.bind(EventTracker);
     EventTracker.buildPresetEffect = function buildRecoverablePresetEffect(afterSnapshot) {
+        restorePersistedPendingPresetEvent(afterSnapshot);
         const pending = STATE.pendingPresetEvent || null;
         const effect = originalBuildPresetEffect(afterSnapshot);
         if (effect && pending) {
+            effect.effectKey = getDeterministicEffectKey(effect, pending);
             Object.defineProperty(effect, pendingEffectEvent, {
                 value: pending,
                 enumerable: false,
@@ -85,8 +109,21 @@
         const recoverable = collection === CONFIG.COLLECTIONS.PRESET_EFFECTS
             ? payload?.[pendingEffectEvent] || null
             : null;
-        return originalPostAppend(collection, payload, label).catch(error => {
-            if (recoverable && !STATE.pendingPresetEvent) {
+        const request = originalPostAppend(collection, payload, label);
+        if (!recoverable) return request;
+
+        return request.then(result => {
+            if (!STATE.pendingPresetEvent) {
+                SnapshotEngine.persistLiveState({
+                    active: !!STATE.liveParserTimer,
+                    pendingPresetEvent: null,
+                    pendingEffectRetry: false,
+                    consumedPresetEventKey: recoverable.eventKey || null
+                });
+            }
+            return result;
+        }).catch(error => {
+            if (!STATE.pendingPresetEvent) {
                 STATE.pendingPresetEvent = recoverable;
                 SnapshotEngine.persistLiveState({
                     active: !!STATE.liveParserTimer,
