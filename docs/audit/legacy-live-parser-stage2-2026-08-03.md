@@ -17,6 +17,10 @@ Tracking issue: #151.
 - the legacy storage key;
 - compatibility `persistLiveState`/`loadLiveState` bridges and dual-write migration.
 
+## Validation boundary
+
+The deletion commit passed syntax checks, runtime integrity, manual workflow, manual-state migration, legacy-boundary, reachability and bundle-order contracts before it was written to the branch. Standard pull-request workflows validate the trusted connector head separately.
+
 ## Exit criterion
 
 No automatic parser runtime or duplicate tactic watcher remains executable.
