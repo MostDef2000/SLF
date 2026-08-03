@@ -207,7 +207,8 @@ const report = {
     'Static evidence does not prove runtime reachability.',
     'String-based callbacks, browser globals and data-driven dispatch require manual review.',
     'Legacy markers identify review targets, not safe deletion candidates.',
-    'A module may contain both active and obsolete code and must be reviewed at symbol level.'
+    'A module may contain both active and obsolete code and must be reviewed at symbol level.',
+    'A manual classification records review coverage; it does not authorize deletion.'
   ],
   modules
 };
