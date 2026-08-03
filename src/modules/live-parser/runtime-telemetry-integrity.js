@@ -102,11 +102,7 @@
             if (typeof localStorage !== 'undefined') {
                 try {
                     localStorage.setItem(this.getStorageKey(gameId), JSON.stringify(migrated));
-                } catch (error) {
-                    if (typeof debugWarn === 'function') {
-                        debugWarn('[SLF] Manual match state migration failed', error);
-                    }
-                }
+                } catch (_) {}
             }
             return readStoredState(manualStatePrefix, gameId) || migrated;
         },
@@ -151,10 +147,7 @@
             try {
                 localStorage.setItem(this.getStorageKey(gameId), JSON.stringify(payload));
                 return payload;
-            } catch (error) {
-                if (typeof debugWarn === 'function') {
-                    debugWarn('[SLF] Manual match state persist failed', error);
-                }
+            } catch (_) {
                 return null;
             }
         },
