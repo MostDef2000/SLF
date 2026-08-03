@@ -5,8 +5,8 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const root = process.cwd();
-const eventTrackerSource = fs.readFileSync(path.join(root, 'src/modules/live-parser/event-tracker.js'), 'utf8');
-const runtimeIntegritySource = fs.readFileSync(path.join(root, 'src/modules/live-parser/runtime-telemetry-integrity.js'), 'utf8');
+const eventTrackerSource = fs.readFileSync(path.join(root, 'src/modules/manual-match-telemetry/event-tracker.js'), 'utf8');
+const runtimeIntegritySource = fs.readFileSync(path.join(root, 'src/modules/manual-match-telemetry/manual-match-runtime.js'), 'utf8');
 
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));

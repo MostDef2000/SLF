@@ -47,8 +47,9 @@
     "SnapshotEngine.clearLiveState"
   ],
   "nextRemovalGate": [
-    "Move active modules out of the live-parser directory and update dependency paths.",
-    "Retain the legacy storage key and compatibility bridge through the published transition window."
+    "Verify a published userscript contains the manual-state envelope and renamed module layout.",
+    "Verify one production manual event-to-effect path after upgrade.",
+    "Remove legacy-key dual-write and compatibility APIs in the sunset PR."
   ],
   "automaticLoop": {
     "status": "removed",
@@ -67,5 +68,12 @@
       "liveSegmentSnapshots",
       "liveAutoResumeChecked"
     ]
+  },
+  "activeModuleLayout": {
+    "status": "renamed",
+    "stage": 4,
+    "trackingIssue": 151,
+    "matchReading": "src/modules/match-reading",
+    "manualTelemetry": "src/modules/manual-match-telemetry"
   }
 }

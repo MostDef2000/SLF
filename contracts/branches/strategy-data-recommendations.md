@@ -116,7 +116,8 @@ This branch owns:
 ## Allowed areas
 
 - `src/modules/strategy-data-recommendations/**`
-- `src/modules/live-parser/**`
+- `src/modules/match-reading/**'
+      - 'src/modules/manual-match-telemetry/**`
 - `src/modules/tactics-presets/**`
 
 ## Forbidden areas

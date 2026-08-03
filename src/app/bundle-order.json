@@ -12,11 +12,11 @@
     "src/core/api.js",
     "src/modules/tactics-presets/preset-storage.js",
     "src/modules/tactics-presets/tactic-control-engine.js",
-    "src/modules/live-parser/match-state-parser.js",
-    "src/modules/live-parser/match-stats-parser.js",
-    "src/modules/live-parser/squad-parser.js",
-    "src/modules/live-parser/snapshot-engine.js",
-    "src/modules/live-parser/event-tracker.js",
+    "src/modules/match-reading/match-state-parser.js",
+    "src/modules/match-reading/match-stats-parser.js",
+    "src/modules/match-reading/squad-parser.js",
+    "src/modules/manual-match-telemetry/snapshot-engine.js",
+    "src/modules/manual-match-telemetry/event-tracker.js",
     "src/modules/strategy-data-recommendations/developer-hint-parser.js",
     "src/modules/strategy-data-recommendations/generator-advice-details-parser.js",
     "src/modules/strategy-data-recommendations/generator-expected-performance-and-strength-context.js",
@@ -37,7 +37,7 @@
     "src/app/ui-layer.js",
     "src/app/version-badge.js",
     "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
-    "src/modules/live-parser/runtime-telemetry-integrity.js",
+    "src/modules/manual-match-telemetry/manual-match-runtime.js",
     "src/modules/transfer-analyzer/tm-enrichment-layer.js",
     "src/modules/transfer-analyzer/slf-alter-layer.js",
     "src/modules/transfer-analyzer/transfer-market-analyzer.js",
@@ -125,7 +125,7 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/match-state-parser.js",
+            "file": "src/modules/match-reading/match-state-parser.js",
             "symbols": [
               "MatchStateParser"
             ],
@@ -318,21 +318,21 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/match-state-parser.js",
+            "file": "src/modules/match-reading/match-state-parser.js",
             "symbols": [
               "MatchStateParser"
             ],
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/snapshot-engine.js",
+            "file": "src/modules/manual-match-telemetry/snapshot-engine.js",
             "symbols": [
               "SnapshotEngine"
             ],
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/event-tracker.js",
+            "file": "src/modules/manual-match-telemetry/event-tracker.js",
             "symbols": [
               "EventTracker"
             ],
@@ -361,7 +361,7 @@
         ]
       },
       {
-        "file": "src/modules/live-parser/match-state-parser.js",
+        "file": "src/modules/match-reading/match-state-parser.js",
         "declares": [
           "MatchTimingModel",
           "MatchStateParser"
@@ -386,7 +386,7 @@
         ]
       },
       {
-        "file": "src/modules/live-parser/match-stats-parser.js",
+        "file": "src/modules/match-reading/match-stats-parser.js",
         "declares": [
           "MatchStatsParser"
         ],
@@ -409,7 +409,7 @@
         ]
       },
       {
-        "file": "src/modules/live-parser/squad-parser.js",
+        "file": "src/modules/match-reading/squad-parser.js",
         "declares": [
           "SquadParser"
         ],
@@ -430,7 +430,7 @@
         ]
       },
       {
-        "file": "src/modules/live-parser/snapshot-engine.js",
+        "file": "src/modules/manual-match-telemetry/snapshot-engine.js",
         "declares": [
           "SnapshotEngine"
         ],
@@ -464,7 +464,7 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/match-state-parser.js",
+            "file": "src/modules/match-reading/match-state-parser.js",
             "symbols": [
               "MatchStateParser",
               "MatchTimingModel"
@@ -472,14 +472,14 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/match-stats-parser.js",
+            "file": "src/modules/match-reading/match-stats-parser.js",
             "symbols": [
               "MatchStatsParser"
             ],
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/squad-parser.js",
+            "file": "src/modules/match-reading/squad-parser.js",
             "symbols": [
               "SquadParser"
             ],
@@ -535,7 +535,7 @@
         ]
       },
       {
-        "file": "src/modules/live-parser/event-tracker.js",
+        "file": "src/modules/manual-match-telemetry/event-tracker.js",
         "declares": [
           "EventTracker"
         ],
@@ -568,7 +568,7 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/match-state-parser.js",
+            "file": "src/modules/match-reading/match-state-parser.js",
             "symbols": [
               "MatchStateParser",
               "MatchTimingModel"
@@ -576,7 +576,7 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/snapshot-engine.js",
+            "file": "src/modules/manual-match-telemetry/snapshot-engine.js",
             "symbols": [
               "SnapshotEngine"
             ],
@@ -755,7 +755,7 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/match-state-parser.js",
+            "file": "src/modules/match-reading/match-state-parser.js",
             "symbols": [
               "MatchStateParser",
               "MatchTimingModel"
@@ -763,7 +763,7 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/snapshot-engine.js",
+            "file": "src/modules/manual-match-telemetry/snapshot-engine.js",
             "symbols": [
               "SnapshotEngine"
             ],
@@ -1072,21 +1072,21 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/match-state-parser.js",
+            "file": "src/modules/match-reading/match-state-parser.js",
             "symbols": [
               "MatchStateParser"
             ],
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/match-stats-parser.js",
+            "file": "src/modules/match-reading/match-stats-parser.js",
             "symbols": [
               "MatchStatsParser"
             ],
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/snapshot-engine.js",
+            "file": "src/modules/manual-match-telemetry/snapshot-engine.js",
             "symbols": [
               "SnapshotEngine"
             ],
@@ -1144,14 +1144,14 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/match-state-parser.js",
+            "file": "src/modules/match-reading/match-state-parser.js",
             "symbols": [
               "MatchStateParser"
             ],
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/snapshot-engine.js",
+            "file": "src/modules/manual-match-telemetry/snapshot-engine.js",
             "symbols": [
               "SnapshotEngine"
             ],
@@ -1179,7 +1179,7 @@
         ]
       },
       {
-        "file": "src/modules/live-parser/runtime-telemetry-integrity.js",
+        "file": "src/modules/manual-match-telemetry/manual-match-runtime.js",
         "declares": [],
         "public": [],
         "requires": [
@@ -1207,7 +1207,7 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/match-state-parser.js",
+            "file": "src/modules/match-reading/match-state-parser.js",
             "symbols": [
               "MatchStateParser",
               "MatchTimingModel"
@@ -1215,14 +1215,14 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/snapshot-engine.js",
+            "file": "src/modules/manual-match-telemetry/snapshot-engine.js",
             "symbols": [
               "SnapshotEngine"
             ],
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/event-tracker.js",
+            "file": "src/modules/manual-match-telemetry/event-tracker.js",
             "symbols": [
               "EventTracker"
             ],

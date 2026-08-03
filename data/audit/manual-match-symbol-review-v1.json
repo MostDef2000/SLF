@@ -4,7 +4,7 @@
   "scope": "Symbol-level boundary between the active manual match workflow and the historical automatic live-parser loop. This file does not authorize deletion.",
   "classifications": {
     "LEGACY_AUTOMATIC_LOOP": "Historical 15-second background parser code not invoked by the current bootstrap or UI.",
-    "LEGACY_DUPLICATE_WATCHER": "Older manual watcher implementation superseded by runtime-telemetry-integrity.js.",
+    "LEGACY_DUPLICATE_WATCHER": "Older manual watcher implementation superseded by manual-match-runtime.js.",
     "LEGACY_NAMED_ACTIVE_STATE": "Historically named state still used by the current pending-event persistence or compatibility envelope.",
     "ACTIVE_MANUAL_BOUNDARY": "Active manual workflow code that must remain covered during refactoring.",
     "LEGACY_STATE_RESIDUE": "State retained only by the compatibility envelope after the automatic runtime was deleted.",
@@ -18,7 +18,7 @@
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
         "src/core/config.js",
-        "src/modules/live-parser/snapshot-engine.js"
+        "src/modules/manual-match-telemetry/snapshot-engine.js"
       ],
       "evidence": [
         "Stores in-memory samples created only by explicit manual hint requests."
@@ -28,10 +28,10 @@
     {
       "symbol": "SnapshotEngine.rememberManualSnapshot",
       "token": "rememberManualSnapshot",
-      "owner": "src/modules/live-parser/snapshot-engine.js",
+      "owner": "src/modules/manual-match-telemetry/snapshot-engine.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
-        "src/modules/live-parser/snapshot-engine.js",
+        "src/modules/manual-match-telemetry/snapshot-engine.js",
         "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js"
       ],
       "evidence": [
@@ -46,7 +46,7 @@
       "classification": "LEGACY_NAMED_ACTIVE_STATE",
       "allowedFiles": [
         "src/core/config.js",
-        "src/modules/live-parser/snapshot-engine.js"
+        "src/modules/manual-match-telemetry/snapshot-engine.js"
       ],
       "evidence": [
         "The original snapshot engine still owns the legacy state-key constant.",
@@ -61,11 +61,11 @@
     {
       "symbol": "SnapshotEngine.persistLiveState",
       "token": "persistLiveState",
-      "owner": "src/modules/live-parser/snapshot-engine.js",
+      "owner": "src/modules/manual-match-telemetry/snapshot-engine.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
-        "src/modules/live-parser/snapshot-engine.js",
-        "src/modules/live-parser/runtime-telemetry-integrity.js"
+        "src/modules/manual-match-telemetry/snapshot-engine.js",
+        "src/modules/manual-match-telemetry/manual-match-runtime.js"
       ],
       "evidence": [
         "The original method is retained for the legacy interval and dual-write compatibility bridge only.",
@@ -76,11 +76,11 @@
     {
       "symbol": "SnapshotEngine.loadLiveState",
       "token": "loadLiveState",
-      "owner": "src/modules/live-parser/snapshot-engine.js",
+      "owner": "src/modules/manual-match-telemetry/snapshot-engine.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
-        "src/modules/live-parser/snapshot-engine.js",
-        "src/modules/live-parser/runtime-telemetry-integrity.js"
+        "src/modules/manual-match-telemetry/snapshot-engine.js",
+        "src/modules/manual-match-telemetry/manual-match-runtime.js"
       ],
       "evidence": [
         "The method remains a compatibility bridge while loadManualState handles active pending-event recovery."
@@ -90,12 +90,12 @@
     {
       "symbol": "SnapshotEngine.persistManualState",
       "token": "persistManualState",
-      "owner": "src/modules/live-parser/runtime-telemetry-integrity.js",
+      "owner": "src/modules/manual-match-telemetry/manual-match-runtime.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
-        "src/modules/live-parser/snapshot-engine.js",
-        "src/modules/live-parser/event-tracker.js",
-        "src/modules/live-parser/runtime-telemetry-integrity.js",
+        "src/modules/manual-match-telemetry/snapshot-engine.js",
+        "src/modules/manual-match-telemetry/event-tracker.js",
+        "src/modules/manual-match-telemetry/manual-match-runtime.js",
         "src/modules/strategy-data-recommendations/recommendation-engine.js"
       ],
       "evidence": [
@@ -106,10 +106,10 @@
     {
       "symbol": "SnapshotEngine.loadManualState",
       "token": "loadManualState",
-      "owner": "src/modules/live-parser/runtime-telemetry-integrity.js",
+      "owner": "src/modules/manual-match-telemetry/manual-match-runtime.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
-        "src/modules/live-parser/runtime-telemetry-integrity.js"
+        "src/modules/manual-match-telemetry/manual-match-runtime.js"
       ],
       "evidence": [
         "Prefers the new manual key and migrates a valid legacy record on read."
@@ -119,10 +119,10 @@
     {
       "symbol": "SnapshotEngine.clearManualState",
       "token": "clearManualState",
-      "owner": "src/modules/live-parser/runtime-telemetry-integrity.js",
+      "owner": "src/modules/manual-match-telemetry/manual-match-runtime.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
-        "src/modules/live-parser/runtime-telemetry-integrity.js"
+        "src/modules/manual-match-telemetry/manual-match-runtime.js"
       ],
       "evidence": [
         "Clears both the manual and legacy keys during the compatibility window."
@@ -132,10 +132,10 @@
     {
       "symbol": "installManualWatcher",
       "token": "installManualWatcher",
-      "owner": "src/modules/live-parser/runtime-telemetry-integrity.js",
+      "owner": "src/modules/manual-match-telemetry/manual-match-runtime.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
-        "src/modules/live-parser/runtime-telemetry-integrity.js"
+        "src/modules/manual-match-telemetry/manual-match-runtime.js"
       ],
       "evidence": [
         "This is the active manual tactic watcher installation path."
@@ -231,5 +231,14 @@
     "issue": 151,
     "status": "implemented",
     "exitCriterion": "Runtime STATE and legacy compatibility payload contain manual-workflow concepts only."
+  },
+  "stage4": {
+    "issue": 151,
+    "status": "implemented",
+    "exitCriterion": "Active match-reading and manual telemetry modules no longer live under the live-parser path.",
+    "moduleLayout": {
+      "matchReading": "src/modules/match-reading",
+      "manualTelemetry": "src/modules/manual-match-telemetry"
+    }
   }
 }

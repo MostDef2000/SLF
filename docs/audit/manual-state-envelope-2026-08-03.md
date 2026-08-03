@@ -51,7 +51,7 @@ This preserves pending events for users upgrading from an older published usersc
 
 ## Runtime changes
 
-`runtime-telemetry-integrity.js` now exposes:
+`manual-match-runtime.js` now exposes:
 
 - `SnapshotEngine.manualMatchState`;
 - `SnapshotEngine.persistManualState()`;
