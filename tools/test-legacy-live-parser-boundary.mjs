@@ -81,10 +81,9 @@ const strategyUi = sourceByFile.get('src/modules/strategy-data-recommendations/s
 assert.match(bootstrap, /Manual-only Coach Hint mode/);
 assert.doesNotMatch(bootstrap, /SnapshotEngine\.(?:startLive|stopLive|autoResumeIfNeeded)\s*\(/);
 assert.doesNotMatch(uiLayer, /SnapshotEngine\.(?:startLive|stopLive|autoResumeIfNeeded)\s*\(/);
-assert.match(snapshotEngine, /STATE\.liveParserTimer\s*=\s*setInterval\s*\(/);
-assert.match(snapshotEngine, /},\s*15000\s*\);/);
-assert.match(eventTracker, /startManualTacticWatcher\s*\(\)/);
-assert.doesNotMatch(eventTracker, /EventTracker\.startManualTacticWatcher\s*\(/);
+assert.doesNotMatch(snapshotEngine, /startLive\s*\(|stopLive\s*\(|autoResumeIfNeeded\s*\(/);
+assert.doesNotMatch(snapshotEngine, /setInterval\s*\(|15000|rememberLiveSnapshot/);
+assert.doesNotMatch(eventTracker, /startManualTacticWatcher\s*\(/);
 assert.match(runtimeIntegrity, /function\s+installManualWatcher\s*\(/);
 assert.match(runtimeIntegrity, /scheduleManualWatcher\s*\(\)/);
 assert.match(runtimeIntegrity, /pendingPresetEvent/);

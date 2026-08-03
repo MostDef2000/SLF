@@ -260,64 +260,6 @@
             return diff;
         },
 
-        startManualTacticWatcher() {
-            if (STATE.tacticWatcherStarted) return;
-            if (!location.pathname.includes('/game.php')) return;
-            const ids = MatchStatsParser.getAllTeamIds();
-            if (!MatchStatsParser.detectMyTeamId(ids, MatchStatsParser.readTeamNames())) return;
-            STATE.tacticWatcherStarted = true;
-            STATE.lastManualTactic = getCurrentTactic();
-            document.body.addEventListener('change', e => {
-                const el = e.target;
-                if (!el || !el.name) return;
-                const isTacticInput = el.matches('input[type="radio"], input[type="checkbox"]') && (
-                    ['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot'].includes(el.name) || el.name.startsWith('priority_')
-                );
-                if (!isTacticInput) return;
-                if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
-                clearTimeout(STATE.manualChangeTimer);
-                STATE.manualChangeTimer = setTimeout(() => {
-                    if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
-                    const current = getCurrentTactic();
-                    const changed = this.diffTactic(STATE.lastManualTactic, current);
-                    if (!Object.keys(changed).length) return;
-                    const snapshot = SnapshotEngine.build();
-                    snapshot.ruleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
-                    const ts = Date.now();
-                    const generationWindow = snapshot?.generationWindow || MatchStateParser.getGenerationWindow(snapshot?.minute);
-                    const targetGenerationWindow = MatchTimingModel.getTargetWindowAfterChange(snapshot?.minute);
-                    const event = {
-                        ts,
-                        recordType: 'preset_event',
-                        schemaVersion: 3,
-                        parserVersion: 'manual_tactic_event_generation_v4_tactic_telemetry',
-                        eventKey: ['manual_tactic_event', MatchStateParser.getGameId(), snapshot.minute ?? '', snapshot.bucket || '', ts].join('|'),
-                        type: 'manual_change',
-                        gameId: MatchStateParser.getGameId(),
-                        minute: snapshot.minute,
-                        bucket: snapshot.bucket,
-                        generationWindow,
-                        targetGenerationWindow,
-                        targetBucket: targetGenerationWindow?.label || snapshot.bucket,
-                        timingModel: 'generation_windows_v1_last_change_before_next_window',
-                        myTeam: snapshot.myTeam,
-                        changed,
-                        tactic: current,
-                        ruleDecision: this.compactRuleDecision(snapshot.ruleDecision),
-                        tacticTelemetry: snapshot.tacticTelemetry || null,
-                        beforeSnapshot: snapshot,
-                        snapshot
-                    };
-                    STATE.pendingPresetEvent = event;
-                    SnapshotEngine.freezeRecommendationsAfterTacticChange('manual_change', snapshot);
-                    void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, event, 'manual tactic event history')
-                        .then(() => UI.addParserLog('Ручное изменение тактики сохранено'))
-                        .catch(error => UI.addParserLog(`Ошибка сохранения изменения тактики: ${error?.kind || 'unknown'}`));
-                    STATE.lastManualTactic = current;
-                }, 500);
-            }, true);
-            UI.addParserLog('Manual tactic watcher активен');
-        }
     };
 
     (function installTacticTelemetryEnvelope() {
