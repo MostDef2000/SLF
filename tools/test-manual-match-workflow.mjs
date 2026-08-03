@@ -85,6 +85,13 @@ function createHarness({ effectPostFails = false, persistedPending = null } = {}
   let storedPending = persistedPending;
 
   const localStorageData = new Map();
+  if (persistedPending) {
+    localStorageData.set('slf_live_parser_state_v2:game-1', JSON.stringify({
+      schema: 'slf_live_parser_state_v2',
+      gameId: 'game-1',
+      pendingPresetEvent: clone(persistedPending)
+    }));
+  }
   const context = {
     console,
     Object,
@@ -118,6 +125,11 @@ function createHarness({ effectPostFails = false, persistedPending = null } = {}
       },
       setItem(key, value) {
         localStorageData.set(key, String(value));
+        if (key.startsWith('slf_manual_match_state_v1:')) {
+          const parsed = JSON.parse(String(value));
+          persisted.push(clone(parsed));
+          storedPending = clone(parsed.pendingPresetEvent || null);
+        }
       },
       removeItem(key) {
         localStorageData.delete(key);
@@ -135,7 +147,6 @@ function createHarness({ effectPostFails = false, persistedPending = null } = {}
       presetProgression: null,
       lastRuleDecision: null,
       lastManualTelemetryFingerprint: null,
-      liveParserTimer: null,
       suppressManualWatcherUntil: 0,
       tacticWatcherStarted: false,
       lastManualTactic: null,
@@ -205,24 +216,7 @@ function createHarness({ effectPostFails = false, persistedPending = null } = {}
       compactSnapshotForStorage(snapshot) {
         return clone(snapshot);
       },
-      freezeRecommendationsAfterTacticChange() {},
-      persistLiveState(value) {
-        const copy = clone(value);
-        persisted.push(copy);
-        if (Object.prototype.hasOwnProperty.call(value, 'pendingPresetEvent')) {
-          storedPending = clone(value.pendingPresetEvent);
-        } else if (context.STATE.pendingPresetEvent) {
-          storedPending = clone(context.STATE.pendingPresetEvent);
-        }
-      },
-      loadLiveState(gameId) {
-        if (!storedPending) return null;
-        return {
-          schema: 'slf_live_parser_state_v2',
-          gameId,
-          pendingPresetEvent: clone(storedPending)
-        };
-      }
+      freezeRecommendationsAfterTacticChange() {}
     },
     Api: {
       postAppend(collection, payload, label) {

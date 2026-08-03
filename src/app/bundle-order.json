@@ -90,7 +90,6 @@
           "BASE_LABELS",
           "DEFAULT_CUSTOM_PRESETS",
           "STATE",
-          "LIVE_PARSER_STATE_PREFIX",
           "LIVE_RECOMMENDATION_HISTORY_LIMIT",
           "LAST_PRESET_STORAGE_KEY",
           "RECENT_PRESETS_STORAGE_KEY",
@@ -108,7 +107,6 @@
           "BASE_LABELS",
           "DEFAULT_CUSTOM_PRESETS",
           "STATE",
-          "LIVE_PARSER_STATE_PREFIX",
           "PresetUsageTracker",
           "debugLog",
           "debugWarn",
@@ -442,9 +440,7 @@
             "file": "src/core/config.js",
             "symbols": [
               "CONFIG",
-              "LIVE_PARSER_STATE_PREFIX",
               "STATE",
-              "debugWarn",
               "num"
             ],
             "phase": "runtime"
@@ -530,7 +526,6 @@
         ],
         "hostCapabilities": [
           "location",
-          "localStorage",
           "console"
         ]
       },
