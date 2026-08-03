@@ -1,0 +1,54 @@
+{
+  "schema": "slf_manual_state_envelope_contract_v1",
+  "reviewedAt": "2026-08-03",
+  "newState": {
+    "storagePrefix": "slf_manual_match_state_v1",
+    "schema": "slf_manual_match_state_v1",
+    "fields": [
+      "gameId",
+      "ts",
+      "url",
+      "pendingPresetEvent",
+      "pendingEffectRetry",
+      "consumedPresetEventKey",
+      "manualTacticEventPending",
+      "recommendationFreeze",
+      "presetProgression",
+      "lastRecommendationHtml",
+      "lastRecommendationMeta",
+      "migratedFrom"
+    ],
+    "forbiddenLegacyFields": [
+      "active",
+      "lastSavedBucket",
+      "liveWaitStatus",
+      "liveStartedAt",
+      "liveSegmentSnapshots"
+    ]
+  },
+  "legacyCompatibility": {
+    "storagePrefix": "slf_live_parser_state_v2",
+    "readFallback": true,
+    "migrateOnRead": true,
+    "dualWrite": true,
+    "deleteLegacyOnMigration": false,
+    "clearBothKeys": true,
+    "reason": "Older published userscripts and in-progress pending events must remain recoverable during the transition."
+  },
+  "activeApi": [
+    "SnapshotEngine.persistManualState",
+    "SnapshotEngine.loadManualState",
+    "SnapshotEngine.clearManualState"
+  ],
+  "compatibilityApi": [
+    "SnapshotEngine.persistLiveState",
+    "SnapshotEngine.loadLiveState",
+    "SnapshotEngine.clearLiveState"
+  ],
+  "nextRemovalGate": [
+    "Migrate RecommendationEngine persistence to persistManualState.",
+    "Remove liveWaitStatus reset from the manual hint UI or replace it with manual-state semantics.",
+    "Delete the automatic interval methods and loop-only STATE fields in a separate PR.",
+    "Retain legacy-key read fallback for at least one published userscript transition."
+  ]
+}
