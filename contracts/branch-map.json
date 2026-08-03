@@ -13,8 +13,12 @@
     },
     "strategy-data-recommendations": {
       "type": "module",
-      "owns": ["src/modules/strategy-data-recommendations/**", "src/modules/match-reading/**'
-      - 'src/modules/manual-match-telemetry/**", "src/modules/tactics-presets/**"]
+      "owns": [
+        "src/modules/strategy-data-recommendations/**",
+        "src/modules/match-reading/**",
+        "src/modules/manual-match-telemetry/**",
+        "src/modules/tactics-presets/**"
+      ]
     },
     "transfer-analyzer": {
       "type": "module",
