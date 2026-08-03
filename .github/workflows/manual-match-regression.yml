@@ -11,11 +11,14 @@ on:
       - 'releases/latest.user.js'
       - 'tools/test-runtime-telemetry-integrity.mjs'
       - 'tools/test-manual-match-workflow.mjs'
+      - 'tools/test-manual-match-state-bridge.mjs'
       - 'tools/test-legacy-live-parser-boundary.mjs'
       - 'tools/audit-runtime-reachability.mjs'
       - 'data/audit/runtime-reachability-review-v1.json'
       - 'data/audit/manual-match-symbol-review-v1.json'
+      - 'data/audit/manual-state-envelope-v1.json'
       - 'docs/audit/manual-match-regression-boundary-2026-08-03.md'
+      - 'docs/audit/manual-state-envelope-2026-08-03.md'
       - '.github/workflows/manual-match-regression.yml'
   workflow_dispatch:
 
@@ -31,12 +34,16 @@ jobs:
         run: |
           node --check tools/test-runtime-telemetry-integrity.mjs
           node --check tools/test-manual-match-workflow.mjs
+          node --check tools/test-manual-match-state-bridge.mjs
           node --check tools/test-legacy-live-parser-boundary.mjs
           node -e "JSON.parse(require('node:fs').readFileSync('data/audit/manual-match-symbol-review-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/audit/manual-state-envelope-v1.json', 'utf8'))"
       - name: Run runtime integrity regression
         run: node tools/test-runtime-telemetry-integrity.mjs
       - name: Run manual match workflow regression
         run: node tools/test-manual-match-workflow.mjs
+      - name: Run manual state migration regression
+        run: node tools/test-manual-match-state-bridge.mjs
       - name: Enforce legacy boundary
         run: node tools/test-legacy-live-parser-boundary.mjs
       - name: Revalidate reachability inventory

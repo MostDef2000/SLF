@@ -72,11 +72,11 @@
         "src/modules/strategy-data-recommendations/recommendation-engine.js"
       ],
       "evidence": [
-        "The timer itself belongs to the old loop, while active persistence code still serializes an active flag from this field.",
-        "RecommendationEngine persists manual recommendation state through the same historical active flag."
+        "The timer itself belongs to the old loop, while active compatibility persistence still serializes an active flag from this field.",
+        "RecommendationEngine persists manual recommendation state through the compatibility bridge."
       ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["replace active flag semantics in persisted manual state"]
+      "removalBlockedBy": ["migrate remaining active callers to persistManualState"]
     },
     {
       "symbol": "STATE.lastSavedBucket",
@@ -103,7 +103,7 @@
         "The active manual hint path clears it to prevent stale live-only state before rendering a new recommendation."
       ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["replace manual reset semantics during state-envelope extraction"]
+      "removalBlockedBy": ["replace manual reset semantics during caller migration"]
     },
     {
       "symbol": "STATE.liveSegmentSnapshots",
@@ -141,9 +141,12 @@
       "owner": "src/core/config.js",
       "classification": "LEGACY_NAMED_ACTIVE_STATE",
       "allowedFiles": ["src/core/config.js", "src/modules/live-parser/snapshot-engine.js"],
-      "evidence": ["Despite its name, the key currently stores active pendingPresetEvent recovery state."],
+      "evidence": [
+        "The original snapshot engine still owns the legacy state-key constant.",
+        "The manual bridge uses the frozen legacy key string without adding a new manifest dependency."
+      ],
       "deletionStatus": "KEEP_UNTIL_MIGRATED",
-      "removalBlockedBy": ["backward-compatible manual-state key migration"]
+      "removalBlockedBy": ["published transition window", "legacy fallback removal PR"]
     },
     {
       "symbol": "SnapshotEngine.persistLiveState",
@@ -157,10 +160,10 @@
         "src/modules/strategy-data-recommendations/recommendation-engine.js"
       ],
       "evidence": [
-        "Persists pending preset events and effect retry state used by the manual workflow.",
-        "Persists the latest manual recommendation metadata from RecommendationEngine."
+        "The method remains a compatibility bridge that dual-writes legacy and manual state.",
+        "Remaining active callers must migrate before the bridge can be removed."
       ],
-      "deletionStatus": "KEEP"
+      "deletionStatus": "KEEP_UNTIL_MIGRATED"
     },
     {
       "symbol": "SnapshotEngine.loadLiveState",
@@ -168,7 +171,34 @@
       "owner": "src/modules/live-parser/snapshot-engine.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": ["src/modules/live-parser/snapshot-engine.js", "src/modules/live-parser/runtime-telemetry-integrity.js"],
-      "evidence": ["Restores a pending preset event after page reload."],
+      "evidence": ["The method remains a compatibility bridge while loadManualState handles active pending-event recovery."],
+      "deletionStatus": "KEEP_UNTIL_MIGRATED"
+    },
+    {
+      "symbol": "SnapshotEngine.persistManualState",
+      "token": "persistManualState",
+      "owner": "src/modules/live-parser/runtime-telemetry-integrity.js",
+      "classification": "ACTIVE_MANUAL_BOUNDARY",
+      "allowedFiles": ["src/modules/live-parser/runtime-telemetry-integrity.js"],
+      "evidence": ["Dual-writes active manual state to the new envelope and the legacy compatibility key."],
+      "deletionStatus": "KEEP"
+    },
+    {
+      "symbol": "SnapshotEngine.loadManualState",
+      "token": "loadManualState",
+      "owner": "src/modules/live-parser/runtime-telemetry-integrity.js",
+      "classification": "ACTIVE_MANUAL_BOUNDARY",
+      "allowedFiles": ["src/modules/live-parser/runtime-telemetry-integrity.js"],
+      "evidence": ["Prefers the new manual key and migrates a valid legacy record on read."],
+      "deletionStatus": "KEEP"
+    },
+    {
+      "symbol": "SnapshotEngine.clearManualState",
+      "token": "clearManualState",
+      "owner": "src/modules/live-parser/runtime-telemetry-integrity.js",
+      "classification": "ACTIVE_MANUAL_BOUNDARY",
+      "allowedFiles": ["src/modules/live-parser/runtime-telemetry-integrity.js"],
+      "evidence": ["Clears both the manual and legacy keys during the compatibility window."],
       "deletionStatus": "KEEP"
     },
     {
@@ -182,9 +212,9 @@
     }
   ],
   "nonGoals": [
-    "No runtime source is modified.",
-    "No symbol is approved for deletion.",
-    "No userscript version is changed.",
-    "No persisted browser state is migrated."
+    "No automatic-loop symbol is deleted by the state-envelope extraction.",
+    "No userscript version is changed directly by the PR.",
+    "No legacy state key is deleted during migration.",
+    "No tactical recommendation policy is changed."
   ]
 }
