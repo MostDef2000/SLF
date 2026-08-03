@@ -99,7 +99,8 @@ The first removal-oriented review queue is intentionally limited to the match/ma
 - `STATE.lastSavedBucket`;
 - `STATE.liveWaitStatus`;
 - `STATE.liveSegmentSnapshots`;
-- the older `EventTracker.startManualTacticWatcher` implementation.
+- the older `EventTracker.startManualTacticWatcher` implementation;
+- `LIVE_PARSER_STATE_PREFIX` and persisted-state envelope fields that may still support pending-event recovery.
 
 None of these identifiers is approved for deletion by this PR. Each requires repository-wide reference evidence and browser-level regression coverage.
 
@@ -123,8 +124,8 @@ A later removal PR must provide all of the following for each deleted symbol:
 ## Proposed follow-up sequence
 
 1. Merge this audit-only baseline.
-2. Add browser-oriented regression coverage for the manual buttons and pending-event lifecycle.
-3. Complete symbol-level reference tracing for `snapshot-engine.js`, `event-tracker.js` and the related `STATE` fields.
+2. Complete symbol-level call-path evidence for `snapshot-engine.js`, `event-tracker.js`, `config.js`, `runtime-telemetry-integrity.js`, `bootstrap.js` and `ui-layer.js`.
+3. Add browser-oriented regression coverage for the manual buttons and pending-event lifecycle.
 4. Extract active manual telemetry into clearly named modules without behavior changes.
 5. Delete only the confirmed automatic-loop symbols in a separate PR.
 6. Audit transfer side-effect modules, collection aliases, deprecated presets and compatibility wrappers as separate scopes.
