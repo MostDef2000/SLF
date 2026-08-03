@@ -97,6 +97,13 @@ assert.doesNotMatch(strategyUi, /liveWaitStatus|rememberLiveSnapshot/);
 assert.match(strategyUi, /rememberManualSnapshot/);
 assert.match(snapshotEngine, /rememberManualSnapshot\s*\(snapshot\)/);
 
+const configSource = sourceByFile.get('src/core/config.js') || '';
+for (const token of ['liveParserTimer', 'lastSavedBucket', 'liveWaitStatus', 'liveStartedAt', 'liveSegmentSnapshots', 'liveAutoResumeChecked']) {
+  assert.doesNotMatch(configSource, new RegExp(`\b${token}\b`));
+  assert.doesNotMatch(snapshotEngine, new RegExp(`\b${token}\b`));
+}
+assert.doesNotMatch(snapshotEngine, /compactSegmentSnapshotsForStorage/);
+
 console.log('[legacy-live-parser-boundary-test] passed');
 for (const finding of findings) {
   console.log(`${finding.classification} ${finding.symbol} occurrences=${finding.totalOccurrences} files=${finding.files.join(',')}`);
