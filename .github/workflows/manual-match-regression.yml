@@ -1,0 +1,43 @@
+name: Manual match workflow regression
+
+on:
+  pull_request:
+    paths:
+      - 'src/core/config.js'
+      - 'src/modules/live-parser/**'
+      - 'src/app/bootstrap.js'
+      - 'src/app/ui-layer.js'
+      - 'src/app/bundle-order.json'
+      - 'releases/latest.user.js'
+      - 'tools/test-runtime-telemetry-integrity.mjs'
+      - 'tools/test-manual-match-workflow.mjs'
+      - 'tools/test-legacy-live-parser-boundary.mjs'
+      - 'tools/audit-runtime-reachability.mjs'
+      - 'data/audit/runtime-reachability-review-v1.json'
+      - 'data/audit/manual-match-symbol-review-v1.json'
+      - 'docs/audit/manual-match-regression-boundary-2026-08-03.md'
+      - '.github/workflows/manual-match-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Check regression test syntax
+        run: |
+          node --check tools/test-runtime-telemetry-integrity.mjs
+          node --check tools/test-manual-match-workflow.mjs
+          node --check tools/test-legacy-live-parser-boundary.mjs
+          node -e "JSON.parse(require('node:fs').readFileSync('data/audit/manual-match-symbol-review-v1.json', 'utf8'))"
+      - name: Run runtime integrity regression
+        run: node tools/test-runtime-telemetry-integrity.mjs
+      - name: Run manual match workflow regression
+        run: node tools/test-manual-match-workflow.mjs
+      - name: Enforce legacy boundary
+        run: node tools/test-legacy-live-parser-boundary.mjs
+      - name: Revalidate reachability inventory
+        run: node tools/audit-runtime-reachability.mjs --validate-review
