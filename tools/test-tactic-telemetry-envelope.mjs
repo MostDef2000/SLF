@@ -105,10 +105,6 @@ const context = {
     sendMatchResult(snapshot) {
       return Promise.resolve(snapshot);
     },
-    compactSnapshotForStorage(snapshot) {
-      return { ...snapshot };
-    },
-    persistLiveState() {},
     freezeRecommendationsAfterTacticChange() {}
   },
   PresetUsageTracker: { record() {} },
@@ -129,6 +125,17 @@ vm.createContext(context);
 vm.runInContext(`${source}\n;globalThis.__EventTracker = EventTracker;`, context, {
   filename: 'event-tracker.js'
 });
+
+assert.equal(
+  typeof context.SnapshotEngine.compactSnapshotForStorage,
+  'undefined',
+  'telemetry initialization must not recreate or require legacy snapshot storage'
+);
+assert.equal(
+  source.includes('SnapshotEngine.compactSnapshotForStorage.bind'),
+  false,
+  'event tracker must not bind the removed compactSnapshotForStorage API'
+);
 
 function stats(myXG, oppXG) {
   return [
