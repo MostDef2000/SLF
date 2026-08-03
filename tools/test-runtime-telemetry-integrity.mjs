@@ -7,13 +7,19 @@ import vm from 'node:vm';
 const root = process.cwd();
 const source = fs.readFileSync(path.join(root, 'src/modules/live-parser/runtime-telemetry-integrity.js'), 'utf8');
 
-function createHarness({ pathname = '/other.php', ownMatch = true } = {}) {
+function createHarness({
+  pathname = '/other.php',
+  ownMatch = true,
+  effectPostFails = true,
+  persistedPending = null
+} = {}) {
   const posted = [];
   const persisted = [];
   const listeners = {};
   let tactic = { def_line: '1' };
   let buildStatus = 'live';
   let buildCount = 0;
+  let storedPending = persistedPending;
 
   const document = {
     readyState: 'complete',
@@ -91,8 +97,21 @@ function createHarness({ pathname = '/other.php', ownMatch = true } = {}) {
       sendMatchResult(snapshot) {
         return Promise.resolve({ status: snapshot.status });
       },
+      loadLiveState(gameId) {
+        if (!storedPending) return null;
+        return {
+          schema: 'slf_live_parser_state_v2',
+          gameId,
+          pendingPresetEvent: storedPending
+        };
+      },
       persistLiveState(value) {
         persisted.push(value);
+        if (Object.prototype.hasOwnProperty.call(value, 'pendingPresetEvent')) {
+          storedPending = value.pendingPresetEvent;
+        } else if (context.STATE.pendingPresetEvent) {
+          storedPending = context.STATE.pendingPresetEvent;
+        }
       }
     },
     EventTracker: {
@@ -100,7 +119,11 @@ function createHarness({ pathname = '/other.php', ownMatch = true } = {}) {
         const pending = context.STATE.pendingPresetEvent;
         if (!pending) return null;
         context.STATE.pendingPresetEvent = null;
-        return { recordType: 'preset_effect', gameId: snapshot.gameId, effectKey: 'effect-1' };
+        return {
+          recordType: 'preset_effect',
+          gameId: snapshot.gameId,
+          effectKey: `unstable-${Date.now()}`
+        };
       },
       diffTactic(oldTactic, newTactic) {
         return JSON.stringify(oldTactic) === JSON.stringify(newTactic)
@@ -114,7 +137,9 @@ function createHarness({ pathname = '/other.php', ownMatch = true } = {}) {
     Api: {
       postAppend(collection, payload, label) {
         posted.push({ collection, payload, label });
-        if (collection === 'preset_effects_v2') return Promise.reject(Object.assign(new Error('network'), { kind: 'network' }));
+        if (collection === 'preset_effects_v2' && effectPostFails) {
+          return Promise.reject(Object.assign(new Error('network'), { kind: 'network' }));
+        }
         return Promise.resolve({ status: 200 });
       }
     },
@@ -134,6 +159,7 @@ function createHarness({ pathname = '/other.php', ownMatch = true } = {}) {
     posted,
     persisted,
     listeners,
+    getStoredPending() { return storedPending; },
     setTactic(value) { tactic = { ...value }; },
     setBuildStatus(value) { buildStatus = value; }
   };
@@ -157,6 +183,7 @@ function createHarness({ pathname = '/other.php', ownMatch = true } = {}) {
   const pending = { gameId: 'game-1', eventKey: 'event-1' };
   harness.context.STATE.pendingPresetEvent = pending;
   const effect = harness.context.EventTracker.buildPresetEffect({ gameId: 'game-1' });
+  assert.equal(effect.effectKey, 'preset_effect|game-1|event-1');
   assert.equal(harness.context.STATE.pendingPresetEvent, null);
   await assert.rejects(
     harness.context.Api.postAppend('preset_effects_v2', effect, 'effect'),
@@ -164,6 +191,33 @@ function createHarness({ pathname = '/other.php', ownMatch = true } = {}) {
   );
   assert.equal(harness.context.STATE.pendingPresetEvent, pending);
   assert.equal(harness.persisted.at(-1).pendingEffectRetry, true);
+}
+
+{
+  const pending = { gameId: 'game-1', eventKey: 'persisted-event' };
+  const harness = createHarness({ effectPostFails: false, persistedPending: pending });
+  assert.equal(harness.context.STATE.pendingPresetEvent, null);
+
+  const effect = harness.context.EventTracker.buildPresetEffect({ gameId: 'game-1' });
+  assert.ok(effect, 'persisted pending event was not restored');
+  assert.equal(effect.effectKey, 'preset_effect|game-1|persisted-event');
+  assert.equal(harness.context.STATE.pendingPresetEvent, null);
+
+  await harness.context.Api.postAppend('preset_effects_v2', effect, 'effect');
+  assert.equal(harness.persisted.at(-1).pendingPresetEvent, null);
+  assert.equal(harness.persisted.at(-1).pendingEffectRetry, false);
+  assert.equal(harness.persisted.at(-1).consumedPresetEventKey, 'persisted-event');
+  assert.equal(harness.getStoredPending(), null);
+}
+
+{
+  const harness = createHarness({
+    effectPostFails: false,
+    persistedPending: { gameId: 'other-game', eventKey: 'wrong-game' }
+  });
+  const effect = harness.context.EventTracker.buildPresetEffect({ gameId: 'game-1' });
+  assert.equal(effect, null);
+  assert.equal(harness.context.STATE.pendingPresetEvent, null);
 }
 
 {
@@ -189,6 +243,5 @@ function createHarness({ pathname = '/other.php', ownMatch = true } = {}) {
   assert.equal(harness.context.STATE.pendingPresetEvent.eventKey, eventPost.payload.eventKey);
   assert.equal(eventPost.payload.tacticTelemetry.transitions.at(-1).source, 'manual_change');
 }
-
 
 console.log('[runtime-telemetry-integrity-test] passed');
