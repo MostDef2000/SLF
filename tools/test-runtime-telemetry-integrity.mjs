@@ -68,6 +68,9 @@ function createHarness({
       manualChangeTimer: null
     },
     MatchStateParser: {
+      getGameId() {
+        return 'game-1';
+      },
       getGenerationWindow(minute) {
         return { index: 1, label: '01-15', effectiveMinute: minute };
       }
