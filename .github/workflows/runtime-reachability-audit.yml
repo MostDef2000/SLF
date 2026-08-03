@@ -1,0 +1,32 @@
+name: Runtime reachability audit
+
+on:
+  pull_request:
+    paths:
+      - 'src/**/*.js'
+      - 'src/app/bundle-order.json'
+      - 'releases/latest.user.js'
+      - 'tools/audit-runtime-reachability.mjs'
+      - 'data/audit/runtime-reachability-review-v1.json'
+      - 'docs/audit/runtime-reachability-audit-2026-08-03.md'
+      - '.github/workflows/runtime-reachability-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Check audit inputs
+        run: |
+          node --check tools/audit-runtime-reachability.mjs
+          node -e "JSON.parse(require('node:fs').readFileSync('data/audit/runtime-reachability-review-v1.json', 'utf8'))"
+      - name: Run reachability audit
+        run: node tools/audit-runtime-reachability.mjs --validate-review
+      - name: Validate machine-readable report
+        run: |
+          node tools/audit-runtime-reachability.mjs --json --validate-review > /tmp/runtime-reachability-report.json
+          node -e "const r=JSON.parse(require('node:fs').readFileSync('/tmp/runtime-reachability-report.json','utf8')); if(r.schema!=='slf_runtime_reachability_audit_v1') throw new Error('unexpected schema'); if(r.summary.bundleModules!==r.summary.sourceFilesRead) throw new Error('missing source files'); if(r.inputs.expectedModuleCount!=null&&r.summary.bundleModules!==r.inputs.expectedModuleCount) throw new Error('module count mismatch'); if(r.summary.releaseMarkerMismatches.length) throw new Error('release marker mismatch'); if(r.summary.unreviewedCandidates.length) throw new Error('unreviewed candidates'); if(r.summary.staleManualReviews.length) throw new Error('stale manual reviews'); console.log(JSON.stringify(r.summary,null,2));"
