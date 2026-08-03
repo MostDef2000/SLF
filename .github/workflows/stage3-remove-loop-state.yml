@@ -1,0 +1,42 @@
+name: Apply Stage 3 loop state cleanup
+
+on:
+  pull_request:
+    paths:
+      - 'tools/apply-stage3-remove-loop-state.py'
+      - '.github/workflows/stage3-remove-loop-state.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/stage3-remove-loop-state
+          fetch-depth: 0
+      - name: Apply exact state cleanup
+        run: python tools/apply-stage3-remove-loop-state.py
+      - name: Remove one-time migration machinery
+        run: rm tools/apply-stage3-remove-loop-state.py .github/workflows/stage3-remove-loop-state.yml
+      - name: Check runtime and repository contracts
+        run: |
+          node --check src/core/config.js
+          node --check src/modules/live-parser/snapshot-engine.js
+          node --check tools/test-legacy-live-parser-boundary.mjs
+          node tools/test-runtime-telemetry-integrity.mjs
+          node tools/test-manual-match-workflow.mjs
+          node tools/test-manual-match-state-bridge.mjs
+          node tools/test-legacy-live-parser-boundary.mjs
+          node tools/audit-runtime-reachability.mjs --validate-review
+          node tools/check-bundle-order.mjs
+      - name: Commit Stage 3
+        run: |
+          git config user.name 'SLF Refactor Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Remove legacy automatic loop state'
+          git push origin HEAD:agent/stage3-remove-loop-state
