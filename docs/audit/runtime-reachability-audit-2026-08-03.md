@@ -4,7 +4,7 @@
 
 This PR establishes a reproducible audit baseline before any legacy-code deletion. It does not modify runtime source, userscript behavior, tactical policy, API behavior, production data or deployment state.
 
-The repository currently bundles 56 source modules through `src/app/bundle-order.json`. The existing dependency audit describes declared module relationships, but it does not prove browser runtime reachability. DOM callbacks, timers, mutation observers, userscript menu commands, global exports and data-driven dispatch can keep code reachable without a conventional import edge.
+The repository currently bundles 56 source modules through `src/app/bundle-order.json`. The existing dependency audit describes declared module relationships, but it does not prove browser runtime reachability. DOM callbacks, timers, mutation observers, userscript menu commands, global exports, object patching and data-driven dispatch can keep code reachable without a conventional import edge.
 
 ## Audit outputs
 
@@ -15,7 +15,8 @@ The repository currently bundles 56 source modules through `src/app/bundle-order
 - `src/app/bundle-order.json`;
 - every source file listed in the bundle;
 - the dependency audit embedded in the manifest;
-- `releases/latest.user.js`.
+- `releases/latest.user.js`;
+- `data/audit/runtime-reachability-review-v1.json`.
 
 For every bundled module it reports:
 
@@ -25,26 +26,70 @@ For every bundled module it reports:
 - external textual references to public symbols;
 - DOM, timer, observer, menu-command, IIFE and global-export hooks;
 - legacy naming markers;
-- a conservative review status.
+- a conservative automated review status;
+- the corresponding manual classification and evidence count.
 
 The generated status is evidence for review, not deletion authorization. In particular, `UNREFERENCED_CANDIDATE` and `LEGACY_CANDIDATE` do not mean dead code.
 
-### Manual review baseline
+### CI review gate
 
-`data/audit/runtime-reachability-review-v1.json` records the first bounded manual review. It separates active manual match telemetry from historical automatic-parser naming.
+The workflow fails when:
 
-Initial findings:
+- a bundled source file is missing;
+- a source/release marker is out of sync;
+- the expected module count changes unexpectedly;
+- an automated candidate has no manual classification or evidence;
+- a manual review points to a file no longer present in the bundle.
 
-1. `src/app/bootstrap.js` explicitly mounts a manual-only Coach Hint workflow and does not invoke live-parser auto-resume.
-2. `src/app/ui-layer.js` mounts manual result/API controls; it does not expose live-parser start/stop controls.
-3. Match-state, match-stats and squad parsers remain active despite their historical `live-parser` directory name.
-4. `SnapshotEngine` and `EventTracker` are mixed modules: active manual telemetry and legacy candidates coexist in the same objects.
-5. `runtime-telemetry-integrity.js` remains active. It restores pending preset events, assigns deterministic effect keys, guards finished-result submission and installs the current manual tactic watcher.
-6. Persisted-state naming cannot be deleted mechanically. `pendingPresetEvent` recovery currently shares the historical live-state envelope.
+This means a new `ACTIVE_WITH_LEGACY_MARKERS`, `LEGACY_CANDIDATE` or `UNREFERENCED_CANDIDATE` result cannot enter the repository silently.
 
-## Candidate queue
+## Current audit result
 
-The first symbol-level review queue includes:
+The first complete run reports:
+
+- 56 bundled modules;
+- 39 `ACTIVE_EVIDENCE` modules;
+- 7 `ACTIVE_WITH_LEGACY_MARKERS` modules;
+- 10 `UNREFERENCED_CANDIDATE` modules;
+- 17 total review candidates;
+- 17 manually classified candidates;
+- zero unreviewed candidates;
+- zero release marker mismatches.
+
+## Candidate inventory
+
+### Active modules containing legacy or compatibility markers
+
+These modules are active and cannot be deleted at module granularity:
+
+- `src/core/config.js` — active central configuration/state mixed with historical live-parser naming;
+- `src/core/api.js` — active API client mixed with legacy collection compatibility;
+- `src/modules/live-parser/snapshot-engine.js` — active manual snapshots/results/state recovery mixed with the old automatic loop;
+- `src/modules/live-parser/event-tracker.js` — active manual events/effects mixed with an older watcher implementation;
+- `src/modules/strategy-data-recommendations/recommendation-engine.js` — active recommendation engine containing compatibility markers;
+- `src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js` — active extension requiring symbol-level separation;
+- `src/modules/live-parser/runtime-telemetry-integrity.js` — active pending-event recovery and manual watcher under a historical namespace.
+
+### Modules with insufficient positive static reachability evidence
+
+These modules remain bundled and published. They are classified `REVIEW_REQUIRED`, not dead:
+
+- `src/modules/transfer-analyzer/config.js`;
+- `src/modules/strategy-data-recommendations/preset-fit-scoring.js`;
+- `src/modules/transfer-analyzer/transfer-history-money-parser.js`;
+- `src/modules/transfer-analyzer/transfer-candidate-scanner-money-parser.js`;
+- `src/modules/transfer-analyzer/transfer-candidate-pagination-policy.js`;
+- `src/modules/transfer-analyzer/transfer-candidate-full-market-policy.js`;
+- `src/modules/transfer-analyzer/purchase-forecast-full-date-policy.js`;
+- `src/modules/transfer-analyzer/transfer-tm-profile-guard.js`;
+- `src/modules/transfer-analyzer/transfer-my-bids-cache-policy.js`;
+- `src/modules/transfer-analyzer/transfer-history-visible-analysis-cleanup.js`.
+
+The transfer modules may attach behavior by load-order side effects or mutate existing analyzer objects. They require a dedicated transfer-scope audit before any deletion decision.
+
+## First symbol-level queue
+
+The first removal-oriented review queue is intentionally limited to the match/manual-telemetry scope:
 
 - `SnapshotEngine.startLive`;
 - `SnapshotEngine.stopLive`;
@@ -76,11 +121,12 @@ A later removal PR must provide all of the following for each deleted symbol:
 
 ## Proposed follow-up sequence
 
-1. Complete symbol-level audit for `snapshot-engine.js`, `event-tracker.js`, `config.js` and `ui-layer.js`.
-2. Extract active manual telemetry into clearly named modules without behavior changes.
-3. Add browser-oriented regression coverage for the manual buttons and pending-event lifecycle.
-4. Delete the confirmed automatic-loop symbols in a separate PR.
-5. Audit collection aliases, deprecated presets, transfer helpers and compatibility wrappers as separate scopes.
+1. Merge this audit-only baseline.
+2. Add browser-oriented regression coverage for the manual buttons and pending-event lifecycle.
+3. Complete symbol-level reference tracing for `snapshot-engine.js`, `event-tracker.js` and the related `STATE` fields.
+4. Extract active manual telemetry into clearly named modules without behavior changes.
+5. Delete only the confirmed automatic-loop symbols in a separate PR.
+6. Audit transfer side-effect modules, collection aliases, deprecated presets and compatibility wrappers as separate scopes.
 
 ## Non-goals
 
