@@ -12,5 +12,11 @@ module['hostCapabilities'] = [
     capability for capability in module.get('hostCapabilities', [])
     if capability != 'localStorage'
 ]
+for requirement in module.get('requires', []):
+    if requirement.get('file') == 'src/core/config.js':
+        requirement['symbols'] = [
+            symbol for symbol in requirement.get('symbols', [])
+            if symbol != 'debugWarn'
+        ]
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-print('[stage5-manifest] removed stale localStorage capability')
+print('[stage5-manifest] removed stale storage capability and debug dependency')
