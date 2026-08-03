@@ -1,0 +1,52 @@
+name: Apply Stage 4 active module layout
+
+on:
+  pull_request:
+    paths:
+      - 'tools/apply-stage4-module-layout.py'
+      - '.github/workflows/stage4-module-layout.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/stage4-rename-manual-modules
+          fetch-depth: 0
+      - name: Apply exact module layout migration
+        run: python tools/apply-stage4-module-layout.py
+      - name: Remove one-time migration machinery
+        run: rm tools/apply-stage4-module-layout.py .github/workflows/stage4-module-layout.yml
+      - name: Check renamed runtime and repository contracts
+        run: |
+          test ! -e src/modules/live-parser/match-state-parser.js
+          test ! -e src/modules/live-parser/match-stats-parser.js
+          test ! -e src/modules/live-parser/squad-parser.js
+          test ! -e src/modules/live-parser/snapshot-engine.js
+          test ! -e src/modules/live-parser/event-tracker.js
+          test ! -e src/modules/live-parser/runtime-telemetry-integrity.js
+          node --check src/modules/match-reading/match-state-parser.js
+          node --check src/modules/match-reading/match-stats-parser.js
+          node --check src/modules/match-reading/squad-parser.js
+          node --check src/modules/manual-match-telemetry/snapshot-engine.js
+          node --check src/modules/manual-match-telemetry/event-tracker.js
+          node --check src/modules/manual-match-telemetry/manual-match-runtime.js
+          node --check tools/test-manual-match-runtime.mjs
+          node tools/test-manual-match-runtime.mjs
+          node tools/test-manual-match-workflow.mjs
+          node tools/test-manual-match-state-bridge.mjs
+          node tools/test-legacy-live-parser-boundary.mjs
+          node tools/audit-runtime-reachability.mjs --validate-review
+          node tools/check-bundle-order.mjs
+      - name: Commit Stage 4
+        run: |
+          git config user.name 'SLF Refactor Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Move active match telemetry out of live parser'
+          git push origin HEAD:agent/stage4-rename-manual-modules
