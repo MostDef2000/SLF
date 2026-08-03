@@ -1,0 +1,35 @@
+name: Apply Stage 4 governance path repair
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/stage4-governance-path-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/stage4-rename-manual-modules
+          fetch-depth: 0
+      - name: Repair governance paths
+        run: python tools/fix-stage4-governance-paths.py
+      - name: Validate governance files
+        run: |
+          python -m json.tool contracts/branch-map.json >/dev/null
+          grep -F -- '- `src/modules/match-reading/**`' contracts/branches/strategy-data-recommendations.md
+          grep -F -- '- `src/modules/manual-match-telemetry/**`' contracts/branches/strategy-data-recommendations.md
+      - name: Commit governance repairs
+        run: |
+          rm tools/fix-stage4-governance-paths.py
+          git checkout HEAD -- .github/workflows
+          git config user.name 'SLF Refactor Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Fix Stage 4 governance paths'
+          git push origin HEAD:agent/stage4-rename-manual-modules
