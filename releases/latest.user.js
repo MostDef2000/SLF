@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.255
+// @version      4.4.256
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.255',
-        scriptVersion: '4.4.255',
+        version: '4.4.256',
+        scriptVersion: '4.4.256',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.255',
+        scriptVersion: '4.4.256',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -9154,11 +9154,195 @@ if (!isTacticPage) return;
     SnapshotEngine.__runtimeTelemetryIntegrityInstalled = true;
 
     const pendingEffectEvent = Symbol('slfPendingEffectEvent');
+    const manualStateSchema = 'slf_manual_match_state_v1';
+    const manualStatePrefix = 'slf_manual_match_state_v1';
+    const legacyStatePrefix = 'slf_live_parser_state_v2';
+    const originalPersistLiveState = typeof SnapshotEngine.persistLiveState === 'function'
+        ? SnapshotEngine.persistLiveState.bind(SnapshotEngine)
+        : null;
+    const originalLoadLiveState = typeof SnapshotEngine.loadLiveState === 'function'
+        ? SnapshotEngine.loadLiveState.bind(SnapshotEngine)
+        : null;
+    const originalClearLiveState = typeof SnapshotEngine.clearLiveState === 'function'
+        ? SnapshotEngine.clearLiveState.bind(SnapshotEngine)
+        : null;
     const tacticalInputNames = new Set([
         'def_line', 'press_line', 'def_width', 'press_intense',
         'build_type', 'build_temp', 'build_long', 'build_fast',
         'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
     ]);
+
+    function hasOwn(object, key) {
+        return !!object && Object.prototype.hasOwnProperty.call(object, key);
+    }
+
+    function cloneForStorage(value) {
+        if (value == null) return value;
+        try {
+            return JSON.parse(JSON.stringify(value));
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function resolveGameId(gameId = null) {
+        if (gameId) return gameId;
+        return typeof MatchStateParser?.getGameId === 'function'
+            ? MatchStateParser.getGameId()
+            : null;
+    }
+
+    function getStateKey(prefix, gameId) {
+        return `${prefix}:${gameId || 'unknown'}`;
+    }
+
+    function readStoredState(prefix, gameId) {
+        if (!gameId || typeof localStorage === 'undefined') return null;
+        try {
+            const raw = localStorage.getItem(getStateKey(prefix, gameId));
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || String(parsed.gameId || '') !== String(gameId)) return null;
+            return parsed;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function normalizeLegacyManualState(legacy, gameId) {
+        if (!legacy || legacy.schema !== 'slf_live_parser_state_v2') return null;
+        if (String(legacy.gameId || '') !== String(gameId || '')) return null;
+        return {
+            schema: manualStateSchema,
+            gameId: legacy.gameId,
+            ts: Number(legacy.ts || Date.now()),
+            url: legacy.url || '',
+            pendingPresetEvent: cloneForStorage(legacy.pendingPresetEvent || null),
+            pendingEffectRetry: !!legacy.pendingEffectRetry,
+            consumedPresetEventKey: legacy.consumedPresetEventKey || null,
+            manualTacticEventPending: !!legacy.manualTacticEventPending,
+            recommendationFreeze: cloneForStorage(legacy.recommendationFreeze || null),
+            presetProgression: cloneForStorage(legacy.presetProgression || null),
+            lastRecommendationHtml: legacy.lastRecommendationHtml || null,
+            lastRecommendationMeta: cloneForStorage(legacy.lastRecommendationMeta || null),
+            migratedFrom: legacy.schema || 'slf_live_parser_state_v2'
+        };
+    }
+
+    const ManualMatchState = {
+        getStorageKey(gameId = null) {
+            return getStateKey(manualStatePrefix, resolveGameId(gameId));
+        },
+
+        load(gameId = null, legacyState = null) {
+            gameId = resolveGameId(gameId);
+            if (!gameId) return null;
+
+            const stored = readStoredState(manualStatePrefix, gameId);
+            if (stored?.schema === manualStateSchema) return stored;
+
+            const legacy = legacyState || readStoredState(legacyStatePrefix, gameId);
+            const migrated = normalizeLegacyManualState(legacy, gameId);
+            if (!migrated) return null;
+
+            if (typeof localStorage !== 'undefined') {
+                try {
+                    localStorage.setItem(this.getStorageKey(gameId), JSON.stringify(migrated));
+                } catch (_) {}
+            }
+            return readStoredState(manualStatePrefix, gameId) || migrated;
+        },
+
+        persist(extra = {}, options = {}) {
+            if (typeof localStorage === 'undefined') return null;
+            const gameId = resolveGameId(options.gameId);
+            if (!gameId) return null;
+
+            const existing = options.existing || readStoredState(manualStatePrefix, gameId) || {};
+            const stateValue = (key, fallback = null) => hasOwn(STATE, key)
+                ? cloneForStorage(STATE[key])
+                : cloneForStorage(existing[key] ?? fallback);
+            const pendingPresetEvent = hasOwn(extra, 'pendingPresetEvent')
+                ? cloneForStorage(extra.pendingPresetEvent)
+                : stateValue('pendingPresetEvent');
+            const pendingEventChanged = !!pendingPresetEvent?.eventKey
+                && String(pendingPresetEvent.eventKey) !== String(existing.pendingPresetEvent?.eventKey || '');
+
+            const payload = {
+                schema: manualStateSchema,
+                gameId,
+                ts: Date.now(),
+                url: typeof location !== 'undefined' ? (location.href || '') : '',
+                pendingPresetEvent,
+                pendingEffectRetry: hasOwn(extra, 'pendingEffectRetry')
+                    ? !!extra.pendingEffectRetry
+                    : (pendingEventChanged ? false : !!existing.pendingEffectRetry),
+                consumedPresetEventKey: hasOwn(extra, 'consumedPresetEventKey')
+                    ? (extra.consumedPresetEventKey || null)
+                    : (existing.consumedPresetEventKey || null),
+                manualTacticEventPending: hasOwn(extra, 'manualTacticEventPending')
+                    ? !!extra.manualTacticEventPending
+                    : (pendingPresetEvent ? !!existing.manualTacticEventPending : false),
+                recommendationFreeze: stateValue('recommendationFreeze'),
+                presetProgression: stateValue('presetProgression'),
+                lastRecommendationHtml: stateValue('lastRecommendationHtml'),
+                lastRecommendationMeta: stateValue('lastRecommendationMeta'),
+                migratedFrom: existing.migratedFrom || null
+            };
+
+            try {
+                localStorage.setItem(this.getStorageKey(gameId), JSON.stringify(payload));
+                return payload;
+            } catch (_) {
+                return null;
+            }
+        },
+
+        clear(gameId = null) {
+            gameId = resolveGameId(gameId);
+            if (!gameId || typeof localStorage === 'undefined') return;
+            try {
+                localStorage.removeItem(this.getStorageKey(gameId));
+            } catch (_) {}
+        }
+    };
+
+    SnapshotEngine.manualMatchState = ManualMatchState;
+    SnapshotEngine.persistManualState = function persistManualState(extra = {}) {
+        if (originalPersistLiveState) originalPersistLiveState(extra);
+        return ManualMatchState.persist(extra);
+    };
+    SnapshotEngine.loadManualState = function loadManualState(gameId = null) {
+        gameId = resolveGameId(gameId);
+        const legacy = originalLoadLiveState ? originalLoadLiveState(gameId) : null;
+        return ManualMatchState.load(gameId, legacy);
+    };
+    SnapshotEngine.clearManualState = function clearManualState(gameId = null) {
+        gameId = resolveGameId(gameId);
+        if (originalClearLiveState) originalClearLiveState(gameId);
+        ManualMatchState.clear(gameId);
+    };
+
+    SnapshotEngine.persistLiveState = function persistLiveStateCompatibilityBridge(extra = {}) {
+        return SnapshotEngine.persistManualState(extra);
+    };
+    SnapshotEngine.loadLiveState = function loadLiveStateCompatibilityBridge(gameId = null) {
+        gameId = resolveGameId(gameId);
+        const legacy = originalLoadLiveState ? originalLoadLiveState(gameId) : null;
+        const manual = ManualMatchState.load(gameId, legacy);
+        if (!manual) return legacy;
+        if (!legacy) return manual;
+
+        return Object.assign({}, legacy, manual, {
+            schema: legacy.schema || manual.schema,
+            active: !!legacy.active,
+            gameId: manual.gameId || legacy.gameId
+        });
+    };
+    SnapshotEngine.clearLiveState = function clearLiveStateCompatibilityBridge(gameId = null) {
+        gameId = resolveGameId(gameId);
+        SnapshotEngine.clearManualState(gameId);
+    };
 
     function setTransitionSourceHint(source, ttlMs = 5000) {
         STATE.tacticTransitionSourceHint = {
@@ -9197,9 +9381,9 @@ if (!isTacticPage) return;
 
     function restorePersistedPendingPresetEvent(afterSnapshot) {
         if (STATE.pendingPresetEvent || !afterSnapshot?.gameId) return null;
-        if (typeof SnapshotEngine.loadLiveState !== 'function') return null;
+        if (typeof SnapshotEngine.loadManualState !== 'function') return null;
 
-        const persisted = SnapshotEngine.loadLiveState(afterSnapshot.gameId);
+        const persisted = SnapshotEngine.loadManualState(afterSnapshot.gameId);
         const pending = persisted?.pendingPresetEvent || null;
         if (!pending) return null;
         if (String(pending.gameId || '') !== String(afterSnapshot.gameId || '')) return null;
@@ -9260,7 +9444,7 @@ if (!isTacticPage) return;
 
         return request.then(result => {
             if (!STATE.pendingPresetEvent) {
-                SnapshotEngine.persistLiveState({
+                SnapshotEngine.persistManualState({
                     active: !!STATE.liveParserTimer,
                     pendingPresetEvent: null,
                     pendingEffectRetry: false,
@@ -9271,7 +9455,7 @@ if (!isTacticPage) return;
         }).catch(error => {
             if (!STATE.pendingPresetEvent) {
                 STATE.pendingPresetEvent = recoverable;
-                SnapshotEngine.persistLiveState({
+                SnapshotEngine.persistManualState({
                     active: !!STATE.liveParserTimer,
                     pendingEffectRetry: true
                 });
@@ -9356,7 +9540,7 @@ if (!isTacticPage) return;
                 };
 
                 STATE.pendingPresetEvent = eventRecord;
-                SnapshotEngine.persistLiveState({
+                SnapshotEngine.persistManualState({
                     active: !!STATE.liveParserTimer,
                     manualTacticEventPending: true
                 });
@@ -20433,15 +20617,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.255',
-        scriptVersion: '4.4.255',
+        version: '4.4.256',
+        scriptVersion: '4.4.256',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.255',
+        scriptVersion: '4.4.256',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

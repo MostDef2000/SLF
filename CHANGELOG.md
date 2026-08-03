@@ -1,5 +1,39 @@
 # Changelog
 
+## 4.4.256
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/manual-match-regression.yml
+- .github/workflows/runtime-reachability-audit.yml
+- data/audit/manual-match-symbol-review-v1.json
+- data/audit/manual-state-envelope-v1.json
+- data/audit/runtime-reachability-review-v1.json
+- docs/audit/manual-match-regression-boundary-2026-08-03.md
+- docs/audit/manual-state-envelope-2026-08-03.md
+- docs/audit/runtime-reachability-audit-2026-08-03.md
+- src/modules/live-parser/runtime-telemetry-integrity.js
+- tools/audit-runtime-reachability.mjs
+- tools/test-legacy-live-parser-boundary.mjs
+- tools/test-manual-match-state-bridge.mjs
+- tools/test-manual-match-workflow.mjs
+- tools/test-runtime-telemetry-integrity.mjs
+
+Approved base commit:
+- 69492a052538cb40f5ad6e0da4b81b0cb3bc17bc
+
+Approved commit:
+- ead000cf90b76fc435c97683bd58c677395f2876
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.255
 
 ### Automatic latest-only build
