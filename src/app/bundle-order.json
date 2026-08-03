@@ -486,13 +486,6 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/live-parser/event-tracker.js",
-            "symbols": [
-              "EventTracker"
-            ],
-            "phase": "runtime"
-          },
-          {
             "file": "src/modules/strategy-data-recommendations/developer-hint-parser.js",
             "symbols": [
               "DeveloperHintParser"
@@ -538,8 +531,6 @@
         "hostCapabilities": [
           "location",
           "localStorage",
-          "setInterval",
-          "clearInterval",
           "console"
         ]
       },
@@ -577,24 +568,10 @@
             "phase": "runtime"
           },
           {
-            "file": "src/modules/tactics-presets/tactic-control-engine.js",
-            "symbols": [
-              "getCurrentTactic"
-            ],
-            "phase": "runtime"
-          },
-          {
             "file": "src/modules/live-parser/match-state-parser.js",
             "symbols": [
               "MatchStateParser",
               "MatchTimingModel"
-            ],
-            "phase": "runtime"
-          },
-          {
-            "file": "src/modules/live-parser/match-stats-parser.js",
-            "symbols": [
-              "MatchStatsParser"
             ],
             "phase": "runtime"
           },
@@ -641,12 +618,7 @@
             "phase": "runtime"
           }
         ],
-        "hostCapabilities": [
-          "document",
-          "location",
-          "setTimeout",
-          "clearTimeout"
-        ]
+        "hostCapabilities": []
       },
       {
         "file": "src/modules/strategy-data-recommendations/developer-hint-parser.js",

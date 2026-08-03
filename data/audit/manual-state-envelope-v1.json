@@ -46,9 +46,12 @@
     "SnapshotEngine.clearLiveState"
   ],
   "nextRemovalGate": [
-    "Migrate RecommendationEngine persistence to persistManualState.",
-    "Remove liveWaitStatus reset from the manual hint UI or replace it with manual-state semantics.",
-    "Delete the automatic interval methods and loop-only STATE fields in a separate PR.",
-    "Retain legacy-key read fallback for at least one published userscript transition."
-  ]
+    "Remove loop-only STATE declarations and legacy serialization fields.",
+    "Retain legacy-key migration and dual-write through the published transition release."
+  ],
+  "automaticLoop": {
+    "status": "removed",
+    "stage": 2,
+    "trackingIssue": 151
+  }
 }

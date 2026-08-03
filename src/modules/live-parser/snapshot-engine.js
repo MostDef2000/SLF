@@ -360,24 +360,6 @@ const SnapshotEngine = {
         };
     },
 
-    autoResumeIfNeeded() {
-        if (STATE.liveAutoResumeChecked) return;
-        if (!location.pathname.includes('/game.php')) return;
-        if (STATE.liveParserTimer) return;
-
-        const saved = this.loadLiveState();
-        if (!saved || !saved.active) return;
-
-        const snapshot = this.build();
-        if (snapshot?.status === 'finished') {
-            this.clearLiveState(saved.gameId);
-            return;
-        }
-
-        STATE.liveAutoResumeChecked = true;
-        this.startLive({ autoResume: true, persistedState: saved });
-    },
-
     rememberManualSnapshot(snapshot) {
         if (!snapshot || !snapshot.gameId || !snapshot.bucket) return snapshot;
 
@@ -390,18 +372,6 @@ const SnapshotEngine = {
         store[key] = list.slice(-12);
 
         snapshot.segmentAggregate = this.buildSegmentAggregate(store[key], snapshot);
-        return snapshot;
-    },
-
-    rememberLiveSnapshot(snapshot) {
-        if (!snapshot || !snapshot.gameId || !snapshot.bucket) return snapshot;
-
-        const key = `${snapshot.gameId}|${snapshot.bucket}`;
-        const list = STATE.liveSegmentSnapshots[key] || [];
-        list.push(snapshot);
-        STATE.liveSegmentSnapshots[key] = list.slice(-12);
-
-        snapshot.segmentAggregate = this.buildSegmentAggregate(STATE.liveSegmentSnapshots[key], snapshot);
         return snapshot;
     },
 
@@ -533,111 +503,6 @@ const SnapshotEngine = {
         return request;
     },
 
-    startLive(options = {}) {
-        if (STATE.liveParserTimer) {
-            UI.updateParserStatus('Live parser уже запущен');
-
-            try {
-                const snapshot = this.build();
-                if (snapshot) {
-                    this.rememberLiveSnapshot(snapshot);
-                    RecommendationEngine.update(snapshot);
-                    this.persistLiveState({ active: true, refreshedWhileRunning: true });
-                    UI.addParserLog('Live parser уже работал: рекомендация обновлена по текущему snapshot');
-                }
-            } catch (error) {
-                console.error('[SLF] Failed to refresh recommendation while live parser already running', error);
-                UI.addParserLog('Live parser уже работал: ошибка обновления рекомендации, см. console');
-            }
-
-            return;
-        }
-
-        const persisted = options.persistedState || null;
-
-        STATE.lastSavedBucket = persisted?.lastSavedBucket || null;
-        STATE.liveWaitStatus = persisted?.liveWaitStatus || null;
-        STATE.liveStartedAt = persisted?.liveStartedAt || Date.now();
-        STATE.liveSegmentSnapshots = persisted?.liveSegmentSnapshots || {};
-        STATE.recommendationFreeze = persisted?.recommendationFreeze || STATE.recommendationFreeze || null;
-        STATE.pendingPresetEvent = persisted?.pendingPresetEvent || STATE.pendingPresetEvent || null;
-        STATE.presetProgression = persisted?.presetProgression || STATE.presetProgression || null;
-        STATE.lastRecommendationHtml = persisted?.lastRecommendationHtml || STATE.lastRecommendationHtml || null;
-        STATE.lastRecommendationMeta = persisted?.lastRecommendationMeta || STATE.lastRecommendationMeta || null;
-
-        STATE.liveParserTimer = setInterval(() => {
-            const snapshot = this.build();
-
-            if (!snapshot) return;
-
-            if (snapshot.status === 'finished') {
-                UI.addParserLog('Live parser увидел завершение матча');
-                this.stopLive({ reason: 'finished', clearPersisted: true });
-                return;
-            }
-
-            if (snapshot.status !== 'live') {
-                const waitStatus = snapshot.status || 'unknown';
-                UI.updateParserStatus(`Live parser ждёт возобновления: ${waitStatus}`);
-
-                if (STATE.liveWaitStatus !== waitStatus) {
-                    STATE.liveWaitStatus = waitStatus;
-                    UI.addParserLog(`Live parser не остановлен, ожидание: ${waitStatus}`);
-                }
-
-                this.persistLiveState({ active: true });
-                return;
-            }
-
-            STATE.liveWaitStatus = null;
-            this.rememberLiveSnapshot(snapshot);
-            RecommendationEngine.update(snapshot);
-
-            if (snapshot.bucket && snapshot.bucket !== STATE.lastSavedBucket) {
-                STATE.lastSavedBucket = snapshot.bucket;
-
-                void this.sendSnapshot(snapshot)
-                    .then(() => UI.addParserLog(`Сохранён generation snapshot: ${snapshot.bucket}`))
-                    .catch(error => UI.addParserLog(`Ошибка сохранения snapshot: ${error?.kind || 'unknown'}`));
-
-                const effect = EventTracker.buildPresetEffect(snapshot);
-
-                if (effect) {
-                    void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EFFECTS, effect, 'preset effect history')
-                        .then(() => UI.addParserLog(`Эффект тактики сохранён: ${effect.presetName}`))
-                        .catch(error => UI.addParserLog(`Ошибка сохранения эффекта: ${error?.kind || 'unknown'}`));
-                }
-            }
-
-            this.persistLiveState({ active: true });
-        }, 15000);
-
-        const first = this.build();
-        this.rememberLiveSnapshot(first);
-        RecommendationEngine.update(first);
-        this.persistLiveState({ active: true });
-
-        UI.updateParserStatus(options.autoResume ? 'Live parser восстановлен после обновления страницы' : 'Live parser запущен');
-        UI.addParserLog(options.autoResume ? 'Live parser auto-resume: восстановлен run state' : 'Live parser запущен: halftime-safe, 36m real-time, generation windows');
-    },
-
-    stopLive(options = {}) {
-        if (STATE.liveParserTimer) {
-            clearInterval(STATE.liveParserTimer);
-            STATE.liveParserTimer = null;
-        }
-
-        STATE.recommendationFreeze = null;
-
-        if (options.clearPersisted !== false) {
-            this.clearLiveState();
-        } else {
-            this.persistLiveState({ active: false, stopReason: options.reason || 'stopped' });
-        }
-
-        UI.updateParserStatus('Live parser остановлен');
-        UI.addParserLog('Live parser остановлен');
-    }
 };
 
     // ============================================================

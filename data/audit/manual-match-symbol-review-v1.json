@@ -6,141 +6,60 @@
     "LEGACY_AUTOMATIC_LOOP": "Historical 15-second background parser code not invoked by the current bootstrap or UI.",
     "LEGACY_DUPLICATE_WATCHER": "Older manual watcher implementation superseded by runtime-telemetry-integrity.js.",
     "LEGACY_NAMED_ACTIVE_STATE": "Historically named state still used by the current pending-event persistence or compatibility envelope.",
-    "ACTIVE_MANUAL_BOUNDARY": "Active manual workflow code that must remain covered during refactoring."
+    "ACTIVE_MANUAL_BOUNDARY": "Active manual workflow code that must remain covered during refactoring.",
+    "LEGACY_STATE_RESIDUE": "State retained only by the compatibility envelope after the automatic runtime was deleted.",
+    "UNREFERENCED_CANDIDATE": "Declared legacy state with no runtime consumer after deletion of its owner path."
   },
   "symbols": [
-    {
-      "symbol": "SnapshotEngine.startLive",
-      "token": "startLive",
-      "owner": "src/modules/live-parser/snapshot-engine.js",
-      "classification": "LEGACY_AUTOMATIC_LOOP",
-      "allowedFiles": [
-        "src/modules/live-parser/snapshot-engine.js"
-      ],
-      "forbiddenCallPatterns": [
-        "SnapshotEngine\\.startLive\\s*\\("
-      ],
-      "evidence": [
-        "The method creates the historical 15-second interval.",
-        "Current bootstrap and UI do not call it."
-      ],
-      "deletionStatus": "BLOCKED",
-      "removalBlockedBy": [
-        "manual workflow regression coverage",
-        "active state-envelope extraction",
-        "separate deletion PR"
-      ]
-    },
-    {
-      "symbol": "SnapshotEngine.stopLive",
-      "token": "stopLive",
-      "owner": "src/modules/live-parser/snapshot-engine.js",
-      "classification": "LEGACY_AUTOMATIC_LOOP",
-      "allowedFiles": [
-        "src/modules/live-parser/snapshot-engine.js"
-      ],
-      "forbiddenCallPatterns": [
-        "SnapshotEngine\\.stopLive\\s*\\("
-      ],
-      "evidence": [
-        "The method only manages the historical interval and its persisted active flag."
-      ],
-      "deletionStatus": "BLOCKED",
-      "removalBlockedBy": [
-        "startLive removal",
-        "state-envelope extraction"
-      ]
-    },
-    {
-      "symbol": "SnapshotEngine.autoResumeIfNeeded",
-      "token": "autoResumeIfNeeded",
-      "owner": "src/modules/live-parser/snapshot-engine.js",
-      "classification": "LEGACY_AUTOMATIC_LOOP",
-      "allowedFiles": [
-        "src/modules/live-parser/snapshot-engine.js"
-      ],
-      "forbiddenCallPatterns": [
-        "SnapshotEngine\\.autoResumeIfNeeded\\s*\\("
-      ],
-      "evidence": [
-        "The current bootstrap explicitly selects manual-only mode and does not invoke auto-resume."
-      ],
-      "deletionStatus": "BLOCKED",
-      "removalBlockedBy": [
-        "persisted-state split",
-        "separate deletion PR"
-      ]
-    },
-    {
-      "symbol": "EventTracker.startManualTacticWatcher",
-      "token": "startManualTacticWatcher",
-      "owner": "src/modules/live-parser/event-tracker.js",
-      "classification": "LEGACY_DUPLICATE_WATCHER",
-      "allowedFiles": [
-        "src/modules/live-parser/event-tracker.js"
-      ],
-      "forbiddenCallPatterns": [
-        "EventTracker\\.startManualTacticWatcher\\s*\\("
-      ],
-      "evidence": [
-        "No current bootstrap path calls this method.",
-        "runtime-telemetry-integrity.js installs the active watcher through installManualWatcher()."
-      ],
-      "deletionStatus": "BLOCKED",
-      "removalBlockedBy": [
-        "manual watcher regression coverage",
-        "separate deletion PR"
-      ]
-    },
     {
       "symbol": "STATE.liveParserTimer",
       "token": "liveParserTimer",
       "owner": "src/core/config.js",
-      "classification": "LEGACY_AUTOMATIC_LOOP",
+      "classification": "LEGACY_STATE_RESIDUE",
       "allowedFiles": [
         "src/core/config.js",
         "src/modules/live-parser/snapshot-engine.js"
       ],
       "evidence": [
-        "Only the historical automatic interval reads or writes this field after active caller migration."
+        "No timer is created after Stage 2; the field remains only in the old persistence envelope until Stage 3."
       ],
       "deletionStatus": "BLOCKED",
       "removalBlockedBy": [
-        "automatic-loop deletion PR"
+        "loop-only state cleanup PR"
       ]
     },
     {
       "symbol": "STATE.lastSavedBucket",
       "token": "lastSavedBucket",
       "owner": "src/core/config.js",
-      "classification": "LEGACY_AUTOMATIC_LOOP",
+      "classification": "LEGACY_STATE_RESIDUE",
       "allowedFiles": [
         "src/core/config.js",
         "src/modules/live-parser/snapshot-engine.js"
       ],
       "evidence": [
-        "Used by automatic per-generation snapshot suppression."
+        "No bucket auto-save loop remains; the field is serialized only by the old state envelope."
       ],
       "deletionStatus": "BLOCKED",
       "removalBlockedBy": [
-        "automatic-loop deletion PR"
+        "loop-only state cleanup PR"
       ]
     },
     {
       "symbol": "STATE.liveWaitStatus",
       "token": "liveWaitStatus",
       "owner": "src/core/config.js",
-      "classification": "LEGACY_AUTOMATIC_LOOP",
+      "classification": "LEGACY_STATE_RESIDUE",
       "allowedFiles": [
         "src/core/config.js",
         "src/modules/live-parser/snapshot-engine.js"
       ],
       "evidence": [
-        "Only the historical interval wait path uses this field after the manual hint reset was removed."
+        "No wait loop remains; the field is serialized only by the old state envelope."
       ],
       "deletionStatus": "BLOCKED",
       "removalBlockedBy": [
-        "automatic-loop deletion PR"
+        "loop-only state cleanup PR"
       ]
     },
     {
@@ -172,70 +91,53 @@
       "deletionStatus": "KEEP"
     },
     {
-      "symbol": "SnapshotEngine.rememberLiveSnapshot",
-      "token": "rememberLiveSnapshot",
-      "owner": "src/modules/live-parser/snapshot-engine.js",
-      "classification": "LEGACY_AUTOMATIC_LOOP",
-      "allowedFiles": [
-        "src/modules/live-parser/snapshot-engine.js"
-      ],
-      "evidence": [
-        "After caller migration this method is referenced only by the historical automatic interval."
-      ],
-      "deletionStatus": "BLOCKED",
-      "removalBlockedBy": [
-        "automatic-loop deletion PR"
-      ]
-    },
-    {
       "symbol": "STATE.liveSegmentSnapshots",
       "token": "liveSegmentSnapshots",
       "owner": "src/core/config.js",
-      "classification": "LEGACY_AUTOMATIC_LOOP",
+      "classification": "LEGACY_STATE_RESIDUE",
       "allowedFiles": [
         "src/core/config.js",
         "src/modules/live-parser/snapshot-engine.js"
       ],
       "evidence": [
-        "Maintains rolling segment samples for the historical loop."
+        "The active manual workflow uses manualSegmentSnapshots; this field remains only in old state serialization."
       ],
       "deletionStatus": "BLOCKED",
       "removalBlockedBy": [
-        "confirm no recommendation consumer requires segmentAggregate"
+        "loop-only state cleanup PR"
       ]
     },
     {
       "symbol": "STATE.liveStartedAt",
       "token": "liveStartedAt",
       "owner": "src/core/config.js",
-      "classification": "LEGACY_AUTOMATIC_LOOP",
+      "classification": "LEGACY_STATE_RESIDUE",
       "allowedFiles": [
         "src/core/config.js",
         "src/modules/live-parser/snapshot-engine.js"
       ],
       "evidence": [
-        "Records start time for the historical run state."
+        "No automatic run start remains; the field is serialized only by the old state envelope."
       ],
       "deletionStatus": "BLOCKED",
       "removalBlockedBy": [
-        "persisted-state schema migration decision"
+        "loop-only state cleanup PR"
       ]
     },
     {
       "symbol": "STATE.liveAutoResumeChecked",
       "token": "liveAutoResumeChecked",
       "owner": "src/core/config.js",
-      "classification": "LEGACY_AUTOMATIC_LOOP",
+      "classification": "UNREFERENCED_CANDIDATE",
       "allowedFiles": [
-        "src/core/config.js",
-        "src/modules/live-parser/snapshot-engine.js"
+        "src/core/config.js"
       ],
       "evidence": [
-        "Guards the unused auto-resume path."
+        "The auto-resume method was removed; only the declaration remains."
       ],
       "deletionStatus": "BLOCKED",
       "removalBlockedBy": [
-        "autoResumeIfNeeded deletion"
+        "loop-only state cleanup PR"
       ]
     },
     {
@@ -352,5 +254,42 @@
     "issue": 151,
     "status": "implemented",
     "exitCriterion": "Compatibility persistence and live-only wait state have no active callers."
+  },
+  "removedSymbols": [
+    {
+      "symbol": "SnapshotEngine.startLive",
+      "removedInStage": 2,
+      "trackingIssue": 151,
+      "reason": "Historical automatic loop or superseded watcher removed after active callers were migrated."
+    },
+    {
+      "symbol": "SnapshotEngine.stopLive",
+      "removedInStage": 2,
+      "trackingIssue": 151,
+      "reason": "Historical automatic loop or superseded watcher removed after active callers were migrated."
+    },
+    {
+      "symbol": "SnapshotEngine.autoResumeIfNeeded",
+      "removedInStage": 2,
+      "trackingIssue": 151,
+      "reason": "Historical automatic loop or superseded watcher removed after active callers were migrated."
+    },
+    {
+      "symbol": "EventTracker.startManualTacticWatcher",
+      "removedInStage": 2,
+      "trackingIssue": 151,
+      "reason": "Historical automatic loop or superseded watcher removed after active callers were migrated."
+    },
+    {
+      "symbol": "SnapshotEngine.rememberLiveSnapshot",
+      "removedInStage": 2,
+      "trackingIssue": 151,
+      "reason": "Historical automatic loop or superseded watcher removed after active callers were migrated."
+    }
+  ],
+  "stage2": {
+    "issue": 151,
+    "status": "implemented",
+    "exitCriterion": "No automatic interval, auto-resume path, stop/start API, legacy snapshot collector or duplicate watcher remains."
   }
 }
