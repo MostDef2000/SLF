@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.254
+// @version      4.4.255
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.254',
-        scriptVersion: '4.4.254',
+        version: '4.4.255',
+        scriptVersion: '4.4.255',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.254',
+        scriptVersion: '4.4.255',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -9195,6 +9195,28 @@ if (!isTacticPage) return;
         return snapshot;
     }
 
+    function restorePersistedPendingPresetEvent(afterSnapshot) {
+        if (STATE.pendingPresetEvent || !afterSnapshot?.gameId) return null;
+        if (typeof SnapshotEngine.loadLiveState !== 'function') return null;
+
+        const persisted = SnapshotEngine.loadLiveState(afterSnapshot.gameId);
+        const pending = persisted?.pendingPresetEvent || null;
+        if (!pending) return null;
+        if (String(pending.gameId || '') !== String(afterSnapshot.gameId || '')) return null;
+
+        STATE.pendingPresetEvent = pending;
+        return pending;
+    }
+
+    function getDeterministicEffectKey(effect, pending) {
+        if (!effect || !pending?.eventKey) return effect?.effectKey;
+        return [
+            'preset_effect',
+            effect.gameId || pending.gameId || '',
+            pending.eventKey
+        ].join('|');
+    }
+
     const originalBuild = SnapshotEngine.build.bind(SnapshotEngine);
     SnapshotEngine.build = function buildWithNormalizedTransitionSource() {
         const hint = consumeTransitionSourceHint();
@@ -9214,9 +9236,11 @@ if (!isTacticPage) return;
 
     const originalBuildPresetEffect = EventTracker.buildPresetEffect.bind(EventTracker);
     EventTracker.buildPresetEffect = function buildRecoverablePresetEffect(afterSnapshot) {
+        restorePersistedPendingPresetEvent(afterSnapshot);
         const pending = STATE.pendingPresetEvent || null;
         const effect = originalBuildPresetEffect(afterSnapshot);
         if (effect && pending) {
+            effect.effectKey = getDeterministicEffectKey(effect, pending);
             Object.defineProperty(effect, pendingEffectEvent, {
                 value: pending,
                 enumerable: false,
@@ -9231,8 +9255,21 @@ if (!isTacticPage) return;
         const recoverable = collection === CONFIG.COLLECTIONS.PRESET_EFFECTS
             ? payload?.[pendingEffectEvent] || null
             : null;
-        return originalPostAppend(collection, payload, label).catch(error => {
-            if (recoverable && !STATE.pendingPresetEvent) {
+        const request = originalPostAppend(collection, payload, label);
+        if (!recoverable) return request;
+
+        return request.then(result => {
+            if (!STATE.pendingPresetEvent) {
+                SnapshotEngine.persistLiveState({
+                    active: !!STATE.liveParserTimer,
+                    pendingPresetEvent: null,
+                    pendingEffectRetry: false,
+                    consumedPresetEventKey: recoverable.eventKey || null
+                });
+            }
+            return result;
+        }).catch(error => {
+            if (!STATE.pendingPresetEvent) {
                 STATE.pendingPresetEvent = recoverable;
                 SnapshotEngine.persistLiveState({
                     active: !!STATE.liveParserTimer,
@@ -20396,15 +20433,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.254',
-        scriptVersion: '4.4.254',
+        version: '4.4.255',
+        scriptVersion: '4.4.255',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.254',
+        scriptVersion: '4.4.255',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

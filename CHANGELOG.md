@@ -1,5 +1,43 @@
 # Changelog
 
+## 4.4.255
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/tactic-analytics-smoke.yml
+- docs/audit/tactical-data-quality-provenance-2026-08-03.md
+- docs/operations/tactic-match-outcomes.md
+- src/modules/live-parser/runtime-telemetry-integrity.js
+- tools/enrich-tactic-match-outcomes.mjs
+- tools/run-tactic-analytics-pipeline.sh
+- tools/test-runtime-telemetry-integrity.mjs
+- tools/test-tactic-match-outcomes.mjs
+- tools/test-tactic-telemetry-envelope.mjs
+- tools/test-tactical-record-keys.mjs
+- vps/api/requirements.txt
+- vps/api/test_server.py
+- vps/ops/README.md
+- vps/ops/deploy-code.sh
+- vps/ops/slf-server.service
+- vps/ops/test_service_contract.py
+- vps/ops/test_verify_api_deployment.py
+- vps/ops/verify_api_deployment.py
+
+Approved base commit:
+- dee056556ae7b76e2fc4d1d8efca7428d6df2a29
+
+Approved commit:
+- 43bc4b2cc0ea19713b3b3d11e8fed6cb38eeedb4
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.254
 
 ### Automatic latest-only build
