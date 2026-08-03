@@ -1,5 +1,34 @@
 # Changelog
 
+## 4.4.257
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/manual-match-symbol-review-v1.json
+- docs/audit/legacy-live-parser-stage1-2026-08-03.md
+- src/core/config.js
+- src/modules/live-parser/event-tracker.js
+- src/modules/live-parser/runtime-telemetry-integrity.js
+- src/modules/live-parser/snapshot-engine.js
+- src/modules/strategy-data-recommendations/recommendation-engine.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/test-legacy-live-parser-boundary.mjs
+
+Approved base commit:
+- 5910c7107b6be3b81763fa97b5bac40437021c59
+
+Approved commit:
+- f295050b178e868179f2c0395d1ccac7cdc799eb
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.256
 
 ### Automatic latest-only build

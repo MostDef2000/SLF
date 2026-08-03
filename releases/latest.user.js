@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Live Parser)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.256
+// @version      4.4.257
 // @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.256',
-        scriptVersion: '4.4.256',
+        version: '4.4.257',
+        scriptVersion: '4.4.257',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.256',
+        scriptVersion: '4.4.257',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -401,6 +401,7 @@ const STATE = {
     liveWaitStatus: null,
     liveStartedAt: null,
     pendingPresetEvent: null,
+    manualSegmentSnapshots: {},
     liveSegmentSnapshots: {},
     recommendationFreeze: null,
     recommendationHistory: [],
@@ -2181,13 +2182,13 @@ const SnapshotEngine = {
         const waitText = `Пресет применён: ${label}. Ждём следующий snapshot/отрезок ${STATE.recommendationFreeze.targetBucket || ''}.`;
         UI.updateParserStatus(waitText);
         UI.addParserLog(waitText);
-        this.persistLiveState({ active: true });
+        this.persistManualState();
     },
 
     clearRecommendationFreeze(reason = 'cleared') {
         if (!STATE.recommendationFreeze) return;
         STATE.recommendationFreeze = null;
-        this.persistLiveState({ active: !!STATE.liveParserTimer, freezeClearedReason: reason });
+        this.persistManualState({ freezeClearedReason: reason });
     },
 
     getRecommendationFreezeStatus(snapshot) {
@@ -2243,6 +2244,21 @@ const SnapshotEngine = {
 
         STATE.liveAutoResumeChecked = true;
         this.startLive({ autoResume: true, persistedState: saved });
+    },
+
+    rememberManualSnapshot(snapshot) {
+        if (!snapshot || !snapshot.gameId || !snapshot.bucket) return snapshot;
+
+        const key = `${snapshot.gameId}|${snapshot.bucket}`;
+        const store = STATE.manualSegmentSnapshots && typeof STATE.manualSegmentSnapshots === 'object'
+            ? STATE.manualSegmentSnapshots
+            : (STATE.manualSegmentSnapshots = {});
+        const list = Array.isArray(store[key]) ? store[key] : [];
+        list.push(snapshot);
+        store[key] = list.slice(-12);
+
+        snapshot.segmentAggregate = this.buildSegmentAggregate(store[key], snapshot);
+        return snapshot;
     },
 
     rememberLiveSnapshot(snapshot) {
@@ -2713,7 +2729,7 @@ const SnapshotEngine = {
                     generatorQualitySignal: afterQualitySignal,
                     evaluatedAt: Date.now()
                 };
-                SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer });
+                SnapshotEngine.persistManualState();
             }
 
             STATE.pendingPresetEvent = null;
@@ -5406,8 +5422,8 @@ const RecommendationEngine = {
             minute: snapshot?.minute ?? null
         }, meta || {});
 
-        if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.persistLiveState) {
-            SnapshotEngine.persistLiveState({ active: !!STATE.liveParserTimer });
+        if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.persistManualState) {
+            SnapshotEngine.persistManualState();
         }
     },
 
@@ -9008,11 +9024,10 @@ if (!isTacticPage) return;
         RecommendationEngine.__compactCoachModePatchedV4 = true;
     }
 
-    function resetLiveOnlyRecommendationState() {
+    function resetManualRecommendationState() {
         if (typeof STATE === 'undefined') return;
         STATE.recommendationFreeze = null;
         // Keep pendingPresetEvent until the target generation window is reached.
-        STATE.liveWaitStatus = null;
     }
 
     function submitManualTelemetry(snapshot) {
@@ -9049,7 +9064,7 @@ if (!isTacticPage) return;
     }
 
     function renderManualRecommendation() {
-        resetLiveOnlyRecommendationState();
+        resetManualRecommendationState();
 
         const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
         if (!snapshot) return;
@@ -9058,8 +9073,8 @@ if (!isTacticPage) return;
         snapshot.manualRecommendationRefresh = true;
         snapshot.generatorVersion = GENERATOR_VERSION;
 
-        if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.rememberLiveSnapshot) {
-            SnapshotEngine.rememberLiveSnapshot(snapshot);
+        if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.rememberManualSnapshot) {
+            SnapshotEngine.rememberManualSnapshot(snapshot);
         }
 
         const el = document.getElementById('slf-parser-recommendation');
@@ -9445,7 +9460,6 @@ if (!isTacticPage) return;
         return request.then(result => {
             if (!STATE.pendingPresetEvent) {
                 SnapshotEngine.persistManualState({
-                    active: !!STATE.liveParserTimer,
                     pendingPresetEvent: null,
                     pendingEffectRetry: false,
                     consumedPresetEventKey: recoverable.eventKey || null
@@ -9456,7 +9470,6 @@ if (!isTacticPage) return;
             if (!STATE.pendingPresetEvent) {
                 STATE.pendingPresetEvent = recoverable;
                 SnapshotEngine.persistManualState({
-                    active: !!STATE.liveParserTimer,
                     pendingEffectRetry: true
                 });
             }
@@ -9541,7 +9554,6 @@ if (!isTacticPage) return;
 
                 STATE.pendingPresetEvent = eventRecord;
                 SnapshotEngine.persistManualState({
-                    active: !!STATE.liveParserTimer,
                     manualTacticEventPending: true
                 });
                 void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, eventRecord, 'manual tactic event history')
@@ -20617,15 +20629,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.256',
-        scriptVersion: '4.4.256',
+        version: '4.4.257',
+        scriptVersion: '4.4.257',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.256',
+        scriptVersion: '4.4.257',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
