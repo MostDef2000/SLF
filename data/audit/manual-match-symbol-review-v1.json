@@ -92,11 +92,18 @@
       "symbol": "STATE.liveWaitStatus",
       "token": "liveWaitStatus",
       "owner": "src/core/config.js",
-      "classification": "LEGACY_AUTOMATIC_LOOP",
-      "allowedFiles": ["src/core/config.js", "src/modules/live-parser/snapshot-engine.js"],
-      "evidence": ["Used by historical background-loop pause messaging."],
+      "classification": "LEGACY_NAMED_ACTIVE_STATE",
+      "allowedFiles": [
+        "src/core/config.js",
+        "src/modules/live-parser/snapshot-engine.js",
+        "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js"
+      ],
+      "evidence": [
+        "The historical loop uses this field for pause messaging.",
+        "The active manual hint path clears it to prevent stale live-only state before rendering a new recommendation."
+      ],
       "deletionStatus": "BLOCKED",
-      "removalBlockedBy": ["automatic-loop deletion PR"]
+      "removalBlockedBy": ["replace manual reset semantics during state-envelope extraction"]
     },
     {
       "symbol": "STATE.liveSegmentSnapshots",
