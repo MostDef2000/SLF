@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'tools/apply-stage5-sunset-legacy-state.py'
+      - 'tools/apply-stage5-test-harness-fix.py'
       - '.github/workflows/stage5-sunset-legacy-state.yml'
 
 permissions:
@@ -18,15 +19,18 @@ jobs:
           ref: agent/stage5-sunset-legacy-state
           fetch-depth: 0
       - name: Apply exact compatibility sunset
-        run: python tools/apply-stage5-sunset-legacy-state.py
+        run: |
+          python tools/apply-stage5-sunset-legacy-state.py
+          python tools/apply-stage5-test-harness-fix.py
       - name: Remove one-time migration machinery
-        run: rm tools/apply-stage5-sunset-legacy-state.py .github/workflows/stage5-sunset-legacy-state.yml
+        run: rm tools/apply-stage5-sunset-legacy-state.py tools/apply-stage5-test-harness-fix.py .github/workflows/stage5-sunset-legacy-state.yml
       - name: Check sunset contracts
         run: |
           node --check src/core/config.js
           node --check src/modules/manual-match-telemetry/snapshot-engine.js
           node --check src/modules/manual-match-telemetry/manual-match-runtime.js
           node --check tools/test-manual-match-runtime.mjs
+          node --check tools/test-manual-match-workflow.mjs
           node --check tools/test-manual-match-state-bridge.mjs
           node tools/test-manual-match-runtime.mjs
           node tools/test-manual-match-workflow.mjs
