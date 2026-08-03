@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         SLF Tactics Helper (+VPS Sync + Live Parser)
+// @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.261
-// @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
+// @version      4.4.262
+// @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
 // @match        https://slf.fm/*
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.261',
-        scriptVersion: '4.4.261',
+        version: '4.4.262',
+        scriptVersion: '4.4.262',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.261',
+        scriptVersion: '4.4.262',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -411,8 +411,6 @@ const STATE = {
     suppressManualWatcherReason: null
 
 };
-
-const LIVE_RECOMMENDATION_HISTORY_LIMIT = 8;
 
 const LAST_PRESET_STORAGE_KEY = "slf_last_selected_preset_v1";
 const RECENT_PRESETS_STORAGE_KEY = "slf_recent_selected_presets_v1";
@@ -20291,15 +20289,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.261',
-        scriptVersion: '4.4.261',
+        version: '4.4.262',
+        scriptVersion: '4.4.262',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.261',
+        scriptVersion: '4.4.262',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.4.262
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/manual-match-regression.yml
+
+Approved base commit:
+- 27f2f9b05a9877e27f6ed634e005f6bb77ede55b
+
+Approved commit:
+- f00972d8606d219a32a0aac2d8ae79d79e9af127
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.261
 
 ### Automatic latest-only build

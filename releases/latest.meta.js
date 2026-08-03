@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         SLF Tactics Helper (+VPS Sync + Live Parser)
+// @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.261
-// @description  Modular SLF helper: tactics, live parser, TM + SLF transfer analyzer
+// @version      4.4.262
+// @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
 // @match        https://slf.fm/*
