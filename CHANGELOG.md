@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.4.260
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/manual-match-regression.yml
+- .github/workflows/tactic-analytics-smoke.yml
+- contracts/branch-map.json
+- contracts/branches/strategy-data-recommendations.md
+
+Approved base commit:
+- 2fcbde9afb15b5f9b4c2133631e070cf7d0d75ad
+
+Approved commit:
+- 61d3ca046d824fd18685def1ee5ccb932d201847
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.259
 
 ### Automatic latest-only build
