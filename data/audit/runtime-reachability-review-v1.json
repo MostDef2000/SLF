@@ -1,0 +1,122 @@
+{
+  "schema": "slf_runtime_reachability_manual_review_v1",
+  "reviewedAt": "2026-08-03",
+  "scope": "Initial audit-only review of match parsing and manual telemetry modules. No deletion approval is granted by this file.",
+  "classificationDefinitions": {
+    "ACTIVE": "Directly used by the current production workflow.",
+    "ACTIVE_BUT_MISNAMED": "Active code stored under a historical or misleading namespace.",
+    "MIXED_ACTIVE_LEGACY": "Active module containing legacy candidates that require symbol-level extraction before deletion.",
+    "LEGACY_CANDIDATE": "Potentially obsolete symbol or state; static and runtime evidence is still required before removal.",
+    "REVIEW_REQUIRED": "Insufficient evidence for a safe classification."
+  },
+  "moduleReviews": [
+    {
+      "file": "src/app/bootstrap.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "App.start() is the bundle entrypoint.",
+        "The bootstrap explicitly declares manual-only Coach Hint mode and does not call live parser auto-resume."
+      ]
+    },
+    {
+      "file": "src/app/ui-layer.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "The current match panel exposes finished-result submission and API status controls.",
+        "No start/stop live parser control is mounted by addMatchParserPanel()."
+      ]
+    },
+    {
+      "file": "src/modules/live-parser/match-state-parser.js",
+      "classification": "ACTIVE_BUT_MISNAMED",
+      "evidence": [
+        "Provides gameId, match status, minute and generation-window parsing used by the manual workflow."
+      ]
+    },
+    {
+      "file": "src/modules/live-parser/match-stats-parser.js",
+      "classification": "ACTIVE_BUT_MISNAMED",
+      "evidence": [
+        "Provides current page statistics used to build manual snapshots and recommendations."
+      ]
+    },
+    {
+      "file": "src/modules/live-parser/squad-parser.js",
+      "classification": "ACTIVE_BUT_MISNAMED",
+      "evidence": [
+        "Provides lineup and formation data included in manually built snapshots."
+      ]
+    },
+    {
+      "file": "src/modules/live-parser/event-tracker.js",
+      "classification": "MIXED_ACTIVE_LEGACY",
+      "evidence": [
+        "submitManualTelemetry(), preset event creation and preset effect construction are active.",
+        "The file also contains historical watcher and live-workflow naming that requires symbol-level review."
+      ]
+    },
+    {
+      "file": "src/modules/live-parser/snapshot-engine.js",
+      "classification": "MIXED_ACTIVE_LEGACY",
+      "evidence": [
+        "build(), sendSnapshot(), sendMatchResult(), persistLiveState() and loadLiveState() support the current manual workflow.",
+        "Automatic loop, bucket and auto-resume identifiers remain in the same object and are not deletion-approved."
+      ]
+    },
+    {
+      "file": "src/modules/live-parser/runtime-telemetry-integrity.js",
+      "classification": "ACTIVE_BUT_MISNAMED",
+      "evidence": [
+        "Restores pending preset events, creates deterministic effect keys and protects result submission.",
+        "Installs the active manual tactic change watcher."
+      ]
+    }
+  ],
+  "symbolReviewQueue": [
+    {
+      "owner": "src/modules/live-parser/snapshot-engine.js",
+      "identifiers": [
+        "startLive",
+        "stopLive",
+        "autoResumeIfNeeded",
+        "liveParserTimer",
+        "lastSavedBucket",
+        "liveWaitStatus",
+        "liveSegmentSnapshots"
+      ],
+      "classification": "LEGACY_CANDIDATE",
+      "removalBlockedBy": [
+        "repository-wide reference audit",
+        "browser runtime smoke test",
+        "manual telemetry regression coverage"
+      ]
+    },
+    {
+      "owner": "src/modules/live-parser/event-tracker.js",
+      "identifiers": [
+        "startManualTacticWatcher"
+      ],
+      "classification": "LEGACY_CANDIDATE",
+      "notes": "A separate active watcher exists in runtime-telemetry-integrity.js; verify that no bootstrap or extension path calls this older implementation."
+    },
+    {
+      "owner": "src/core/config.js",
+      "identifiers": [
+        "LIVE_PARSER_STATE_PREFIX",
+        "liveParserTimer",
+        "lastSavedBucket",
+        "liveWaitStatus",
+        "liveSegmentSnapshots"
+      ],
+      "classification": "REVIEW_REQUIRED",
+      "notes": "Some historically named state remains active because pending event recovery currently uses the same persisted state envelope."
+    }
+  ],
+  "nonGoals": [
+    "No runtime source is changed.",
+    "No symbol is approved for deletion.",
+    "No userscript version is changed.",
+    "No VPS data or deployment is changed.",
+    "No tactical policy, preset or recommendation behavior is changed."
+  ]
+}
