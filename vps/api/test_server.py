@@ -52,6 +52,32 @@ class ServerTestCase(unittest.TestCase):
         self.assertEqual(second.get_json()["skippedDuplicates"], 1)
         self.assertEqual(len(self.read_collection("match_snapshots_v2")), 1)
 
+    def test_all_tactical_collections_reject_retried_logical_records(self):
+        cases = {
+            "match_snapshots_v2": {"snapshotKey": "snapshot-1", "gameId": "g1"},
+            "match_results_v2": {"resultKey": "result-1", "gameId": "g1"},
+            "preset_events_v2": {"eventKey": "event-1", "gameId": "g1"},
+            "preset_effects_v2": {"effectKey": "effect-1", "gameId": "g1"}
+        }
+        for collection, payload in cases.items():
+            with self.subTest(collection=collection):
+                first = self.client.post(
+                    f"/api/{collection}?mode=append",
+                    json=payload,
+                    headers=self.auth
+                )
+                second = self.client.post(
+                    f"/api/{collection}?mode=append",
+                    json={**payload, "ts": 999, "source": {"trigger": "retry"}},
+                    headers=self.auth
+                )
+                self.assertEqual(first.status_code, 200)
+                self.assertEqual(second.status_code, 200)
+                self.assertEqual(first.get_json()["added"], 1)
+                self.assertEqual(second.get_json()["added"], 0)
+                self.assertEqual(second.get_json()["skippedDuplicates"], 1)
+                self.assertEqual(len(self.read_collection(collection)), 1)
+
     def test_duplicate_inside_single_request_is_skipped(self):
         payload = [
             {"eventKey": "event-1", "gameId": "g1"},
