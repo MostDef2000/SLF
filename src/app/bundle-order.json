@@ -90,7 +90,6 @@
           "BASE_LABELS",
           "DEFAULT_CUSTOM_PRESETS",
           "STATE",
-          "LIVE_RECOMMENDATION_HISTORY_LIMIT",
           "LAST_PRESET_STORAGE_KEY",
           "RECENT_PRESETS_STORAGE_KEY",
           "PresetUsageTracker",

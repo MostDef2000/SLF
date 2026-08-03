@@ -324,8 +324,6 @@ const STATE = {
 
 };
 
-const LIVE_RECOMMENDATION_HISTORY_LIMIT = 8;
-
 const LAST_PRESET_STORAGE_KEY = "slf_last_selected_preset_v1";
 const RECENT_PRESETS_STORAGE_KEY = "slf_recent_selected_presets_v1";
 

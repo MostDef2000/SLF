@@ -35,7 +35,7 @@ The pre-existing runtime integrity test continues to cover manual tactic watcher
 
 ### Legacy boundary contract
 
-`tools/test-legacy-live-parser-boundary.mjs` scans every JavaScript file under `src/` and joins observed token locations to `data/audit/manual-match-symbol-review-v1.json`.
+`tools/test-manual-telemetry-legacy-boundary.mjs` scans every JavaScript file under `src/` and joins observed token locations to `data/audit/manual-match-symbol-review-v1.json`.
 
 It fails when:
 

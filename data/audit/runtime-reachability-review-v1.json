@@ -2,13 +2,14 @@
   "schema": "slf_runtime_reachability_manual_review_v1",
   "reviewedAt": "2026-08-03",
   "reviewCandidateCount": 17,
-  "scope": "Audit-only review of all modules emitted as ACTIVE_WITH_LEGACY_MARKERS, LEGACY_CANDIDATE or UNREFERENCED_CANDIDATE. No deletion approval is granted by this file.",
+  "scope": "Final review after removal of the automatic live parser. Active manual telemetry is separated; one read-only storage migration key remains.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
     "ACTIVE_BUT_MISNAMED": "Active code stored under a historical or misleading namespace.",
     "MIXED_ACTIVE_LEGACY": "Active module containing legacy or compatibility candidates that require symbol-level extraction before deletion.",
     "LEGACY_CANDIDATE": "Potentially obsolete symbol or state; static and runtime evidence is still required before removal.",
-    "REVIEW_REQUIRED": "The automated audit found insufficient positive reachability evidence. Inclusion in the bundle is not deletion evidence; side effects and runtime patching must be inspected."
+    "REVIEW_REQUIRED": "The automated audit found insufficient positive reachability evidence. Inclusion in the bundle is not deletion evidence; side effects and runtime patching must be inspected.",
+    "MIGRATION_ONLY": "Read-only compatibility retained solely to migrate persisted data from a published predecessor."
   },
   "moduleReviews": [
     {
@@ -32,8 +33,8 @@
       "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
       "classification": "MIXED_ACTIVE_LEGACY",
       "evidence": [
-        "The dependency manifest records runtime consumers of CONFIG, STATE, utility functions and preset tracking.",
-        "The file still declares historical LIVE_PARSER naming and state fields used by the mixed persisted-state envelope."
+        "CONFIG, STATE, preset tracking and utilities have active runtime consumers.",
+        "Remaining legacy markers are collection aliases for historical server data and are unrelated to the removed live parser."
       ]
     },
     {
@@ -57,41 +58,39 @@
     },
     {
       "file": "src/modules/match-reading/match-state-parser.js",
-      "classification": "ACTIVE_BUT_MISNAMED",
+      "classification": "ACTIVE",
       "evidence": [
         "Provides gameId, match status, minute and generation-window parsing used by the manual workflow."
       ]
     },
     {
       "file": "src/modules/match-reading/match-stats-parser.js",
-      "classification": "ACTIVE_BUT_MISNAMED",
+      "classification": "ACTIVE",
       "evidence": [
         "Provides current page statistics used to build manual snapshots and recommendations."
       ]
     },
     {
       "file": "src/modules/match-reading/squad-parser.js",
-      "classification": "ACTIVE_BUT_MISNAMED",
+      "classification": "ACTIVE",
       "evidence": [
         "Provides lineup and formation data included in manually built snapshots."
       ]
     },
     {
       "file": "src/modules/manual-match-telemetry/snapshot-engine.js",
-      "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
-      "classification": "MIXED_ACTIVE_LEGACY",
+      "classification": "ACTIVE",
       "evidence": [
-        "build(), sendSnapshot(), sendMatchResult(), persistLiveState() and loadLiveState() support the current manual workflow.",
-        "Automatic loop, bucket and auto-resume identifiers remain in the same object and are not deletion-approved."
+        "Builds explicit manual snapshots and submits snapshots and finished results.",
+        "Contains no automatic interval, live-state storage API or auto-resume path."
       ]
     },
     {
       "file": "src/modules/manual-match-telemetry/event-tracker.js",
-      "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
-      "classification": "MIXED_ACTIVE_LEGACY",
+      "classification": "ACTIVE",
       "evidence": [
-        "submitManualTelemetry(), preset event creation and preset effect construction are active.",
-        "The file also contains an older manual watcher implementation and historical live-workflow naming that require symbol-level review."
+        "Creates manual telemetry fingerprints, preset events and deterministic preset effects.",
+        "Contains no duplicate watcher or automatic live-parser path."
       ]
     },
     {
@@ -125,10 +124,10 @@
     {
       "file": "src/modules/manual-match-telemetry/manual-match-runtime.js",
       "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
-      "classification": "ACTIVE_BUT_MISNAMED",
+      "classification": "ACTIVE",
       "evidence": [
-        "Restores pending preset events, creates deterministic effect keys and protects result submission.",
-        "Installs the active manual tactic change watcher; historical live-parser naming does not make the module obsolete."
+        "Owns manual-state persistence, pending-event migration, deterministic effect keys, retry recovery and the active manual tactic watcher.",
+        "The old storage key is read-only migration input; no legacy API or legacy write remains."
       ]
     },
     {
@@ -206,49 +205,22 @@
   ],
   "symbolReviewQueue": [
     {
-      "owner": "src/modules/manual-match-telemetry/snapshot-engine.js",
+      "owner": "src/modules/manual-match-telemetry/manual-match-runtime.js",
       "identifiers": [
-        "startLive",
-        "stopLive",
-        "autoResumeIfNeeded",
-        "liveParserTimer",
-        "lastSavedBucket",
-        "liveWaitStatus",
-        "liveSegmentSnapshots"
+        "slf_live_parser_state_v2"
       ],
-      "classification": "LEGACY_CANDIDATE",
-      "removalBlockedBy": [
-        "repository-wide reference audit",
-        "browser runtime smoke test",
-        "manual telemetry regression coverage"
-      ]
-    },
-    {
-      "owner": "src/modules/manual-match-telemetry/event-tracker.js",
-      "identifiers": [
-        "startManualTacticWatcher"
-      ],
-      "classification": "LEGACY_CANDIDATE",
-      "notes": "A separate active watcher exists in manual-match-runtime.js; verify that no bootstrap or extension path calls this older implementation."
-    },
-    {
-      "owner": "src/core/config.js",
-      "identifiers": [
-        "LIVE_PARSER_STATE_PREFIX",
-        "liveParserTimer",
-        "lastSavedBucket",
-        "liveWaitStatus",
-        "liveSegmentSnapshots"
-      ],
-      "classification": "REVIEW_REQUIRED",
-      "notes": "Some historically named state remains active because pending event recovery currently uses the same persisted state envelope."
+      "classification": "MIGRATION_ONLY",
+      "notes": "Read-only fallback for users upgrading from a published predecessor. Manual writes use slf_manual_match_state_v1 only."
     }
   ],
   "nonGoals": [
-    "No runtime source is changed.",
-    "No symbol is approved for deletion.",
-    "No userscript version is changed.",
-    "No VPS data or deployment is changed.",
-    "No tactical policy, preset or recommendation behavior is changed."
-  ]
+    "No tactical policy, preset or recommendation behavior is changed.",
+    "No historical VPS data or deployment is changed.",
+    "The read-only predecessor storage key is not removed before production acceptance."
+  ],
+  "stage6": {
+    "issue": 151,
+    "status": "repository_complete",
+    "externalGate": "post-release production manual event-to-effect verification"
+  }
 }

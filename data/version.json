@@ -23,7 +23,7 @@
       "src/core/config.js",
       "src/modules/manual-match-telemetry/manual-match-runtime.js",
       "src/modules/manual-match-telemetry/snapshot-engine.js",
-      "tools/test-legacy-live-parser-boundary.mjs",
+      "tools/test-manual-telemetry-legacy-boundary.mjs",
       "tools/test-manual-match-runtime.mjs",
       "tools/test-manual-match-state-bridge.mjs",
       "tools/test-manual-match-workflow.mjs"
