@@ -1,0 +1,56 @@
+{
+  "schema": "slf_contract_policy_v1",
+  "contractSchema": "data/contracts/slf-contracts-v1.schema.json",
+  "fixtures": "data/contracts/fixtures-v1.json",
+  "recordContracts": {
+    "match_snapshots_v2": {
+      "contract": "matchSnapshot",
+      "schemaVersion": 2,
+      "uniqueKey": "snapshotKey"
+    },
+    "match_results_v2": {
+      "contract": "matchResult",
+      "schemaVersion": 2,
+      "uniqueKey": "resultKey"
+    },
+    "preset_events_v2": {
+      "contract": "presetEvent",
+      "schemaVersion": 3,
+      "uniqueKey": "eventKey"
+    },
+    "preset_effects_v2": {
+      "contract": "presetEffect",
+      "schemaVersion": 3,
+      "uniqueKey": "effectKey"
+    }
+  },
+  "manualState": {
+    "contract": "manualMatchState",
+    "activeSchema": "slf_manual_match_state_v1",
+    "legacyReadOnlySchema": "slf_live_parser_state_v2",
+    "writesLegacy": false,
+    "migrationDirection": "legacy_to_active_only"
+  },
+  "apiResponses": {
+    "append": "appendResponse",
+    "analysis": "analysisResponse"
+  },
+  "releaseManifest": "releaseManifest",
+  "compatibility": {
+    "missingTacticalUniqueKey": {
+      "mode": "accept_and_report",
+      "serverResponseCounter": "missingUniqueKey",
+      "clientContractAllowsMissingKey": false,
+      "serverPersistenceRisk": "accepted records without keys cannot be deduplicated",
+      "strictTarget": "reject_before_persist",
+      "strictTargetStage": "security-automation-and-adversarial-api-tests"
+    }
+  },
+  "versioningRules": [
+    "Adding optional fields is backward compatible within the current schema version.",
+    "Removing or renaming required fields requires a new schema version and migration plan.",
+    "Changing unique-key semantics requires a new schema version and duplicate migration plan.",
+    "Legacy manual state may be read for migration but must never be written.",
+    "Generated release artifacts must validate against the release manifest contract before publication."
+  ]
+}
