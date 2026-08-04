@@ -1,0 +1,264 @@
+{
+  "schema": "slf_contract_fixtures_v1",
+  "contractSchema": "data/contracts/slf-contracts-v1.schema.json",
+  "positive": [
+    {
+      "name": "match snapshot envelope",
+      "contract": "matchSnapshot",
+      "data": {
+        "recordType": "match_snapshot",
+        "schemaVersion": 2,
+        "parserVersion": "match_snapshot_append_v1",
+        "snapshotKey": "match_snapshot|game-1|live|10|01-15|0:0|1-2",
+        "gameId": "game-1",
+        "status": "live",
+        "ts": 1770000000000,
+        "minute": 10,
+        "bucket": "01-15",
+        "generationWindow": { "index": 1, "label": "01-15" },
+        "score": { "home": 0, "away": 0 },
+        "teams": [1, 2],
+        "source": {
+          "page": "game",
+          "url": "https://slf.fm/game.php?id=game-1",
+          "collectedAt": 1770000000001,
+          "scriptVersion": "4.4.263"
+        }
+      }
+    },
+    {
+      "name": "finished match result envelope",
+      "contract": "matchResult",
+      "data": {
+        "recordType": "match_result",
+        "resultType": "finished_match",
+        "schemaVersion": 2,
+        "parserVersion": "match_result_append_v1",
+        "resultKey": "match_result|game-1|finished_match|2:1|1-2",
+        "gameId": "game-1",
+        "status": "finished",
+        "ts": 1770000000000,
+        "parsedAt": 1770000000002,
+        "score": { "home": 2, "away": 1 },
+        "source": {
+          "page": "game",
+          "url": "https://slf.fm/game.php?id=game-1",
+          "collectedAt": 1770000000002,
+          "scriptVersion": "4.4.263"
+        }
+      }
+    },
+    {
+      "name": "preset event envelope",
+      "contract": "presetEvent",
+      "data": {
+        "recordType": "preset_event",
+        "schemaVersion": 3,
+        "parserVersion": "preset_event_generation_v4_tactic_telemetry",
+        "eventKey": "preset_event|game-1|10|01-15|balanced|1770000000000",
+        "type": "preset",
+        "gameId": "game-1",
+        "ts": 1770000000000,
+        "minute": 10,
+        "bucket": "01-15",
+        "generationWindow": { "index": 1, "label": "01-15" },
+        "targetGenerationWindow": { "index": 2, "label": "16-30" },
+        "presetName": "balanced",
+        "tactic": { "def_line": "2", "press_line": "3" },
+        "beforeSnapshot": { "gameId": "game-1", "status": "live" }
+      }
+    },
+    {
+      "name": "manual tactic event envelope",
+      "contract": "presetEvent",
+      "data": {
+        "recordType": "preset_event",
+        "schemaVersion": 3,
+        "parserVersion": "manual_tactic_event_generation_v5_telemetry_only",
+        "eventKey": "manual_tactic_event|game-1|10|01-15|1770000000000",
+        "type": "manual_change",
+        "gameId": "game-1",
+        "ts": 1770000000000,
+        "minute": 10,
+        "bucket": "01-15",
+        "generationWindow": { "index": 1, "label": "01-15" },
+        "targetGenerationWindow": { "index": 2, "label": "16-30" },
+        "tactic": { "def_line": "3", "press_line": "3" },
+        "beforeSnapshot": { "gameId": "game-1", "status": "live" },
+        "source": {
+          "page": "game",
+          "trigger": "manual_tactic_control",
+          "collectedAt": 1770000000000,
+          "scriptVersion": "4.4.263"
+        }
+      }
+    },
+    {
+      "name": "preset effect envelope",
+      "contract": "presetEffect",
+      "data": {
+        "recordType": "preset_effect",
+        "schemaVersion": 3,
+        "parserVersion": "preset_effect_generation_v4_tactic_telemetry",
+        "effectKey": "preset_effect|game-1|preset_event|game-1|10|01-15|balanced|1770000000000",
+        "gameId": "game-1",
+        "presetName": "balanced",
+        "eventType": "preset",
+        "ts": 1770000001000,
+        "fromGenerationWindow": { "index": 1, "label": "01-15" },
+        "targetGenerationWindow": { "index": 2, "label": "16-30" },
+        "toGenerationWindow": { "index": 2, "label": "16-30" },
+        "before": { "gameId": "game-1", "minute": 10 },
+        "after": { "gameId": "game-1", "minute": 20 },
+        "delta": { "myXG": 0.6, "oppXG": 0.2 }
+      }
+    },
+    {
+      "name": "manual match state envelope",
+      "contract": "manualMatchState",
+      "data": {
+        "schema": "slf_manual_match_state_v1",
+        "gameId": "game-1",
+        "ts": 1770000000000,
+        "url": "https://slf.fm/game.php?id=game-1",
+        "pendingPresetEvent": null,
+        "pendingEffectRetry": false,
+        "consumedPresetEventKey": null,
+        "manualTacticEventPending": false,
+        "recommendationFreeze": null,
+        "presetProgression": null,
+        "lastRecommendationHtml": null,
+        "lastRecommendationMeta": null,
+        "migratedFrom": null
+      }
+    },
+    {
+      "name": "append API response",
+      "contract": "appendResponse",
+      "data": {
+        "status": "appended",
+        "collection": "match_snapshots_v2",
+        "received": 1,
+        "added": 1,
+        "skippedDuplicates": 0,
+        "missingUniqueKey": 0,
+        "count": 10
+      }
+    },
+    {
+      "name": "analysis API response",
+      "contract": "analysisResponse",
+      "data": {
+        "status": "ok",
+        "games": 3,
+        "collections": {},
+        "serverTime": 1770000000
+      }
+    }
+  ],
+  "negative": [
+    {
+      "name": "snapshot without unique key",
+      "contract": "matchSnapshot",
+      "data": {
+        "recordType": "match_snapshot",
+        "schemaVersion": 2,
+        "parserVersion": "match_snapshot_append_v1",
+        "gameId": "game-1",
+        "status": "live",
+        "ts": 1770000000000,
+        "source": { "page": "game", "collectedAt": 1770000000001, "scriptVersion": "4.4.263" }
+      }
+    },
+    {
+      "name": "result with non-finished status",
+      "contract": "matchResult",
+      "data": {
+        "recordType": "match_result",
+        "resultType": "finished_match",
+        "schemaVersion": 2,
+        "parserVersion": "match_result_append_v1",
+        "resultKey": "match_result|game-1|finished_match|0:0|1-2",
+        "gameId": "game-1",
+        "status": "live",
+        "ts": 1770000000000,
+        "parsedAt": 1770000000001,
+        "source": { "page": "game", "collectedAt": 1770000000001, "scriptVersion": "4.4.263" }
+      }
+    },
+    {
+      "name": "event without unique key",
+      "contract": "presetEvent",
+      "data": {
+        "recordType": "preset_event",
+        "schemaVersion": 3,
+        "parserVersion": "preset_event_generation_v4_tactic_telemetry",
+        "type": "preset",
+        "gameId": "game-1",
+        "ts": 1770000000000,
+        "generationWindow": { "index": 1, "label": "01-15" },
+        "targetGenerationWindow": { "index": 2, "label": "16-30" },
+        "beforeSnapshot": {}
+      }
+    },
+    {
+      "name": "effect with invalid key prefix",
+      "contract": "presetEffect",
+      "data": {
+        "recordType": "preset_effect",
+        "schemaVersion": 3,
+        "parserVersion": "preset_effect_generation_v4_tactic_telemetry",
+        "effectKey": "effect|game-1",
+        "gameId": "game-1",
+        "presetName": "balanced",
+        "eventType": "preset",
+        "ts": 1770000001000,
+        "before": {},
+        "after": {},
+        "delta": {}
+      }
+    },
+    {
+      "name": "manual state using removed legacy schema",
+      "contract": "manualMatchState",
+      "data": {
+        "schema": "slf_live_parser_state_v2",
+        "gameId": "game-1",
+        "ts": 1770000000000,
+        "url": "",
+        "pendingPresetEvent": null,
+        "pendingEffectRetry": false,
+        "consumedPresetEventKey": null,
+        "manualTacticEventPending": false,
+        "recommendationFreeze": null,
+        "presetProgression": null,
+        "lastRecommendationHtml": null,
+        "lastRecommendationMeta": null,
+        "migratedFrom": null
+      }
+    },
+    {
+      "name": "append response with negative count",
+      "contract": "appendResponse",
+      "data": {
+        "status": "appended",
+        "collection": "match_snapshots_v2",
+        "received": 1,
+        "added": -1,
+        "skippedDuplicates": 0,
+        "missingUniqueKey": 0,
+        "count": 10
+      }
+    },
+    {
+      "name": "analysis response with unknown status",
+      "contract": "analysisResponse",
+      "data": {
+        "status": "healthy",
+        "games": 3,
+        "collections": {},
+        "serverTime": 1770000000
+      }
+    }
+  ]
+}
