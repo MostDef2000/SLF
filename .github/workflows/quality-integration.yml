@@ -1,0 +1,201 @@
+name: Quality integration gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-contract-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Check static, contract, and security tooling syntax
+        run: |
+          node --check releases/latest.user.js
+          node --check tools/test-userscript-artifact-boundary.mjs
+          node --check tools/test-versioned-contracts.mjs
+          node --check tools/test-security-boundaries.mjs
+          node --check tools/validate-quality-governance.mjs
+          python3 -m py_compile tools/test-api-contract-compatibility.py
+          python3 -m py_compile tools/test-api-adversarial.py
+          node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/slf-contracts-v1.schema.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/fixtures-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/contract-policy-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/quality/quality-gates-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/quality/accepted-risks-v1.json', 'utf8'))"
+
+      - name: Enforce exact artifact, contracts, security, and governance
+        run: |
+          node tools/test-userscript-artifact-boundary.mjs
+          node tools/test-versioned-contracts.mjs
+          node tools/test-security-boundaries.mjs
+          node tools/validate-quality-governance.mjs
+
+      - name: Install pinned VPS API dependencies
+        run: python3 -m pip install --disable-pip-version-check -r vps/api/requirements.txt
+
+      - name: Verify installed dependency consistency
+        run: python3 -m pip check
+
+      - name: Run API contract and adversarial tests
+        run: |
+          python3 tools/test-api-contract-compatibility.py
+          python3 tools/test-api-adversarial.py
+
+  property-fuzz-reliability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Check property and fuzz tooling syntax
+        run: |
+          node --check tools/test-telemetry-properties-and-mutations.mjs
+          python3 -m py_compile tools/test-api-fuzz-and-recovery.py
+          node -e "JSON.parse(require('node:fs').readFileSync('data/quality/reliability-budget-v1.json', 'utf8'))"
+
+      - name: Run telemetry properties and mutation sentinels
+        run: node tools/test-telemetry-properties-and-mutations.mjs
+
+      - name: Install pinned VPS API dependencies
+        run: python3 -m pip install --disable-pip-version-check -r vps/api/requirements.txt
+
+      - name: Verify installed dependency consistency
+        run: python3 -m pip check
+
+      - name: Run API fuzz and recovery properties
+        run: python3 tools/test-api-fuzz-and-recovery.py
+
+  browser-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Check browser harness syntax
+        run: python3 -m py_compile tests/browser/test_exact_userscript.py
+
+      - name: Install pinned browser test dependencies
+        run: python3 -m pip install --disable-pip-version-check -r tests/browser/requirements.txt
+
+      - name: Verify browser dependency consistency
+        run: python3 -m pip check
+
+      - name: Install pinned Chromium runtime
+        run: python3 -m playwright install --with-deps chromium
+
+      - name: Execute exact userscript in browser fixtures
+        run: python3 tests/browser/test_exact_userscript.py
+
+      - name: Upload browser failure evidence
+        if: failure() && hashFiles('tests/browser/artifacts/**') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: quality-integration-browser-failure-evidence
+          path: tests/browser/artifacts
+          if-no-files-found: ignore
+          retention-days: 7
+
+  release-deployment-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Check release and deployment evidence tooling syntax
+        run: |
+          node --check tools/generate-release-evidence.mjs
+          node --check tools/validate-release-evidence.mjs
+          python3 -m py_compile tools/test-deployment-evidence.py
+          python3 -m py_compile vps/ops/verify_api_deployment.py
+          bash -n vps/ops/deploy-code.sh
+          bash -n vps/ops/rollback-code.sh
+
+      - name: Rebuild exact release bytes deterministically
+        run: |
+          set -euo pipefail
+          sha256sum releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md > "$RUNNER_TEMP/release-before.sha256"
+          export APPROVED_BASE_COMMIT
+          export APPROVED_COMMIT
+          export APPROVED_FILES
+          export SOURCE_BRANCH
+          export TARGET_VERSION
+          APPROVED_BASE_COMMIT=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.approvedBaseCommit)")
+          APPROVED_COMMIT=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.approvedCommit)")
+          APPROVED_FILES=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.approvedFiles.join('\n'))")
+          SOURCE_BRANCH=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.sourceBranch || 'main')")
+          TARGET_VERSION=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.scriptVersion)")
+          node tools/build-latest-userscript.mjs
+          sha256sum --check "$RUNNER_TEMP/release-before.sha256"
+          git diff --exit-code -- releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md
+          EXPECTED_APPROVED_BASE_COMMIT="$APPROVED_BASE_COMMIT" \
+          EXPECTED_APPROVED_COMMIT="$APPROVED_COMMIT" \
+          EXPECTED_APPROVED_FILES="$APPROVED_FILES" \
+            node tools/validate-release-provenance.mjs
+
+      - name: Validate deployment verifier contract
+        run: python3 tools/test-deployment-evidence.py
+
+      - name: Generate release evidence and SPDX SBOM
+        env:
+          SLF_DETERMINISTIC_REBUILD_VERIFIED: 'true'
+          SLF_EVIDENCE_DIR: artifacts/release-evidence
+        run: node tools/generate-release-evidence.mjs
+
+      - name: Validate evidence bundle
+        env:
+          SLF_EVIDENCE_DIR: artifacts/release-evidence
+        run: node tools/validate-release-evidence.mjs
+
+      - name: Upload release evidence bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: quality-integration-release-evidence
+          path: artifacts/release-evidence
+          if-no-files-found: error
+          retention-days: 14
+
+  quality-integration:
+    if: always()
+    needs:
+      - static-contract-security
+      - property-fuzz-reliability
+      - browser-e2e
+      - release-deployment-evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every quality domain to pass
+        env:
+          STATIC_RESULT: ${{ needs.static-contract-security.result }}
+          RELIABILITY_RESULT: ${{ needs.property-fuzz-reliability.result }}
+          BROWSER_RESULT: ${{ needs.browser-e2e.result }}
+          EVIDENCE_RESULT: ${{ needs.release-deployment-evidence.result }}
+        run: |
+          set -euo pipefail
+          printf 'static-contract-security=%s\n' "$STATIC_RESULT"
+          printf 'property-fuzz-reliability=%s\n' "$RELIABILITY_RESULT"
+          printf 'browser-e2e=%s\n' "$BROWSER_RESULT"
+          printf 'release-deployment-evidence=%s\n' "$EVIDENCE_RESULT"
+          for result in "$STATIC_RESULT" "$RELIABILITY_RESULT" "$BROWSER_RESULT" "$EVIDENCE_RESULT"; do
+            test "$result" = 'success'
+          done
+          echo 'Quality integration gate passed.'

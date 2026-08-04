@@ -4,7 +4,13 @@
 
 The prerequisite quality pull requests are integrated into `main` with explicit repository-owner acceptance. An independent reviewer was not available, so the repository must not describe those merges as independently reviewed.
 
-Governance remains `prepared_not_enforced` until an always-running aggregate workflow exists on `main`, its exact check context is observed, and GitHub branch protection is applied and verified separately.
+The always-running aggregate workflow was exercised on PR #175. All four domain jobs and the final context completed successfully:
+
+```text
+Quality integration gate / quality-integration
+```
+
+Repository state is therefore `aggregate_verified_settings_not_enforced`. GitHub branch protection has not been applied or verified.
 
 ## Review model
 
@@ -20,17 +26,26 @@ The accepted review model is:
 
 If an independent reviewer becomes available, critical-path changes should use that reviewer and the single-maintainer risk should be reassessed.
 
-## Why component checks are not required directly
+## Aggregate quality context
 
 Most component workflows use path filters to avoid unnecessary work. GitHub can leave a required check pending when its workflow is skipped by a path filter. Requiring every component workflow directly would therefore risk blocking unrelated pull requests indefinitely.
 
-The enforcement target is one always-running aggregate workflow:
+`.github/workflows/quality-integration.yml` runs on every pull request and `main` push. It executes four independent domains:
 
-```text
-Quality integration gate / quality-integration
-```
+1. exact artifact, versioned contracts, security boundaries, governance, and adversarial API tests;
+2. property, fuzz, mutation, recovery, and reliability tests;
+3. exact userscript execution in Chromium fixtures;
+4. deterministic release rebuild and deployment evidence validation.
 
-The aggregate workflow is added only after all prerequisite quality tools and workflows exist on `main`.
+The final `quality-integration` job uses `if: always()` and fails unless every domain concludes `success`.
+
+Verification evidence recorded in `data/quality/quality-gates-v1.json`:
+
+- PR: `#175`;
+- workflow run: `30884950897`;
+- final job: `91914145283`;
+- result: `success`;
+- verified: `2026-08-04`.
 
 ## Rollout sequence
 
@@ -43,13 +58,13 @@ Completed:
 5. Owner-approved and merged browser E2E PR #166.
 6. Owner-approved and merged property, fuzz, mutation, and reliability PR #167.
 7. Owner-approved and merged release and deployment evidence PR #168.
+8. Owner-approved and merged governance PR #169 with single-maintainer risk `QR-007` recorded.
+9. Added the always-running aggregate workflow in PR #175.
+10. Observed the exact successful aggregate context on the PR merge-ref.
 
 Remaining:
 
-8. Merge the governance package with the single-maintainer risk recorded.
-9. Add an always-running aggregate workflow that invokes the integrated checks.
-10. Observe the exact successful check context in GitHub.
-11. Change `data/quality/quality-gates-v1.json` from `prepared_not_enforced` to a verified ready state.
+11. Merge PR #175 so the aggregate workflow exists on `main`.
 12. Apply branch protection or a repository ruleset with separate owner approval.
 13. Verify protection with a disposable pull request before treating enforcement as complete.
 
@@ -61,14 +76,14 @@ The target configuration for the current single-maintainer model is:
 - zero required approvals while no independent reviewer exists;
 - CODEOWNER review routing retained, but CODEOWNER approval not required;
 - conversations resolved before merge;
-- the always-running aggregate check required;
+- `Quality integration gate / quality-integration` required;
 - force pushes blocked;
 - branch deletion blocked;
 - administrator bypass disabled unless a separately documented emergency process is adopted.
 
-This avoids a permanently unmergeable repository while preserving review evidence, mandatory CI, and protected history.
+This avoids a permanently unmergeable repository while preserving owner accountability, mandatory CI, and protected history.
 
-Repository settings are not deployable source code. A committed manifest describes intent but does not prove that GitHub settings were applied.
+Repository settings are not deployable source code. A committed manifest and successful workflow do not prove that GitHub settings were applied.
 
 ## Critical path ownership
 
