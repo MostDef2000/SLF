@@ -26,6 +26,28 @@ function linesMatching(source, expression) {
   return source.split(/\r?\n/).filter(line => expression.test(line));
 }
 
+function assertExplicitWorkflowPermissions(source, file) {
+  if (/^permissions:\s*$/m.test(source)) return;
+
+  const lines = source.split(/\r?\n/);
+  const jobsIndex = lines.findIndex(line => /^jobs:\s*$/.test(line));
+  assert.ok(jobsIndex >= 0, `${file} must define jobs`);
+
+  const jobStarts = [];
+  for (let index = jobsIndex + 1; index < lines.length; index += 1) {
+    const match = lines[index].match(/^  ([A-Za-z0-9_-]+):\s*$/);
+    if (match) jobStarts.push({ id: match[1], index });
+  }
+  assert.ok(jobStarts.length > 0, `${file} must define at least one job`);
+
+  for (let index = 0; index < jobStarts.length; index += 1) {
+    const start = jobStarts[index];
+    const end = jobStarts[index + 1]?.index ?? lines.length;
+    const block = lines.slice(start.index + 1, end).join('\n');
+    assert.match(block, /^    permissions:\s*$/m, `${file} job ${start.id} must declare explicit permissions`);
+  }
+}
+
 const header = read('src/app/userscript-header.js');
 const apiSource = read('src/core/api.js');
 const tokenSource = read('src/core/token-storage.js');
@@ -131,17 +153,18 @@ const workflowFiles = walk('.github/workflows').filter(file => /\.ya?ml$/.test(f
 assert.ok(workflowFiles.length > 0, 'no GitHub Actions workflows found');
 for (const file of workflowFiles) {
   const source = read(file);
-  assert.match(source, /^permissions:\s*$/m, `${file} must declare explicit top-level permissions`);
+  assertExplicitWorkflowPermissions(source, file);
   assert.equal(/permissions:\s*write-all/.test(source), false, `${file} must not use write-all permissions`);
   assert.equal(/\bpull_request_target\s*:/.test(source), false, `${file} must not use pull_request_target`);
   assert.equal(/(?:curl|wget)[^\n|]*\|\s*(?:ba)?sh\b/.test(source), false, `${file} must not pipe downloads into a shell`);
 
   for (const line of linesMatching(source, /^\s*-?\s*uses:\s*/)) {
-    const value = line.replace(/^\s*-?\s*uses:\s*/, '').trim();
+    const rawValue = line.replace(/^\s*-?\s*uses:\s*/, '').trim();
+    const value = rawValue.replace(/\s+#.*$/, '').trim();
     if (value.startsWith('./')) continue;
     const match = value.match(/^([^@\s]+)@([^\s#]+)$/);
-    assert.ok(match, `${file} has an invalid action reference: ${value}`);
-    assert.match(match[2], /^[0-9a-f]{40}$/i, `${file} action is not pinned to a full commit SHA: ${value}`);
+    assert.ok(match, `${file} has an invalid action reference: ${rawValue}`);
+    assert.match(match[2], /^[0-9a-f]{40}$/i, `${file} action is not pinned to a full commit SHA: ${rawValue}`);
   }
 }
 
