@@ -1,0 +1,30 @@
+{
+  "schema": "slf_reliability_budget_v1",
+  "artifact": {
+    "path": "releases/latest.user.js",
+    "maxBytes": 2000000,
+    "maxParseMilliseconds": 1500
+  },
+  "bundle": {
+    "expectedModules": 56
+  },
+  "runtimeStaticInventory": {
+    "maxSetIntervalCalls": 20,
+    "maxMutationObservers": 10,
+    "manualWatcherInstallIntervalMilliseconds": 500,
+    "manualWatcherMaxAttempts": 120
+  },
+  "fuzz": {
+    "seed": 1597463007,
+    "javascriptCases": 1000,
+    "pythonCases": 1000
+  },
+  "mutationSentinels": {
+    "minimumKilled": 6
+  },
+  "notes": [
+    "Budgets are merge-blocking upper bounds, not performance targets.",
+    "A budget increase requires a reviewed reason and replacement evidence.",
+    "Budgets should be ratcheted downward when stable production evidence permits it."
+  ]
+}
