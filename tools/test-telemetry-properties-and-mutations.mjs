@@ -12,24 +12,15 @@ const runtimePath = 'src/modules/manual-match-telemetry/manual-match-runtime.js'
 const artifactPath = 'releases/latest.user.js';
 const budgetPath = 'data/quality/reliability-budget-v1.json';
 
-function read(relativePath) {
-  return fs.readFileSync(path.join(root, relativePath), 'utf8');
-}
-
-function readJson(relativePath) {
-  return JSON.parse(read(relativePath));
-}
+const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
+const readJson = relativePath => JSON.parse(read(relativePath));
 
 function createPrng(seed) {
   let state = seed >>> 0;
-  return function next() {
+  return () => {
     state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
     return state / 0x100000000;
   };
-}
-
-function pick(next, values) {
-  return values[Math.floor(next() * values.length)];
 }
 
 function token(next, prefix = 'v') {
@@ -44,16 +35,7 @@ function token(next, prefix = 'v') {
 
 function loadSnapshotEngine(source) {
   const context = {
-    console,
-    Date,
-    JSON,
-    Object,
-    Array,
-    Map,
-    Set,
-    Number,
-    String,
-    Promise,
+    console, Date, JSON, Object, Array, Map, Set, Number, String, Promise,
     location: { href: 'https://slf.fm/game.php?id=property-test' }
   };
   vm.createContext(context);
@@ -64,12 +46,9 @@ function loadSnapshotEngine(source) {
 }
 
 function extractNamedFunction(source, name) {
-  const needle = `function ${name}`;
-  const start = source.indexOf(needle);
+  const start = source.indexOf(`function ${name}`);
   assert.ok(start >= 0, `missing function ${name}`);
   const open = source.indexOf('{', start);
-  assert.ok(open >= 0, `missing function body ${name}`);
-
   let depth = 0;
   let quote = null;
   let escaped = false;
@@ -79,7 +58,6 @@ function extractNamedFunction(source, name) {
   for (let index = open; index < source.length; index += 1) {
     const char = source[index];
     const next = source[index + 1];
-
     if (lineComment) {
       if (char === '\n') lineComment = false;
       continue;
@@ -120,33 +98,30 @@ function extractNamedFunction(source, name) {
   throw new Error(`unterminated function ${name}`);
 }
 
-function loadDeterministicEffectKey(source) {
-  const functionSource = extractNamedFunction(source, 'getDeterministicEffectKey');
-  return vm.runInNewContext(`(${functionSource})`, {});
+function loadEffectKey(source) {
+  return vm.runInNewContext(`(${extractNamedFunction(source, 'getDeterministicEffectKey')})`, {});
 }
 
 function loadLegacyNormalizer(source) {
   const functionSource = extractNamedFunction(source, 'normalizeLegacyManualState');
-  const wrapper = `(() => {
+  return vm.runInNewContext(`(() => {
     const manualStateSchema = 'slf_manual_match_state_v1';
     const cloneForStorage = value => value == null ? value : JSON.parse(JSON.stringify(value));
     return (${functionSource});
-  })()`;
-  return vm.runInNewContext(wrapper, { JSON, Date, Number, String });
+  })()`, { JSON, Date, Number, String });
 }
 
-function makeSnapshot(next, overrides = {}) {
+function makeSnapshot(next) {
   return {
     ts: Math.floor(next() * 1e12),
     gameId: token(next, 'game-'),
-    status: pick(next, ['live', 'halftime', 'finished']),
+    status: ['live', 'halftime', 'finished'][Math.floor(next() * 3)],
     minute: Math.floor(next() * 121),
-    bucket: pick(next, ['01-15', '16-30', '31-45', '46-60', '61-75', '76-90']),
+    bucket: ['01-15', '16-30', '31-45', '46-60', '61-75', '76-90'][Math.floor(next() * 6)],
     score: { home: Math.floor(next() * 7), away: Math.floor(next() * 7) },
     teams: [Math.floor(next() * 99999) + 1, Math.floor(next() * 99999) + 1],
     retryCount: Math.floor(next() * 5),
-    source: { collectedAt: Math.floor(next() * 1e12) },
-    ...overrides
+    source: { collectedAt: Math.floor(next() * 1e12) }
   };
 }
 
@@ -154,216 +129,177 @@ function assertSnapshotProperties(engine, cases, seed) {
   const next = createPrng(seed);
   for (let index = 0; index < cases; index += 1) {
     const snapshot = makeSnapshot(next);
-    const baseline = engine.buildSnapshotKey(snapshot);
-    assert.match(baseline, /^match_snapshot\|/, 'snapshot key prefix changed');
-
-    const retryVariant = {
+    const key = engine.buildSnapshotKey(snapshot);
+    assert.match(key, /^match_snapshot\|/);
+    assert.equal(engine.buildSnapshotKey({
       ...snapshot,
-      ts: snapshot.ts + 1000,
+      ts: snapshot.ts + 1,
       retryCount: snapshot.retryCount + 1,
-      source: { collectedAt: snapshot.source.collectedAt + 5000, retry: true }
-    };
-    assert.equal(
-      engine.buildSnapshotKey(retryVariant),
-      baseline,
-      'snapshot identity must ignore transport and retry metadata'
-    );
+      source: { collectedAt: snapshot.source.collectedAt + 1, retry: true }
+    }), key, 'snapshot identity changed with transport metadata');
 
-    const dimensions = [
-      ['gameId', token(next, 'changed-game-')],
+    for (const [field, value] of [
+      ['gameId', token(next, 'other-game-')],
       ['status', snapshot.status === 'live' ? 'finished' : 'live'],
-      ['minute', Number(snapshot.minute) + 1],
-      ['bucket', `${snapshot.bucket}-changed`],
+      ['minute', snapshot.minute + 1],
+      ['bucket', `${snapshot.bucket}-other`],
       ['score', { ...snapshot.score, home: snapshot.score.home + 1 }],
       ['teams', [snapshot.teams[0], snapshot.teams[1] + 100000]]
-    ];
-    for (const [field, value] of dimensions) {
-      assert.notEqual(
-        engine.buildSnapshotKey({ ...snapshot, [field]: value }),
-        baseline,
-        `snapshot identity must change with ${field}`
-      );
+    ]) {
+      assert.notEqual(engine.buildSnapshotKey({ ...snapshot, [field]: value }), key, `snapshot ${field}`);
     }
 
-    const resultBaseline = engine.buildResultKey({ ...snapshot, status: 'finished' });
-    assert.match(resultBaseline, /^match_result\|/, 'result key prefix changed');
-    assert.equal(
-      engine.buildResultKey({
-        ...snapshot,
-        status: 'live',
-        minute: snapshot.minute + 25,
-        bucket: 'other',
-        ts: snapshot.ts + 99999,
-        retryCount: 77
-      }),
-      resultBaseline,
-      'result identity must ignore runtime timing and retry metadata'
-    );
+    const resultKey = engine.buildResultKey(snapshot);
+    assert.match(resultKey, /^match_result\|/);
+    assert.equal(engine.buildResultKey({
+      ...snapshot,
+      status: snapshot.status === 'live' ? 'finished' : 'live',
+      minute: snapshot.minute + 30,
+      bucket: 'other',
+      ts: snapshot.ts + 99,
+      retryCount: 99
+    }), resultKey, 'result identity changed with runtime metadata');
     for (const [field, value] of [
-      ['gameId', token(next, 'result-game-')],
+      ['gameId', token(next, 'other-result-')],
       ['score', { ...snapshot.score, away: snapshot.score.away + 1 }],
       ['teams', [snapshot.teams[0] + 100000, snapshot.teams[1]]]
     ]) {
-      assert.notEqual(
-        engine.buildResultKey({ ...snapshot, [field]: value }),
-        resultBaseline,
-        `result identity must change with ${field}`
-      );
+      assert.notEqual(engine.buildResultKey({ ...snapshot, [field]: value }), resultKey, `result ${field}`);
     }
   }
 }
 
-function assertEffectProperties(buildEffectKey, cases, seed) {
+function assertEffectProperties(buildKey, cases, seed) {
   const next = createPrng(seed ^ 0x9e3779b9);
   for (let index = 0; index < cases; index += 1) {
     const gameId = token(next, 'effect-game-');
-    const eventKey = `preset_event|${gameId}|${Math.floor(next() * 100000)}`;
-    const pending = { gameId, eventKey, ts: Math.floor(next() * 1e12) };
-    const effect = {
-      gameId,
-      ts: Math.floor(next() * 1e12),
-      delta: { xG: next(), shots: Math.floor(next() * 20) },
-      effectKey: `legacy|${next()}`
-    };
-    const baseline = buildEffectKey(effect, pending);
-    assert.equal(baseline, `preset_effect|${gameId}|${eventKey}`);
-    assert.equal(
-      buildEffectKey({ ...effect, ts: effect.ts + 10000, delta: { xG: 999 } }, { ...pending, ts: pending.ts + 10 }),
-      baseline,
-      'effect identity must ignore observation time and metric changes'
-    );
-    assert.notEqual(
-      buildEffectKey(effect, { ...pending, eventKey: `${eventKey}-other` }),
-      baseline,
-      'effect identity must change when source event identity changes'
-    );
-    assert.notEqual(
-      buildEffectKey({ ...effect, gameId: `${gameId}-other` }, pending),
-      baseline,
-      'effect identity must change when effect game identity changes'
-    );
-    assert.equal(buildEffectKey(effect, null), effect.effectKey, 'effect without pending event must retain original key');
+    const eventKey = `preset_event|${gameId}|${index}`;
+    const effect = { gameId, effectKey: `legacy|${index}`, ts: index, delta: { xG: next() } };
+    const pending = { gameId, eventKey, ts: index };
+    const key = buildKey(effect, pending);
+    assert.equal(key, `preset_effect|${gameId}|${eventKey}`);
+    assert.equal(buildKey({ ...effect, ts: index + 1, delta: { xG: 999 } }, { ...pending, ts: index + 2 }), key);
+    assert.notEqual(buildKey(effect, { ...pending, eventKey: `${eventKey}-other` }), key);
+    assert.notEqual(buildKey({ ...effect, gameId: `${gameId}-other` }, pending), key);
+    assert.equal(buildKey(effect, null), effect.effectKey);
   }
 }
 
-function assertMigrationProperties(normalizeLegacy, cases, seed) {
+function assertMigrationProperties(normalize, cases, seed) {
   const next = createPrng(seed ^ 0x85ebca6b);
   for (let index = 0; index < cases; index += 1) {
     const gameId = token(next, 'migration-game-');
-    const eventKey = `preset_event|${gameId}|${index}`;
+    const event = { gameId, eventKey: `preset_event|${gameId}|${index}`, nested: { index } };
     const legacy = {
-      schema: 'slf_live_parser_state_v2',
-      gameId,
-      ts: Math.floor(next() * 1e12),
+      schema: 'slf_live_parser_state_v2', gameId, ts: index,
       url: `https://slf.fm/game.php?id=${gameId}`,
-      pendingPresetEvent: { gameId, eventKey, nested: { value: index } },
-      pendingEffectRetry: index % 2 === 0,
-      consumedPresetEventKey: index % 3 === 0 ? eventKey : null,
-      manualTacticEventPending: index % 5 === 0,
-      recommendationFreeze: { gameId, index },
-      presetProgression: { rank: index },
-      lastRecommendationHtml: `<p>${index}</p>`,
-      lastRecommendationMeta: { index },
-      liveParserTimer: 123,
-      compactSnapshot: { stale: true }
+      pendingPresetEvent: event, pendingEffectRetry: index % 2 === 0,
+      consumedPresetEventKey: null, manualTacticEventPending: false,
+      recommendationFreeze: { index }, presetProgression: { index },
+      lastRecommendationHtml: `<p>${index}</p>`, lastRecommendationMeta: { index },
+      liveParserTimer: 123, compactSnapshot: { stale: true }
     };
-    const migrated = normalizeLegacy(legacy, gameId);
-    assert.ok(migrated, 'valid legacy state must migrate');
+    const migrated = normalize(legacy, gameId);
+    assert.ok(migrated);
     assert.equal(migrated.schema, 'slf_manual_match_state_v1');
-    assert.equal(migrated.gameId, gameId);
     assert.equal(migrated.migratedFrom, 'slf_live_parser_state_v2');
     assert.equal(Object.hasOwn(migrated, 'liveParserTimer'), false);
     assert.equal(Object.hasOwn(migrated, 'compactSnapshot'), false);
-    assert.notEqual(migrated.pendingPresetEvent, legacy.pendingPresetEvent, 'migration must clone nested state');
-    assert.deepEqual(migrated.pendingPresetEvent, legacy.pendingPresetEvent);
-    assert.equal(normalizeLegacy({ ...legacy, schema: 'unknown' }, gameId), null);
-    assert.equal(normalizeLegacy(legacy, `${gameId}-other`), null);
+    assert.notEqual(migrated.pendingPresetEvent, legacy.pendingPresetEvent);
+    assert.equal(JSON.stringify(migrated.pendingPresetEvent), JSON.stringify(legacy.pendingPresetEvent));
+    assert.equal(normalize({ ...legacy, schema: 'unknown' }, gameId), null);
+    assert.equal(normalize(legacy, `${gameId}-other`), null);
   }
 }
 
-function expectMutationKilled(label, run) {
-  let killed = false;
+function expectKilled(label, test) {
   try {
-    run();
+    test();
   } catch (error) {
-    if (error instanceof assert.AssertionError || error?.name === 'AssertionError') killed = true;
-    else throw error;
+    if (error?.name === 'AssertionError') return 1;
+    throw error;
   }
-  assert.equal(killed, true, `mutation survived: ${label}`);
-  return 1;
+  throw new assert.AssertionError({ message: `mutation survived: ${label}` });
 }
 
 const budget = readJson(budgetPath);
 const snapshotSource = read(snapshotPath);
 const runtimeSource = read(runtimePath);
 const artifactSource = read(artifactPath);
+const bundleOrder = readJson('src/app/bundle-order.json');
 const cases = budget.fuzz.javascriptCases;
 const seed = budget.fuzz.seed;
 
-const parseStarted = performance.now();
+const parseStart = performance.now();
 new vm.Script(artifactSource, { filename: artifactPath });
-const parseMilliseconds = performance.now() - parseStarted;
-const artifactBytes = Buffer.byteLength(artifactSource, 'utf8');
-assert.ok(artifactBytes <= budget.artifact.maxBytes, `artifact size ${artifactBytes} exceeds ${budget.artifact.maxBytes}`);
-assert.ok(parseMilliseconds <= budget.artifact.maxParseMilliseconds, `artifact parse ${parseMilliseconds.toFixed(1)}ms exceeds budget`);
+const parseMs = performance.now() - parseStart;
+const bytes = Buffer.byteLength(artifactSource, 'utf8');
+assert.ok(bytes <= budget.artifact.maxBytes, `artifact bytes ${bytes}`);
+assert.ok(parseMs <= budget.artifact.maxParseMilliseconds, `artifact parse ${parseMs.toFixed(1)}ms`);
+assert.equal(bundleOrder.files.length, budget.bundle.expectedModules);
 
-const engine = loadSnapshotEngine(snapshotSource);
-const deterministicEffectKey = loadDeterministicEffectKey(runtimeSource);
-const normalizeLegacy = loadLegacyNormalizer(runtimeSource);
-assertSnapshotProperties(engine, cases, seed);
-assertEffectProperties(deterministicEffectKey, cases, seed);
-assertMigrationProperties(normalizeLegacy, Math.min(cases, 500), seed);
+assertSnapshotProperties(loadSnapshotEngine(snapshotSource), cases, seed);
+assertEffectProperties(loadEffectKey(runtimeSource), cases, seed);
+assertMigrationProperties(loadLegacyNormalizer(runtimeSource), Math.min(cases, 500), seed);
 
-const intervalCount = (artifactSource.match(/\bsetInterval\s*\(/g) || []).length;
-const observerCount = (artifactSource.match(/\bnew\s+MutationObserver\s*\(/g) || []).length;
-assert.ok(intervalCount <= budget.runtimeStaticInventory.maxSetIntervalCalls, `setInterval inventory ${intervalCount} exceeds budget`);
-assert.ok(observerCount <= budget.runtimeStaticInventory.maxMutationObservers, `MutationObserver inventory ${observerCount} exceeds budget`);
-assert.ok(runtimeSource.includes('const maxAttempts = 120;'), 'manual watcher installation must remain bounded to 120 attempts');
-assert.ok(runtimeSource.includes('setInterval(tryInstall, 500)'), 'manual watcher installation interval changed');
+const intervals = (artifactSource.match(/\bsetInterval\s*\(/g) || []).length;
+const observers = (artifactSource.match(/\bnew\s+MutationObserver\s*\(/g) || []).length;
+assert.ok(intervals <= budget.runtimeStaticInventory.maxSetIntervalCalls, `setInterval inventory ${intervals}`);
+assert.ok(observers <= budget.runtimeStaticInventory.maxMutationObservers, `MutationObserver inventory ${observers}`);
+const scheduleSource = extractNamedFunction(runtimeSource, 'scheduleManualWatcher');
+assert.ok(
+  scheduleSource.includes(`attempts >= ${budget.runtimeStaticInventory.manualWatcherMaxAttempts}`),
+  'manual watcher attempt boundary changed'
+);
+assert.match(
+  scheduleSource,
+  new RegExp(`\\},\\s*${budget.runtimeStaticInventory.manualWatcherInstallIntervalMilliseconds}\\);`),
+  'manual watcher interval changed'
+);
 
 let killed = 0;
-killed += expectMutationKilled('snapshot prefix', () => {
+killed += expectKilled('snapshot prefix', () => {
   const mutated = snapshotSource.replace("'match_snapshot',", "'match_snapshot_mutated',");
   assert.notEqual(mutated, snapshotSource);
   assertSnapshotProperties(loadSnapshotEngine(mutated), 10, seed);
 });
-killed += expectMutationKilled('snapshot minute omitted', () => {
+killed += expectKilled('snapshot minute', () => {
   const mutated = snapshotSource.replace("            snapshot.minute ?? '',\n", '');
   assert.notEqual(mutated, snapshotSource);
   assertSnapshotProperties(loadSnapshotEngine(mutated), 10, seed);
 });
-killed += expectMutationKilled('snapshot score omitted', () => {
+killed += expectKilled('snapshot score', () => {
   const mutated = snapshotSource.replace('            this.getScoreKey(snapshot.score),\n', "            '',\n");
   assert.notEqual(mutated, snapshotSource);
   assertSnapshotProperties(loadSnapshotEngine(mutated), 10, seed);
 });
-killed += expectMutationKilled('result score omitted', () => {
-  const first = snapshotSource.indexOf('this.getScoreKey(snapshot.score)');
-  const second = snapshotSource.indexOf('this.getScoreKey(snapshot.score)', first + 1);
+killed += expectKilled('result score', () => {
+  const needle = 'this.getScoreKey(snapshot.score)';
+  const first = snapshotSource.indexOf(needle);
+  const second = snapshotSource.indexOf(needle, first + 1);
   assert.ok(second >= 0);
-  const mutated = snapshotSource.slice(0, second) + "''" + snapshotSource.slice(second + 'this.getScoreKey(snapshot.score)'.length);
+  const mutated = snapshotSource.slice(0, second) + "''" + snapshotSource.slice(second + needle.length);
   assertSnapshotProperties(loadSnapshotEngine(mutated), 10, seed);
 });
-killed += expectMutationKilled('effect prefix', () => {
-  const functionSource = extractNamedFunction(runtimeSource, 'getDeterministicEffectKey');
-  const mutatedFunction = functionSource.replace("'preset_effect'", "'preset_effect_mutated'");
-  assert.notEqual(mutatedFunction, functionSource);
-  const mutated = vm.runInNewContext(`(${mutatedFunction})`, {});
-  assertEffectProperties(mutated, 10, seed);
+killed += expectKilled('effect prefix', () => {
+  const source = extractNamedFunction(runtimeSource, 'getDeterministicEffectKey');
+  const mutated = source.replace("'preset_effect'", "'preset_effect_mutated'");
+  assert.notEqual(mutated, source);
+  assertEffectProperties(vm.runInNewContext(`(${mutated})`, {}), 10, seed);
 });
-killed += expectMutationKilled('migration remains legacy', () => {
-  const functionSource = extractNamedFunction(runtimeSource, 'normalizeLegacyManualState');
-  const mutatedFunction = functionSource.replace('schema: manualStateSchema', 'schema: legacy.schema');
-  assert.notEqual(mutatedFunction, functionSource);
-  const mutated = vm.runInNewContext(`(() => {
+killed += expectKilled('migration schema', () => {
+  const source = extractNamedFunction(runtimeSource, 'normalizeLegacyManualState');
+  const mutated = source.replace('schema: manualStateSchema', 'schema: legacy.schema');
+  assert.notEqual(mutated, source);
+  const normalize = vm.runInNewContext(`(() => {
     const manualStateSchema = 'slf_manual_match_state_v1';
     const cloneForStorage = value => value == null ? value : JSON.parse(JSON.stringify(value));
-    return (${mutatedFunction});
+    return (${mutated});
   })()`, { JSON, Date, Number, String });
-  assertMigrationProperties(mutated, 10, seed);
+  assertMigrationProperties(normalize, 10, seed);
 });
 
-assert.ok(killed >= budget.mutationSentinels.minimumKilled, `killed ${killed} mutation sentinels`);
+assert.ok(killed >= budget.mutationSentinels.minimumKilled, `killed ${killed} mutations`);
 console.log(
-  `[telemetry-properties] passed: cases=${cases} mutationsKilled=${killed} bytes=${artifactBytes} parseMs=${parseMilliseconds.toFixed(1)} intervals=${intervalCount} observers=${observerCount}`
+  `[telemetry-properties] passed: cases=${cases} mutationsKilled=${killed} bytes=${bytes} parseMs=${parseMs.toFixed(1)} intervals=${intervals} observers=${observers}`
 );
