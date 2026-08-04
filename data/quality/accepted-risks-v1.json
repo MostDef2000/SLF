@@ -1,0 +1,134 @@
+{
+  "schema": "slf_accepted_risks_v1",
+  "generatedForRoadmapIssue": 160,
+  "policy": {
+    "highSeverityRequiresExplicitHumanAcceptance": true,
+    "independentReviewUnavailableAccepted": true,
+    "approvalModel": "repository_owner_acceptance",
+    "expiredRiskBlocksGovernanceCheck": true,
+    "closedRiskRequiresEvidence": true
+  },
+  "risks": [
+    {
+      "id": "QR-001",
+      "title": "VPS accepts tactical records without the configured unique key",
+      "status": "open",
+      "severity": "high",
+      "owner": "MostDef2000",
+      "boundary": "VPS API persistence",
+      "consequence": "Records without identity cannot be deduplicated reliably and may inflate tactical collections.",
+      "compensatingControls": [
+        "SLF client contracts require snapshotKey, resultKey, eventKey, or effectKey",
+        "append responses report missingUniqueKey",
+        "analysis health reports missingUniqueKeys",
+        "contract and compatibility tests cover the current behaviour"
+      ],
+      "target": "Reject missing tactical identity before persistence after producer compatibility verification and a separately tested deployment change.",
+      "sourcePullRequest": 164,
+      "reviewBy": "2026-09-01"
+    },
+    {
+      "id": "QR-002",
+      "title": "VPS API has no explicit request-body size limit",
+      "status": "open",
+      "severity": "medium",
+      "owner": "MostDef2000",
+      "boundary": "HTTP request parsing",
+      "consequence": "Oversized authenticated requests can consume memory, CPU, and storage.",
+      "compensatingControls": [
+        "API requires bearer authentication",
+        "CI fuzz payloads are bounded",
+        "deployment remains private operational infrastructure"
+      ],
+      "target": "Introduce a reviewed MAX_CONTENT_LENGTH and negative tests with an explicit operational limit.",
+      "sourcePullRequest": 165,
+      "reviewBy": "2026-09-01"
+    },
+    {
+      "id": "QR-003",
+      "title": "VPS API CORS policy is broad",
+      "status": "open",
+      "severity": "medium",
+      "owner": "MostDef2000",
+      "boundary": "Browser to VPS API",
+      "consequence": "Unexpected browser origins may attempt authenticated API access if a token is exposed to that origin.",
+      "compensatingControls": [
+        "Bearer token is stored in Tampermonkey storage",
+        "token is sent only in the Authorization header",
+        "userscript connection hosts are allowlisted"
+      ],
+      "target": "Define and test explicit allowed origins without breaking Tampermonkey transport.",
+      "sourcePullRequest": 165,
+      "reviewBy": "2026-09-15"
+    },
+    {
+      "id": "QR-004",
+      "title": "External jQuery userscript dependency is URL-versioned but not content-addressed",
+      "status": "open",
+      "severity": "medium",
+      "owner": "MostDef2000",
+      "boundary": "Userscript supply chain",
+      "consequence": "A compromised external distribution path could change executed dependency bytes without a repository diff.",
+      "compensatingControls": [
+        "The dependency URL is fixed to jQuery 3.6.0",
+        "The exact @require allowlist is merge-blocking",
+        "Release evidence records the declared external requirement"
+      ],
+      "target": "Remove the dependency, vendor a reviewed licensed copy, or add content-digest verification to release evidence.",
+      "sourcePullRequest": 165,
+      "reviewBy": "2026-10-01"
+    },
+    {
+      "id": "QR-005",
+      "title": "Browser DOM XSS coverage is not yet sink-complete",
+      "status": "open",
+      "severity": "high",
+      "owner": "MostDef2000",
+      "boundary": "Untrusted page and API text to userscript UI",
+      "consequence": "An unsafe render path could execute or inject attacker-controlled markup in the SLF page context.",
+      "compensatingControls": [
+        "Dynamic code execution sinks are prohibited",
+        "Browser E2E executes the exact artifact and fails on runtime exceptions",
+        "Security scan inventories innerHTML assignments"
+      ],
+      "target": "Classify every innerHTML assignment and add malicious-string fixtures for all untrusted data paths.",
+      "sourcePullRequest": 165,
+      "reviewBy": "2026-09-01"
+    },
+    {
+      "id": "QR-006",
+      "title": "Component workflows are path-filtered and cannot safely be required individually",
+      "status": "open",
+      "severity": "medium",
+      "owner": "MostDef2000",
+      "boundary": "GitHub merge enforcement",
+      "consequence": "A skipped path-filtered workflow can leave a required status context pending and block unrelated merges.",
+      "compensatingControls": [
+        "All prerequisite quality workflows are integrated into main",
+        "The rollout manifest requires an always-running aggregate check before protection is enabled",
+        "Branch protection remains explicitly not enforced until the aggregate context is observed"
+      ],
+      "target": "Create and observe the exact aggregate status context, then configure and verify branch protection with a disposable pull request.",
+      "reviewBy": "2026-09-01"
+    },
+    {
+      "id": "QR-007",
+      "title": "No independent reviewer is currently available for critical repository changes",
+      "status": "accepted",
+      "severity": "high",
+      "owner": "MostDef2000",
+      "boundary": "Change approval and test-oracle validation",
+      "consequence": "The same maintainer can author requirements, implementation, tests, and approval, increasing the chance that a shared mistaken assumption passes every internal check.",
+      "compensatingControls": [
+        "Owner acceptance is recorded explicitly and never described as independent review",
+        "Exact artifact, contract, security, browser E2E, property, fuzz, mutation, reliability, and provenance gates are integrated",
+        "Critical unresolved assumptions must remain in the risk register with review dates",
+        "Production deployment and branch-protection changes require separate explicit owner actions",
+        "Failures and skipped checks cannot be silently reclassified as successful review"
+      ],
+      "target": "Use an independent qualified reviewer when one becomes available and reassess whether approval requirements can be increased.",
+      "acceptance": "Repository owner explicitly accepted this single-maintainer risk on 2026-08-04.",
+      "reviewBy": "2026-10-01"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "schema": "slf_quality_gate_rollout_v1",
+  "repository": "MostDef2000/SLF",
+  "defaultBranch": "main",
+  "state": "prepared_not_enforced",
+  "reason": "Prerequisite quality pull requests were owner-approved and merged. The always-running aggregate workflow and GitHub branch-protection settings are not yet applied or verified.",
+  "roadmapIssue": 160,
+  "reviewModel": "single_maintainer_owner_acceptance_with_compensating_controls",
+  "prerequisitesIntegrated": true,
+  "prerequisitePullRequests": [159, 163, 164, 165, 166, 167, 168],
+  "componentWorkflows": [
+    {
+      "workflow": "SLF Validate and Release",
+      "purpose": "canonical build, manifest, provenance, and release validation",
+      "existing": true
+    },
+    {
+      "workflow": "Manual match workflow regression",
+      "purpose": "manual runtime, state, and legacy-boundary regression",
+      "existing": true
+    },
+    {
+      "workflow": "Runtime reachability audit",
+      "purpose": "runtime symbol and capability reachability",
+      "existing": true
+    },
+    {
+      "workflow": "Tactic runtime, analytics and API smoke",
+      "purpose": "tactic telemetry and VPS API smoke validation",
+      "existing": true
+    },
+    {
+      "workflow": "Userscript exact artifact boundary",
+      "purpose": "exact generated userscript structure and startup boundary",
+      "sourcePullRequest": 163
+    },
+    {
+      "workflow": "Versioned data and API contracts",
+      "purpose": "versioned schemas, fixtures, and API compatibility",
+      "sourcePullRequest": 164
+    },
+    {
+      "workflow": "Security boundaries and adversarial API",
+      "purpose": "repository security boundaries and adversarial API tests",
+      "sourcePullRequest": 165
+    },
+    {
+      "workflow": "Exact userscript browser E2E",
+      "purpose": "exact artifact execution in sanitised Chromium fixtures",
+      "sourcePullRequest": 166
+    },
+    {
+      "workflow": "Property fuzz mutation and reliability",
+      "purpose": "generated properties, fuzzing, mutation sentinels, and reliability budgets",
+      "sourcePullRequest": 167
+    },
+    {
+      "workflow": "Release and deployment evidence",
+      "purpose": "deterministic rebuild, provenance bundle, SPDX SBOM, and deployment verifier contract",
+      "sourcePullRequest": 168
+    }
+  ],
+  "enforcementPlan": {
+    "strategy": "always_run_aggregate_check",
+    "aggregateWorkflow": ".github/workflows/quality-integration.yml",
+    "aggregateContext": "Quality integration gate / quality-integration",
+    "why": "Path-filtered component workflows must not be configured directly as required checks because skipped workflows can leave required contexts pending.",
+    "applyOnlyAfter": [
+      "all prerequisite pull requests are owner-approved and merged",
+      "the aggregate workflow exists on main and has completed successfully",
+      "the aggregate check name is observed exactly in GitHub",
+      "repository owner separately approves branch-protection changes"
+    ]
+  },
+  "branchProtectionTarget": {
+    "requirePullRequest": true,
+    "requiredApprovals": 0,
+    "requireCodeOwnerReview": false,
+    "dismissStaleApprovals": false,
+    "requireConversationResolution": true,
+    "requireAggregateStatusCheck": true,
+    "blockForcePushes": true,
+    "blockBranchDeletion": true,
+    "allowAdminBypass": false,
+    "singleMaintainerException": "No independent reviewer is currently available. Owner acceptance is recorded explicitly and mandatory automated quality gates are the primary compensating control."
+  },
+  "connectorLimitation": "The connected GitHub tool set in this session does not expose branch-protection or ruleset mutation actions.",
+  "productionDeploymentImplied": false
+}

@@ -1,0 +1,26 @@
+# Default repository owner
+* @MostDef2000
+
+# CI, release, and repository security
+/.github/ @MostDef2000
+/releases/ @MostDef2000
+/data/version.json @MostDef2000
+/src/app/bundle-order.json @MostDef2000
+/src/app/userscript-header.js @MostDef2000
+/tools/build-latest-userscript.mjs @MostDef2000
+/tools/check-bundle-order.mjs @MostDef2000
+/tools/validate-release-provenance.mjs @MostDef2000
+
+# Authentication, API, persistence, and deployment
+/src/core/api.js @MostDef2000
+/src/core/token-storage.js @MostDef2000
+/src/modules/manual-match-telemetry/ @MostDef2000
+/vps/api/ @MostDef2000
+/vps/ops/ @MostDef2000
+
+# Quality, contracts, and security policy
+/data/contracts/ @MostDef2000
+/data/quality/ @MostDef2000
+/docs/quality/ @MostDef2000
+/docs/security/ @MostDef2000
+/docs/release/ @MostDef2000
