@@ -1,0 +1,46 @@
+name: Versioned data and API contracts
+
+on:
+  pull_request:
+    paths:
+      - 'data/contracts/**'
+      - 'data/version.json'
+      - 'src/core/api.js'
+      - 'src/modules/manual-match-telemetry/**'
+      - 'vps/api/server.py'
+      - 'vps/api/requirements.txt'
+      - 'tools/test-versioned-contracts.mjs'
+      - 'tools/test-api-contract-compatibility.py'
+      - '.github/workflows/versioned-contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Check contract test syntax
+        run: |
+          node --check tools/test-versioned-contracts.mjs
+          python3 -m py_compile tools/test-api-contract-compatibility.py
+
+      - name: Parse contract documents
+        run: |
+          node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/slf-contracts-v1.schema.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/fixtures-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/contract-policy-v1.json', 'utf8'))"
+
+      - name: Validate versioned contracts and fixtures
+        run: node tools/test-versioned-contracts.mjs
+
+      - name: Install pinned VPS API dependencies
+        run: python3 -m pip install --disable-pip-version-check -r vps/api/requirements.txt
+
+      - name: Validate API compatibility contract
+        run: python3 tools/test-api-contract-compatibility.py
