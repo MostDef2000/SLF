@@ -58,9 +58,13 @@ Commands, workflow runs, or evidence artifacts:
 - Post-deploy verification plan:
 - Rollback command and verification:
 
-## Human review
+## Owner review
 
-- [ ] Test oracle and expected failures were reviewed by a human.
-- [ ] Critical-path changes have an independent reviewer.
-- [ ] Reviewers confirmed that passing tests would detect the stated regression.
+- Independent reviewer available: yes / no
+- [ ] Repository owner reviewed the test oracle and expected failures.
+- [ ] Repository owner confirmed that passing tests would detect the stated regression.
+- [ ] CI evidence was checked and unresolved failures or skipped checks are documented.
+- [ ] Critical-path work without an independent reviewer is covered by an accepted risk and compensating controls.
 - [ ] Any accepted risk has an owner and review date.
+
+Do not mark a change as independently reviewed unless a separate qualified reviewer actually reviewed it.
