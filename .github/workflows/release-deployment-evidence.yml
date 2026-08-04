@@ -1,0 +1,87 @@
+name: Release and deployment evidence
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'releases/**'
+      - 'data/version.json'
+      - 'CHANGELOG.md'
+      - 'tools/build-latest-userscript.mjs'
+      - 'tools/check-bundle-order.mjs'
+      - 'tools/validate-release-provenance.mjs'
+      - 'tools/generate-release-evidence.mjs'
+      - 'tools/validate-release-evidence.mjs'
+      - 'tools/test-deployment-evidence.py'
+      - 'vps/api/**'
+      - 'vps/exporter-rag/**'
+      - 'vps/ops/**'
+      - 'docs/release/release-deployment-evidence.md'
+      - '.github/workflows/release-deployment-evidence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Check evidence tooling syntax
+        run: |
+          node --check tools/generate-release-evidence.mjs
+          node --check tools/validate-release-evidence.mjs
+          python3 -m py_compile tools/test-deployment-evidence.py
+          python3 -m py_compile vps/ops/verify_api_deployment.py
+          bash -n vps/ops/deploy-code.sh
+          bash -n vps/ops/rollback-code.sh
+
+      - name: Rebuild exact release bytes deterministically
+        run: |
+          set -euo pipefail
+          sha256sum releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md > "$RUNNER_TEMP/release-before.sha256"
+          export APPROVED_BASE_COMMIT
+          export APPROVED_COMMIT
+          export APPROVED_FILES
+          export SOURCE_BRANCH
+          export TARGET_VERSION
+          APPROVED_BASE_COMMIT=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.approvedBaseCommit)")
+          APPROVED_COMMIT=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.approvedCommit)")
+          APPROVED_FILES=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.approvedFiles.join('\n'))")
+          SOURCE_BRANCH=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.sourceBranch || 'main')")
+          TARGET_VERSION=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.scriptVersion)")
+          node tools/build-latest-userscript.mjs
+          sha256sum --check "$RUNNER_TEMP/release-before.sha256"
+          git diff --exit-code -- releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md
+          EXPECTED_APPROVED_BASE_COMMIT="$APPROVED_BASE_COMMIT" \
+          EXPECTED_APPROVED_COMMIT="$APPROVED_COMMIT" \
+          EXPECTED_APPROVED_FILES="$APPROVED_FILES" \
+            node tools/validate-release-provenance.mjs
+
+      - name: Validate deployment verifier contract
+        run: python3 tools/test-deployment-evidence.py
+
+      - name: Generate release evidence and SPDX SBOM
+        env:
+          SLF_DETERMINISTIC_REBUILD_VERIFIED: 'true'
+          SLF_EVIDENCE_DIR: artifacts/release-evidence
+        run: node tools/generate-release-evidence.mjs
+
+      - name: Validate evidence bundle
+        env:
+          SLF_EVIDENCE_DIR: artifacts/release-evidence
+        run: node tools/validate-release-evidence.mjs
+
+      - name: Upload release evidence bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: slf-release-evidence
+          path: artifacts/release-evidence
+          if-no-files-found: error
+          retention-days: 14
