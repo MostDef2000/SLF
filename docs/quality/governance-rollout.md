@@ -2,9 +2,23 @@
 
 ## Current state
 
-The repository governance package is prepared but not enforced.
+The prerequisite quality pull requests are integrated into `main` with explicit repository-owner acceptance. An independent reviewer was not available, so the repository must not describe those merges as independently reviewed.
 
-Component quality changes are reviewed through independent draft pull requests. Until those changes are merged into `main`, the repository must not claim that the corresponding checks are available as permanent branch-protection controls.
+Governance remains `prepared_not_enforced` until an always-running aggregate workflow exists on `main`, its exact check context is observed, and GitHub branch protection is applied and verified separately.
+
+## Review model
+
+SLF currently operates as a single-maintainer repository.
+
+The accepted review model is:
+
+- the repository owner explicitly accepts each change;
+- automated quality gates are mandatory evidence, not a substitute claim for independent review;
+- critical unreviewed assumptions are recorded in `data/quality/accepted-risks-v1.json`;
+- failures, skipped checks, and production gaps must remain visible;
+- no PR may claim independent review unless another qualified person actually performed it.
+
+If an independent reviewer becomes available, critical-path changes should use that reviewer and the single-maintainer risk should be reassessed.
 
 ## Why component checks are not required directly
 
@@ -16,37 +30,43 @@ The enforcement target is one always-running aggregate workflow:
 Quality integration gate / quality-integration
 ```
 
-That aggregate is created only after all prerequisite quality tools and workflows exist on `main`.
+The aggregate workflow is added only after all prerequisite quality tools and workflows exist on `main`.
 
-## Merge sequence
+## Rollout sequence
 
-1. Human-review and merge the policy PR.
-2. Human-review and merge exact-artifact validation.
-3. Human-review and merge versioned contracts.
-4. Human-review and merge security automation.
-5. Human-review and merge browser E2E.
-6. Human-review and merge property, fuzz, mutation, and reliability checks.
-7. Human-review and merge release and deployment evidence.
-8. Rebase or recreate the governance PR from the resulting `main`.
+Completed:
+
+1. Owner-approved and merged the quality policy PR #159.
+2. Owner-approved and merged exact-artifact validation PR #163.
+3. Owner-approved and merged versioned contracts PR #164.
+4. Owner-approved and merged security automation PR #165.
+5. Owner-approved and merged browser E2E PR #166.
+6. Owner-approved and merged property, fuzz, mutation, and reliability PR #167.
+7. Owner-approved and merged release and deployment evidence PR #168.
+
+Remaining:
+
+8. Merge the governance package with the single-maintainer risk recorded.
 9. Add an always-running aggregate workflow that invokes the integrated checks.
 10. Observe the exact successful check context in GitHub.
-11. Change `data/quality/quality-gates-v1.json` from `prepared_not_enforced` to a reviewed ready state.
+11. Change `data/quality/quality-gates-v1.json` from `prepared_not_enforced` to a verified ready state.
 12. Apply branch protection or a repository ruleset with separate owner approval.
 13. Verify protection with a disposable pull request before treating enforcement as complete.
 
 ## Target branch protection
 
-The target configuration is:
+The target configuration for the current single-maintainer model is:
 
 - pull requests required for `main`;
-- at least one approval;
-- CODEOWNER review required;
-- stale approvals dismissed after new commits;
+- zero required approvals while no independent reviewer exists;
+- CODEOWNER review routing retained, but CODEOWNER approval not required;
 - conversations resolved before merge;
 - the always-running aggregate check required;
 - force pushes blocked;
 - branch deletion blocked;
 - administrator bypass disabled unless a separately documented emergency process is adopted.
+
+This avoids a permanently unmergeable repository while preserving review evidence, mandatory CI, and protected history.
 
 Repository settings are not deployable source code. A committed manifest describes intent but does not prove that GitHub settings were applied.
 
@@ -62,7 +82,7 @@ CODEOWNERS covers:
 - VPS API and deployment tooling;
 - contracts, quality budgets, security, and release policy.
 
-CODEOWNER assignment establishes review routing. It does not establish reviewer independence when the owner also authored the change. Critical changes still require a reviewer who independently evaluates the test oracle and risk.
+CODEOWNER assignment identifies accountability and future review routing. It does not establish reviewer independence when the owner also authored the change.
 
 ## Risk review
 
@@ -79,12 +99,13 @@ The scheduled governance workflow fails when a risk review date expires. Closing
 
 ## Emergency changes
 
-Emergency hotfixes still require:
+Emergency hotfixes require:
 
-- smallest viable change;
-- permanent regression test;
+- the smallest viable change;
+- a permanent regression test;
 - exact-artifact validation where applicable;
+- explicit owner acceptance;
 - documented temporary risk acceptance;
-- independent follow-up review.
+- post-merge verification and rollback evidence.
 
-Branch-protection bypass, if ever used, must be treated as a security event and recorded with the exact commit, reason, approver, validation evidence, and follow-up action.
+Branch-protection bypass, if ever used, must be treated as a security event and recorded with the exact commit, reason, owner, validation evidence, and follow-up action.
