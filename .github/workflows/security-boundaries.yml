@@ -1,0 +1,41 @@
+name: Security boundaries and adversarial API
+
+on:
+  pull_request:
+    paths:
+      - '.github/**'
+      - 'src/**'
+      - 'tools/test-security-boundaries.mjs'
+      - 'tools/test-api-adversarial.py'
+      - 'vps/api/**'
+      - 'data/**'
+      - 'docs/security/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security-boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Check security test syntax
+        run: |
+          node --check tools/test-security-boundaries.mjs
+          python3 -m py_compile tools/test-api-adversarial.py
+
+      - name: Enforce repository security boundaries
+        run: node tools/test-security-boundaries.mjs
+
+      - name: Install pinned VPS API dependencies
+        run: python3 -m pip install --disable-pip-version-check -r vps/api/requirements.txt
+
+      - name: Verify installed dependency consistency
+        run: python3 -m pip check
+
+      - name: Run adversarial VPS API tests
+        run: python3 tools/test-api-adversarial.py
