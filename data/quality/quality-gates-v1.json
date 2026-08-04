@@ -2,12 +2,13 @@
   "schema": "slf_quality_gate_rollout_v1",
   "repository": "MostDef2000/SLF",
   "defaultBranch": "main",
-  "state": "prepared_not_enforced",
-  "reason": "Prerequisite quality pull requests were owner-approved and merged. The always-running aggregate workflow and GitHub branch-protection settings are not yet applied or verified.",
+  "state": "aggregate_verified_settings_not_enforced",
+  "reason": "Prerequisite quality pull requests are integrated and the always-running aggregate context completed successfully on PR #175. GitHub branch-protection settings are not applied or verified.",
   "roadmapIssue": 160,
   "reviewModel": "single_maintainer_owner_acceptance_with_compensating_controls",
   "prerequisitesIntegrated": true,
   "prerequisitePullRequests": [159, 163, 164, 165, 166, 167, 168],
+  "aggregatePullRequest": 175,
   "componentWorkflows": [
     {
       "workflow": "SLF Validate and Release",
@@ -58,6 +59,13 @@
       "workflow": "Release and deployment evidence",
       "purpose": "deterministic rebuild, provenance bundle, SPDX SBOM, and deployment verifier contract",
       "sourcePullRequest": 168
+    },
+    {
+      "workflow": "Quality integration gate",
+      "purpose": "always-running aggregate status context that requires every quality domain to pass",
+      "sourcePullRequest": 175,
+      "aggregate": true,
+      "existing": true
     }
   ],
   "enforcementPlan": {
@@ -65,11 +73,25 @@
     "aggregateWorkflow": ".github/workflows/quality-integration.yml",
     "aggregateContext": "Quality integration gate / quality-integration",
     "why": "Path-filtered component workflows must not be configured directly as required checks because skipped workflows can leave required contexts pending.",
-    "applyOnlyAfter": [
-      "all prerequisite pull requests are owner-approved and merged",
-      "the aggregate workflow exists on main and has completed successfully",
-      "the aggregate check name is observed exactly in GitHub",
-      "repository owner separately approves branch-protection changes"
+    "remainingActions": [
+      "merge PR #175 so the verified aggregate workflow exists on main",
+      "apply the single-maintainer branch-protection target in GitHub settings",
+      "verify enforcement with a disposable pull request"
+    ]
+  },
+  "aggregateVerification": {
+    "result": "success",
+    "workflow": "Quality integration gate",
+    "context": "Quality integration gate / quality-integration",
+    "sourcePullRequest": 175,
+    "runId": 30884950897,
+    "jobId": 91914145283,
+    "verifiedAt": "2026-08-04",
+    "domains": [
+      "static-contract-security",
+      "property-fuzz-reliability",
+      "browser-e2e",
+      "release-deployment-evidence"
     ]
   },
   "branchProtectionTarget": {
@@ -84,6 +106,8 @@
     "allowAdminBypass": false,
     "singleMaintainerException": "No independent reviewer is currently available. Owner acceptance is recorded explicitly and mandatory automated quality gates are the primary compensating control."
   },
+  "branchProtectionApplied": false,
+  "branchProtectionVerified": false,
   "connectorLimitation": "The connected GitHub tool set in this session does not expose branch-protection or ruleset mutation actions.",
   "productionDeploymentImplied": false
 }
