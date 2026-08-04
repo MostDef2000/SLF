@@ -10,6 +10,7 @@ const readJson = relativePath => JSON.parse(read(relativePath));
 
 const codeowners = read('.github/CODEOWNERS');
 const template = read('.github/pull_request_template.md');
+const qualityIntegration = read('.github/workflows/quality-integration.yml');
 const gates = readJson('data/quality/quality-gates-v1.json');
 const register = readJson('data/quality/accepted-risks-v1.json');
 
@@ -68,18 +69,49 @@ for (const invariant of [
 }
 assert.ok(template.includes('Do not mark a change as independently reviewed'), 'PR template must prohibit false independent-review claims');
 
+for (const invariant of [
+  'name: Quality integration gate',
+  'permissions:\n  contents: read',
+  'static-contract-security:',
+  'property-fuzz-reliability:',
+  'browser-e2e:',
+  'release-deployment-evidence:',
+  'quality-integration:\n    if: always()',
+  'Require every quality domain to pass'
+]) {
+  assert.ok(qualityIntegration.includes(invariant), `aggregate workflow missing invariant: ${invariant}`);
+}
+assert.equal(/pull_request:\s*\n\s+paths:/.test(qualityIntegration), false, 'aggregate workflow must not use pull-request path filters');
+assert.equal((qualityIntegration.match(/\buses:\s*actions\/checkout@[0-9a-f]{40}\b/g) || []).length, 4, 'aggregate workflow must pin four checkout actions');
+assert.equal((qualityIntegration.match(/\buses:\s*actions\/upload-artifact@[0-9a-f]{40}\b/g) || []).length, 2, 'aggregate workflow must pin two upload actions');
+
 assert.equal(gates.schema, 'slf_quality_gate_rollout_v1');
 assert.equal(gates.repository, 'MostDef2000/SLF');
 assert.equal(gates.defaultBranch, 'main');
-assert.equal(gates.state, 'prepared_not_enforced');
-assert.match(gates.reason, /owner-approved and merged/i);
+assert.equal(gates.state, 'aggregate_verified_settings_not_enforced');
+assert.match(gates.reason, /aggregate context completed successfully/i);
+assert.match(gates.reason, /branch-protection settings are not applied/i);
 assert.equal(gates.roadmapIssue, 160);
 assert.equal(gates.reviewModel, 'single_maintainer_owner_acceptance_with_compensating_controls');
 assert.equal(gates.prerequisitesIntegrated, true);
 assert.deepEqual(gates.prerequisitePullRequests, [159, 163, 164, 165, 166, 167, 168]);
+assert.equal(gates.aggregatePullRequest, 175);
 assert.equal(gates.enforcementPlan.strategy, 'always_run_aggregate_check');
 assert.equal(gates.enforcementPlan.aggregateContext, 'Quality integration gate / quality-integration');
-assert.ok(gates.enforcementPlan.applyOnlyAfter.length >= 4);
+assert.ok(gates.enforcementPlan.remainingActions.length >= 3);
+assert.equal(gates.aggregateVerification.result, 'success');
+assert.equal(gates.aggregateVerification.workflow, 'Quality integration gate');
+assert.equal(gates.aggregateVerification.context, 'Quality integration gate / quality-integration');
+assert.equal(gates.aggregateVerification.sourcePullRequest, 175);
+assert.equal(gates.aggregateVerification.runId, 30884950897);
+assert.equal(gates.aggregateVerification.jobId, 91914145283);
+assert.equal(gates.aggregateVerification.verifiedAt, '2026-08-04');
+assert.deepEqual(gates.aggregateVerification.domains, [
+  'static-contract-security',
+  'property-fuzz-reliability',
+  'browser-e2e',
+  'release-deployment-evidence'
+]);
 assert.equal(gates.branchProtectionTarget.requirePullRequest, true);
 assert.equal(gates.branchProtectionTarget.requiredApprovals, 0);
 assert.equal(gates.branchProtectionTarget.requireCodeOwnerReview, false);
@@ -87,6 +119,8 @@ assert.equal(gates.branchProtectionTarget.requireConversationResolution, true);
 assert.equal(gates.branchProtectionTarget.requireAggregateStatusCheck, true);
 assert.equal(gates.branchProtectionTarget.allowAdminBypass, false);
 assert.match(gates.branchProtectionTarget.singleMaintainerException, /No independent reviewer is currently available/);
+assert.equal(gates.branchProtectionApplied, false);
+assert.equal(gates.branchProtectionVerified, false);
 assert.equal(gates.productionDeploymentImplied, false);
 assert.match(gates.connectorLimitation, /does not expose branch-protection or ruleset mutation actions/);
 
@@ -96,7 +130,11 @@ for (const workflow of gates.componentWorkflows) {
   assert.equal(workflowNames.has(workflow.workflow), false, `duplicate workflow name: ${workflow.workflow}`);
   workflowNames.add(workflow.workflow);
   assert.ok(workflow.purpose.length > 10);
-  if (!workflow.existing) {
+  if (workflow.aggregate) {
+    assert.equal(workflow.workflow, 'Quality integration gate');
+    assert.equal(workflow.sourcePullRequest, 175);
+    assert.equal(workflow.existing, true);
+  } else if (!workflow.existing) {
     assert.ok(Number.isInteger(workflow.sourcePullRequest), `${workflow.workflow} missing sourcePullRequest`);
     assert.ok(gates.prerequisitePullRequests.includes(workflow.sourcePullRequest));
   }
@@ -107,7 +145,8 @@ for (const expected of [
   'Security boundaries and adversarial API',
   'Exact userscript browser E2E',
   'Property fuzz mutation and reliability',
-  'Release and deployment evidence'
+  'Release and deployment evidence',
+  'Quality integration gate'
 ]) {
   assert.ok(workflowNames.has(expected), `rollout manifest missing workflow: ${expected}`);
 }
@@ -165,5 +204,5 @@ for (const pattern of [
 }
 
 console.log(
-  `[quality-governance] passed: owners=${requiredOwnership.size} workflows=${workflowNames.size} risks=${ids.size} date=${today} state=${gates.state} reviewModel=${gates.reviewModel}`
+  `[quality-governance] passed: owners=${requiredOwnership.size} workflows=${workflowNames.size} risks=${ids.size} date=${today} state=${gates.state} aggregate=${gates.aggregateVerification.context}`
 );
