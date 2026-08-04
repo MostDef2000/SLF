@@ -3,6 +3,8 @@
   "generatedForRoadmapIssue": 160,
   "policy": {
     "highSeverityRequiresExplicitHumanAcceptance": true,
+    "independentReviewUnavailableAccepted": true,
+    "approvalModel": "repository_owner_acceptance",
     "expiredRiskBlocksGovernanceCheck": true,
     "closedRiskRequiresEvidence": true
   },
@@ -21,7 +23,7 @@
         "analysis health reports missingUniqueKeys",
         "contract and compatibility tests cover the current behaviour"
       ],
-      "target": "Reject missing tactical identity before persistence after contract PR review and producer compatibility verification.",
+      "target": "Reject missing tactical identity before persistence after producer compatibility verification and a separately tested deployment change.",
       "sourcePullRequest": 164,
       "reviewBy": "2026-09-01"
     },
@@ -102,11 +104,31 @@
       "boundary": "GitHub merge enforcement",
       "consequence": "A skipped path-filtered workflow can leave a required status context pending and block unrelated merges.",
       "compensatingControls": [
-        "All quality PRs remain draft pending review",
-        "The rollout manifest requires an always-running aggregate check before protection is enabled"
+        "All prerequisite quality workflows are integrated into main",
+        "The rollout manifest requires an always-running aggregate check before protection is enabled",
+        "Branch protection remains explicitly not enforced until the aggregate context is observed"
       ],
-      "target": "Create and observe the exact aggregate status context after prerequisite PRs merge, then configure branch protection.",
+      "target": "Create and observe the exact aggregate status context, then configure and verify branch protection with a disposable pull request.",
       "reviewBy": "2026-09-01"
+    },
+    {
+      "id": "QR-007",
+      "title": "No independent reviewer is currently available for critical repository changes",
+      "status": "accepted",
+      "severity": "high",
+      "owner": "MostDef2000",
+      "boundary": "Change approval and test-oracle validation",
+      "consequence": "The same maintainer can author requirements, implementation, tests, and approval, increasing the chance that a shared mistaken assumption passes every internal check.",
+      "compensatingControls": [
+        "Owner acceptance is recorded explicitly and never described as independent review",
+        "Exact artifact, contract, security, browser E2E, property, fuzz, mutation, reliability, and provenance gates are integrated",
+        "Critical unresolved assumptions must remain in the risk register with review dates",
+        "Production deployment and branch-protection changes require separate explicit owner actions",
+        "Failures and skipped checks cannot be silently reclassified as successful review"
+      ],
+      "target": "Use an independent qualified reviewer when one becomes available and reassess whether approval requirements can be increased.",
+      "acceptance": "Repository owner explicitly accepted this single-maintainer risk on 2026-08-04.",
+      "reviewBy": "2026-10-01"
     }
   ]
 }
