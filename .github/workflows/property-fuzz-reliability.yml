@@ -1,0 +1,44 @@
+name: Property fuzz mutation and reliability
+
+on:
+  pull_request:
+    paths:
+      - 'src/modules/manual-match-telemetry/**'
+      - 'vps/api/**'
+      - 'releases/latest.user.js'
+      - 'src/app/bundle-order.json'
+      - 'data/quality/**'
+      - 'tools/test-telemetry-properties-and-mutations.mjs'
+      - 'tools/test-api-fuzz-and-recovery.py'
+      - 'docs/quality/property-fuzz-mutation-reliability.md'
+      - '.github/workflows/property-fuzz-reliability.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  property-fuzz-reliability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Check test syntax
+        run: |
+          node --check tools/test-telemetry-properties-and-mutations.mjs
+          python3 -m py_compile tools/test-api-fuzz-and-recovery.py
+          node -e "JSON.parse(require('node:fs').readFileSync('data/quality/reliability-budget-v1.json', 'utf8'))"
+
+      - name: Run telemetry properties and mutation sentinels
+        run: node tools/test-telemetry-properties-and-mutations.mjs
+
+      - name: Install pinned VPS API dependencies
+        run: python3 -m pip install --disable-pip-version-check -r vps/api/requirements.txt
+
+      - name: Verify installed dependency consistency
+        run: python3 -m pip check
+
+      - name: Run API fuzz and recovery properties
+        run: python3 tools/test-api-fuzz-and-recovery.py
