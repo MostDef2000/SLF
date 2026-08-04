@@ -158,7 +158,7 @@ def request_rows(page: Page):
 def assert_runtime_version(page: Page):
     page.wait_for_function(
         "expected => window.SLF && window.SLF.scriptVersion === expected",
-        EXPECTED_VERSION,
+        arg=EXPECTED_VERSION,
     )
     actual = page.evaluate("window.SLF.scriptVersion")
     assert actual == EXPECTED_VERSION, (actual, EXPECTED_VERSION)
