@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MostDef2000/SLF/blob/main/data/contracts/slf-contracts-v1.schema.json",
+  "title": "SLF versioned data and API contracts v1",
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["page", "collectedAt", "scriptVersion"],
+      "properties": {
+        "page": { "type": "string", "minLength": 1 },
+        "url": { "type": "string" },
+        "trigger": { "type": ["string", "null"] },
+        "generatorVersion": { "type": ["string", "null"] },
+        "collectedAt": { "type": "integer", "minimum": 0 },
+        "scriptVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+      },
+      "additionalProperties": true
+    },
+    "generationWindow": {
+      "type": "object",
+      "required": ["index", "label"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "label": { "type": "string", "minLength": 1 },
+        "realMinuteEstimate": { "type": ["number", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "score": {
+      "type": "object",
+      "required": ["home", "away"],
+      "properties": {
+        "home": { "type": "integer", "minimum": 0 },
+        "away": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "matchSnapshot": {
+      "type": "object",
+      "required": [
+        "recordType",
+        "schemaVersion",
+        "parserVersion",
+        "snapshotKey",
+        "gameId",
+        "status",
+        "ts",
+        "source"
+      ],
+      "properties": {
+        "recordType": { "const": "match_snapshot" },
+        "schemaVersion": { "const": 2 },
+        "parserVersion": { "const": "match_snapshot_append_v1" },
+        "snapshotKey": { "type": "string", "pattern": "^match_snapshot\\|" },
+        "gameId": { "type": ["string", "number"] },
+        "status": { "type": "string", "minLength": 1 },
+        "ts": { "type": "integer", "minimum": 0 },
+        "minute": { "type": ["integer", "number", "null"] },
+        "bucket": { "type": ["string", "null"] },
+        "generationWindow": { "$ref": "#/$defs/generationWindow" },
+        "score": { "$ref": "#/$defs/score" },
+        "teams": {
+          "type": "array",
+          "items": { "type": ["string", "number"] },
+          "minItems": 2
+        },
+        "source": { "$ref": "#/$defs/source" }
+      },
+      "additionalProperties": true
+    },
+    "matchResult": {
+      "type": "object",
+      "required": [
+        "recordType",
+        "resultType",
+        "schemaVersion",
+        "parserVersion",
+        "resultKey",
+        "gameId",
+        "status",
+        "ts",
+        "parsedAt",
+        "source"
+      ],
+      "properties": {
+        "recordType": { "const": "match_result" },
+        "resultType": { "const": "finished_match" },
+        "schemaVersion": { "const": 2 },
+        "parserVersion": { "const": "match_result_append_v1" },
+        "resultKey": { "type": "string", "pattern": "^match_result\\|" },
+        "gameId": { "type": ["string", "number"] },
+        "status": { "const": "finished" },
+        "ts": { "type": "integer", "minimum": 0 },
+        "parsedAt": { "type": "integer", "minimum": 0 },
+        "score": { "$ref": "#/$defs/score" },
+        "source": { "$ref": "#/$defs/source" }
+      },
+      "additionalProperties": true
+    },
+    "presetEvent": {
+      "type": "object",
+      "required": [
+        "recordType",
+        "schemaVersion",
+        "parserVersion",
+        "eventKey",
+        "type",
+        "gameId",
+        "ts",
+        "generationWindow",
+        "targetGenerationWindow",
+        "beforeSnapshot"
+      ],
+      "properties": {
+        "recordType": { "const": "preset_event" },
+        "schemaVersion": { "const": 3 },
+        "parserVersion": { "type": "string", "minLength": 1 },
+        "eventKey": { "type": "string", "pattern": "^(preset_event|manual_tactic_event)\\|" },
+        "type": { "enum": ["preset", "manual_change"] },
+        "gameId": { "type": ["string", "number"] },
+        "ts": { "type": "integer", "minimum": 0 },
+        "minute": { "type": ["integer", "number", "null"] },
+        "bucket": { "type": ["string", "null"] },
+        "generationWindow": { "$ref": "#/$defs/generationWindow" },
+        "targetGenerationWindow": { "$ref": "#/$defs/generationWindow" },
+        "presetName": { "type": ["string", "null"] },
+        "tactic": { "type": ["object", "null"] },
+        "beforeSnapshot": { "type": "object" },
+        "source": { "$ref": "#/$defs/source" }
+      },
+      "additionalProperties": true
+    },
+    "presetEffect": {
+      "type": "object",
+      "required": [
+        "recordType",
+        "schemaVersion",
+        "parserVersion",
+        "effectKey",
+        "gameId",
+        "presetName",
+        "eventType",
+        "ts",
+        "before",
+        "after",
+        "delta"
+      ],
+      "properties": {
+        "recordType": { "const": "preset_effect" },
+        "schemaVersion": { "const": 3 },
+        "parserVersion": { "type": "string", "minLength": 1 },
+        "effectKey": { "type": "string", "pattern": "^preset_effect\\|" },
+        "gameId": { "type": ["string", "number"] },
+        "presetName": { "type": "string", "minLength": 1 },
+        "eventType": { "enum": ["preset", "manual_change"] },
+        "ts": { "type": "integer", "minimum": 0 },
+        "fromGenerationWindow": { "$ref": "#/$defs/generationWindow" },
+        "targetGenerationWindow": { "$ref": "#/$defs/generationWindow" },
+        "toGenerationWindow": { "$ref": "#/$defs/generationWindow" },
+        "before": { "type": "object" },
+        "after": { "type": "object" },
+        "delta": { "type": "object" },
+        "source": { "$ref": "#/$defs/source" }
+      },
+      "additionalProperties": true
+    },
+    "manualMatchState": {
+      "type": "object",
+      "required": [
+        "schema",
+        "gameId",
+        "ts",
+        "url",
+        "pendingPresetEvent",
+        "pendingEffectRetry",
+        "consumedPresetEventKey",
+        "manualTacticEventPending",
+        "recommendationFreeze",
+        "presetProgression",
+        "lastRecommendationHtml",
+        "lastRecommendationMeta",
+        "migratedFrom"
+      ],
+      "properties": {
+        "schema": { "const": "slf_manual_match_state_v1" },
+        "gameId": { "type": ["string", "number"] },
+        "ts": { "type": "integer", "minimum": 0 },
+        "url": { "type": "string" },
+        "pendingPresetEvent": { "type": ["object", "null"] },
+        "pendingEffectRetry": { "type": "boolean" },
+        "consumedPresetEventKey": { "type": ["string", "null"] },
+        "manualTacticEventPending": { "type": "boolean" },
+        "recommendationFreeze": { "type": ["object", "null"] },
+        "presetProgression": { "type": ["object", "null"] },
+        "lastRecommendationHtml": { "type": ["string", "null"] },
+        "lastRecommendationMeta": { "type": ["object", "null"] },
+        "migratedFrom": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "appendResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "collection",
+        "received",
+        "added",
+        "skippedDuplicates",
+        "missingUniqueKey",
+        "count"
+      ],
+      "properties": {
+        "status": { "const": "appended" },
+        "collection": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+$" },
+        "received": { "type": "integer", "minimum": 0 },
+        "added": { "type": "integer", "minimum": 0 },
+        "skippedDuplicates": { "type": "integer", "minimum": 0 },
+        "missingUniqueKey": { "type": "integer", "minimum": 0 },
+        "count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "analysisResponse": {
+      "type": "object",
+      "required": ["status", "games", "collections", "serverTime"],
+      "properties": {
+        "status": { "enum": ["ok", "degraded"] },
+        "games": { "type": "integer", "minimum": 0 },
+        "collections": { "type": "object" },
+        "serverTime": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "releaseManifest": {
+      "type": "object",
+      "required": [
+        "schema",
+        "scriptVersion",
+        "releaseChannel",
+        "latestOnly",
+        "archiveCreated",
+        "latestMetaJs",
+        "latestUserJs",
+        "status",
+        "build"
+      ],
+      "properties": {
+        "schema": { "const": "slf_version_manifest_v3_latest_only_build_from_src" },
+        "scriptVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "releaseChannel": { "const": "github-tampermonkey" },
+        "latestOnly": { "const": true },
+        "archiveCreated": { "const": false },
+        "latestMetaJs": { "const": "releases/latest.meta.js" },
+        "latestUserJs": { "const": "releases/latest.user.js" },
+        "status": { "type": "string", "pattern": "^release_[0-9]+_[0-9]+_[0-9]+_published$" },
+        "build": {
+          "type": "object",
+          "required": [
+            "source",
+            "assembly",
+            "bundleOrder",
+            "bundleManifestSha256",
+            "bundleFileCount",
+            "approvedBaseCommit",
+            "approvedCommit",
+            "approvedFiles"
+          ],
+          "properties": {
+            "source": { "const": "src/**" },
+            "assembly": { "const": "manifest-only" },
+            "bundleOrder": { "const": "src/app/bundle-order.json" },
+            "bundleManifestSha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+            "bundleFileCount": { "type": "integer", "minimum": 1 },
+            "approvedBaseCommit": { "type": "string", "pattern": "^[0-9a-fA-F]{40}$" },
+            "approvedCommit": { "type": "string", "pattern": "^[0-9a-fA-F]{40}$" },
+            "approvedFiles": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
