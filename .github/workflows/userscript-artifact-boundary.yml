@@ -1,0 +1,32 @@
+name: Userscript exact artifact boundary
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'data/version.json'
+      - 'releases/latest.meta.js'
+      - 'releases/latest.user.js'
+      - 'tools/test-userscript-artifact-boundary.mjs'
+      - '.github/workflows/userscript-artifact-boundary.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  artifact-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Check gate syntax
+        run: node --check tools/test-userscript-artifact-boundary.mjs
+
+      - name: Check published userscript syntax
+        run: node --check releases/latest.user.js
+
+      - name: Enforce exact artifact boundary
+        run: node tools/test-userscript-artifact-boundary.mjs
