@@ -52,32 +52,41 @@ for (const heading of [
   '## Compatibility and migration',
   '## Security review',
   '## Release and deployment',
-  '## Human review'
+  '## Owner review'
 ]) {
   assert.ok(template.includes(heading), `PR template missing ${heading}`);
 }
 for (const invariant of [
   'Exact generated artifact was tested',
-  'Critical-path changes have an independent reviewer',
+  'Independent reviewer available',
+  'Repository owner reviewed the test oracle and expected failures',
+  'Critical-path work without an independent reviewer is covered by an accepted risk',
   'Any accepted risk has an owner and review date',
   'Rollback command and verification'
 ]) {
   assert.ok(template.includes(invariant), `PR template missing invariant: ${invariant}`);
 }
+assert.ok(template.includes('Do not mark a change as independently reviewed'), 'PR template must prohibit false independent-review claims');
 
 assert.equal(gates.schema, 'slf_quality_gate_rollout_v1');
 assert.equal(gates.repository, 'MostDef2000/SLF');
 assert.equal(gates.defaultBranch, 'main');
 assert.equal(gates.state, 'prepared_not_enforced');
+assert.match(gates.reason, /owner-approved and merged/i);
 assert.equal(gates.roadmapIssue, 160);
+assert.equal(gates.reviewModel, 'single_maintainer_owner_acceptance_with_compensating_controls');
+assert.equal(gates.prerequisitesIntegrated, true);
 assert.deepEqual(gates.prerequisitePullRequests, [159, 163, 164, 165, 166, 167, 168]);
 assert.equal(gates.enforcementPlan.strategy, 'always_run_aggregate_check');
 assert.equal(gates.enforcementPlan.aggregateContext, 'Quality integration gate / quality-integration');
 assert.ok(gates.enforcementPlan.applyOnlyAfter.length >= 4);
 assert.equal(gates.branchProtectionTarget.requirePullRequest, true);
-assert.equal(gates.branchProtectionTarget.requireCodeOwnerReview, true);
+assert.equal(gates.branchProtectionTarget.requiredApprovals, 0);
+assert.equal(gates.branchProtectionTarget.requireCodeOwnerReview, false);
 assert.equal(gates.branchProtectionTarget.requireConversationResolution, true);
+assert.equal(gates.branchProtectionTarget.requireAggregateStatusCheck, true);
 assert.equal(gates.branchProtectionTarget.allowAdminBypass, false);
+assert.match(gates.branchProtectionTarget.singleMaintainerException, /No independent reviewer is currently available/);
 assert.equal(gates.productionDeploymentImplied, false);
 assert.match(gates.connectorLimitation, /does not expose branch-protection or ruleset mutation actions/);
 
@@ -105,6 +114,9 @@ for (const expected of [
 
 assert.equal(register.schema, 'slf_accepted_risks_v1');
 assert.equal(register.generatedForRoadmapIssue, 160);
+assert.equal(register.policy.highSeverityRequiresExplicitHumanAcceptance, true);
+assert.equal(register.policy.independentReviewUnavailableAccepted, true);
+assert.equal(register.policy.approvalModel, 'repository_owner_acceptance');
 assert.equal(register.policy.expiredRiskBlocksGovernanceCheck, true);
 assert.ok(Array.isArray(register.risks) && register.risks.length > 0);
 
@@ -136,7 +148,11 @@ for (const risk of register.risks) {
   if (risk.severity === 'high' || risk.severity === 'critical') {
     assert.equal(register.policy.highSeverityRequiresExplicitHumanAcceptance, true);
   }
+  if (risk.status === 'accepted' && (risk.severity === 'high' || risk.severity === 'critical')) {
+    assert.ok(risk.acceptance && risk.acceptance.length > 20, `${risk.id} accepted high risk lacks explicit acceptance`);
+  }
 }
+assert.ok(ids.has('QR-007'), 'risk register must track unavailable independent review');
 
 const serialized = JSON.stringify({ gates, register });
 for (const pattern of [
@@ -149,5 +165,5 @@ for (const pattern of [
 }
 
 console.log(
-  `[quality-governance] passed: owners=${requiredOwnership.size} workflows=${workflowNames.size} risks=${ids.size} date=${today} state=${gates.state}`
+  `[quality-governance] passed: owners=${requiredOwnership.size} workflows=${workflowNames.size} risks=${ids.size} date=${today} state=${gates.state} reviewModel=${gates.reviewModel}`
 );
