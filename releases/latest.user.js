@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.273
+// @version      4.4.274
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.273',
-        scriptVersion: '4.4.273',
+        version: '4.4.274',
+        scriptVersion: '4.4.274',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.273',
+        scriptVersion: '4.4.274',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -799,6 +799,8 @@ const DomUtils = {
         if (window.__slf_ui_observer_installed) return;
         window.__slf_ui_observer_installed = true;
 
+        const isMatchPage = location.pathname.includes('/game.php');
+        const delay = isMatchPage ? 400 : 150;
         let scheduled = false;
 
         const run = () => {
@@ -808,18 +810,80 @@ const DomUtils = {
 
             setTimeout(() => {
                 scheduled = false;
+                if (isMatchPage) {
+                    window.__slf_match_ui_observer_runs =
+                        Number(window.__slf_match_ui_observer_runs || 0) + 1;
+                }
                 callback();
-            }, 150);
+            }, delay);
         };
 
-        const observer = new MutationObserver(run);
+        if (!isMatchPage) {
+            const observer = new MutationObserver(run);
 
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
 
-        run();
+            window.__slf_ui_observer_target = 'body';
+            run();
+            return;
+        }
+
+        const relevantSelector = [
+            '#slf-match-parser-panel',
+            '#slf-tactics-dropdown',
+            '.team_general_content',
+            '.game_control',
+            '#game_control',
+            '.game_tab_content',
+            '.tabs_content',
+            'input[name="def_line"]'
+        ].join(',');
+
+        const isRelevantNode = node => {
+            if (!node || node.nodeType !== 1) return false;
+            return node.matches(relevantSelector) || !!node.querySelector(relevantSelector);
+        };
+
+        const handleMutations = mutations => {
+            const relevant = mutations.some(mutation =>
+                [...mutation.addedNodes, ...mutation.removedNodes].some(isRelevantNode)
+            );
+            if (relevant) run();
+        };
+
+        const installMatchObserver = root => {
+            if (!root || window.__slf_match_ui_observer_state === 'ready') return;
+
+            const observer = new MutationObserver(handleMutations);
+            observer.observe(root, {
+                childList: true,
+                subtree: true
+            });
+
+            window.__slf_ui_observer_target = 'match-content';
+            window.__slf_match_ui_observer_state = 'ready';
+            run();
+        };
+
+        const root =
+            document.querySelector('.content-ui__wrapper') ||
+            document.querySelector('.match_content');
+
+        if (root) {
+            installMatchObserver(root);
+            return;
+        }
+
+        window.__slf_match_ui_observer_state = 'waiting';
+        this.waitForElement(
+            '.content-ui__wrapper, .match_content',
+            installMatchObserver,
+            50,
+            100
+        );
     }
 };
     // ============================================================
@@ -20851,15 +20915,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.273',
-        scriptVersion: '4.4.273',
+        version: '4.4.274',
+        scriptVersion: '4.4.274',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.273',
+        scriptVersion: '4.4.274',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

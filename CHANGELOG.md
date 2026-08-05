@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.274
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/core/dom-utils.js
+- tests/browser/test_match_rendering_compatibility.py
+
+Approved base commit:
+- c3f28bed1a1cd625fc3565bcf1574423cfde1f4e
+
+Approved commit:
+- 28f0c5e239e0eb4c28fd23b7ff8fee59c740ea97
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.273
 
 ### Automatic latest-only build
