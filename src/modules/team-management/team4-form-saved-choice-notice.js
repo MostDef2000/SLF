@@ -74,6 +74,8 @@ SLFTeam4FormSavedChoiceNotice.start();
     const PANEL_ID = 'slf-team4-championship-table';
     const UPCOMING_ID = 'slf-team4-upcoming-matches';
     const STYLE_ID = 'slf-team4-championship-table-style';
+    const PROMOTION_ATTEMPTS = 100;
+    const PROMOTION_INTERVAL_MS = 50;
     const norm = value => String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
     const positiveId = value => /^\d+$/.test(String(value || '')) && Number(value) > 0 ? String(value) : '';
 
@@ -283,31 +285,32 @@ SLFTeam4FormSavedChoiceNotice.start();
         return String(value || '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
     }
 
+    function mountPanel(panel, layout) {
+        layout.host.classList.add('slf-team4-championship-layout');
+        if (layout.mode === 'fm2026-roster-side') {
+            layout.host.classList.add('team_general_content', 'slf-team4-championship-roster-side');
+            if (panel.parentElement !== layout.host) layout.host.appendChild(panel);
+        } else if (panel.parentElement !== layout.host) {
+            layout.general.insertAdjacentElement('afterend', panel);
+        }
+        panel.dataset.slfTeamLayout = layout.mode;
+        return panel;
+    }
+
     function ensurePanel(context) {
         ensureStyle();
         const layout = resolvePageLayout();
         if (!layout) return null;
-
-        layout.host.classList.add('slf-team4-championship-layout');
         let panel = document.getElementById(PANEL_ID);
-
-        if (layout.mode === 'fm2026-roster-side') {
-            layout.host.classList.add('team_general_content', 'slf-team4-championship-roster-side');
-            if (!panel) {
-                panel = document.createElement('aside');
-                panel.id = PANEL_ID;
-                layout.host.appendChild(panel);
-            } else if (panel.parentElement !== layout.host) {
-                layout.host.appendChild(panel);
-            }
-        } else if (!panel) {
+        const created = !panel;
+        if (!panel) {
             panel = document.createElement('aside');
             panel.id = PANEL_ID;
-            layout.general.insertAdjacentElement('afterend', panel);
         }
-
-        panel.dataset.slfTeamLayout = layout.mode;
-        panel.innerHTML = `<div class="slf-champ-title"><a href="${escapeHtml(context.url.pathname + context.url.search)}">${escapeHtml(context.title)}</a></div><div class="slf-champ-state">Загрузка…</div>`;
+        mountPanel(panel, layout);
+        if (created || !panel.hasChildNodes()) {
+            panel.innerHTML = `<div class="slf-champ-title"><a href="${escapeHtml(context.url.pathname + context.url.search)}">${escapeHtml(context.title)}</a></div><div class="slf-champ-state">Загрузка…</div>`;
+        }
         return panel;
     }
 
@@ -329,6 +332,30 @@ SLFTeam4FormSavedChoiceNotice.start();
         panel.innerHTML = `<div class="slf-champ-title"><a href="${escapeHtml(context.url.pathname + context.url.search)}">${escapeHtml(context.title)}</a>${data.season ? `<div class="slf-champ-season">${escapeHtml(data.season)}</div>` : ''}</div><table class="slf-champ-standings"><thead><tr><th>№</th><th>Команда</th><th>И</th><th>О</th></tr></thead><tbody>${rows}</tbody></table>${upcoming}`;
     }
 
+    function promotePanelWhenReady(context, data) {
+        let attempts = 0;
+        const sync = () => {
+            if (!isTeam4MainPage()) return true;
+            const panel = document.getElementById(PANEL_ID);
+            if (!panel) return attempts >= PROMOTION_ATTEMPTS;
+            const layout = resolvePageLayout();
+            if (layout?.mode === 'fm2026-roster-side') {
+                mountPanel(panel, layout);
+                render(panel, context, data);
+                panel.dataset.slfUpcomingPromotion = 'ready';
+                document.documentElement.dataset.slfTeamUpcomingPromotion = 'ready';
+                return true;
+            }
+            attempts += 1;
+            return attempts >= PROMOTION_ATTEMPTS;
+        };
+
+        if (sync()) return;
+        const timer = setInterval(() => {
+            if (sync()) clearInterval(timer);
+        }, PROMOTION_INTERVAL_MS);
+    }
+
     async function start() {
         if (!isTeam4MainPage() || !matchMedia('(min-width: 1280px)').matches || document.getElementById(PANEL_ID)) return;
         const context = getChampionshipContext();
@@ -340,10 +367,12 @@ SLFTeam4FormSavedChoiceNotice.start();
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
             const upcoming = parseUpcomingMatchesDocument(doc);
-            render(panel, context, {
+            const data = {
                 ...parseTableDocument(doc, getActiveTeam()),
                 upcoming: upcoming.length ? upcoming : parseUpcomingMatchesDocument(document)
-            });
+            };
+            render(panel, context, data);
+            promotePanelWhenReady(context, data);
         } catch (error) {
             console.warn('[SLF Team4 Championship Table] failed', error);
             panel.innerHTML = `<div class="slf-champ-title"><a href="${escapeHtml(context.url.pathname + context.url.search)}">${escapeHtml(context.title)}</a></div><div class="slf-champ-state">Таблица чемпионата недоступна.</div>`;
