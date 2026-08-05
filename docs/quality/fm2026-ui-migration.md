@@ -74,3 +74,7 @@ A migrated module must:
 - prevent duplicate UI after repeated mount calls and DOM mutations;
 - pass exact candidate artifact browser tests;
 - provide failure screenshots and traces through the quality integration workflow.
+
+## Integration sequencing
+
+Stage 1 was merged before Stage 2 was retargeted to `main`. The Stage 2 branch records this sequencing change with a new head commit so every source-sensitive workflow reruns against the current integration base before merge.
