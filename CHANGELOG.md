@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.4.276
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/quality-integration.yml
+- src/app/bootstrap.js
+- tests/browser/fixtures/fm2026-header-matches.html
+- tests/browser/test_header_matches_layout.py
+
+Approved base commit:
+- 39bd2a17ea1b8bc1079a99ed16b9366833914bfa
+
+Approved commit:
+- f633891665ac8b4210c49dedd3977859f9ee152b
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.275
 
 ### Automatic latest-only build
