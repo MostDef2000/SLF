@@ -12,6 +12,26 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         return String(value || '').trim().length > 0;
     }
 
+    function positivePlayerId(value) {
+        const id = String(value || '').trim();
+        return /^\d+$/.test(id) && Number(id) > 0 ? id : '';
+    }
+
+    function playerIdFromRelativeUrl(value) {
+        const raw = String(value || '').trim();
+        if (!/^\/player\.php\?/i.test(raw)) return '';
+        if (!/(?:^|[?&])action=view(?:&|$)/i.test(raw)) return '';
+        return positivePlayerId(raw.match(/(?:^|[?&])id=(\d+)(?:&|$)/i)?.[1] || '');
+    }
+
+    TransferMarketAnalyzer.buildPurchaseForecastPlayerUrl = function buildSafePurchaseForecastPlayerUrl(playerId, playerUrl) {
+        const requestedId = positivePlayerId(playerId);
+        const urlId = playerIdFromRelativeUrl(playerUrl);
+        const id = requestedId || urlId;
+        if (!id) return '';
+        return `/player.php?action=view&id=${id}`;
+    };
+
     TransferMarketAnalyzer.hasValidTmProfileForValue = function hasValidTmProfileForValue(profile) {
         if (!profile || typeof profile !== 'object') return false;
         if (!hasText(profile.tmUrl) && !hasText(profile.tmId)) return false;

@@ -1,0 +1,121 @@
+{
+  "schema": "slf_fm2026_ui_migration_v1",
+  "status": "staged_not_released",
+  "designContract": {
+    "contentRoot": ".content-ui__wrapper",
+    "excludedMountRoots": [
+      ".fm-topbar",
+      ".fm-deck",
+      ".fm-slots"
+    ],
+    "tokenPrefix": "--fm-",
+    "classicFallbackRetained": true
+  },
+  "migratedSurfaces": [
+    "match parser and manual recommendation",
+    "tactics dropdown and save dialog",
+    "runtime version badge",
+    "transfer toolbar, candidate scanner, purchase forecast and history",
+    "training reference guide",
+    "loan-limit helper",
+    "saved-form notice",
+    "championship table",
+    "leadership-upgrade badge"
+  ],
+  "retainedClassicSelectors": [
+    {
+      "selector": ".match_content",
+      "owner": "src/app/version-badge.js",
+      "purpose": "classic match content fallback",
+      "removalCondition": "production evidence confirms every supported match page exposes .content-ui__wrapper"
+    },
+    {
+      "selector": ".team_general_content",
+      "owner": "src/app/version-badge.js and team-management modules",
+      "purpose": "classic team and tactic mount plus native team sub-layout",
+      "removalCondition": "all supported Team4 routes publish a stable FM content-root and native sub-layout contract"
+    },
+    {
+      "selector": ".pad2",
+      "owner": "src/modules/team-management/training-reference-guide.js",
+      "purpose": "classic training-page container fallback",
+      "removalCondition": "training page migration is production-verified and #train has a stable FM parent contract"
+    },
+    {
+      "selector": "#head",
+      "owner": "src/app/ui-layer.js",
+      "purpose": "classic body insertion anchor for match parser panel",
+      "removalCondition": "the panel is created directly in the FM content root after production acceptance"
+    },
+    {
+      "selector": "#generallist",
+      "owner": "team-management modules",
+      "purpose": "native Team4 roster table and row observation contract",
+      "removalCondition": "the redesigned Team4 roster exposes a documented replacement table contract"
+    },
+    {
+      "selector": ".team_general_calendar",
+      "owner": "src/modules/team-management/team4-form-saved-choice-notice.js",
+      "purpose": "native saved-form notice target",
+      "removalCondition": "the redesigned Team4 page exposes a dedicated form-status slot"
+    }
+  ],
+  "renderedSinkReview": [
+    {
+      "surface": "purchase forecast rows",
+      "source": "VPS transfer_history records",
+      "sink": "innerHTML",
+      "controls": [
+        "escapeForecastHtml for text and attributes",
+        "same-origin player URL validation required by hostile-record browser test"
+      ]
+    },
+    {
+      "surface": "championship table",
+      "source": "fetched championship HTML",
+      "sink": "innerHTML",
+      "controls": [
+        "escapeHtml for team names, season, table values and href"
+      ]
+    },
+    {
+      "surface": "training benchmark table",
+      "source": "VPS cache and fetched league statistics",
+      "sink": "innerHTML",
+      "controls": [
+        "TrainingGuidePanel.esc for roles, values, source-derived titles and attributes"
+      ]
+    },
+    {
+      "surface": "manual recommendation",
+      "source": "parsed match state and recommendation engine",
+      "sink": "innerHTML",
+      "controls": [
+        "RecommendationEngine.escapeHtml for rendered context and action text"
+      ]
+    },
+    {
+      "surface": "saved-form notice",
+      "source": "fetched native form page",
+      "sink": "innerHTML",
+      "controls": [
+        "only a date matched by a numeric date regex is inserted"
+      ]
+    }
+  ],
+  "browserEvidence": {
+    "legacyScenarioCount": 7,
+    "fmDesktopScenarioCount": 5,
+    "responsiveScenarioCount": 4,
+    "hostileStringScenarios": [
+      "VPS purchase forecast record",
+      "championship team name"
+    ]
+  },
+  "rolloutBoundary": {
+    "merged": false,
+    "releasePublished": false,
+    "productionDeployed": false,
+    "classicFallbackRemovalApproved": false
+  }
+}
