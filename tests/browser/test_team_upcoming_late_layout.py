@@ -2,6 +2,7 @@
 
 import json
 import threading
+import time
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,16 +24,6 @@ CHAMP_HTML = """<!doctype html><html><body><div>Сезон 2026/27</div>
 <tr><th>№</th><th>Команда</th><th>И</th><th>Очки</th></tr>
 <tr><td>1</td><td><a href="/roster.php?id=23698">Луч</a></td><td>4</td><td>12</td></tr>
 <tr><td>2</td><td><a href="/roster.php?id=99999">Соперник</a></td><td>4</td><td>9</td></tr>
-</table>
-<table class="team-games__near">
-<thead><tr><th>Дата</th><th>Соперник</th><th>П</th><th>Форма</th></tr></thead>
-<tbody>
-<tr><td>09.08.2026</td><td><a href="/roster.php?id=41001">Ньюпорт Каунти</a></td><td>4</td><td><span>W</span><span>L</span><span>W</span><span>D</span><span>W</span></td></tr>
-<tr><td>12.08.2026</td><td><a href="/roster.php?id=41002">Линкольн Сити</a></td><td>21</td><td><span>L</span><span>L</span><span>D</span><span>D</span><span>D</span></td></tr>
-<tr><td>17.08.2026</td><td><a href="/roster.php?id=41003">Гримсби</a></td><td>2</td><td><span>W</span><span>W</span><span>W</span><span>W</span><span>W</span></td></tr>
-<tr><td>20.08.2026</td><td><a href="javascript:window.__slfPwned=5">&lt;svg onload=window.__slfPwned=5&gt;</a></td><td>12</td><td><span>W</span><span>W</span><span>L</span><span>D</span><span>W</span></td></tr>
-<tr><td>23.08.2026</td><td><a href="/team.php?id=41005">Кроули Таун</a></td><td>22</td><td><span>D</span><span>L</span><span>L</span><span>L</span><span>D</span></td></tr>
-</tbody>
 </table>
 </body></html>"""
 
@@ -58,6 +49,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_html(FIXTURE.read_text(encoding="utf-8"))
         elif parsed.path == "/champ.php":
             type(self).champ_requests += 1
+            time.sleep(0.30)
             self.send_html(CHAMP_HTML)
         elif parsed.path in {"/player.php", "/alter.php", "/roster.php", "/team.php"}:
             self.send_html("<!doctype html><html><body></body></html>")
@@ -142,12 +134,17 @@ def main():
               return {
                 beforePromotion: window.__lateLayoutBeforePromotion || '',
                 failure: window.__lateLayoutFailure || '',
+                sourcePresentBeforeRemoval: window.__legacyUpcomingPresentBeforeRemoval === true,
+                sourceRemoved: window.__legacyUpcomingRemoved === true && !document.querySelector('.team-games__near'),
                 panelCount: document.querySelectorAll('#slf-team4-championship-table').length,
                 upcomingCount: document.querySelectorAll('#slf-team4-upcoming-matches').length,
                 panelParent: panel.parentElement?.className || '',
                 panelLayout: panel.dataset.slfTeamLayout || '',
                 promotion: panel.dataset.slfUpcomingPromotion || '',
                 rootPromotion: document.documentElement.dataset.slfTeamUpcomingPromotion || '',
+                snapshotRows: document.documentElement.dataset.slfTeamUpcomingSnapshotRows || '',
+                snapshotState: document.documentElement.dataset.slfTeamUpcomingSnapshot || '',
+                snapshotSource: upcoming.dataset.slfUpcomingSource || '',
                 rows: rows.length,
                 chips: upcoming.querySelectorAll('.slf-form-chip').length,
                 firstDate: rows[0]?.cells[0]?.textContent || '',
@@ -162,17 +159,20 @@ def main():
 
             assert evidence["beforePromotion"] == "legacy-content", evidence
             assert evidence["failure"] == "", evidence
+            assert evidence["sourcePresentBeforeRemoval"] and evidence["sourceRemoved"], evidence
             assert evidence["panelCount"] == 1 and evidence["upcomingCount"] == 1, evidence
             assert "team-body" in evidence["panelParent"], evidence
             assert evidence["panelLayout"] == "fm2026-roster-side", evidence
             assert evidence["promotion"] == "ready" and evidence["rootPromotion"] == "ready", evidence
+            assert evidence["snapshotRows"] == "5" and evidence["snapshotState"] == "rendered", evidence
+            assert evidence["snapshotSource"] == "legacy-pre-migration-snapshot", evidence
             assert evidence["rows"] == 5 and evidence["chips"] == 25, evidence
             assert evidence["firstDate"] == "09.08.2026" and evidence["firstOpponent"] == "Ньюпорт Каунти", evidence
             assert evidence["unsafeNodes"] == 0 and evidence["unsafeHref"] == "", evidence
             assert evidence["hostileText"] and evidence["pwned"] == 0, evidence
             assert evidence["unhandled"] == [] and page_errors == [], {"evidence": evidence, "page_errors": page_errors}
             assert Handler.champ_requests == 1, Handler.champ_requests
-            print(f"[team-upcoming-late-layout] passed version={VERSION} requests={Handler.champ_requests}")
+            print(f"[team-upcoming-pre-migration-snapshot] passed version={VERSION} requests={Handler.champ_requests}")
         finally:
             context.close()
             browser.close()
