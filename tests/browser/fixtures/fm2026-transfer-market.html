@@ -15,7 +15,14 @@
     .fm-deck{padding:10px 18px;background:#141827}.fm-card--manager{display:inline-block;padding:6px 10px;background:#1a2030;border-radius:10px}
     .fm-stage{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;padding:16px}.fm-slots{min-height:500px;background:#121624;border-radius:12px;padding:10px}
     .content-ui__wrapper{min-width:0;background:#101522;border-radius:14px;padding:16px;overflow:hidden}
-    #market-summary{width:720px;max-width:100%;height:120px;padding:14px;background:#181d2b;border:1px solid #343d58;border-radius:12px;box-sizing:border-box;margin-bottom:14px}
+    .fmx{min-width:0}.fmx-tnav{margin-bottom:12px}.fmx-tnav__title{font-size:19px}
+    .fmx-info-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
+    .fmx-card{min-width:0;padding:12px 14px;background:#181d2b;border:1px solid #343d58;border-radius:12px;box-sizing:border-box}
+    .fmx-info__label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--fm-muted);margin-bottom:8px}
+    .fmx-info__hero{font-size:22px;font-weight:700;margin-bottom:8px}.fmx-info__hero-sub{font-size:11px;color:var(--fm-muted)}
+    .fmx-kv{display:flex;justify-content:space-between;gap:8px;padding:4px 0;color:var(--fm-muted)}
+    .fmx-tabs{display:flex;align-items:center;gap:5px;margin-bottom:0}.fmx-tab{padding:8px 14px;background:#181d2b;border:1px solid #343d58;border-radius:9px 9px 0 0}.fmx-tab--active{color:#fff}
+    .fmx-pill--accent{margin-left:auto}.fmx-table-card{border-radius:0 12px 12px 12px}
     table{width:100%;border-collapse:collapse;background:#151a28}th,td{padding:7px;border-bottom:1px solid #303850;text-align:left}a{color:#8dc0ff}
   </style>
 </head>
@@ -25,21 +32,45 @@
   <main class="fm-stage">
     <aside class="fm-slots">Команды</aside>
     <section class="content-ui__wrapper">
-      <div id="market-summary">
-        <div>Текущий статус: открыт</div>
-        <div>Период проведения: 05.08.2026–12.08.2026</div>
-        <div>Бюджет клуба: 450M</div>
+      <div class="fmx">
+        <div class="fmx-tnav"><div class="fmx-tnav__title">Трансферный рынок</div></div>
+        <div class="fmx-info-grid wide_format">
+          <div class="fmx-card">
+            <div class="fmx-info__label">Трансферное окно</div>
+            <div class="fmx-info__hero"><span>окно открыто</span></div>
+            <div class="fmx-kv"><span>с 05.08.2026 по 12.08.2026</span><b>7 дней</b></div>
+          </div>
+          <div class="fmx-card">
+            <div class="fmx-info__label">Активность рынка</div>
+            <div class="fmx-info__hero">111 <span class="fmx-info__hero-sub">предложений на рынке</span></div>
+            <div class="fmx-kv"><span>Ваших сделок в это ТО</span><b>0/40</b></div>
+          </div>
+          <div class="fmx-card">
+            <div class="fmx-info__label">Финансы клуба</div>
+            <div class="fmx-info__hero">450M <span class="fmx-info__hero-sub">бюджет клуба</span></div>
+            <div class="fmx-kv"><span>Сумма всех ваших ставок</span><b>0M</b></div>
+          </div>
+        </div>
+        <div class="fmx-tabs">
+          <span class="fmx-tab fmx-tab--active">Все игроки (111)</span>
+          <a class="fmx-tab" href="/transfers.php?lister=1">Ваши игроки (0)</a>
+          <a class="fmx-tab" href="/transfers.php?ucs=1">Ваши ставки (0 из 0)</a>
+          <a class="fmx-tab" href="/transfers.php?ucs=2">На карандаше (0)</a>
+          <button class="fmx-pill--accent">Выставить игрока</button>
+        </div>
+        <div class="fmx-card fmx-table-card">
+          <table class="trans_market_offers" data-slf-transfer-table="fixture">
+            <thead>
+              <tr><th>Амплуа</th><th>Фамилия</th><th>Команда</th><th>Воз</th><th>Тал</th><th>Пот</th><th>Скилл</th><th>Цена</th><th>Дата окончания</th><th>Предл.</th></tr>
+            </thead>
+            <tbody>
+              <tr id="tl-7001"><td>ST</td><td><a href="/player.php?action=view&id=1001">Игрок Один</a></td><td>Клуб A</td><td>22</td><td>5</td><td>4</td><td>151</td><td>1.20 H 120M</td><td>06.08.2026 12:00</td><td>2</td></tr>
+              <tr id="tl-7002"><td>CM</td><td><a href="/player.php?action=view&id=1002">Игрок Два</a></td><td>Клуб B</td><td>24</td><td>4</td><td>3</td><td>146</td><td>0.95 H 82M</td><td>06.08.2026 13:00</td><td>1</td></tr>
+              <tr id="tl-7003"><td>CD</td><td><a href="/player.php?action=view&id=1003">Игрок Три</a></td><td>Клуб C</td><td>21</td><td>6</td><td>5</td><td>158</td><td>1.40 H 165M</td><td>06.08.2026 14:00</td><td>4</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-      <table class="trans_market_offers" data-slf-transfer-table="fixture">
-        <thead>
-          <tr><th>Амплуа</th><th>Фамилия</th><th>Команда</th><th>Воз</th><th>Тал</th><th>Пот</th><th>Скилл</th><th>Цена</th><th>Дата окончания</th><th>Предл.</th></tr>
-        </thead>
-        <tbody>
-          <tr id="tl-7001"><td>ST</td><td><a href="/player.php?action=view&id=1001">Игрок Один</a></td><td>Клуб A</td><td>22</td><td>5</td><td>4</td><td>151</td><td>1.20 H 120M</td><td>06.08.2026 12:00</td><td>2</td></tr>
-          <tr id="tl-7002"><td>CM</td><td><a href="/player.php?action=view&id=1002">Игрок Два</a></td><td>Клуб B</td><td>24</td><td>4</td><td>3</td><td>146</td><td>0.95 H 82M</td><td>06.08.2026 13:00</td><td>1</td></tr>
-          <tr id="tl-7003"><td>CD</td><td><a href="/player.php?action=view&id=1003">Игрок Три</a></td><td>Клуб C</td><td>21</td><td>6</td><td>5</td><td>158</td><td>1.40 H 165M</td><td>06.08.2026 14:00</td><td>4</td></tr>
-        </tbody>
-      </table>
     </section>
   </main>
 </body>
