@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.4.283
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/quality-integration.yml
+- src/app/ui-layer.js
+- tests/browser/fixtures/fm2026-team-tactic.html
+- tests/browser/test_team4_tactic_header_selector.py
+
+Approved base commit:
+- 86fc477663ad86289c2f518541d476ce2fe66125
+
+Approved commit:
+- 45069bdb24991b3ad8b3e40353ff2d160dfe3a32
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.282
 
 ### Automatic latest-only build

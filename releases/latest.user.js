@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.282
+// @version      4.4.283
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.282',
-        scriptVersion: '4.4.282',
+        version: '4.4.283',
+        scriptVersion: '4.4.283',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.282',
+        scriptVersion: '4.4.283',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -8075,6 +8075,7 @@ recBox.style.cssText = `
                 const check = () => {
                     const target =
                         document.querySelector('.team_general_content') ||
+                        document.querySelector('.ui-tactic__wrap') ||
                         document.querySelector('.game_control') ||
                         document.querySelector('#game_control') ||
                         document.querySelector('.game_tab_content') ||
@@ -8128,7 +8129,14 @@ if (!isTacticPage) return;
                 await this.waitForTacticReady();
             }
 
+            const isTeam4TacticPage = location.pathname.includes('/team4.php')
+                && new URLSearchParams(location.search).get('action') === 'tactic';
             let target = document.querySelector('.team_general_content');
+
+            if (!target && isTeam4TacticPage) {
+                const tacticWrap = document.querySelector('.ui-tactic__wrap');
+                target = tacticWrap?.closest('form') || tacticWrap || null;
+            }
 
             if (!target && location.pathname.includes('/game.php')) {
                 const defInput = document.querySelector('input[name="def_line"]');
@@ -8402,6 +8410,99 @@ if (!isTacticPage) return;
                 container.append(topLine, schemeLabel);
 
                 controlRoot.parentNode.insertBefore(container, controlRoot);
+            } else if (isTeam4TacticPage) {
+                const teamHeader = document.querySelector('.team > .team-head');
+                const matches = teamHeader?.querySelector(':scope > .team-head__matches');
+                if (!teamHeader) {
+                    target.insertBefore(container, target.firstChild);
+                    return;
+                }
+
+                const styleId = 'slf-team4-tactic-header-selector-style';
+                if (!document.getElementById(styleId)) {
+                    const style = document.createElement('style');
+                    style.id = styleId;
+                    style.textContent = `
+                        .team > .team-head > #slf-tactics-dropdown.slf-team4-tactic-header-selector {
+                            flex: 1 1 520px !important;
+                            width: auto !important;
+                            min-width: 360px !important;
+                            max-width: 720px !important;
+                            align-self: center !important;
+                            margin: 0 12px !important;
+                            padding: 8px 10px !important;
+                            display: grid !important;
+                            grid-template-columns: auto minmax(240px, 1fr) !important;
+                            grid-template-areas: "title controls" "scheme scheme" !important;
+                            align-items: center !important;
+                            gap: 4px 10px !important;
+                            overflow: hidden !important;
+                            box-sizing: border-box !important;
+                        }
+                        .team > .team-head > #slf-tactics-dropdown.slf-team4-tactic-header-selector > div:first-child {
+                            grid-area: title !important;
+                            margin: 0 !important;
+                            color: var(--slf-muted, #8b93ab) !important;
+                            font-size: 10px !important;
+                            font-weight: 700 !important;
+                            letter-spacing: .08em !important;
+                            text-transform: uppercase !important;
+                            white-space: nowrap !important;
+                        }
+                        .team > .team-head > #slf-tactics-dropdown.slf-team4-tactic-header-selector > div:nth-child(2) {
+                            grid-area: controls !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            gap: 5px !important;
+                            flex-wrap: nowrap !important;
+                            min-width: 0 !important;
+                        }
+                        .team > .team-head > #slf-tactics-dropdown.slf-team4-tactic-header-selector select {
+                            flex: 1 1 auto !important;
+                            width: auto !important;
+                            min-width: 0 !important;
+                            max-width: 100% !important;
+                        }
+                        .team > .team-head > #slf-tactics-dropdown.slf-team4-tactic-header-selector button {
+                            flex: 0 0 30px !important;
+                            width: 30px !important;
+                            height: 30px !important;
+                            min-width: 30px !important;
+                            min-height: 30px !important;
+                            padding: 0 !important;
+                            line-height: 1 !important;
+                        }
+                        .team > .team-head > #slf-tactics-dropdown.slf-team4-tactic-header-selector #slf-tactics-scheme-label {
+                            grid-area: scheme !important;
+                            width: 100% !important;
+                            min-width: 0 !important;
+                            margin: 0 !important;
+                            overflow: hidden !important;
+                            text-overflow: ellipsis !important;
+                            white-space: nowrap !important;
+                            font-size: 10px !important;
+                            line-height: 1.2 !important;
+                        }
+                        @media (max-width: 1300px) {
+                            .team > .team-head > #slf-tactics-dropdown.slf-team4-tactic-header-selector {
+                                grid-template-columns: minmax(0, 1fr) !important;
+                                grid-template-areas: "controls" "scheme" !important;
+                                min-width: 330px !important;
+                                margin-left: auto !important;
+                                margin-right: 8px !important;
+                            }
+                            .team > .team-head > #slf-tactics-dropdown.slf-team4-tactic-header-selector > div:first-child {
+                                display: none !important;
+                            }
+                        }
+                    `;
+                    (document.head || document.documentElement).appendChild(style);
+                }
+
+                container.classList.add('slf-ui', 'slf-panel', 'slf-team4-tactic-header-selector');
+                container.dataset.slfTeam4TacticHeader = '1';
+                if (matches) teamHeader.insertBefore(container, matches);
+                else teamHeader.appendChild(container);
             } else {
                 target.insertBefore(container, target.firstChild);
             }
@@ -21101,15 +21202,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.282',
-        scriptVersion: '4.4.282',
+        version: '4.4.283',
+        scriptVersion: '4.4.283',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.282',
+        scriptVersion: '4.4.283',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
