@@ -1,7 +1,7 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
   "reviewedAt": "2026-08-05",
-  "reviewCandidateCount": 19,
+  "reviewCandidateCount": 17,
   "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
@@ -138,6 +138,16 @@
       "evidence": [
         "Owns manual-state persistence, pending-event migration, deterministic effect keys, retry recovery and the active manual tactic watcher.",
         "The old storage key is read-only migration input; no legacy API or legacy write remains."
+      ]
+    },
+    {
+      "file": "src/modules/team-management/team4-form-saved-choice-notice.js",
+      "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
+      "classification": "MIXED_ACTIVE_LEGACY",
+      "evidence": [
+        "The saved-form notice and championship table execute as Team4 main-page side effects and mount into the real FM 2026 `.team-body` dashboard contract.",
+        "The exact candidate browser fixture derived from the live Players page verifies the dashboard mount, active-team highlighting, duplicate prevention and containment inside `.content-ui__wrapper`.",
+        "The `.team_general_calendar` and `.team_general_content > #general` branches are deliberate compatibility fallbacks for classic pages; they do not add legacy API, storage, parser or telemetry behavior."
       ]
     },
     {
