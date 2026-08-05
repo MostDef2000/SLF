@@ -7,6 +7,7 @@ on:
       - 'data/version.json'
       - 'releases/latest.meta.js'
       - 'releases/latest.user.js'
+      - 'tools/build-latest-userscript.mjs'
       - 'tools/test-userscript-artifact-boundary.mjs'
       - '.github/workflows/userscript-artifact-boundary.yml'
   workflow_dispatch:
@@ -21,12 +22,19 @@ jobs:
     steps:
       - name: Checkout reviewed revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Build exact candidate artifact from reviewed source
+        run: |
+          set -euo pipefail
+          node tools/build-latest-userscript.mjs
 
       - name: Check gate syntax
         run: node --check tools/test-userscript-artifact-boundary.mjs
 
-      - name: Check published userscript syntax
+      - name: Check candidate userscript syntax
         run: node --check releases/latest.user.js
 
-      - name: Enforce exact artifact boundary
+      - name: Enforce exact candidate artifact boundary
         run: node tools/test-userscript-artifact-boundary.mjs
