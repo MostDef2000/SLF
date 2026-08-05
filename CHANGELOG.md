@@ -1,5 +1,30 @@
 # Changelog
 
+## 4.4.265
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- docs/quality/fm2026-ui-migration.md
+- src/app/version-badge.js
+- tests/browser/fixtures/fm2026-transfer-history.html
+- tests/browser/fixtures/fm2026-transfer-market.html
+- tests/browser/test_fm2026_design_adapter.py
+
+Approved base commit:
+- b27a9168b4edb052f8edd0611b68e8d70bef69fa
+
+Approved commit:
+- f530538d3c8850c0a5811148698c3261557fc136
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.264
 
 ### Automatic latest-only build
