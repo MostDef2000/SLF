@@ -106,9 +106,11 @@
         attempts += 1;
         const table = document.getElementById('generallist');
         const wrapper = table?.closest('.roster-scroll');
-        if (!table || !wrapper || table.dataset.slfRosterFit !== '1' || wrapper.dataset.slfRosterFit !== '1') {
-          if (attempts < 50) return setTimeout(verifyRosterFit, 50);
-          throw new Error('SLF roster-fit adapter did not attach');
+        const panel = document.getElementById('slf-team4-championship-table');
+        const badge = document.getElementById('slf-version-inline-badge');
+        if (!table || !wrapper || !panel || !badge || table.dataset.slfRosterFit !== '1' || wrapper.dataset.slfRosterFit !== '1') {
+          if (attempts < 100) return setTimeout(verifyRosterFit, 50);
+          throw new Error('SLF team layout adapters did not attach');
         }
         if (innerWidth < 1280) {
           window.__slfRosterFitEvidence = { skipped: 'host desktop roster requires at least 1280px', viewport: innerWidth };
@@ -117,6 +119,9 @@
         const rows = [...table.tBodies[0].rows];
         const tableRect = table.getBoundingClientRect();
         const wrapperRect = wrapper.getBoundingClientRect();
+        const teamContentRect = document.querySelector('.team-content').getBoundingClientRect();
+        const panelRect = panel.getBoundingClientRect();
+        const badgeStyle = getComputedStyle(badge);
         const evidence = {
           headerColumns: table.tHead.rows[0].cells.length,
           bodyColumns: rows.map(row => row.cells.length),
@@ -126,17 +131,35 @@
           clientWidth: wrapper.clientWidth,
           tableRight: tableRect.right,
           wrapperRight: wrapperRect.right,
-          nameMinWidth: getComputedStyle(table.querySelector('.player-column-name')).minWidth
+          nameMinWidth: getComputedStyle(table.querySelector('.player-column-name')).minWidth,
+          panelParent: panel.parentElement?.className || '',
+          panelLeft: panelRect.left,
+          rosterRight: teamContentRect.right,
+          panelTop: panelRect.top,
+          rosterTop: teamContentRect.top,
+          badgeParent: badge.parentElement?.className || '',
+          badgeText: badge.textContent,
+          badgeDisplay: badgeStyle.display,
+          badgeVisibility: badgeStyle.visibility,
+          versionMarker: document.documentElement.dataset.slfVersionBadge || ''
         };
         window.__slfRosterFitEvidence = evidence;
+        const sideBySide = innerWidth < 1440 || (evidence.panelLeft >= evidence.rosterRight + 5 && Math.abs(evidence.panelTop - evidence.rosterTop) <= 2);
         const passed = evidence.headerColumns === 16
           && evidence.bodyColumns.every(count => count === 16)
           && evidence.tableLayout === 'fixed'
           && evidence.overflowX === 'hidden'
           && evidence.scrollWidth <= evidence.clientWidth + 1
           && evidence.tableRight <= evidence.wrapperRight + 1
-          && evidence.nameMinWidth !== '200px';
-        if (!passed) throw new Error(`SLF roster-fit regression: ${JSON.stringify(evidence)}`);
+          && evidence.nameMinWidth !== '200px'
+          && evidence.panelParent.includes('team-body')
+          && sideBySide
+          && evidence.badgeParent.includes('fm-topbar__right')
+          && evidence.badgeText === `SLF ${window.SLF?.scriptVersion || ''}`
+          && evidence.badgeDisplay !== 'none'
+          && evidence.badgeVisibility !== 'hidden'
+          && evidence.versionMarker === 'visible';
+        if (!passed) throw new Error(`SLF roster/version/championship regression: ${JSON.stringify(evidence)}`);
       }
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(verifyRosterFit, 0), { once:true });
       else setTimeout(verifyRosterFit, 0);
