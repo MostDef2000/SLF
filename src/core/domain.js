@@ -141,8 +141,6 @@
         table.className = 'slf-upcoming-table';
         const head = document.createElement('thead');
         const headRow = document.createElement('tr');
-        appendTextCell(headRow, 'slf-upcoming-date', 'Дата').outerHTML = appendTextCell(headRow, 'slf-upcoming-date', 'Дата').outerHTML;
-        headRow.replaceChildren();
         ['Дата', 'Соперник', '', 'Форма'].forEach((label, index) => {
             const cell = document.createElement('th');
             cell.className = ['slf-upcoming-date', 'slf-upcoming-opponent', 'slf-upcoming-detail', 'slf-upcoming-form'][index];
