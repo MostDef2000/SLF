@@ -126,17 +126,17 @@ def assert_header_selector(page: Page):
     assert evidence["bridgeClassRemaining"] is False, evidence
 
     select = page.locator("#slf-tactics-dropdown select")
-    assert select.locator("option[value='Bielsa_ChaosPress_att5']").count() == 1
-    select.select_option("Bielsa_ChaosPress_att5")
-    page.wait_for_timeout(1200)
+    preset_name = "Pep_StandardControl_bal3"
+    assert select.locator(f"option[value='{preset_name}']").count() == 1
+    select.select_option(preset_name)
+    page.wait_for_timeout(1000)
     page.locator("#slf-tactics-dropdown button").first.click()
 
-    expected_applied = """() => document.querySelector('input[name="def_line"][value="4"]')?.checked
-      && document.querySelector('input[name="press_line"][value="5"]')?.checked
-      && document.querySelector('input[name="press_intense"][value="5"]')?.checked
-      && document.querySelector('input[name="priority_l"]')?.checked
-      && document.querySelector('input[name="priority_c"]')?.checked
-      && document.querySelector('input[name="priority_r"]')?.checked"""
+    expected_applied = """() => document.querySelector('input[name="def_line"][value="2"]')?.checked
+      && document.querySelector('input[name="press_line"][value="2"]')?.checked
+      && document.querySelector('input[name="press_intense"][value="3"]')?.checked
+      && document.querySelector('input[name="style"][value="3"]')?.checked
+      && document.querySelector('input[name="pass_risk"][value="3"]')?.checked"""
     try:
         page.wait_for_function(expected_applied, timeout=5000)
     except PlaywrightTimeoutError as error:
@@ -148,7 +148,8 @@ def assert_header_selector(page: Page):
                 def_line: checked('def_line'),
                 press_line: checked('press_line'),
                 press_intense: checked('press_intense'),
-                priorities: [...document.querySelectorAll('input[name^="priority_"]:checked')].map(node => node.name),
+                style: checked('style'),
+                pass_risk: checked('pass_risk'),
                 alerts: window.__slfAlerts.slice(),
                 unhandled: window.__slfUnhandled.slice()
               };
