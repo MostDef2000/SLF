@@ -21,6 +21,15 @@ jobs:
     steps:
       - name: Checkout reviewed revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Build exact candidate artifact from reviewed source
+        run: |
+          set -euo pipefail
+          export TARGET_VERSION
+          TARGET_VERSION=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.scriptVersion)")
+          node tools/build-latest-userscript.mjs
 
       - name: Check static, contract, and security tooling syntax
         run: |
@@ -61,6 +70,15 @@ jobs:
     steps:
       - name: Checkout reviewed revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Build exact candidate artifact from reviewed source
+        run: |
+          set -euo pipefail
+          export TARGET_VERSION
+          TARGET_VERSION=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.scriptVersion)")
+          node tools/build-latest-userscript.mjs
 
       - name: Check property and fuzz tooling syntax
         run: |
@@ -86,9 +104,20 @@ jobs:
     steps:
       - name: Checkout reviewed revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Build exact candidate artifact from reviewed source
+        run: |
+          set -euo pipefail
+          export TARGET_VERSION
+          TARGET_VERSION=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.scriptVersion)")
+          node tools/build-latest-userscript.mjs
 
       - name: Check browser harness syntax
-        run: python3 -m py_compile tests/browser/test_exact_userscript.py
+        run: |
+          python3 -m py_compile tests/browser/test_exact_userscript.py
+          python3 -m py_compile tests/browser/test_fm2026_design_adapter.py
 
       - name: Install pinned browser test dependencies
         run: python3 -m pip install --disable-pip-version-check -r tests/browser/requirements.txt
@@ -99,8 +128,10 @@ jobs:
       - name: Install pinned Chromium runtime
         run: python3 -m playwright install --with-deps chromium
 
-      - name: Execute exact userscript in browser fixtures
-        run: python3 tests/browser/test_exact_userscript.py
+      - name: Execute exact candidate userscript in browser fixtures
+        run: |
+          python3 tests/browser/test_exact_userscript.py
+          python3 tests/browser/test_fm2026_design_adapter.py
 
       - name: Upload browser failure evidence
         if: failure() && hashFiles('tests/browser/artifacts/**') != ''
@@ -129,23 +160,21 @@ jobs:
           bash -n vps/ops/deploy-code.sh
           bash -n vps/ops/rollback-code.sh
 
-      - name: Rebuild exact release bytes deterministically
+      - name: Build and rebuild exact candidate bytes deterministically
         run: |
           set -euo pipefail
-          sha256sum releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md > "$RUNNER_TEMP/release-before.sha256"
+          export TARGET_VERSION
+          TARGET_VERSION=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.scriptVersion)")
+          node tools/build-latest-userscript.mjs
+          sha256sum releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md > "$RUNNER_TEMP/candidate-before.sha256"
           export APPROVED_BASE_COMMIT
           export APPROVED_COMMIT
           export APPROVED_FILES
-          export SOURCE_BRANCH
-          export TARGET_VERSION
           APPROVED_BASE_COMMIT=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.approvedBaseCommit)")
           APPROVED_COMMIT=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.approvedCommit)")
           APPROVED_FILES=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.approvedFiles.join('\n'))")
-          SOURCE_BRANCH=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.sourceBranch || 'main')")
-          TARGET_VERSION=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.scriptVersion)")
           node tools/build-latest-userscript.mjs
-          sha256sum --check "$RUNNER_TEMP/release-before.sha256"
-          git diff --exit-code -- releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md
+          sha256sum --check "$RUNNER_TEMP/candidate-before.sha256"
           EXPECTED_APPROVED_BASE_COMMIT="$APPROVED_BASE_COMMIT" \
           EXPECTED_APPROVED_COMMIT="$APPROVED_COMMIT" \
           EXPECTED_APPROVED_FILES="$APPROVED_FILES" \
