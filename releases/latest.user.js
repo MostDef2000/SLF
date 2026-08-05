@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.269
+// @version      4.4.270
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.269',
-        scriptVersion: '4.4.269',
+        version: '4.4.270',
+        scriptVersion: '4.4.270',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.269',
+        scriptVersion: '4.4.270',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -20550,6 +20550,68 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
 // 15. App Bootstrap
 // ============================================================
 
+(function installMatchRenderingCompatibility() {
+    if (!location.pathname.includes('/game.php')) return;
+
+    const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+    const root = document.documentElement;
+    if (root.dataset.slfMatchRenderingCompatibility === '1') return;
+    root.dataset.slfMatchRenderingCompatibility = '1';
+
+    const styleId = 'slf-match-rendering-compatibility';
+    if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+            .g3 [id^="fieldgrass"]:not([class*="user-custom__game-field-"]) {
+                background: #1d6f36 url("/images/gen4/play_field6.png") -1px 0 / 800px 550px no-repeat !important;
+                box-shadow: none !important;
+            }
+            .g3 [id^="fieldgrass"] #letsdance {
+                image-rendering: auto;
+            }
+        `;
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    const maxRenderScale = 2;
+    const patchRenderScale = () => {
+        const engine = pageWindow.game_2d;
+        if (!engine || typeof engine.set_render_scale !== 'function') return false;
+
+        if (!engine.__slfSmoothRenderScaleInstalled) {
+            const originalSetRenderScale = engine.set_render_scale.bind(engine);
+            engine.set_render_scale = value => {
+                const numeric = Number(value);
+                const normalized = Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
+                return originalSetRenderScale(Math.min(normalized, maxRenderScale));
+            };
+            Object.defineProperty(engine, '__slfSmoothRenderScaleInstalled', {
+                value: true,
+                enumerable: false,
+                configurable: false
+            });
+        }
+
+        if (typeof pageWindow.game2dRefreshRenderScale === 'function') {
+            pageWindow.game2dRefreshRenderScale();
+        } else {
+            engine.set_render_scale(maxRenderScale);
+        }
+        return true;
+    };
+
+    if (patchRenderScale()) return;
+
+    let attempts = 0;
+    const timer = setInterval(() => {
+        attempts += 1;
+        if (patchRenderScale() || attempts >= 100 || !location.pathname.includes('/game.php')) {
+            clearInterval(timer);
+        }
+    }, 100);
+})();
+
 function applyTacticsDropdownUiPolicy() {
     if (typeof UI === 'undefined' || !UI?.addDropdown || UI.__flatSortedTacticDropdownApplied) return;
 
@@ -20689,15 +20751,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.269',
-        scriptVersion: '4.4.269',
+        version: '4.4.270',
+        scriptVersion: '4.4.270',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.269',
+        scriptVersion: '4.4.270',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

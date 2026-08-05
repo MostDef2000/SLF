@@ -1,5 +1,34 @@
 # Changelog
 
+## 4.4.270
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/pull_request_template.md
+- .github/workflows/quality-integration.yml
+- data/quality/deliberate-execution-contract-v1.json
+- data/quality/deliberate-execution-fixtures-v1.json
+- data/quality/quality-gates-v1.json
+- docs/quality/deliberate-execution-contract.md
+- src/app/bootstrap.js
+- tests/browser/test_match_rendering_compatibility.py
+- tools/test-deliberate-execution-contract.mjs
+
+Approved base commit:
+- 4714601fa0973fea42f1cb70c0216a5942a4ecf8
+
+Approved commit:
+- 1a90fd0172f5f0e8eea74431a001670c5b8c804b
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.269
 
 ### Automatic latest-only build
