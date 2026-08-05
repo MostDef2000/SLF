@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 ROOT = Path.cwd()
 ARTIFACT = ROOT / "releases" / "latest.user.js"
@@ -128,14 +128,33 @@ def assert_header_selector(page: Page):
     select = page.locator("#slf-tactics-dropdown select")
     assert select.locator("option[value='Bielsa_ChaosPress_att5']").count() == 1
     select.select_option("Bielsa_ChaosPress_att5")
-    page.wait_for_function(
-        """() => document.querySelector('input[name="def_line"][value="4"]')?.checked
-          && document.querySelector('input[name="press_line"][value="5"]')?.checked
-          && document.querySelector('input[name="press_intense"][value="5"]')?.checked
-          && document.querySelector('input[name="priority_l"]')?.checked
-          && document.querySelector('input[name="priority_c"]')?.checked
-          && document.querySelector('input[name="priority_r"]')?.checked"""
-    )
+    page.wait_for_timeout(1200)
+    page.locator("#slf-tactics-dropdown button").first.click()
+
+    expected_applied = """() => document.querySelector('input[name="def_line"][value="4"]')?.checked
+      && document.querySelector('input[name="press_line"][value="5"]')?.checked
+      && document.querySelector('input[name="press_intense"][value="5"]')?.checked
+      && document.querySelector('input[name="priority_l"]')?.checked
+      && document.querySelector('input[name="priority_c"]')?.checked
+      && document.querySelector('input[name="priority_r"]')?.checked"""
+    try:
+        page.wait_for_function(expected_applied, timeout=5000)
+    except PlaywrightTimeoutError as error:
+        actual = page.evaluate(
+            """() => {
+              const checked = name => document.querySelector(`input[type="radio"][name="${name}"]:checked`)?.value || '';
+              return {
+                selected: document.querySelector('#slf-tactics-dropdown select')?.value || '',
+                def_line: checked('def_line'),
+                press_line: checked('press_line'),
+                press_intense: checked('press_intense'),
+                priorities: [...document.querySelectorAll('input[name^="priority_"]:checked')].map(node => node.name),
+                alerts: window.__slfAlerts.slice(),
+                unhandled: window.__slfUnhandled.slice()
+              };
+            }"""
+        )
+        raise AssertionError(f"Team4 preset application mismatch: {actual}") from error
 
     page.evaluate(
         """() => {
