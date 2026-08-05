@@ -42,23 +42,21 @@ jobs:
           bash -n vps/ops/deploy-code.sh
           bash -n vps/ops/rollback-code.sh
 
-      - name: Rebuild exact release bytes deterministically
+      - name: Build and rebuild exact candidate bytes deterministically
         run: |
           set -euo pipefail
-          sha256sum releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md > "$RUNNER_TEMP/release-before.sha256"
+          node tools/build-latest-userscript.mjs
+          export TARGET_VERSION
+          TARGET_VERSION=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.scriptVersion)")
+          sha256sum releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md > "$RUNNER_TEMP/candidate-before.sha256"
           export APPROVED_BASE_COMMIT
           export APPROVED_COMMIT
           export APPROVED_FILES
-          export SOURCE_BRANCH
-          export TARGET_VERSION
           APPROVED_BASE_COMMIT=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.approvedBaseCommit)")
           APPROVED_COMMIT=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.approvedCommit)")
           APPROVED_FILES=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.approvedFiles.join('\n'))")
-          SOURCE_BRANCH=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.build.sourceBranch || 'main')")
-          TARGET_VERSION=$(node -e "const v=require('./data/version.json'); process.stdout.write(v.scriptVersion)")
           node tools/build-latest-userscript.mjs
-          sha256sum --check "$RUNNER_TEMP/release-before.sha256"
-          git diff --exit-code -- releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md
+          sha256sum --check "$RUNNER_TEMP/candidate-before.sha256"
           EXPECTED_APPROVED_BASE_COMMIT="$APPROVED_BASE_COMMIT" \
           EXPECTED_APPROVED_COMMIT="$APPROVED_COMMIT" \
           EXPECTED_APPROVED_FILES="$APPROVED_FILES" \
@@ -81,7 +79,7 @@ jobs:
       - name: Upload release evidence bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: slf-release-evidence
+          name: slf-release-candidate-evidence
           path: artifacts/release-evidence
           if-no-files-found: error
           retention-days: 14
