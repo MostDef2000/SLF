@@ -92,7 +92,7 @@ jobs:
       - name: Install pinned VPS API dependencies
         run: python3 -m pip install --disable-pip-version-check -r vps/api/requirements.txt
 
-      - name: Verify installed dependency consistency
+      - name: Verify browser dependency consistency
         run: python3 -m pip check
 
       - name: Run API fuzz and recovery properties
@@ -118,6 +118,7 @@ jobs:
           python3 -m py_compile tests/browser/test_fm2026_design_adapter.py
           python3 -m py_compile tests/browser/test_match_rendering_compatibility.py
           python3 -m py_compile tests/browser/test_header_matches_layout.py
+          python3 -m py_compile tests/browser/test_team4_tactic_header_selector.py
 
       - name: Install pinned browser test dependencies
         run: python3 -m pip install --disable-pip-version-check -r tests/browser/requirements.txt
@@ -134,6 +135,7 @@ jobs:
           python3 tests/browser/test_fm2026_design_adapter.py
           python3 tests/browser/test_match_rendering_compatibility.py
           python3 tests/browser/test_header_matches_layout.py
+          python3 tests/browser/test_team4_tactic_header_selector.py
 
       - name: Upload browser failure evidence
         if: failure() && hashFiles('tests/browser/artifacts/**') != ''
