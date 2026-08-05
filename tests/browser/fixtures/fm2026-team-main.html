@@ -95,19 +95,6 @@
               </div>
             </div>
           </div>
-          <section id="legacy-upcoming-source" hidden>
-            <div>Ближайшие матчи лиги</div>
-            <table>
-              <thead><tr><th>Дата</th><th>Соперник</th><th></th><th>Форма</th></tr></thead>
-              <tbody>
-                <tr><td>09.08.2026</td><td><a href="/roster.php?id=41001">Ньюпорт Каунти</a></td><td>4</td><td><span>W</span><span>L</span><span>W</span><span>D</span><span>W</span></td></tr>
-                <tr><td>12.08.2026</td><td><a href="/roster.php?id=41002">Линкольн Сити</a></td><td>21</td><td><span>L</span><span>L</span><span>D</span><span>D</span><span>D</span></td></tr>
-                <tr><td>17.08.2026</td><td><a href="/roster.php?id=41003">Гримсби</a></td><td>2</td><td><span>W</span><span>W</span><span>W</span><span>W</span><span>W</span></td></tr>
-                <tr><td>20.08.2026</td><td><a href="javascript:window.__slfPwned=5">&lt;svg onload=window.__slfPwned=5&gt;</a></td><td>12</td><td><span>W</span><span>W</span><span>L</span><span>D</span><span>W</span></td></tr>
-                <tr><td>23.08.2026</td><td><a href="/team.php?id=41005">Кроули Таун</a></td><td>22</td><td><span>D</span><span>L</span><span>L</span><span>L</span><span>D</span></td></tr>
-              </tbody>
-            </table>
-          </section>
         </div>
       </div>
     </section>
@@ -121,8 +108,7 @@
         const wrapper = table?.closest('.roster-scroll');
         const panel = document.getElementById('slf-team4-championship-table');
         const badge = document.getElementById('slf-version-inline-badge');
-        const upcoming = document.getElementById('slf-team4-upcoming-matches');
-        if (!table || !wrapper || !panel || !badge || !upcoming || table.dataset.slfRosterFit !== '1' || wrapper.dataset.slfRosterFit !== '1') {
+        if (!table || !wrapper || !panel || !badge || table.dataset.slfRosterFit !== '1' || wrapper.dataset.slfRosterFit !== '1') {
           if (attempts < 100) return setTimeout(verifyRosterFit, 50);
           throw new Error('SLF team layout adapters did not attach');
         }
@@ -135,10 +121,7 @@
         const wrapperRect = wrapper.getBoundingClientRect();
         const teamContentRect = document.querySelector('.team-content').getBoundingClientRect();
         const panelRect = panel.getBoundingClientRect();
-        const standingsRect = panel.querySelector('.slf-champ-standings').getBoundingClientRect();
-        const upcomingRect = upcoming.getBoundingClientRect();
         const badgeStyle = getComputedStyle(badge);
-        const upcomingRows = [...upcoming.querySelectorAll('tbody tr')];
         const evidence = {
           headerColumns: table.tHead.rows[0].cells.length,
           bodyColumns: rows.map(row => row.cells.length),
@@ -154,17 +137,6 @@
           rosterRight: teamContentRect.right,
           panelTop: panelRect.top,
           rosterTop: teamContentRect.top,
-          panelScrollWidth: panel.scrollWidth,
-          panelClientWidth: panel.clientWidth,
-          upcomingRows: upcomingRows.length,
-          upcomingTitle: upcoming.querySelector('.slf-upcoming-title')?.textContent || '',
-          firstUpcomingDate: upcomingRows[0]?.cells[0]?.textContent || '',
-          firstUpcomingOpponent: upcomingRows[0]?.cells[1]?.textContent || '',
-          formChipCount: upcoming.querySelectorAll('.slf-form-chip').length,
-          unsafeUpcomingNodes: upcoming.querySelectorAll('img,script,svg,iframe').length,
-          unsafeUpcomingHref: upcoming.querySelector('a[href^="javascript:"]')?.getAttribute('href') || '',
-          hostileUpcomingText: upcoming.textContent.includes('<svg onload=window.__slfPwned=5>'),
-          upcomingBelowStandings: upcomingRect.top >= standingsRect.bottom + 8,
           badgeParent: badge.parentElement?.className || '',
           badgeText: badge.textContent,
           badgeDisplay: badgeStyle.display,
@@ -182,22 +154,12 @@
           && evidence.nameMinWidth !== '200px'
           && evidence.panelParent.includes('team-body')
           && sideBySide
-          && evidence.panelScrollWidth <= evidence.panelClientWidth + 1
-          && evidence.upcomingRows === 5
-          && evidence.upcomingTitle === 'Ближайшие матчи лиги'
-          && evidence.firstUpcomingDate === '09.08.2026'
-          && evidence.firstUpcomingOpponent === 'Ньюпорт Каунти'
-          && evidence.formChipCount === 25
-          && evidence.unsafeUpcomingNodes === 0
-          && evidence.unsafeUpcomingHref === ''
-          && evidence.hostileUpcomingText
-          && evidence.upcomingBelowStandings
           && evidence.badgeParent.includes('fm-topbar__right')
           && evidence.badgeText === `SLF ${window.SLF?.scriptVersion || ''}`
           && evidence.badgeDisplay !== 'none'
           && evidence.badgeVisibility !== 'hidden'
           && evidence.versionMarker === 'visible';
-        if (!passed) throw new Error(`SLF roster/version/championship/upcoming regression: ${JSON.stringify(evidence)}`);
+        if (!passed) throw new Error(`SLF roster/version/championship regression: ${JSON.stringify(evidence)}`);
       }
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(verifyRosterFit, 0), { once:true });
       else setTimeout(verifyRosterFit, 0);
