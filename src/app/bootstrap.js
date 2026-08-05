@@ -12,19 +12,18 @@
     const FIELD_WIDTH = 800;
     const FIELD_HEIGHT = 550;
     const MAX_RENDER_SCALE = 1.5;
+    const CLASSIC_PITCH_BACKGROUND = '#1d6f36 url("/images/gen4/play_field6.png") -1px 0 / 800px 550px no-repeat';
 
     const styleId = 'slf-match-rendering-compatibility';
     if (!document.getElementById(styleId)) {
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
-            .g3 [id^="fieldgrass"]:not([class*="user-custom__game-field-"]) {
-                background: #1d6f36 url("/images/gen4/play_field6.png") -1px 0 / 800px 550px no-repeat !important;
-            }
             html[data-slf-match-rendering-compatibility="1"] .g3 [id^="fieldgrass"] {
                 width: 800px !important;
                 height: 550px !important;
                 max-width: none !important;
+                background: #1d6f36 url("/images/gen4/play_field6.png") -1px 0 / 800px 550px no-repeat !important;
                 transform: none !important;
                 transform-origin: top center !important;
                 margin-left: auto !important;
@@ -59,8 +58,10 @@
         if (!field) return false;
 
         field.dataset.slfClassicPerformance = '1';
+        field.dataset.slfClassicPitchForced = '1';
         field.style.setProperty('width', `${FIELD_WIDTH}px`, 'important');
         field.style.setProperty('height', `${FIELD_HEIGHT}px`, 'important');
+        field.style.setProperty('background', CLASSIC_PITCH_BACKGROUND, 'important');
         field.style.setProperty('transform', 'none', 'important');
         field.style.setProperty('transform-origin', 'top center', 'important');
         field.style.setProperty('margin-left', 'auto', 'important');
