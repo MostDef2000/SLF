@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.279
+// @version      4.4.280
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.279',
-        scriptVersion: '4.4.279',
+        version: '4.4.280',
+        scriptVersion: '4.4.280',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.279',
+        scriptVersion: '4.4.280',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -20401,19 +20401,38 @@ SLFTeam4FormSavedChoiceNotice.start();
         if (!isTeam4MainPage() || !matchMedia('(min-width: 1280px)').matches || document.getElementById(PANEL_ID)) return;
         const context = getChampionshipContext();
         if (!context) return;
+        const initialUpcoming = parseUpcomingMatchesDocument(document);
+        document.documentElement.dataset.slfTeamUpcomingSnapshotRows = String(initialUpcoming.length);
         const panel = ensurePanel(context);
         if (!panel) return;
         try {
             const response = await fetch(context.url.href, { credentials:'include', cache:'no-store' });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
-            const upcoming = parseUpcomingMatchesDocument(doc);
+            const responseUpcoming = parseUpcomingMatchesDocument(doc);
+            const lateDocumentUpcoming = parseUpcomingMatchesDocument(document);
+            const upcoming = responseUpcoming.length
+                ? responseUpcoming
+                : lateDocumentUpcoming.length
+                    ? lateDocumentUpcoming
+                    : initialUpcoming;
+            const upcomingSource = responseUpcoming.length
+                ? 'championship-response'
+                : lateDocumentUpcoming.length
+                    ? 'late-document'
+                    : initialUpcoming.length
+                        ? 'pre-migration-snapshot'
+                        : 'none';
             const data = {
                 ...parseTableDocument(doc, getActiveTeam()),
-                upcoming: upcoming.length ? upcoming : parseUpcomingMatchesDocument(document)
+                upcoming
             };
+            panel.dataset.slfUpcomingSource = upcomingSource;
+            document.documentElement.dataset.slfTeamUpcomingSource = upcomingSource;
             render(panel, context, data);
             promotePanelWhenReady(context, data);
+            const upcomingPanel = document.getElementById(UPCOMING_ID);
+            if (upcomingPanel) upcomingPanel.dataset.slfUpcomingSource = upcomingSource;
         } catch (error) {
             console.warn('[SLF Team4 Championship Table] failed', error);
             panel.innerHTML = `<div class="slf-champ-title"><a href="${escapeHtml(context.url.pathname + context.url.search)}">${escapeHtml(context.title)}</a></div><div class="slf-champ-state">Таблица чемпионата недоступна.</div>`;
@@ -21180,15 +21199,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.279',
-        scriptVersion: '4.4.279',
+        version: '4.4.280',
+        scriptVersion: '4.4.280',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.279',
+        scriptVersion: '4.4.280',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

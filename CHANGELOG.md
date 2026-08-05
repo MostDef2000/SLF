@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.4.280
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/team-management/team4-form-saved-choice-notice.js
+- tests/browser/fixtures/fm2026-team-late-layout.html
+- tests/browser/test_team_upcoming_late_layout.py
+
+Approved base commit:
+- 50e83c5ea3f923e1fed7d17bd70638dfea24cdbb
+
+Approved commit:
+- 2361f1e7708312b91dd35297d3813c52aca9ba0b
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.279
 
 ### Automatic latest-only build
