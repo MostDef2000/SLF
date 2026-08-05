@@ -37,9 +37,11 @@
 
     function badgeTarget() {
         return safe(() =>
-            document.querySelector('.fm-card--manager .fm-account__status') ||
             document.querySelector('.fm-topbar__right') ||
-            document.querySelector('.head-ui__information')
+            document.querySelector('.head-ui__information') ||
+            document.querySelector('.fm-card--manager .fm-account__status') ||
+            document.querySelector('.fm-card--manager .fm-account') ||
+            document.querySelector('.fm-topbar')
         );
     }
 
@@ -85,7 +87,7 @@ html[data-slf-design="fm2026"] .slf-transfer-analysis-badge{color:var(--slf-text
 html[data-slf-design="fm2026"] .slf-transfer-analysis-chip,html[data-slf-design="fm2026"] .slf-transfer-verdict-chip,html[data-slf-design="fm2026"] .slf-transfer-decision-details-trigger{font-family:var(--slf-font)!important;border-radius:999px!important}
 html[data-slf-design="fm2026"] .slf-transfer-html-tooltip-portal{color:var(--slf-text)!important;background:var(--slf-bg)!important;border:1px solid var(--slf-border)!important;border-radius:12px!important;box-shadow:0 18px 48px rgba(0,0,0,.48)!important;font-family:var(--slf-font)!important}
 html[data-slf-design="fm2026"] .slf-transfer-table{max-width:100%!important}
-html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex;align-items:center;margin-left:7px;padding:1px 7px;color:var(--slf-accent2)!important;background:rgba(43,217,124,.10);border:1px solid rgba(43,217,124,.28);border-radius:999px;font:700 9px var(--slf-font)!important;letter-spacing:.04em;white-space:nowrap;text-shadow:none!important}
+html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!important;align-items:center!important;flex:0 0 auto!important;margin-left:8px!important;padding:2px 8px!important;color:var(--slf-accent2)!important;background:rgba(43,217,124,.10)!important;border:1px solid rgba(43,217,124,.28)!important;border-radius:999px!important;font:700 9px var(--slf-font)!important;line-height:1.4!important;letter-spacing:.04em!important;white-space:nowrap!important;text-shadow:none!important;visibility:visible!important;opacity:1!important}
 @media (max-width:1050px){html[data-slf-design="fm2026"] #slf-purchase-forecast-row{grid-template-columns:minmax(0,1fr)!important}html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar button{flex:1 1 auto!important}html[data-slf-design="fm2026"] #slf-transfer-status{width:100%!important}}
             `;
             (document.head || document.documentElement).appendChild(style);
@@ -178,7 +180,9 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex;ali
     function runtimeVersion() {
         return safe(() => {
             const root = typeof unsafeWindow !== 'undefined' && unsafeWindow ? unsafeWindow : window;
-            return String(root?.SLF?.scriptVersion || root?.SLF?.versionInfo?.version || '').trim();
+            const gmVersion = typeof GM_info !== 'undefined' ? GM_info?.script?.version : '';
+            const buildVersion = typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO?.version : '';
+            return String(root?.SLF?.scriptVersion || root?.SLF?.versionInfo?.version || gmVersion || buildVersion || '').trim();
         }, '');
     }
 
@@ -187,25 +191,47 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex;ali
         const target = badgeTarget();
         const version = runtimeVersion();
         if (!target || !version) return false;
-        safe(() => document.getElementById(BADGE_ID)?.remove());
-        const badge = document.createElement('span');
-        badge.id = BADGE_ID;
-        badge.className = 'slf-ui';
+        let badge = safe(() => document.getElementById(BADGE_ID));
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.id = BADGE_ID;
+            badge.className = 'slf-ui';
+            badge.title = 'SLF userscript version';
+        }
         badge.textContent = `SLF ${version}`;
-        badge.title = 'SLF userscript version';
-        target.appendChild(badge);
+        badge.dataset.slfVersion = version;
+        if (badge.parentElement !== target) target.appendChild(badge);
+        document.documentElement.dataset.slfVersionBadge = 'visible';
         return true;
+    }
+
+    function observeBadgeHost() {
+        const host = safe(() => document.querySelector('.fm-topbar') || document.querySelector('.head-ui__information'));
+        if (!host || host.dataset.slfVersionObserver === '1') return;
+        let timer = 0;
+        const observer = new MutationObserver(() => {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(() => {
+                const badge = document.getElementById(BADGE_ID);
+                const target = badgeTarget();
+                if (!badge || !target || badge.parentElement !== target) renderBadge();
+            }, 50);
+        });
+        observer.observe(host, { childList: true, subtree: true });
+        host.dataset.slfVersionObserver = '1';
     }
 
     function start() {
         const run = () => {
             adaptExisting();
             renderBadge();
+            observeBadgeHost();
             let attempts = 0;
             const timer = window.setInterval(() => {
                 attempts += 1;
                 adaptExisting();
-                if (!document.getElementById(BADGE_ID)) renderBadge();
+                renderBadge();
+                observeBadgeHost();
                 if (attempts >= 120) window.clearInterval(timer);
             }, 250);
         };
