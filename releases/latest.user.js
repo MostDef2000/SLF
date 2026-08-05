@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.267
+// @version      4.4.268
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.267',
-        scriptVersion: '4.4.267',
+        version: '4.4.268',
+        scriptVersion: '4.4.268',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.267',
+        scriptVersion: '4.4.268',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -19821,6 +19821,11 @@ const SLFTeam4FormSavedChoiceNotice = (() => {
         return /\/team4\.php$/i.test(location.pathname || '') && !params.get('action');
     }
 
+    function getMountTarget() {
+        return document.querySelector('.team_general_calendar')
+            || document.querySelector('.team-body > .team-dash');
+    }
+
     function ensureStyle() {
         if (document.getElementById(STYLE_ID)) return;
         const style = document.createElement('style');
@@ -19829,6 +19834,7 @@ const SLFTeam4FormSavedChoiceNotice = (() => {
             #${NOTICE_ID} { grid-column:1/-1; width:100%; margin:0 0 6px; padding:5px 8px; background:#202020; border:1px solid #4d4d4d; border-radius:5px; color:#ddd; font:11px Verdana,Arial,sans-serif; text-align:center; box-sizing:border-box; }
             #${NOTICE_ID} a { color:#9cff57; font-weight:700; text-decoration:underline; }
             #${NOTICE_ID} b { color:#fff; }
+            html[data-slf-design="fm2026"] .team-body > .team-dash > #${NOTICE_ID} { order:-1; margin:0; }
         `;
         document.head.appendChild(style);
     }
@@ -19845,7 +19851,7 @@ const SLFTeam4FormSavedChoiceNotice = (() => {
     function render(state) {
         ensureStyle();
         document.getElementById(NOTICE_ID)?.remove();
-        const target = document.querySelector('.team_general_calendar');
+        const target = getMountTarget();
         if (!target) return false;
         const notice = document.createElement('div');
         notice.id = NOTICE_ID;
@@ -19866,7 +19872,7 @@ const SLFTeam4FormSavedChoiceNotice = (() => {
         }
     }
 
-    const api = { FORM_URL, FETCH_URL, parseSavedChoiceState, render, start };
+    const api = { FORM_URL, FETCH_URL, getMountTarget, parseSavedChoiceState, render, start };
     window.SLFTeam4FormSavedChoiceNotice = api;
     return api;
 })();
@@ -19884,16 +19890,42 @@ SLFTeam4FormSavedChoiceNotice.start();
         return /\/team4\.php$/i.test(location.pathname || '') && !params.get('action');
     }
 
+    function resolvePageLayout() {
+        const dashboard = document.querySelector('.team-body > .team-dash');
+        const teamContent = document.querySelector('.team-body > .team-content');
+        const currentGeneral = teamContent?.querySelector('#general');
+        if (dashboard && currentGeneral && currentGeneral.querySelector('#generallist')) {
+            return { mode: 'fm2026-dashboard', host: dashboard, general: currentGeneral };
+        }
+
+        const legacyContent = document.querySelector('.team_general_content');
+        const legacyGeneral = legacyContent?.querySelector(':scope > #general') || document.getElementById('general');
+        if (legacyContent && legacyGeneral && legacyGeneral.parentElement === legacyContent) {
+            return { mode: 'legacy-content', host: legacyContent, general: legacyGeneral };
+        }
+        return null;
+    }
+
     function getActiveTeam() {
-        const rosterLink = document.querySelector('.tf3 a[href*="/roster.php"][href*="id="]');
+        const rosterLink = document.querySelector('.tf3 a[href*="/roster.php"][href*="id="]')
+            || document.querySelector('.team .t_name a[href*="/roster.php"][href*="id="]');
         let rosterId = '';
         try { rosterId = positiveId(new URL(rosterLink?.getAttribute('href') || '', location.origin).searchParams.get('id')); } catch (_) {}
         const classId = [...(document.querySelector('#globalcontent')?.classList || [])].map(name => name.match(/^user-custom__team-(\d+)$/)?.[1] || '').find(Boolean) || '';
-        return { teamId: rosterId || classId, teamName: norm(document.querySelector('.tf3 .team-name')?.textContent || document.querySelector('.team_general_name')?.textContent || rosterLink?.textContent || '') };
+        return {
+            teamId: rosterId || classId,
+            teamName: norm(document.querySelector('.tf3 .team-name')?.textContent
+                || document.querySelector('.team .t_name')?.textContent
+                || document.querySelector('.team_general_name')?.textContent
+                || rosterLink?.textContent
+                || '')
+        };
     }
 
     function getChampionshipContext() {
-        const link = document.querySelector('.tf3 .champ-url a[href*="/champ.php"]') || document.querySelector('.tf3 a[href*="/champ.php?action=view"]');
+        const link = document.querySelector('.tf3 .champ-url a[href*="/champ.php"]')
+            || document.querySelector('.tf3 a[href*="/champ.php?action=view"]')
+            || document.querySelector('.team-head__links a[href*="/champ.php?action=view"]');
         if (!link) return null;
         const url = new URL(link.getAttribute('href'), location.origin);
         const id = positiveId(url.searchParams.get('id'));
@@ -19941,8 +19973,10 @@ SLFTeam4FormSavedChoiceNotice.start();
         const style = document.createElement('style');
         style.id = STYLE_ID;
         style.textContent = `
-            .team_general_content.slf-team4-championship-layout { display:flex; align-items:flex-start; gap:12px; width:max-content; max-width:none; overflow:visible; }
-            .team_general_content.slf-team4-championship-layout > #general { flex:0 0 auto; min-width:700px; }
+            .team_general_content.slf-team4-championship-layout:not(.team-dash) { display:flex; align-items:flex-start; gap:12px; width:max-content; max-width:none; overflow:visible; }
+            .team_general_content.slf-team4-championship-layout:not(.team-dash) > #general { flex:0 0 auto; min-width:700px; }
+            html[data-slf-design="fm2026"] .team-body > .team-dash.team_general_content.slf-team4-championship-layout { display:grid!important; grid-template-columns:minmax(0,1fr)!important; gap:14px!important; width:100%!important; max-width:100%!important; min-width:0!important; overflow:visible!important; }
+            html[data-slf-design="fm2026"] .team-body > .team-dash.team_general_content.slf-team4-championship-layout > #${PANEL_ID} { width:100%!important; max-width:100%!important; min-width:0!important; margin:0!important; }
             #${PANEL_ID} { flex:0 0 300px; width:300px; box-sizing:border-box; padding:8px; border:1px solid #555; border-radius:6px; background:#181818; color:#ddd; box-shadow:0 2px 10px rgba(0,0,0,.35); font:11px Verdana,Arial,sans-serif; }
             #${PANEL_ID} .slf-champ-title { margin-bottom:7px; text-align:center; line-height:1.35; }
             #${PANEL_ID} .slf-champ-title a { color:#9cff57; font-weight:700; text-decoration:none; }
@@ -19962,16 +19996,29 @@ SLFTeam4FormSavedChoiceNotice.start();
 
     function ensurePanel(context) {
         ensureStyle();
-        const content = document.querySelector('.team_general_content');
-        const general = content?.querySelector(':scope > #general') || document.getElementById('general');
-        if (!content || !general || general.parentElement !== content) return null;
-        content.classList.add('slf-team4-championship-layout');
+        const layout = resolvePageLayout();
+        if (!layout) return null;
+
+        layout.host.classList.add('slf-team4-championship-layout');
         let panel = document.getElementById(PANEL_ID);
-        if (!panel) {
+
+        if (layout.mode === 'fm2026-dashboard') {
+            // Compatibility marker retained for the shared FM adapter and existing evidence queries.
+            layout.host.classList.add('team_general_content', 'slf-team4-championship-dashboard');
+            if (!panel) {
+                panel = document.createElement('aside');
+                panel.id = PANEL_ID;
+                layout.host.appendChild(panel);
+            } else if (panel.parentElement !== layout.host) {
+                layout.host.appendChild(panel);
+            }
+        } else if (!panel) {
             panel = document.createElement('aside');
             panel.id = PANEL_ID;
-            general.insertAdjacentElement('afterend', panel);
+            layout.general.insertAdjacentElement('afterend', panel);
         }
+
+        panel.dataset.slfTeamLayout = layout.mode;
         panel.innerHTML = `<div class="slf-champ-title"><a href="${escapeHtml(context.url.pathname + context.url.search)}">${escapeHtml(context.title)}</a></div><div class="slf-champ-state">Загрузка…</div>`;
         return panel;
     }
@@ -20500,15 +20547,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.267',
-        scriptVersion: '4.4.267',
+        version: '4.4.268',
+        scriptVersion: '4.4.268',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.267',
+        scriptVersion: '4.4.268',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

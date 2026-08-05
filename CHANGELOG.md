@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.4.268
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/runtime-reachability-review-v1.json
+- src/modules/team-management/team4-form-saved-choice-notice.js
+- tests/browser/fixtures/fm2026-team-main.html
+
+Approved base commit:
+- 41d58f5d12924101eb78ba396f8d58f9c6c8b22a
+
+Approved commit:
+- bbf9b3fffa8637988cfaddb288c0b26737ea43d1
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.267
 
 ### Automatic latest-only build
