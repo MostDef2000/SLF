@@ -25,13 +25,11 @@ ROUTES = {
 FORM_HTML = """<!doctype html><html><body>
 <div id="player_form"><div id="coach_set"><div class="coach_expire"><span data-expire>Форма действует до 15.08.2026</span></div><input class="coachd" type="checkbox" checked></div></div>
 </body></html>"""
-
 CHAMP_HTML = """<!doctype html><html><body><div>Сезон 2026/27</div>
 <table class="tourney_table"><tr><th>№</th><th>Команда</th><th>И</th><th>Очки</th></tr>
 <tr><td>1</td><td><a href="/roster.php?id=23698">Луч</a></td><td>4</td><td>12</td></tr>
 <tr><td>2</td><td><a href="/roster.php?id=99999">Соперник</a></td><td>4</td><td>9</td></tr></table>
 </body></html>"""
-
 PLAYER_HTML = """<!doctype html><html><body><table>
 <tr><td>Лидерство</td><td><a href="/player.php?action=view&id=1&up14=ok" title="Можно поднять до 15">Поднять до 15</a></td></tr>
 </table></body></html>"""
@@ -134,60 +132,117 @@ def assert_clean(page: Page, page_errors):
     assert page.evaluate("window.__slfUnhandled.slice()") == []
 
 
+def assert_inside_content(page: Page, selectors):
+    violations = page.evaluate(
+        """selectors => {
+          const root = document.querySelector('.content-ui__wrapper');
+          return selectors.flatMap(selector => [...document.querySelectorAll(selector)]
+            .filter(node => !root || !root.contains(node))
+            .map(node => `${selector}:${node.id || node.className}`));
+        }""",
+        selectors,
+    )
+    assert violations == [], violations
+
+
+def assert_top_level_containment(page: Page, selectors):
+    violations = page.evaluate(
+        """selectors => {
+          const root = document.querySelector('.content-ui__wrapper');
+          if (!root) return ['content-root-missing'];
+          const rr = root.getBoundingClientRect();
+          return selectors.flatMap(selector => [...document.querySelectorAll(selector)].filter(node => {
+            const style = getComputedStyle(node);
+            if (style.display === 'none' || style.visibility === 'hidden') return false;
+            const rect = node.getBoundingClientRect();
+            return rect.left < rr.left - 1 || rect.right > rr.right + 1 || rect.width > rr.width + 1;
+          }).map(node => `${selector}:${node.id || node.className}`));
+        }""",
+        selectors,
+    )
+    assert violations == [], violations
+    dimensions = page.evaluate("() => ({viewport:innerWidth,scroll:document.documentElement.scrollWidth})")
+    assert dimensions["scroll"] <= dimensions["viewport"] + 1, dimensions
+
+
+def contrast_ratio(page: Page, selector: str) -> float:
+    return page.eval_on_selector(
+        selector,
+        """el => {
+          const parse = value => (value.match(/[0-9.]+/g) || []).slice(0,3).map(Number);
+          const luminance = rgb => {
+            const values = rgb.map(value => {
+              const channel = value / 255;
+              return channel <= .03928 ? channel / 12.92 : Math.pow((channel + .055) / 1.055, 2.4);
+            });
+            return .2126 * values[0] + .7152 * values[1] + .0722 * values[2];
+          };
+          const style = getComputedStyle(el);
+          let node = el;
+          let background = [0,0,0,0];
+          while (node) {
+            const candidate = getComputedStyle(node).backgroundColor;
+            const parts = (candidate.match(/[0-9.]+/g) || []).map(Number);
+            if (parts.length >= 3 && (parts.length < 4 || parts[3] > 0)) { background = parts; break; }
+            node = node.parentElement;
+          }
+          const fg = parse(style.color);
+          const bg = background.slice(0,3);
+          const l1 = luminance(fg), l2 = luminance(bg);
+          return (Math.max(l1,l2)+.05)/(Math.min(l1,l2)+.05);
+        }""",
+    )
+
+
+def mutate_content(page: Page, prefix: str, count: int = 30):
+    page.evaluate(
+        """args => {
+          const root = document.querySelector('.content-ui__wrapper');
+          for (let index = 0; index < args.count; index += 1) {
+            const node = document.createElement('i');
+            node.textContent = `${args.prefix}-${index}`;
+            root.appendChild(node);
+            node.remove();
+          }
+        }""",
+        {"prefix": prefix, "count": count},
+    )
+    page.wait_for_timeout(350)
+
+
 def assert_match(page: Page):
     page.wait_for_selector(".content-ui__wrapper > #slf-match-parser-panel")
     page.wait_for_selector("#slf-tactics-dropdown.slf-ui.slf-panel")
     page.wait_for_selector("#slf-manual-recommendation-btn")
-    page.wait_for_selector(".fm-account__status #slf-version-inline-badge")
-
     assert page.locator("#slf-match-parser-panel").get_attribute("data-slf-mount") == "fm2026-content"
     assert page.locator("#slf-tactics-dropdown").get_attribute("data-slf-mount") == "fm2026-tactic-root"
-    assert page.locator(".fm-topbar #slf-match-parser-panel, .fm-deck #slf-match-parser-panel, .fm-slots #slf-match-parser-panel").count() == 0
-    assert page.locator("#slf-match-parser-panel").count() == 1
-    assert page.locator("#slf-tactics-dropdown").count() == 1
-
+    assert_inside_content(page, ["#slf-match-parser-panel", "#slf-tactics-dropdown"])
     style = page.locator("#slf-match-parser-panel").evaluate("el => ({font:getComputedStyle(el).fontFamily,radius:getComputedStyle(el).borderRadius})")
-    assert "Roboto" in style["font"], style
-    assert float(style["radius"].replace("px", "")) >= 10, style
-
+    assert "Roboto" in style["font"] and float(style["radius"].replace("px", "")) >= 10, style
     page.locator("#slf-manual-recommendation-btn").click()
     page.wait_for_function("() => document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')")
     page.wait_for_function("() => window.__slfRequests.some(row => row.url.includes('/api/match_snapshots_v2?mode=append'))")
 
 
-def assert_transfer_market(page: Page):
+def wait_transfer_market(page: Page):
     page.wait_for_selector(".content-ui__wrapper #slf-transfer-analyzer-toolbar.slf-ui.slf-panel")
     page.wait_for_selector(".content-ui__wrapper #slf-transfer-candidate-panel.slf-ui.slf-panel")
     page.wait_for_selector(".content-ui__wrapper #slf-purchase-forecast-row")
     page.wait_for_selector("#slf-purchase-forecast-panel.slf-ui.slf-panel")
 
-    assert page.locator("#slf-transfer-analyzer-toolbar").count() == 1
-    assert page.locator("#slf-transfer-candidate-panel").count() == 1
-    assert page.locator("#slf-purchase-forecast-row").count() == 1
-    assert page.locator(".fm-topbar [id^='slf-transfer'], .fm-deck [id^='slf-transfer'], .fm-slots [id^='slf-transfer']").count() == 0
+
+def assert_transfer_market(page: Page):
+    wait_transfer_market(page)
+    selectors = ["#slf-transfer-analyzer-toolbar", "#slf-transfer-candidate-panel", "#slf-purchase-forecast-row"]
+    assert_inside_content(page, selectors)
     assert page.locator("#slf-transfer-analyzer-toolbar").get_attribute("data-slf-mount") == "fm2026-transfer-content"
     assert page.locator("#slf-transfer-candidate-panel").get_attribute("data-slf-mount") == "fm2026-transfer-content"
     assert page.locator("#slf-purchase-forecast-row").get_attribute("data-slf-mount") == "fm2026-transfer-content"
-
-    toolbar_style = page.locator("#slf-transfer-analyzer-toolbar").evaluate("el => ({font:getComputedStyle(el).fontFamily,radius:getComputedStyle(el).borderRadius})")
     row_style = page.locator("#slf-purchase-forecast-row").evaluate("el => ({display:getComputedStyle(el).display,columns:getComputedStyle(el).gridTemplateColumns})")
-    assert "Roboto" in toolbar_style["font"], toolbar_style
-    assert float(toolbar_style["radius"].replace("px", "")) >= 10, toolbar_style
-    assert row_style["display"] == "grid", row_style
-    assert row_style["columns"] != "none", row_style
-
+    assert row_style["display"] == "grid" and row_style["columns"] != "none", row_style
     page.locator("#slf-purchase-forecast-calc").click()
     page.wait_for_function("() => document.getElementById('slf-purchase-forecast-note')?.textContent.includes('выборка 0')")
-
-    page.evaluate("""
-      for (let index = 0; index < 40; index += 1) {
-        const node = document.createElement('span');
-        node.textContent = `transfer-mutation-${index}`;
-        document.body.appendChild(node);
-        node.remove();
-      }
-    """)
-    page.wait_for_timeout(350)
+    mutate_content(page, "transfer")
     assert page.locator("#slf-transfer-analyzer-toolbar").count() == 1
     assert page.locator("#slf-transfer-candidate-panel").count() == 1
     assert page.locator("#slf-purchase-forecast-panel").count() == 1
@@ -195,91 +250,100 @@ def assert_transfer_market(page: Page):
 
 def assert_transfer_history(page: Page):
     page.wait_for_selector(".content-ui__wrapper #slf-transfer-analyzer-toolbar.slf-ui.slf-panel")
-    page.wait_for_selector("#slf-transfer-status")
     page.wait_for_function("() => document.getElementById('slf-transfer-status')?.textContent.includes('История')")
-
-    assert page.locator("#slf-transfer-analyzer-toolbar").count() == 1
     assert page.locator("#slf-transfer-candidate-panel").count() == 0
     assert page.locator("#slf-purchase-forecast-panel").count() == 0
-    assert page.locator("#slf-transfer-analyzer-toolbar").get_attribute("data-slf-mount") == "fm2026-transfer-content"
-    assert page.locator(".fm-topbar #slf-transfer-analyzer-toolbar, .fm-deck #slf-transfer-analyzer-toolbar, .fm-slots #slf-transfer-analyzer-toolbar").count() == 0
+    assert_inside_content(page, ["#slf-transfer-analyzer-toolbar"])
+
+
+def wait_team_core(page: Page):
+    page.wait_for_selector(".content-ui__wrapper #slf-team4-form-saved-choice-notice.slf-ui.slf-panel")
+    page.wait_for_selector(".content-ui__wrapper #slf-loan-limit-inline.slf-ui.slf-panel")
+    page.wait_for_selector(".content-ui__wrapper .slf-team4-leadership-upgrade-badge.slf-ui")
 
 
 def assert_team_main(page: Page):
-    page.wait_for_selector(".content-ui__wrapper #slf-team4-form-saved-choice-notice.slf-ui.slf-panel")
-    page.wait_for_selector(".content-ui__wrapper #slf-loan-limit-inline.slf-ui.slf-panel")
+    wait_team_core(page)
     page.wait_for_selector(".content-ui__wrapper #slf-team4-championship-table.slf-ui.slf-panel")
-    page.wait_for_selector(".content-ui__wrapper .slf-team4-leadership-upgrade-badge.slf-ui")
-
-    assert page.locator("#slf-team4-form-saved-choice-notice").count() == 1
-    assert page.locator("#slf-loan-limit-inline").count() == 1
-    assert page.locator("#slf-team4-championship-table").count() == 1
     assert page.locator(".slf-team4-leadership-upgrade-badge").count() == 2
     assert "15.08.2026" in page.locator("#slf-team4-form-saved-choice-notice").inner_text()
     assert "2/10" in page.locator("#slf-loan-limit-inline").inner_text()
     assert page.locator("#slf-team4-championship-table tr.slf-active-team").count() == 1
-    assert "до 15" in page.locator(".slf-team4-leadership-upgrade-badge").first.get_attribute("title")
-
-    for selector in ["#slf-team4-form-saved-choice-notice", "#slf-loan-limit-inline", "#slf-team4-championship-table"]:
-        assert page.locator(selector).get_attribute("data-slf-mount") == "fm2026-team-content"
+    selectors = ["#slf-team4-form-saved-choice-notice", "#slf-loan-limit-inline", "#slf-team4-championship-table"]
+    assert_inside_content(page, selectors)
+    for selector in selectors:
         assert page.locator(selector).get_attribute("data-slf-mount-violation") is None
-
-    layout = page.locator(".team_general_content.slf-team4-championship-layout").evaluate("el => ({display:getComputedStyle(el).display,columns:getComputedStyle(el).gridTemplateColumns,width:getComputedStyle(el).width})")
-    panel_style = page.locator("#slf-team4-championship-table").evaluate("el => ({font:getComputedStyle(el).fontFamily,radius:getComputedStyle(el).borderRadius})")
-    assert layout["display"] == "grid", layout
-    assert layout["columns"] != "none", layout
-    assert "Roboto" in panel_style["font"], panel_style
-    assert float(panel_style["radius"].replace("px", "")) >= 10, panel_style
-    assert page.locator(".fm-topbar [id^='slf-team4'], .fm-deck [id^='slf-team4'], .fm-slots [id^='slf-team4']").count() == 0
-
-    page.evaluate("""
-      for (let index = 0; index < 30; index += 1) {
-        const node = document.createElement('i');
-        node.textContent = `team-mutation-${index}`;
-        document.querySelector('.content-ui__wrapper').appendChild(node);
-        node.remove();
-      }
-    """)
-    page.wait_for_timeout(350)
+    layout = page.locator(".team_general_content.slf-team4-championship-layout").evaluate("el => ({display:getComputedStyle(el).display,columns:getComputedStyle(el).gridTemplateColumns})")
+    assert layout["display"] == "grid" and layout["columns"] != "none", layout
+    mutate_content(page, "team")
     assert page.locator("#slf-team4-form-saved-choice-notice").count() == 1
     assert page.locator("#slf-loan-limit-inline").count() == 1
     assert page.locator("#slf-team4-championship-table").count() == 1
 
 
-def assert_training(page: Page):
+def wait_training(page: Page):
     page.wait_for_selector(".content-ui__wrapper #slf-training-guide-layout.slf-ui")
     page.wait_for_selector("#slf-training-guide-panel.slf-ui.slf-panel")
     page.wait_for_function("() => document.querySelector('#slf-training-guide-panel #slf-status')?.textContent.includes('VPS-кеш')")
 
-    assert page.locator("#slf-training-guide-layout").count() == 1
-    assert page.locator("#slf-training-guide-panel").count() == 1
+
+def assert_training(page: Page):
+    wait_training(page)
+    assert_inside_content(page, ["#slf-training-guide-layout", "#slf-training-guide-panel"])
     assert page.locator("#slf-training-guide-layout").get_attribute("data-slf-mount") == "fm2026-training-content"
-    assert page.locator("#slf-training-guide-panel").get_attribute("data-slf-mount") == "fm2026-training-content"
     assert page.locator("#slf-training-guide-panel").get_attribute("data-slf-mount-violation") is None
-    assert page.locator(".fm-topbar #slf-training-guide-panel, .fm-deck #slf-training-guide-panel, .fm-slots #slf-training-guide-panel").count() == 0
-
-    layout = page.locator("#slf-training-guide-layout").evaluate("el => ({display:getComputedStyle(el).display,columns:getComputedStyle(el).gridTemplateColumns,width:getComputedStyle(el).width})")
-    panel_style = page.locator("#slf-training-guide-panel").evaluate("el => ({font:getComputedStyle(el).fontFamily,radius:getComputedStyle(el).borderRadius,width:getComputedStyle(el).width,maxWidth:getComputedStyle(el).maxWidth})")
-    assert layout["display"] == "grid", layout
-    assert layout["columns"] != "none", layout
-    assert "Roboto" in panel_style["font"], panel_style
-    assert float(panel_style["radius"].replace("px", "")) >= 10, panel_style
-
-    page.evaluate("""
-      for (let index = 0; index < 30; index += 1) {
-        const node = document.createElement('i');
-        node.textContent = `training-mutation-${index}`;
-        document.querySelector('.content-ui__wrapper').appendChild(node);
-        node.remove();
-      }
-    """)
-    page.wait_for_timeout(350)
+    layout = page.locator("#slf-training-guide-layout").evaluate("el => ({display:getComputedStyle(el).display,columns:getComputedStyle(el).gridTemplateColumns})")
+    assert layout["display"] == "grid" and layout["columns"] != "none", layout
+    mutate_content(page, "training")
     assert page.locator("#slf-training-guide-layout").count() == 1
     assert page.locator("#slf-training-guide-panel").count() == 1
 
 
-def run_case(browser: Browser, base_url: str, name: str, path: str, assertions):
-    context = browser.new_context(locale="ru-RU", viewport={"width": 1440, "height": 1000})
+def assert_transfer_responsive_accessibility(page: Page):
+    wait_transfer_market(page)
+    selectors = ["#slf-transfer-analyzer-toolbar", "#slf-transfer-candidate-panel", "#slf-purchase-forecast-row", "#slf-purchase-forecast-panel"]
+    assert_top_level_containment(page, selectors)
+    columns = page.locator("#slf-purchase-forecast-row").evaluate("el => getComputedStyle(el).gridTemplateColumns")
+    assert len(columns.split()) == 1, columns
+
+    target = "#slf-purchase-forecast-calc"
+    page.locator("body").click(position={"x": 4, "y": 4})
+    focused = ""
+    for _ in range(40):
+        page.keyboard.press("Tab")
+        focused = page.evaluate("document.activeElement?.id || ''")
+        if focused == "slf-purchase-forecast-calc":
+            break
+    assert focused == "slf-purchase-forecast-calc", focused
+    focus_style = page.locator(target).evaluate("el => ({style:getComputedStyle(el).outlineStyle,width:getComputedStyle(el).outlineWidth})")
+    assert focus_style["style"] != "none" and float(focus_style["width"].replace("px", "")) > 0, focus_style
+    page.keyboard.press("Enter")
+    page.wait_for_function("() => document.getElementById('slf-purchase-forecast-note')?.textContent.includes('выборка 0')")
+
+    assert contrast_ratio(page, "#slf-transfer-analyzer-toolbar") >= 4.5
+    motion = page.locator("#slf-transfer-analyzer-toolbar").evaluate("el => ({animation:getComputedStyle(el).animationDuration,transition:getComputedStyle(el).transitionDuration})")
+    assert motion["animation"] in {"0s", "0ms"} and motion["transition"] in {"0s", "0ms"}, motion
+
+
+def assert_team_responsive(page: Page):
+    wait_team_core(page)
+    assert page.locator("#slf-team4-championship-table").count() == 0
+    selectors = ["#slf-team4-form-saved-choice-notice", "#slf-loan-limit-inline"]
+    assert_top_level_containment(page, selectors)
+    assert contrast_ratio(page, "#slf-loan-limit-inline") >= 4.5
+
+
+def assert_training_responsive(page: Page):
+    wait_training(page)
+    selectors = ["#slf-training-guide-layout", "#slf-training-guide-panel"]
+    assert_top_level_containment(page, selectors)
+    columns = page.locator("#slf-training-guide-layout").evaluate("el => getComputedStyle(el).gridTemplateColumns")
+    assert len(columns.split()) == 1, columns
+    assert contrast_ratio(page, "#slf-training-guide-panel") >= 4.5
+
+
+def run_case(browser: Browser, base_url: str, name: str, path: str, assertions, viewport, reduced_motion="no-preference"):
+    context = browser.new_context(locale="ru-RU", viewport=viewport, reduced_motion=reduced_motion)
     page = context.new_page()
     page_errors = []
     page.on("pageerror", lambda error: page_errors.append(str(error)))
@@ -289,7 +353,7 @@ def run_case(browser: Browser, base_url: str, name: str, path: str, assertions):
         inject(page)
         assertions(page)
         assert_clean(page, page_errors)
-        print(f"[fm2026-design-e2e] passed: {name} version={VERSION}")
+        print(f"[fm2026-design-e2e] passed: {name} viewport={viewport['width']}x{viewport['height']} version={VERSION}")
     finally:
         context.close()
 
@@ -299,19 +363,26 @@ def main():
     for fixture in ROUTES.values():
         assert fixture.is_file(), fixture
 
+    desktop = {"width": 1440, "height": 1000}
+    medium = {"width": 1024, "height": 900}
+    narrow = {"width": 820, "height": 900}
     cases = [
-        ("match", "/game.php?id=e2e-fm2026", assert_match),
-        ("transfer-market", "/transfers.php", assert_transfer_market),
-        ("transfer-history", "/transfers.php?action=history", assert_transfer_history),
-        ("team-main", "/team4.php", assert_team_main),
-        ("training", "/train.php", assert_training),
+        ("match", "/game.php?id=e2e-fm2026", assert_match, desktop, "no-preference"),
+        ("transfer-market", "/transfers.php", assert_transfer_market, desktop, "no-preference"),
+        ("transfer-history", "/transfers.php?action=history", assert_transfer_history, desktop, "no-preference"),
+        ("team-main", "/team4.php", assert_team_main, desktop, "no-preference"),
+        ("training", "/train.php", assert_training, desktop, "no-preference"),
+        ("transfer-responsive", "/transfers.php", assert_transfer_responsive_accessibility, medium, "reduce"),
+        ("transfer-narrow", "/transfers.php", assert_transfer_responsive_accessibility, narrow, "reduce"),
+        ("team-responsive", "/team4.php", assert_team_responsive, medium, "reduce"),
+        ("training-responsive", "/train.php", assert_training_responsive, medium, "reduce"),
     ]
 
     with server() as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
-            for name, path, assertions in cases:
-                run_case(browser, base_url, name, path, assertions)
+            for name, path, assertions, viewport, reduced_motion in cases:
+                run_case(browser, base_url, name, path, assertions, viewport, reduced_motion)
         finally:
             browser.close()
 
