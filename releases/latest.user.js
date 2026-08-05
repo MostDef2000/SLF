@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.272
+// @version      4.4.273
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.272',
-        scriptVersion: '4.4.272',
+        version: '4.4.273',
+        scriptVersion: '4.4.273',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.272',
+        scriptVersion: '4.4.273',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -20560,7 +20560,7 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
 
     const FIELD_WIDTH = 800;
     const FIELD_HEIGHT = 550;
-    const MAX_RENDER_SCALE = 1.5;
+    const MAX_RENDER_SCALE = 1;
     const CLASSIC_PITCH_BACKGROUND = '#1d6f36 url("/images/gen4/play_field6.png") -1px 0 / 800px 550px no-repeat';
 
     const styleId = 'slf-match-rendering-compatibility';
@@ -20582,6 +20582,8 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
                 box-shadow: none !important;
                 transition: none !important;
                 will-change: auto !important;
+                contain: layout paint style !important;
+                isolation: isolate !important;
             }
             html[data-slf-match-rendering-compatibility="1"] .g3 [id^="fieldgrass"] #letsdance {
                 width: 800px !important;
@@ -20608,6 +20610,7 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
 
         field.dataset.slfClassicPerformance = '1';
         field.dataset.slfClassicPitchForced = '1';
+        field.dataset.slfClassicRaster = '1';
         field.style.setProperty('width', `${FIELD_WIDTH}px`, 'important');
         field.style.setProperty('height', `${FIELD_HEIGHT}px`, 'important');
         field.style.setProperty('background', CLASSIC_PITCH_BACKGROUND, 'important');
@@ -20618,6 +20621,8 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
         field.style.setProperty('margin-bottom', '0px', 'important');
         field.style.setProperty('filter', 'none', 'important');
         field.style.setProperty('box-shadow', 'none', 'important');
+        field.style.setProperty('contain', 'layout paint style', 'important');
+        field.style.setProperty('isolation', 'isolate', 'important');
 
         const canvas = field.querySelector('#letsdance');
         if (canvas) {
@@ -20645,10 +20650,16 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
 
         if (!engine.__slfSmoothRenderScaleInstalled) {
             const originalSetRenderScale = engine.set_render_scale.bind(engine);
+            let lastAppliedScale = null;
             engine.set_render_scale = value => {
                 const numeric = Number(value);
                 const normalized = Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
-                return originalSetRenderScale(Math.min(normalized, MAX_RENDER_SCALE));
+                const capped = Math.min(normalized, MAX_RENDER_SCALE);
+                if (lastAppliedScale !== null && Math.abs(lastAppliedScale - capped) < 0.02) return undefined;
+                const result = originalSetRenderScale(capped);
+                lastAppliedScale = capped;
+                root.dataset.slfMatchRenderScale = String(capped);
+                return result;
             };
             Object.defineProperty(engine, '__slfSmoothRenderScaleInstalled', {
                 value: true,
@@ -20658,7 +20669,7 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
         }
 
         engine.set_render_scale(MAX_RENDER_SCALE);
-        return true;
+        return root.dataset.slfMatchRenderScale === String(MAX_RENDER_SCALE);
     };
 
     const patchFieldSizer = () => {
@@ -20683,19 +20694,21 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
     };
 
     const enforce = () => {
-        applyClassicGeometry();
-        patchRenderScale();
-        patchFieldSizer();
+        const geometryReady = applyClassicGeometry();
+        const scaleReady = patchRenderScale();
+        const fieldSizerReady = patchFieldSizer();
+        const ready = geometryReady && scaleReady && fieldSizerReady;
+        if (ready) root.dataset.slfMatchRenderHooks = 'ready';
+        return ready;
     };
 
-    enforce();
     pageWindow.addEventListener('resize', enforce, { passive: true });
+    if (enforce()) return;
 
     let attempts = 0;
     const timer = setInterval(() => {
         attempts += 1;
-        enforce();
-        if (attempts >= 100 || !location.pathname.includes('/game.php')) clearInterval(timer);
+        if (enforce() || attempts >= 100 || !location.pathname.includes('/game.php')) clearInterval(timer);
     }, 100);
 })();
 
@@ -20838,15 +20851,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.272',
-        scriptVersion: '4.4.272',
+        version: '4.4.273',
+        scriptVersion: '4.4.273',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.272',
+        scriptVersion: '4.4.273',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

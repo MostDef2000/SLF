@@ -1,20 +1,20 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.272",
+  "scriptVersion": "4.4.273",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_272_published",
+  "status": "release_4_4_273_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "472f1e134f9ea14dddb440fcb87840e71a83009341081493584f66166006433b",
     "bundleFileCount": 56,
-    "approvedBaseCommit": "ea32ca904156d850c437e818297a413e43efae7b",
-    "approvedCommit": "99933bef8143d3a55e240fd0f0cb0f01f77476ce",
+    "approvedBaseCommit": "20b6986fb8c6531aa5492fa0778f4f568a4f00cc",
+    "approvedCommit": "b5609240a27fab89b4da3c463460a473bbc8a515",
     "approvedFiles": [
       "src/app/bootstrap.js",
       "tests/browser/test_match_rendering_compatibility.py"
