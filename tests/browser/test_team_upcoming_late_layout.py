@@ -143,8 +143,8 @@ def main():
                 promotion: panel.dataset.slfUpcomingPromotion || '',
                 rootPromotion: document.documentElement.dataset.slfTeamUpcomingPromotion || '',
                 snapshotRows: document.documentElement.dataset.slfTeamUpcomingSnapshotRows || '',
-                snapshotState: document.documentElement.dataset.slfTeamUpcomingSnapshot || '',
-                snapshotSource: upcoming.dataset.slfUpcomingSource || '',
+                panelSource: panel.dataset.slfUpcomingSource || '',
+                rootSource: document.documentElement.dataset.slfTeamUpcomingSource || '',
                 rows: rows.length,
                 chips: upcoming.querySelectorAll('.slf-form-chip').length,
                 firstDate: rows[0]?.cells[0]?.textContent || '',
@@ -164,8 +164,8 @@ def main():
             assert "team-body" in evidence["panelParent"], evidence
             assert evidence["panelLayout"] == "fm2026-roster-side", evidence
             assert evidence["promotion"] == "ready" and evidence["rootPromotion"] == "ready", evidence
-            assert evidence["snapshotRows"] == "5" and evidence["snapshotState"] == "rendered", evidence
-            assert evidence["snapshotSource"] == "legacy-pre-migration-snapshot", evidence
+            assert evidence["snapshotRows"] == "5", evidence
+            assert evidence["panelSource"] == "pre-migration-snapshot" and evidence["rootSource"] == "pre-migration-snapshot", evidence
             assert evidence["rows"] == 5 and evidence["chips"] == 25, evidence
             assert evidence["firstDate"] == "09.08.2026" and evidence["firstOpponent"] == "Ньюпорт Каунти", evidence
             assert evidence["unsafeNodes"] == 0 and evidence["unsafeHref"] == "", evidence
