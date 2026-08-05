@@ -216,7 +216,8 @@ def assert_classic_geometry(page):
     assert "play_field6.png" in geometry["background"], geometry
     assert "custom-pitch.jpg" not in geometry["background"], geometry
     assert "second-custom-pitch.jpg" not in geometry["background"], geometry
-    assert {"layout", "paint", "style"}.issubset(set(geometry["contain"].split())), geometry
+    contain_tokens = set(geometry["contain"].split())
+    assert geometry["contain"] == "content" or {"layout", "paint", "style"}.issubset(contain_tokens), geometry
     assert geometry["isolation"] == "isolate", geometry
     assert geometry["canvasWidth"] == "800px", geometry
     assert geometry["canvasHeight"] == "550px", geometry
