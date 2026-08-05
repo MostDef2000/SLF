@@ -1,0 +1,292 @@
+{
+  "schema": "slf_deliberate_execution_fixtures_v1",
+  "contract": "data/quality/deliberate-execution-contract-v1.json",
+  "validRecords": [
+    {
+      "name": "direct documentation correction",
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Correct one unambiguous documentation typo without changing behaviour.",
+        "mode": "direct",
+        "classificationReason": "The change is mechanical, read-only with respect to runtime state, and has an unambiguous expected result.",
+        "acceptanceCriteria": [
+          "The intended word is corrected.",
+          "No runtime or contract file changes."
+        ],
+        "outcome": "success",
+        "decisionSummary": "The isolated documentation typo was corrected and the surrounding text was unchanged."
+      }
+    },
+    {
+      "name": "structured user interface change",
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Compact the transfer workspace without changing handlers, API calls, storage, or mount order.",
+        "mode": "structured",
+        "classificationReason": "This is a source-code and browser-fixture change with reversible presentation mutations and no critical data boundary.",
+        "plan": [
+          "Inspect the live DOM contract and current module IDs.",
+          "Apply a late presentation adapter without replacing handlers.",
+          "Update the exact-candidate browser fixture.",
+          "Run the aggregate quality gate."
+        ],
+        "assumptions": [
+          "Existing element IDs remain the functional handler contract.",
+          "The supplied sanitized DOM accurately represents the production shell."
+        ],
+        "acceptanceCriteria": [
+          "The modules remain at their existing page locations.",
+          "No duplicate panels appear after DOM mutations.",
+          "The exact candidate browser suite and aggregate gate pass."
+        ],
+        "evidence": [
+          {
+            "kind": "diff",
+            "reference": "presentation adapter and sanitized fixture only",
+            "result": "success"
+          },
+          {
+            "kind": "workflow",
+            "reference": "Quality integration gate / quality-integration",
+            "result": "success"
+          }
+        ],
+        "verification": [
+          {
+            "check": "Exact candidate artifact executes in the transfer fixture.",
+            "result": "success"
+          },
+          {
+            "check": "Negative duplicate and horizontal-overflow assertions pass.",
+            "result": "success"
+          }
+        ],
+        "outcome": "success",
+        "decisionSummary": "The transfer modules were visually unified through a presentation adapter while their functional contracts remained unchanged.",
+        "residualRisks": [
+          "A future production DOM redesign may require a new fixture and selector adapter."
+        ]
+      }
+    },
+    {
+      "name": "critical deployment readiness assessment",
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Assess whether a fixed userscript artifact is ready for an explicitly approved production deployment.",
+        "mode": "critical",
+        "classificationReason": "The task crosses release, deployment, production-state, and rollback boundaries.",
+        "plan": [
+          "Identify the exact source commit and artifact digest.",
+          "Run deterministic rebuild and exact-artifact checks.",
+          "Verify deployment tooling and rollback procedure.",
+          "Require explicit operational approval before production mutation.",
+          "Run post-deploy verification after activation."
+        ],
+        "assumptions": [
+          "The deployment target and credentials are available only to an authorized operator.",
+          "The rollback artifact corresponds to the currently deployed known-good revision."
+        ],
+        "alternatives": [
+          "Do not deploy and retain the current production revision.",
+          "Deploy to a non-production target for additional smoke testing."
+        ],
+        "acceptanceCriteria": [
+          "The artifact digest matches the reviewed candidate.",
+          "All mandatory gates pass.",
+          "Rollback is available and verified.",
+          "Explicit operational approval is recorded.",
+          "Post-deploy verification succeeds."
+        ],
+        "evidence": [
+          {
+            "kind": "artifact",
+            "reference": "reviewed userscript SHA-256 digest",
+            "result": "success"
+          },
+          {
+            "kind": "workflow",
+            "reference": "Quality integration gate / quality-integration",
+            "result": "success"
+          }
+        ],
+        "verification": [
+          {
+            "check": "Candidate bytes rebuild deterministically.",
+            "result": "success"
+          },
+          {
+            "check": "Deployment verifier rejects a mismatched revision.",
+            "result": "success"
+          }
+        ],
+        "adversarialVerification": [
+          {
+            "check": "Attempt deployment with missing approval and require a blocked result.",
+            "result": "success"
+          },
+          {
+            "check": "Attempt verification against a wrong artifact digest and require failure.",
+            "result": "success"
+          }
+        ],
+        "stopConditions": [
+          "Any mandatory quality domain fails.",
+          "The reviewed artifact digest cannot be matched.",
+          "Explicit approval or rollback evidence is absent."
+        ],
+        "rollback": {
+          "available": true,
+          "procedure": "Restore the previous known-good artifact and restart the service or client distribution path.",
+          "verification": "Confirm the previous revision, health checks, and changed-path smoke test."
+        },
+        "approval": {
+          "required": true,
+          "status": "approved",
+          "authority": "repository owner and authorized production operator"
+        },
+        "outcome": "success",
+        "decisionSummary": "The candidate is ready for a separately approved deployment; the quality gate itself does not perform or imply deployment.",
+        "residualRisks": [
+          "Production-only environmental differences remain until post-deploy verification completes."
+        ]
+      }
+    }
+  ],
+  "invalidRecords": [
+    {
+      "name": "structured record without observable evidence",
+      "expectedErrors": [
+        "structured.evidence_required",
+        "success.observable_evidence_required"
+      ],
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Change a runtime module.",
+        "mode": "structured",
+        "classificationReason": "Source code changes require structured execution.",
+        "plan": [
+          "Edit code.",
+          "Run tests."
+        ],
+        "assumptions": [],
+        "acceptanceCriteria": [
+          "Tests pass."
+        ],
+        "evidence": [],
+        "verification": [
+          {
+            "check": "Tests were expected to pass.",
+            "result": "not_run"
+          }
+        ],
+        "outcome": "success",
+        "decisionSummary": "The change succeeded.",
+        "residualRisks": []
+      }
+    },
+    {
+      "name": "critical record without rollback and approval",
+      "expectedErrors": [
+        "critical.rollback_required",
+        "critical.approval_required"
+      ],
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Deploy a new API revision to production.",
+        "mode": "critical",
+        "classificationReason": "This changes production state.",
+        "plan": [
+          "Deploy the revision."
+        ],
+        "assumptions": [],
+        "alternatives": [
+          "Do not deploy."
+        ],
+        "acceptanceCriteria": [
+          "Production responds."
+        ],
+        "evidence": [
+          {
+            "kind": "workflow",
+            "reference": "quality gate",
+            "result": "success"
+          }
+        ],
+        "verification": [
+          {
+            "check": "Health endpoint responds.",
+            "result": "success"
+          }
+        ],
+        "adversarialVerification": [
+          {
+            "check": "Unauthorized request is rejected.",
+            "result": "success"
+          }
+        ],
+        "stopConditions": [
+          "Health check fails."
+        ],
+        "outcome": "partial",
+        "decisionSummary": "The deployment plan is incomplete.",
+        "residualRisks": [
+          "Rollback is undefined."
+        ]
+      }
+    },
+    {
+      "name": "record containing hidden reasoning",
+      "expectedErrors": [
+        "privacy.forbidden_key:privateReasoning"
+      ],
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Analyze a defect.",
+        "mode": "direct",
+        "classificationReason": "Fixture intentionally violates the privacy boundary.",
+        "acceptanceCriteria": [
+          "No hidden reasoning is stored."
+        ],
+        "privateReasoning": "Internal token-by-token reasoning must not be stored in evidence records.",
+        "outcome": "failed",
+        "decisionSummary": "The record is invalid."
+      }
+    },
+    {
+      "name": "success with failed verification",
+      "expectedErrors": [
+        "success.verification_must_pass"
+      ],
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Modify a browser integration.",
+        "mode": "structured",
+        "classificationReason": "The task changes runtime integration behaviour.",
+        "plan": [
+          "Modify the integration.",
+          "Run the browser suite."
+        ],
+        "assumptions": [],
+        "acceptanceCriteria": [
+          "Browser suite passes."
+        ],
+        "evidence": [
+          {
+            "kind": "test",
+            "reference": "browser suite",
+            "result": "failure"
+          }
+        ],
+        "verification": [
+          {
+            "check": "Browser suite",
+            "result": "failure"
+          }
+        ],
+        "outcome": "success",
+        "decisionSummary": "The change succeeded despite a failed check.",
+        "residualRisks": []
+      }
+    }
+  ]
+}
