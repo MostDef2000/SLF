@@ -126,8 +126,11 @@ def assert_header_selector(page: Page):
     assert evidence["bridgeClassRemaining"] is False, evidence
 
     select = page.locator("#slf-tactics-dropdown select")
-    preset_name = "Pep_StandardControl_bal3"
-    assert select.locator(f"option[value='{preset_name}']").count() == 1
+    preset_name = "standard"
+    page.wait_for_function(
+        "name => [...document.querySelectorAll('#slf-tactics-dropdown select option')].some(option => option.value === name)",
+        arg=preset_name,
+    )
     select.select_option(preset_name)
     page.wait_for_timeout(1000)
     page.locator("#slf-tactics-dropdown button").first.click()
@@ -135,7 +138,7 @@ def assert_header_selector(page: Page):
     expected_applied = """() => document.querySelector('input[name="def_line"][value="2"]')?.checked
       && document.querySelector('input[name="press_line"][value="2"]')?.checked
       && document.querySelector('input[name="press_intense"][value="3"]')?.checked
-      && document.querySelector('input[name="style"][value="3"]')?.checked
+      && document.querySelector('input[name="style"][value="4"]')?.checked
       && document.querySelector('input[name="pass_risk"][value="3"]')?.checked"""
     try:
         page.wait_for_function(expected_applied, timeout=5000)
@@ -145,6 +148,7 @@ def assert_header_selector(page: Page):
               const checked = name => document.querySelector(`input[type="radio"][name="${name}"]:checked`)?.value || '';
               return {
                 selected: document.querySelector('#slf-tactics-dropdown select')?.value || '',
+                options: [...document.querySelectorAll('#slf-tactics-dropdown select option')].map(option => option.value),
                 def_line: checked('def_line'),
                 press_line: checked('press_line'),
                 press_intense: checked('press_intense'),
