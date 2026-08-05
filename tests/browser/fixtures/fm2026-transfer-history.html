@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>SLF FM 2026 transfer history</title>
+  <style>
+    :root {
+      --fm-panel:#171b29; --fm-panel-2:#1c2132; --fm-panel-3:#222842;
+      --fm-border-2:#38415f; --fm-text:#eef1f8; --fm-muted:#8b93ab;
+      --fm-green:#2bd97c; --fm-green-2:#43f58c; --fm-radius:14px;
+      --fm-font:"Roboto","Segoe UI",Arial,sans-serif;
+    }
+    body{margin:0;background:#0d1018;color:var(--fm-text);font-family:var(--fm-font)}
+    .fm-topbar{height:42px;background:#111522}.fm-deck{padding:10px 18px;background:#141827}.fm-card--manager{display:inline-block;padding:6px 10px;background:#1a2030;border-radius:10px}
+    .fm-stage{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;padding:16px}.fm-slots{min-height:420px;background:#121624;border-radius:12px;padding:10px}
+    .content-ui__wrapper{min-width:0;background:#101522;border-radius:14px;padding:16px;overflow:hidden}
+    table{width:100%;border-collapse:collapse;background:#151a28}th,td{padding:7px;border-bottom:1px solid #303850;text-align:left}a{color:#8dc0ff}
+  </style>
+</head>
+<body>
+  <header class="fm-topbar"><div class="fm-topbar__right">FM topbar</div></header>
+  <section class="fm-deck"><article class="fm-card--manager"><span>Менеджер</span><span class="fm-account__status">online</span></article></section>
+  <main class="fm-stage">
+    <aside class="fm-slots">Команды</aside>
+    <section class="content-ui__wrapper">
+      <h1>История трансферов</h1>
+      <table class="trans_market_offers" data-slf-transfer-table="history-fixture">
+        <thead><tr><th>Амплуа</th><th>Фамилия</th><th>Команда</th><th>Воз</th><th>Тал</th><th>Скилл</th><th>Цена</th><th>Дата</th></tr></thead>
+        <tbody>
+          <tr><td>ST</td><td><a href="/player.php?action=view&id=2001">История Один</a></td><td>Клуб X</td><td>25</td><td>5</td><td>160</td><td>132M</td><td>01.08.2026</td></tr>
+          <tr><td>DM</td><td><a href="/player.php?action=view&id=2002">История Два</a></td><td>Клуб Y</td><td>23</td><td>4</td><td>149</td><td>78M</td><td>02.08.2026</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>
