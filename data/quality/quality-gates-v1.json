@@ -6,6 +6,16 @@
   "reason": "Prerequisite quality pull requests are integrated and the always-running aggregate context completed successfully on PR #175. GitHub branch-protection settings are not applied or verified.",
   "roadmapIssue": 160,
   "reviewModel": "single_maintainer_owner_acceptance_with_compensating_controls",
+  "deliberateExecutionContract": {
+    "schema": "slf_deliberate_execution_contract_v1",
+    "path": "data/quality/deliberate-execution-contract-v1.json",
+    "fixtures": "data/quality/deliberate-execution-fixtures-v1.json",
+    "validator": "tools/test-deliberate-execution-contract.mjs",
+    "aggregateDomain": "static-contract-security",
+    "hiddenChainOfThoughtRequiredInEvidence": false,
+    "observableEvidenceRequired": true,
+    "explicitDeploymentApprovalRequired": true
+  },
   "prerequisitesIntegrated": true,
   "prerequisitePullRequests": [159, 163, 164, 165, 166, 167, 168],
   "aggregatePullRequest": 175,

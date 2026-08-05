@@ -9,6 +9,24 @@
 - Affected boundaries: browser / API / storage / release / deployment / workflow / documentation
 - Failure consequence:
 
+## Deliberate execution
+
+- Reasoning mode: direct / structured / critical
+- Classification reason:
+- Plan:
+- Material assumptions:
+- Acceptance criteria:
+- Counterexample or adversarial check:
+- Observable evidence expected:
+- Stop conditions:
+- Residual risks:
+
+- [ ] No hidden chain-of-thought or private scratchpad is included.
+- [ ] Facts, assumptions, and inferences are separated.
+- [ ] Success claims are backed by observable evidence.
+- [ ] Generation and verification were performed as separate passes for structured or critical work.
+- [ ] Critical work includes explicit approval and rollback evidence where applicable.
+
 ## Test design
 
 - Behavioural contract being verified:

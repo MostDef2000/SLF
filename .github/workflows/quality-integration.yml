@@ -36,6 +36,7 @@ jobs:
           node --check tools/test-versioned-contracts.mjs
           node --check tools/test-security-boundaries.mjs
           node --check tools/validate-quality-governance.mjs
+          node --check tools/test-deliberate-execution-contract.mjs
           python3 -m py_compile tools/test-api-contract-compatibility.py
           python3 -m py_compile tools/test-api-adversarial.py
           node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/slf-contracts-v1.schema.json', 'utf8'))"
@@ -43,6 +44,8 @@ jobs:
           node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/contract-policy-v1.json', 'utf8'))"
           node -e "JSON.parse(require('node:fs').readFileSync('data/quality/quality-gates-v1.json', 'utf8'))"
           node -e "JSON.parse(require('node:fs').readFileSync('data/quality/accepted-risks-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/quality/deliberate-execution-contract-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/quality/deliberate-execution-fixtures-v1.json', 'utf8'))"
 
       - name: Enforce exact artifact, contracts, security, and governance
         run: |
@@ -50,6 +53,7 @@ jobs:
           node tools/test-versioned-contracts.mjs
           node tools/test-security-boundaries.mjs
           node tools/validate-quality-governance.mjs
+          node tools/test-deliberate-execution-contract.mjs
 
       - name: Install pinned VPS API dependencies
         run: python3 -m pip install --disable-pip-version-check -r vps/api/requirements.txt
