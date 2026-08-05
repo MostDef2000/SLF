@@ -135,7 +135,7 @@ def main():
         page.goto(base_url + "/game.php?id=34368005", wait_until="domcontentloaded")
         page.add_script_tag(path=str(ARTIFACT))
         page.wait_for_function("expected => window.SLF?.scriptVersion === expected", arg=VERSION)
-        page.wait_for_selector("#slf-match-rendering-compatibility")
+        page.wait_for_selector("#slf-match-rendering-compatibility", state="attached")
         page.wait_for_function("() => window.game_2d?.__slfSmoothRenderScaleInstalled === true")
 
         style = page.locator("#fieldgrass").evaluate(
