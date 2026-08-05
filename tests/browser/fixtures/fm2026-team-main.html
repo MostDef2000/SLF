@@ -20,7 +20,12 @@
     .team{color:var(--pc-text)}.team-head{margin-bottom:14px}.team-head__links{display:flex;gap:8px;flex-wrap:wrap}.team-head__links a{color:var(--fm-muted)}
     .team-body{display:grid;gap:16px;align-items:start;grid-template-columns:366px minmax(0,1fr)}.team-dash{display:grid;gap:14px;align-content:start}.team-content{min-width:0}
     .pcard,.roster-card{background:var(--pc-card);border:1px solid var(--pc-border);border-radius:var(--pc-radius);overflow:hidden}.pcard{padding:12px}.pcard__head,.pcard__head2{font-weight:700;margin-bottom:8px}
-    .team-lineup__field{height:300px;background:repeating-linear-gradient(0deg,#1f8240 0,#1f8240 14px,#1c7639 14px,#1c7639 28px);border-radius:10px}.team-lineup__power{display:inline-block;margin:10px;padding:3px 9px;background:var(--pc-accent);border-radius:999px;color:#07130c;font-weight:700}
+    .team-lineup__field{position:relative;padding:6px}.team-lineup__power{position:absolute;z-index:3;display:inline-block;margin:10px;padding:3px 9px;background:var(--pc-accent);border-radius:999px;color:#07130c;font-weight:700}
+    .team-lineup__field .fcpitch{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,3fr) minmax(0,1fr);grid-template-rows:repeat(6,1fr);grid-template-areas:'. st .' 'lw am rw' 'lm cm rm' 'lb dm rb' 'ld cd rd' '. gk .';gap:5px 1px;min-height:300px;padding:18px 6px 6px;overflow:hidden;background:repeating-linear-gradient(0deg,#1f8240 0,#1f8240 14px,#1c7639 14px,#1c7639 28px);border-radius:10px}
+    .position_wrapper_ld{grid-area:ld}.position_wrapper_cd{grid-area:cd}.position_wrapper_rd{grid-area:rd}.position_wrapper_gk{grid-area:gk}
+    .position__wrapper{display:flex;justify-content:space-evenly;min-width:0}.fcpitch.lineup__roster .position__wrapper{min-width:0}.fcpitch.lineup__roster .__player{min-width:0;max-width:100%}.fcpitch.lineup__roster .__player_sign{min-width:0;max-width:100%}
+    .__player{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.test-shirt{width:32px;height:32px;border-radius:50%;background:#2555a5}
+    .__player_sign{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}.fcpitch .__fio{background:rgba(13,16,26,.82);color:#fff;padding:2px 7px;border-radius:6px;font:600 10px var(--fm-font);max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fcpitch.lineup__roster .__fio{max-width:100%;box-sizing:border-box}.fcpitch .__skill{background:#1fb863;color:#fff;padding:1px 6px;border-radius:6px;font-weight:800}.flags{display:inline-block;width:14px;height:10px;background:#fff;border:1px solid #777;vertical-align:middle;margin-right:3px}
     .player-blocks,.team-navigation__back{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px;border-bottom:1px solid var(--pc-border)}
     .tpanel-a,.tpanel-b,.sub-panel-a,.sub-panel-b{padding:6px 12px;border-radius:999px;background:var(--pc-soft)}.tpanel-a,.sub-panel-a{background:rgba(43,217,124,.18);color:var(--pc-accent)}
     .roster-scroll{max-width:100%;overflow-x:auto}
@@ -53,7 +58,24 @@
             <div class="team-dash">
               <div class="pcard team-lineup" data-school="19">
                 <div class="pcard__head">Стартовый состав на следующий матч</div>
-                <div class="team-lineup__field"><span class="team-lineup__power">Сила 1708</span></div>
+                <div class="team-lineup__field">
+                  <span class="team-lineup__power">Сила 1708</span>
+                  <div class="lineup__wrapper fcpitch lineup__roster">
+                    <div class="position__wrapper position_wrapper_ld">
+                      <div class="__player"><div class="test-shirt"></div><div class="__player_sign"><div class="__fio"><span class="flags"></span> Уоррен-Смит</div><div class="__skill">154</div></div></div>
+                    </div>
+                    <div class="position__wrapper position_wrapper_cd">
+                      <div class="__player"><div class="test-shirt"></div><div class="__player_sign"><div class="__fio"><span class="flags"></span> Палмер-Джонсон</div><div class="__skill">153</div></div></div>
+                      <div class="__player"><div class="test-shirt"></div><div class="__player_sign"><div class="__fio"><span class="flags"></span> Букенен-Младший</div><div class="__skill">143</div></div></div>
+                    </div>
+                    <div class="position__wrapper position_wrapper_rd">
+                      <div class="__player"><div class="test-shirt"></div><div class="__player_sign"><div class="__fio"><span class="flags"></span> Харрисон</div><div class="__skill">152</div></div></div>
+                    </div>
+                    <div class="position__wrapper position_wrapper_gk">
+                      <div class="__player"><div class="test-shirt"></div><div class="__player_sign"><div class="__fio"><span class="flags"></span> Суарес</div><div class="__skill">155</div></div></div>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div class="pcard"><div class="pcard__head2">Лазарет клуба</div><table class="team-mini"><tr><td>Все здоровы</td></tr></table></div>
               <div class="pcard"><div class="pcard__head2">Дисквалифицированные игроки</div><table class="team-mini"><tr><td>Нет дисквалификаций</td></tr></table></div>
@@ -108,7 +130,9 @@
         const wrapper = table?.closest('.roster-scroll');
         const panel = document.getElementById('slf-team4-championship-table');
         const badge = document.getElementById('slf-version-inline-badge');
-        if (!table || !wrapper || !panel || !badge || table.dataset.slfRosterFit !== '1' || wrapper.dataset.slfRosterFit !== '1') {
+        const lineupField = document.querySelector('.team-lineup .fcpitch.lineup__roster');
+        const lineupNames = [...document.querySelectorAll('.team-lineup .fcpitch.lineup__roster .__fio')];
+        if (!table || !wrapper || !panel || !badge || !lineupField || lineupNames.length !== 5 || document.documentElement.dataset.slfTeamLineupFullNames !== '1' || table.dataset.slfRosterFit !== '1' || wrapper.dataset.slfRosterFit !== '1') {
           if (attempts < 100) return setTimeout(verifyRosterFit, 50);
           throw new Error('SLF team layout adapters did not attach');
         }
@@ -122,6 +146,23 @@
         const teamContentRect = document.querySelector('.team-content').getBoundingClientRect();
         const panelRect = panel.getBoundingClientRect();
         const badgeStyle = getComputedStyle(badge);
+        const fieldRect = lineupField.getBoundingClientRect();
+        const lineupEvidence = lineupNames.map(node => {
+          const style = getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          const textRect = range.getBoundingClientRect();
+          return {
+            text: node.textContent.replace(/\s+/g, ' ').trim(),
+            overflow: style.overflow,
+            textOverflow: style.textOverflow,
+            whiteSpace: style.whiteSpace,
+            overflowWrap: style.overflowWrap,
+            insideField: rect.left >= fieldRect.left - 1 && rect.right <= fieldRect.right + 1 && rect.top >= fieldRect.top - 1 && rect.bottom <= fieldRect.bottom + 1,
+            textFits: textRect.left >= rect.left - 1 && textRect.right <= rect.right + 1 && textRect.top >= rect.top - 1 && textRect.bottom <= rect.bottom + 1
+          };
+        });
         const evidence = {
           headerColumns: table.tHead.rows[0].cells.length,
           bodyColumns: rows.map(row => row.cells.length),
@@ -141,10 +182,13 @@
           badgeText: badge.textContent,
           badgeDisplay: badgeStyle.display,
           badgeVisibility: badgeStyle.visibility,
-          versionMarker: document.documentElement.dataset.slfVersionBadge || ''
+          versionMarker: document.documentElement.dataset.slfVersionBadge || '',
+          lineupMarker: document.documentElement.dataset.slfTeamLineupFullNames || '',
+          lineupEvidence
         };
         window.__slfRosterFitEvidence = evidence;
         const sideBySide = innerWidth < 1440 || (evidence.panelLeft >= evidence.rosterRight + 5 && Math.abs(evidence.panelTop - evidence.rosterTop) <= 2);
+        const expectedNames = ['Уоррен-Смит', 'Палмер-Джонсон', 'Букенен-Младший', 'Харрисон', 'Суарес'];
         const passed = evidence.headerColumns === 16
           && evidence.bodyColumns.every(count => count === 16)
           && evidence.tableLayout === 'fixed'
@@ -158,8 +202,11 @@
           && evidence.badgeText === `SLF ${window.SLF?.scriptVersion || ''}`
           && evidence.badgeDisplay !== 'none'
           && evidence.badgeVisibility !== 'hidden'
-          && evidence.versionMarker === 'visible';
-        if (!passed) throw new Error(`SLF roster/version/championship regression: ${JSON.stringify(evidence)}`);
+          && evidence.versionMarker === 'visible'
+          && evidence.lineupMarker === '1'
+          && evidence.lineupEvidence.map(row => row.text.replace(/^\S+\s+/, '')).every((text, index) => text === expectedNames[index])
+          && evidence.lineupEvidence.every(row => row.overflow !== 'hidden' && row.textOverflow !== 'ellipsis' && row.whiteSpace === 'normal' && row.overflowWrap === 'anywhere' && row.insideField && row.textFits);
+        if (!passed) throw new Error(`SLF roster/version/championship/full-lineup-names regression: ${JSON.stringify(evidence)}`);
       }
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(verifyRosterFit, 0), { once:true });
       else setTimeout(verifyRosterFit, 0);
