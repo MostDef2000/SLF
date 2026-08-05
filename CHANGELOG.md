@@ -1,5 +1,76 @@
 # Changelog
 
+## 4.4.264
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/CODEOWNERS
+- .github/dependabot.yml
+- .github/pull_request_template.md
+- .github/workflows/browser-e2e.yml
+- .github/workflows/property-fuzz-reliability.yml
+- .github/workflows/quality-governance.yml
+- .github/workflows/quality-integration.yml
+- .github/workflows/release-deployment-evidence.yml
+- .github/workflows/security-boundaries.yml
+- .github/workflows/userscript-artifact-boundary.yml
+- .github/workflows/versioned-contracts.yml
+- data/audit/runtime-reachability-review-v1.json
+- data/contracts/README.md
+- data/contracts/contract-policy-v1.json
+- data/contracts/fixtures-v1.json
+- data/contracts/slf-contracts-v1.schema.json
+- data/quality/accepted-risks-v1.json
+- data/quality/quality-gates-v1.json
+- data/quality/reliability-budget-v1.json
+- docs/contracts/versioned-data-api-contracts.md
+- docs/quality/fm2026-ui-migration.md
+- docs/quality/governance-rollout.md
+- docs/quality/property-fuzz-mutation-reliability.md
+- docs/quality/test-design-review.md
+- docs/quality/testing-policy.md
+- docs/release/release-deployment-evidence.md
+- docs/security/quality-security-control-map.md
+- docs/security/threat-model.md
+- src/app/version-badge.js
+- tests/browser/README.md
+- tests/browser/fixtures/finished-match.html
+- tests/browser/fixtures/fm2026-owned-live-match.html
+- tests/browser/fixtures/foreign-live-match.html
+- tests/browser/fixtures/incomplete-match.html
+- tests/browser/fixtures/owned-live-match.html
+- tests/browser/fixtures/team-tactic.html
+- tests/browser/fixtures/transfer-page.html
+- tests/browser/requirements.txt
+- tests/browser/test_exact_userscript.py
+- tests/browser/test_fm2026_design_adapter.py
+- tools/generate-release-evidence.mjs
+- tools/test-api-adversarial.py
+- tools/test-api-contract-compatibility.py
+- tools/test-api-fuzz-and-recovery.py
+- tools/test-deployment-evidence.py
+- tools/test-security-boundaries.mjs
+- tools/test-telemetry-properties-and-mutations.mjs
+- tools/test-userscript-artifact-boundary.mjs
+- tools/test-versioned-contracts.mjs
+- tools/validate-quality-governance.mjs
+- tools/validate-release-evidence.mjs
+
+Approved base commit:
+- e7b0c767c75f160988b7d4cacd1077fdfa048c07
+
+Approved commit:
+- 4382ab1441add6f5d8a45d8acf8df19591a02e2f
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.263
 
 ### Automatic latest-only build
