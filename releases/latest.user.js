@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.271
+// @version      4.4.272
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.271',
-        scriptVersion: '4.4.271',
+        version: '4.4.272',
+        scriptVersion: '4.4.272',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.271',
+        scriptVersion: '4.4.272',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -20561,19 +20561,18 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
     const FIELD_WIDTH = 800;
     const FIELD_HEIGHT = 550;
     const MAX_RENDER_SCALE = 1.5;
+    const CLASSIC_PITCH_BACKGROUND = '#1d6f36 url("/images/gen4/play_field6.png") -1px 0 / 800px 550px no-repeat';
 
     const styleId = 'slf-match-rendering-compatibility';
     if (!document.getElementById(styleId)) {
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
-            .g3 [id^="fieldgrass"]:not([class*="user-custom__game-field-"]) {
-                background: #1d6f36 url("/images/gen4/play_field6.png") -1px 0 / 800px 550px no-repeat !important;
-            }
             html[data-slf-match-rendering-compatibility="1"] .g3 [id^="fieldgrass"] {
                 width: 800px !important;
                 height: 550px !important;
                 max-width: none !important;
+                background: #1d6f36 url("/images/gen4/play_field6.png") -1px 0 / 800px 550px no-repeat !important;
                 transform: none !important;
                 transform-origin: top center !important;
                 margin-left: auto !important;
@@ -20608,8 +20607,10 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
         if (!field) return false;
 
         field.dataset.slfClassicPerformance = '1';
+        field.dataset.slfClassicPitchForced = '1';
         field.style.setProperty('width', `${FIELD_WIDTH}px`, 'important');
         field.style.setProperty('height', `${FIELD_HEIGHT}px`, 'important');
+        field.style.setProperty('background', CLASSIC_PITCH_BACKGROUND, 'important');
         field.style.setProperty('transform', 'none', 'important');
         field.style.setProperty('transform-origin', 'top center', 'important');
         field.style.setProperty('margin-left', 'auto', 'important');
@@ -20837,15 +20838,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.271',
-        scriptVersion: '4.4.271',
+        version: '4.4.272',
+        scriptVersion: '4.4.272',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.271',
+        scriptVersion: '4.4.272',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
