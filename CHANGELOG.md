@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.271
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/bootstrap.js
+- tests/browser/test_match_rendering_compatibility.py
+
+Approved base commit:
+- 73741fbdf50265ed5ae14fe27ae4e6b83a2967f7
+
+Approved commit:
+- a0594b22fe3c141989e893561f82af212c13a68a
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.270
 
 ### Automatic latest-only build

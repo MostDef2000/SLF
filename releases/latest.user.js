@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.270
+// @version      4.4.271
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.270',
-        scriptVersion: '4.4.270',
+        version: '4.4.271',
+        scriptVersion: '4.4.271',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.270',
+        scriptVersion: '4.4.271',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -20558,6 +20558,10 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
     if (root.dataset.slfMatchRenderingCompatibility === '1') return;
     root.dataset.slfMatchRenderingCompatibility = '1';
 
+    const FIELD_WIDTH = 800;
+    const FIELD_HEIGHT = 550;
+    const MAX_RENDER_SCALE = 1.5;
+
     const styleId = 'slf-match-rendering-compatibility';
     if (!document.getElementById(styleId)) {
         const style = document.createElement('style');
@@ -20565,16 +20569,75 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
         style.textContent = `
             .g3 [id^="fieldgrass"]:not([class*="user-custom__game-field-"]) {
                 background: #1d6f36 url("/images/gen4/play_field6.png") -1px 0 / 800px 550px no-repeat !important;
-                box-shadow: none !important;
             }
-            .g3 [id^="fieldgrass"] #letsdance {
+            html[data-slf-match-rendering-compatibility="1"] .g3 [id^="fieldgrass"] {
+                width: 800px !important;
+                height: 550px !important;
+                max-width: none !important;
+                transform: none !important;
+                transform-origin: top center !important;
+                margin-left: auto !important;
+                margin-right: auto !important;
+                margin-bottom: 0 !important;
+                filter: none !important;
+                box-shadow: none !important;
+                transition: none !important;
+                will-change: auto !important;
+            }
+            html[data-slf-match-rendering-compatibility="1"] .g3 [id^="fieldgrass"] #letsdance {
+                width: 800px !important;
+                height: 550px !important;
                 image-rendering: auto;
+                filter: none !important;
+                transform: none !important;
+            }
+            html[data-slf-match-rendering-compatibility="1"] .g3 .g3-timeline {
+                width: 800px !important;
+                max-width: 800px !important;
+                margin-left: auto !important;
+                margin-right: auto !important;
             }
         `;
         (document.head || document.documentElement).appendChild(style);
     }
 
-    const maxRenderScale = 2;
+    const getField = () => document.querySelector('.g3 [id^="fieldgrass"]');
+
+    const applyClassicGeometry = () => {
+        const field = getField();
+        if (!field) return false;
+
+        field.dataset.slfClassicPerformance = '1';
+        field.style.setProperty('width', `${FIELD_WIDTH}px`, 'important');
+        field.style.setProperty('height', `${FIELD_HEIGHT}px`, 'important');
+        field.style.setProperty('transform', 'none', 'important');
+        field.style.setProperty('transform-origin', 'top center', 'important');
+        field.style.setProperty('margin-left', 'auto', 'important');
+        field.style.setProperty('margin-right', 'auto', 'important');
+        field.style.setProperty('margin-bottom', '0px', 'important');
+        field.style.setProperty('filter', 'none', 'important');
+        field.style.setProperty('box-shadow', 'none', 'important');
+
+        const canvas = field.querySelector('#letsdance');
+        if (canvas) {
+            canvas.style.setProperty('width', `${FIELD_WIDTH}px`, 'important');
+            canvas.style.setProperty('height', `${FIELD_HEIGHT}px`, 'important');
+            canvas.style.setProperty('transform', 'none', 'important');
+            canvas.style.setProperty('filter', 'none', 'important');
+        }
+
+        const timeline = document.querySelector('.g3 .g3-timeline');
+        if (timeline) {
+            timeline.style.setProperty('width', `${FIELD_WIDTH}px`, 'important');
+            timeline.style.setProperty('max-width', `${FIELD_WIDTH}px`, 'important');
+            timeline.style.setProperty('margin-left', 'auto', 'important');
+            timeline.style.setProperty('margin-right', 'auto', 'important');
+        }
+
+        root.dataset.slfClassicMatchPerformance = '1';
+        return true;
+    };
+
     const patchRenderScale = () => {
         const engine = pageWindow.game_2d;
         if (!engine || typeof engine.set_render_scale !== 'function') return false;
@@ -20584,7 +20647,7 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
             engine.set_render_scale = value => {
                 const numeric = Number(value);
                 const normalized = Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
-                return originalSetRenderScale(Math.min(normalized, maxRenderScale));
+                return originalSetRenderScale(Math.min(normalized, MAX_RENDER_SCALE));
             };
             Object.defineProperty(engine, '__slfSmoothRenderScaleInstalled', {
                 value: true,
@@ -20593,22 +20656,45 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
             });
         }
 
-        if (typeof pageWindow.game2dRefreshRenderScale === 'function') {
-            pageWindow.game2dRefreshRenderScale();
-        } else {
-            engine.set_render_scale(maxRenderScale);
-        }
+        engine.set_render_scale(MAX_RENDER_SCALE);
         return true;
     };
 
-    if (patchRenderScale()) return;
+    const patchFieldSizer = () => {
+        const current = pageWindow.game2dSetFieldSize;
+        if (typeof current !== 'function') return false;
+        if (current.__slfClassicMatchPerformanceInstalled) return true;
+
+        const original = current.bind(pageWindow);
+        const wrapped = function classicMatchFieldSizer() {
+            const result = original.apply(pageWindow, arguments);
+            applyClassicGeometry();
+            patchRenderScale();
+            return result;
+        };
+        Object.defineProperty(wrapped, '__slfClassicMatchPerformanceInstalled', {
+            value: true,
+            enumerable: false,
+            configurable: false
+        });
+        pageWindow.game2dSetFieldSize = wrapped;
+        return true;
+    };
+
+    const enforce = () => {
+        applyClassicGeometry();
+        patchRenderScale();
+        patchFieldSizer();
+    };
+
+    enforce();
+    pageWindow.addEventListener('resize', enforce, { passive: true });
 
     let attempts = 0;
     const timer = setInterval(() => {
         attempts += 1;
-        if (patchRenderScale() || attempts >= 100 || !location.pathname.includes('/game.php')) {
-            clearInterval(timer);
-        }
+        enforce();
+        if (attempts >= 100 || !location.pathname.includes('/game.php')) clearInterval(timer);
     }, 100);
 })();
 
@@ -20751,15 +20837,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.270',
-        scriptVersion: '4.4.270',
+        version: '4.4.271',
+        scriptVersion: '4.4.271',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.270',
+        scriptVersion: '4.4.271',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
