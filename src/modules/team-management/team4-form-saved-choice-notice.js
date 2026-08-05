@@ -82,11 +82,18 @@ SLFTeam4FormSavedChoiceNotice.start();
     }
 
     function resolvePageLayout() {
-        const dashboard = document.querySelector('.team-body > .team-dash');
-        const teamContent = document.querySelector('.team-body > .team-content');
+        const teamBody = document.querySelector('.team-body');
+        const dashboard = teamBody?.querySelector(':scope > .team-dash');
+        const teamContent = teamBody?.querySelector(':scope > .team-content');
         const currentGeneral = teamContent?.querySelector('#general');
-        if (dashboard && currentGeneral && currentGeneral.querySelector('#generallist')) {
-            return { mode: 'fm2026-dashboard', host: dashboard, general: currentGeneral };
+        if (teamBody && dashboard && teamContent && currentGeneral && currentGeneral.querySelector('#generallist')) {
+            return {
+                mode: 'fm2026-roster-side',
+                host: teamBody,
+                dashboard,
+                teamContent,
+                general: currentGeneral
+            };
         }
 
         const legacyContent = document.querySelector('.team_general_content');
@@ -164,10 +171,18 @@ SLFTeam4FormSavedChoiceNotice.start();
         const style = document.createElement('style');
         style.id = STYLE_ID;
         style.textContent = `
-            .team_general_content.slf-team4-championship-layout:not(.team-dash) { display:flex; align-items:flex-start; gap:12px; width:max-content; max-width:none; overflow:visible; }
-            .team_general_content.slf-team4-championship-layout:not(.team-dash) > #general { flex:0 0 auto; min-width:700px; }
-            html[data-slf-design="fm2026"] .team-body > .team-dash.team_general_content.slf-team4-championship-layout { display:grid!important; grid-template-columns:minmax(0,1fr)!important; gap:14px!important; width:100%!important; max-width:100%!important; min-width:0!important; overflow:visible!important; }
-            html[data-slf-design="fm2026"] .team-body > .team-dash.team_general_content.slf-team4-championship-layout > #${PANEL_ID} { width:100%!important; max-width:100%!important; min-width:0!important; margin:0!important; }
+            .team_general_content.slf-team4-championship-layout:not(.team-body) { display:flex; align-items:flex-start; gap:12px; width:max-content; max-width:none; overflow:visible; }
+            .team_general_content.slf-team4-championship-layout:not(.team-body) > #general { flex:0 0 auto; min-width:700px; }
+            html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout { display:grid!important; grid-template-columns:minmax(240px,366px) minmax(0,1fr)!important; align-items:start!important; gap:16px!important; width:100%!important; max-width:100%!important; min-width:0!important; overflow:visible!important; }
+            html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > .team-dash { grid-column:1!important; grid-row:1 / span 2!important; min-width:0!important; }
+            html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > .team-content { grid-column:2!important; grid-row:1!important; min-width:0!important; }
+            html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > #${PANEL_ID} { grid-column:2!important; grid-row:2!important; justify-self:end!important; width:min(320px,100%)!important; max-width:320px!important; min-width:0!important; margin:0!important; }
+            @media (min-width:1440px) {
+                html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout { grid-template-columns:clamp(240px,18vw,280px) minmax(0,1fr) minmax(260px,290px)!important; gap:14px!important; }
+                html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > .team-dash { grid-column:1!important; grid-row:1!important; }
+                html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > .team-content { grid-column:2!important; grid-row:1!important; }
+                html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > #${PANEL_ID} { grid-column:3!important; grid-row:1!important; justify-self:stretch!important; width:100%!important; max-width:100%!important; }
+            }
             #${PANEL_ID} { flex:0 0 300px; width:300px; box-sizing:border-box; padding:8px; border:1px solid #555; border-radius:6px; background:#181818; color:#ddd; box-shadow:0 2px 10px rgba(0,0,0,.35); font:11px Verdana,Arial,sans-serif; }
             #${PANEL_ID} .slf-champ-title { margin-bottom:7px; text-align:center; line-height:1.35; }
             #${PANEL_ID} .slf-champ-title a { color:#9cff57; font-weight:700; text-decoration:none; }
@@ -193,9 +208,8 @@ SLFTeam4FormSavedChoiceNotice.start();
         layout.host.classList.add('slf-team4-championship-layout');
         let panel = document.getElementById(PANEL_ID);
 
-        if (layout.mode === 'fm2026-dashboard') {
-            // Compatibility marker retained for the shared FM adapter and existing evidence queries.
-            layout.host.classList.add('team_general_content', 'slf-team4-championship-dashboard');
+        if (layout.mode === 'fm2026-roster-side') {
+            layout.host.classList.add('team_general_content', 'slf-team4-championship-roster-side');
             if (!panel) {
                 panel = document.createElement('aside');
                 panel.id = PANEL_ID;
