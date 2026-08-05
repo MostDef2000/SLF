@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.4.267
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/quality/fm2026-ui-migration-v1.json
+- docs/quality/fm2026-ui-migration-audit.md
+- src/modules/transfer-analyzer/transfer-tm-profile-guard.js
+- tests/browser/test_fm2026_design_adapter.py
+
+Approved base commit:
+- a9e01d5e0bb95c35310d3da57a3d39cf4228b17a
+
+Approved commit:
+- 68785f9241d02b71223f34514d9d7b7ed4601647
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.266
 
 ### Automatic latest-only build

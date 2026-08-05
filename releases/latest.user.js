@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.266
+// @version      4.4.267
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.266',
-        scriptVersion: '4.4.266',
+        version: '4.4.267',
+        scriptVersion: '4.4.267',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.266',
+        scriptVersion: '4.4.267',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -17497,6 +17497,26 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         return String(value || '').trim().length > 0;
     }
 
+    function positivePlayerId(value) {
+        const id = String(value || '').trim();
+        return /^\d+$/.test(id) && Number(id) > 0 ? id : '';
+    }
+
+    function playerIdFromRelativeUrl(value) {
+        const raw = String(value || '').trim();
+        if (!/^\/player\.php\?/i.test(raw)) return '';
+        if (!/(?:^|[?&])action=view(?:&|$)/i.test(raw)) return '';
+        return positivePlayerId(raw.match(/(?:^|[?&])id=(\d+)(?:&|$)/i)?.[1] || '');
+    }
+
+    TransferMarketAnalyzer.buildPurchaseForecastPlayerUrl = function buildSafePurchaseForecastPlayerUrl(playerId, playerUrl) {
+        const requestedId = positivePlayerId(playerId);
+        const urlId = playerIdFromRelativeUrl(playerUrl);
+        const id = requestedId || urlId;
+        if (!id) return '';
+        return `/player.php?action=view&id=${id}`;
+    };
+
     TransferMarketAnalyzer.hasValidTmProfileForValue = function hasValidTmProfileForValue(profile) {
         if (!profile || typeof profile !== 'object') return false;
         if (!hasText(profile.tmUrl) && !hasText(profile.tmId)) return false;
@@ -20480,15 +20500,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.266',
-        scriptVersion: '4.4.266',
+        version: '4.4.267',
+        scriptVersion: '4.4.267',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.266',
+        scriptVersion: '4.4.267',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
