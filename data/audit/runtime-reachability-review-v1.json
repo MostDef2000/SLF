@@ -1,8 +1,8 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
   "reviewedAt": "2026-08-05",
-  "reviewCandidateCount": 18,
-  "scope": "Runtime review after introducing the FM 2026 design adapter. Active manual telemetry remains separated; the UI adapter preserves a classic-DOM fallback and one read-only storage migration key remains.",
+  "reviewCandidateCount": 19,
+  "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
     "ACTIVE_BUT_MISNAMED": "Active code stored under a historical or misleading namespace.",
@@ -138,6 +138,17 @@
       "evidence": [
         "Owns manual-state persistence, pending-event migration, deterministic effect keys, retry recovery and the active manual tactic watcher.",
         "The old storage key is read-only migration input; no legacy API or legacy write remains."
+      ]
+    },
+    {
+      "file": "src/modules/team-management/team4-leadership-upgrade-indicator.js",
+      "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
+      "classification": "MIXED_ACTIVE_LEGACY",
+      "evidence": [
+        "The read-only leadership scanner is active on the Team4 main page and renders badges from bounded player-page checks without invoking the upgrade action.",
+        "The appended FM 2026 presentation adapter executes as a load-order side effect after the other team-management modules and decorates team and training surfaces created synchronously or asynchronously.",
+        "The legacy marker is limited to the presentation adapter's classic-DOM fallback classification; it does not introduce a legacy API, storage write, parser, or telemetry path.",
+        "Candidate Chromium fixtures verify saved-form, loan-limit, championship, leadership and training-guide rendering inside the FM content root."
       ]
     },
     {

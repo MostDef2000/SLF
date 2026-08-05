@@ -78,3 +78,5 @@ A migrated module must:
 ## Integration sequencing
 
 Stage 1 was merged before Stage 2 was retargeted to `main`. The Stage 2 branch records this sequencing change with a new head commit so every source-sensitive workflow reruns against the current integration base before merge.
+
+Stage 2 was merged before Stage 3 was retargeted to `main`. The Stage 3 branch carries forward the prior sequencing evidence and records a new head commit so team and training fixtures rerun against the integrated transfer UI.

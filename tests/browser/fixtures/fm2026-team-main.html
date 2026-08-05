@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>SLF FM 2026 team main</title>
+  <style>
+    :root {
+      --fm-panel:#171b29; --fm-panel-2:#1c2132; --fm-panel-3:#222842;
+      --fm-border-2:#38415f; --fm-text:#eef1f8; --fm-muted:#8b93ab;
+      --fm-green:#2bd97c; --fm-green-2:#43f58c; --fm-radius:14px;
+      --fm-font:"Roboto","Segoe UI",Arial,sans-serif;
+    }
+    body{margin:0;background:#0d1018;color:var(--fm-text);font-family:var(--fm-font)}
+    .fm-topbar{height:42px;background:#111522;display:flex;justify-content:flex-end;align-items:center;padding:0 18px}.fm-deck{padding:10px 18px;background:#141827}.fm-card--manager{display:inline-block;padding:6px 10px;background:#1a2030;border-radius:10px}
+    .fm-stage{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;padding:16px}.fm-slots{min-height:620px;background:#121624;border-radius:12px;padding:10px}.content-ui__wrapper{min-width:0;background:#101522;border-radius:14px;padding:16px;overflow:hidden}
+    .tf3,.team_general_calendar,.team_general_content{background:#151a28;border:1px solid #303850;border-radius:12px;padding:10px;margin-bottom:12px}.team_general_content{display:block}.team_general_calendar{display:grid;grid-template-columns:1fr}
+    table{width:100%;border-collapse:collapse}th,td{padding:6px;border-bottom:1px solid #303850;text-align:left}a{color:#8dc0ff}.tpanel-a{display:inline-block;margin-bottom:8px;padding:5px 9px;background:#202842;border-radius:8px}
+  </style>
+</head>
+<body>
+  <header class="fm-topbar"><div class="fm-topbar__right">FM topbar</div></header>
+  <section class="fm-deck"><article class="fm-card--manager"><span>Менеджер</span><span class="fm-account__status">online</span></article></section>
+  <main class="fm-stage">
+    <aside class="fm-slots">Команды</aside>
+    <section class="content-ui__wrapper">
+      <div id="globalcontent" class="user-custom__team-23698">
+        <div class="tf3">
+          <a href="/roster.php?id=23698">Луч</a>
+          <span class="team-name">Луч</span>
+          <span class="champ-url"><a href="/champ.php?action=view&id=54164">Высшая лига</a></span>
+        </div>
+        <div class="team_general_calendar"><div>Календарь команды</div></div>
+        <div class="team_general_content">
+          <section id="general">
+            <div class="tpanel-a" data-tp="-1">Аренда</div>
+            <table id="generallist">
+              <thead><tr><th>Игрок</th><th>Поз.</th><th>Воз</th><th>Скилл</th></tr></thead>
+              <tbody>
+                <tr id="pltr-3001" class="view-team__player pl--1"><td><a href="/player.php?action=view&id=3001">Арендованный Старший</a></td><td>CD</td><td>24</td><td>152</td></tr>
+                <tr id="pltr-3002" class="view-team__player pl--1"><td><a href="/player.php?action=view&id=3002">Арендованный Молодой</a></td><td>CM</td><td>21</td><td>148</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
