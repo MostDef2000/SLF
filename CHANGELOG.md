@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.4.279
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/quality-integration.yml
+- src/modules/team-management/team4-form-saved-choice-notice.js
+- tests/browser/fixtures/fm2026-team-late-layout.html
+- tests/browser/test_team_upcoming_late_layout.py
+
+Approved base commit:
+- 7db419a8e968474a25f844c8a26940dcb83538dc
+
+Approved commit:
+- 0341bb662d96a97f33117836980da1761a9ac260
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.278
 
 ### Automatic latest-only build
