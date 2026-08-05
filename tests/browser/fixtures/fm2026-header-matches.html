@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>SLF FM 2026 header matches layout</title>
+  <style>
+    :root {
+      --fm-panel:#171b29; --fm-panel-2:#1c2132; --fm-panel-3:#222842;
+      --fm-border:#272d42; --fm-border-2:#38415f; --fm-text:#eef1f8;
+      --fm-muted:#8b93ab; --fm-green:#2bd97c; --fm-green-2:#43f58c;
+      --fm-shell-width:min(100% - 64px,1480px); --fm-font:"Roboto","Segoe UI",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;min-width:1200px;background:#0d0f18;color:var(--fm-text);font-family:var(--fm-font)}
+    .fm-deck{width:100%;padding:20px 0;background:#171b29}
+    .fm-deck__grid{width:var(--fm-shell-width);margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) clamp(400px,30vw,580px);align-items:start;gap:0}
+    .fm-card{position:relative;padding:0 18px;min-width:0}
+    .fm-card__title{height:24px;color:var(--fm-muted);font-size:10px;text-transform:uppercase}
+    .fm-card--controls{display:flex;flex-flow:row nowrap;align-items:stretch;gap:10px;min-width:0;padding-left:0}
+    .fm-card--controls>.fm-card{flex:0 1 auto;min-height:150px}
+    .fm-card--manager{min-width:290px;width:max-content}
+    .fm-card--matchday{min-width:300px;width:332px}
+    .fm-card--club{min-width:380px;width:max-content;overflow:visible}
+    .fm-card--matches{min-width:400px;max-width:780px;width:100%;display:flex;flex-direction:column;border-left:1px solid var(--fm-border)}
+    .fm-card--matches #field-f7{display:flex;flex:1 1 auto;min-height:0;flex-direction:column;position:relative}
+    .fm-account,.fm-md,.fm-club{height:100px;display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.03);border-radius:12px;padding:10px}
+    .fm-avatar,.fm-md__logo img,.fm-club__logo-col img{width:64px;height:64px;flex:0 0 auto;border-radius:50%;background:#32405c}
+    .fm-md__body,.fm-club__body{min-width:220px;white-space:nowrap}
+    .fm-md__body b,.fm-club__body b{display:block;font-size:16px;margin-bottom:6px}
+    .fm-matches__head{height:28px;display:flex;align-items:center;justify-content:space-between;color:var(--fm-muted)}
+    .fm-matches__scroll{flex:1 1 auto;min-height:0;max-height:110px;overflow-y:auto;scrollbar-width:thin}
+    .fm-fixtures{display:flex;flex-direction:column}
+    .fm-fixture{height:32px;display:grid;grid-template-columns:42px 70px minmax(0,1fr) 54px minmax(0,1fr);align-items:center;gap:6px;padding:3px 7px;border-radius:8px;white-space:nowrap}
+    .fm-fixture:nth-child(even){background:rgba(255,255,255,.06)}
+    .fm-fixture__team{overflow:hidden;text-overflow:ellipsis}
+    .fm-score{display:inline-block;text-align:center;padding:2px 6px;border-radius:6px;background:var(--fm-panel-3)}
+    #fm-games-expand{width:24px;height:24px}
+  </style>
+</head>
+<body>
+  <div class="fm-deck">
+    <div class="fm-deck__grid">
+      <div class="fm-card fm-card--controls">
+        <section class="fm-card fm-card--manager">
+          <div class="fm-card__title">Менеджер</div>
+          <div class="fm-card__mid"><div class="fm-account"><div class="fm-avatar"></div><div><b>MostDef</b><br>Активная подписка</div></div></div>
+        </section>
+        <section class="fm-card fm-card--matchday">
+          <div class="fm-card__title">Следующий матч</div>
+          <div class="fm-md"><div class="fm-md__logo"><img alt="Луч"></div><div class="fm-md__body"><b>Луч — Сокол Брозаны</b><span>завтра, 17:00</span></div></div>
+        </section>
+        <section class="fm-card fm-card--club">
+          <div class="fm-card__title">Клуб</div>
+          <div class="fm-club"><div class="fm-club__logo-col"><img alt="Клуб"></div><div class="fm-club__body"><b>Луч</b><span>Высшая лига · бюджет · сила</span></div></div>
+        </section>
+      </div>
+      <section class="fm-card fm-card--matches">
+        <div class="fm-matches__head"><span>Матчи ваших команд</span><button id="fm-games-expand" type="button">⌄</button></div>
+        <div id="field-f7">
+          <div class="fm-matches__scroll" style="--fm-matches-h:110px">
+            <div class="fm-fixtures">
+              <div class="fm-fixture fm-fixture--mine"><span>18:00</span><span>НП</span><span class="fm-fixture__team">Честерт</span><span class="fm-score">1-0</span><span class="fm-fixture__team">Шрусбери</span></div>
+              <div class="fm-fixture"><span>18:12</span><span>КТ</span><span class="fm-fixture__team">Боа</span><span class="fm-score">2-3</span><span class="fm-fixture__team">Комуникасьонес</span></div>
+              <div class="fm-fixture"><span>18:36</span><span>ОТ</span><span class="fm-fixture__team">Портмадог</span><span class="fm-score">1-3</span><span class="fm-fixture__team">Эйрбас</span></div>
+              <div class="fm-fixture"><span>19:48</span><span>КТ</span><span class="fm-fixture__team">Аль Шабаб</span><span class="fm-score">0-0</span><span class="fm-fixture__team">Норт Дистрикт</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>
