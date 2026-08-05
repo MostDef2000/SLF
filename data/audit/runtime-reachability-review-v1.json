@@ -1,8 +1,8 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
-  "reviewedAt": "2026-08-03",
-  "reviewCandidateCount": 17,
-  "scope": "Final review after removal of the automatic live parser. Active manual telemetry is separated; one read-only storage migration key remains.",
+  "reviewedAt": "2026-08-05",
+  "reviewCandidateCount": 18,
+  "scope": "Runtime review after introducing the FM 2026 design adapter. Active manual telemetry remains separated; the UI adapter preserves a classic-DOM fallback and one read-only storage migration key remains.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
     "ACTIVE_BUT_MISNAMED": "Active code stored under a historical or misleading namespace.",
@@ -26,6 +26,16 @@
       "evidence": [
         "The current match panel exposes finished-result submission and API status controls.",
         "No start/stop live parser control is mounted by addMatchParserPanel()."
+      ]
+    },
+    {
+      "file": "src/app/version-badge.js",
+      "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
+      "classification": "MIXED_ACTIVE_LEGACY",
+      "evidence": [
+        "The module executes as an app-level side effect immediately after ui-layer.js and installs the FM 2026 design adapter and runtime version badge.",
+        "The legacy marker identifies a deliberate fallback for pages that do not expose the FM 2026 shell; it does not represent an obsolete parser, storage, API, or telemetry path.",
+        "The exact candidate browser test verifies the FM 2026 mount root, component decoration, version-badge target, duplicate prevention, and clean runtime execution."
       ]
     },
     {
