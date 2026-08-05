@@ -124,6 +124,7 @@ def init_script() -> str:
   const store = new Map();
   window.__slfUnhandled = [];
   window.__renderScaleCalls = [];
+  window.__canvasReallocations = 0;
   window.__fieldSizerCalls = 0;
   window.unsafeWindow = window;
   window.addEventListener('error', event => window.__slfUnhandled.push(`error:${event.message || 'unknown'}`));
@@ -143,7 +144,17 @@ def init_script() -> str:
   window.confirm = () => true;
   window.prompt = () => null;
   window.game_2d = {
-    set_render_scale(value) { window.__renderScaleCalls.push(value); }
+    set_render_scale(value) {
+      window.__renderScaleCalls.push(value);
+      const canvas = document.getElementById('letsdance');
+      const width = Math.round(800 * value);
+      const height = Math.round(550 * value);
+      if (canvas && (canvas.width !== width || canvas.height !== height)) {
+        canvas.width = width;
+        canvas.height = height;
+        window.__canvasReallocations += 1;
+      }
+    }
   };
   window.game2dRefreshRenderScale = () => window.game_2d.set_render_scale(4);
   window.game2dSetFieldSize = () => {
@@ -169,7 +180,8 @@ def assert_classic_geometry(page):
           const rect = el.getBoundingClientRect();
           const center = el.closest('.g3-col--center').getBoundingClientRect();
           const style = getComputedStyle(el);
-          const canvasStyle = getComputedStyle(el.querySelector('#letsdance'));
+          const canvas = el.querySelector('#letsdance');
+          const canvasStyle = getComputedStyle(canvas);
           const timelineRect = document.querySelector('.g3-timeline').getBoundingClientRect();
           return {
             width: rect.width,
@@ -180,12 +192,17 @@ def assert_classic_geometry(page):
             shadow: style.boxShadow,
             marginBottom: style.marginBottom,
             background: style.backgroundImage,
+            contain: style.contain,
+            isolation: style.isolation,
             canvasWidth: canvasStyle.width,
             canvasHeight: canvasStyle.height,
+            canvasBitmapWidth: canvas.width,
+            canvasBitmapHeight: canvas.height,
             canvasTransform: canvasStyle.transform,
             timelineWidth: timelineRect.width,
             marker: el.dataset.slfClassicPerformance,
-            pitchMarker: el.dataset.slfClassicPitchForced
+            pitchMarker: el.dataset.slfClassicPitchForced,
+            rasterMarker: el.dataset.slfClassicRaster
           };
         }"""
     )
@@ -199,12 +216,18 @@ def assert_classic_geometry(page):
     assert "play_field6.png" in geometry["background"], geometry
     assert "custom-pitch.jpg" not in geometry["background"], geometry
     assert "second-custom-pitch.jpg" not in geometry["background"], geometry
+    contain_tokens = set(geometry["contain"].split())
+    assert geometry["contain"] == "content" or {"layout", "paint", "style"}.issubset(contain_tokens), geometry
+    assert geometry["isolation"] == "isolate", geometry
     assert geometry["canvasWidth"] == "800px", geometry
     assert geometry["canvasHeight"] == "550px", geometry
+    assert geometry["canvasBitmapWidth"] == 800, geometry
+    assert geometry["canvasBitmapHeight"] == 550, geometry
     assert geometry["canvasTransform"] == "none", geometry
     assert abs(geometry["timelineWidth"] - 800) < 0.5, geometry
     assert geometry["marker"] == "1", geometry
     assert geometry["pitchMarker"] == "1", geometry
+    assert geometry["rasterMarker"] == "1", geometry
 
 
 def main():
@@ -221,21 +244,33 @@ def main():
         page.wait_for_function("expected => window.SLF?.scriptVersion === expected", arg=VERSION)
         page.wait_for_selector("#slf-match-rendering-compatibility", state="attached")
         page.wait_for_function("() => document.documentElement.dataset.slfClassicMatchPerformance === '1'")
+        page.wait_for_function("() => document.documentElement.dataset.slfMatchRenderHooks === 'ready'")
+        page.wait_for_function("() => document.documentElement.dataset.slfMatchRenderScale === '1'")
         page.wait_for_function("() => window.game_2d?.__slfSmoothRenderScaleInstalled === true")
         page.wait_for_function("() => window.game2dSetFieldSize?.__slfClassicMatchPerformanceInstalled === true")
 
         assert_classic_geometry(page)
         assert page.locator("#fieldgrass").evaluate("el => el.classList.contains('user-custom__game-field-23698')")
         assert page.locator("#slf-match-rendering-compatibility").count() == 1
+        assert page.evaluate("window.__renderScaleCalls.slice()") == [1]
+        assert page.evaluate("window.__canvasReallocations") == 1
+
+        stable_calls = page.evaluate("window.__renderScaleCalls.length")
+        stable_reallocations = page.evaluate("window.__canvasReallocations")
+        page.wait_for_timeout(500)
+        assert page.evaluate("window.__renderScaleCalls.length") == stable_calls
+        assert page.evaluate("window.__canvasReallocations") == stable_reallocations
 
         page.evaluate("window.game2dSetFieldSize()")
         page.wait_for_timeout(150)
         assert page.evaluate("window.__fieldSizerCalls") >= 1
         assert_classic_geometry(page)
-        assert page.evaluate("window.__renderScaleCalls.at(-1)") == 1.5
+        assert page.evaluate("window.__renderScaleCalls.length") == stable_calls
+        assert page.evaluate("window.__canvasReallocations") == stable_reallocations
 
         page.evaluate("window.game_2d.set_render_scale(9)")
-        assert page.evaluate("window.__renderScaleCalls.at(-1)") == 1.5
+        assert page.evaluate("window.__renderScaleCalls.length") == stable_calls
+        assert page.evaluate("window.__canvasReallocations") == stable_reallocations
 
         page.locator("#fieldgrass").evaluate(
             "el => { el.classList.remove('user-custom__game-field-23698'); el.classList.add('user-custom__game-field-99999'); }"
@@ -246,13 +281,15 @@ def main():
         page.set_viewport_size({"width": 1600, "height": 1000})
         page.wait_for_timeout(150)
         assert_classic_geometry(page)
+        assert page.evaluate("window.__renderScaleCalls.length") == stable_calls
+        assert page.evaluate("window.__canvasReallocations") == stable_reallocations
 
         assert not page_errors, page_errors
         assert page.evaluate("window.__slfUnhandled.slice()") == []
         context.close()
         browser.close()
 
-    print("[match-rendering-compatibility] passed: classic_geometry=800x550 render_scale_cap=1.5 host_resize_resisted=true custom_pitch_overridden=true")
+    print("[match-rendering-compatibility] passed: classic_geometry=800x550 render_scale=1 bitmap=800x550 reallocations=1 duplicate_scale_calls=0")
 
 
 if __name__ == "__main__":

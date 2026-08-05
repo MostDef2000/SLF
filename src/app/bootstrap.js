@@ -11,7 +11,7 @@
 
     const FIELD_WIDTH = 800;
     const FIELD_HEIGHT = 550;
-    const MAX_RENDER_SCALE = 1.5;
+    const MAX_RENDER_SCALE = 1;
     const CLASSIC_PITCH_BACKGROUND = '#1d6f36 url("/images/gen4/play_field6.png") -1px 0 / 800px 550px no-repeat';
 
     const styleId = 'slf-match-rendering-compatibility';
@@ -33,6 +33,8 @@
                 box-shadow: none !important;
                 transition: none !important;
                 will-change: auto !important;
+                contain: layout paint style !important;
+                isolation: isolate !important;
             }
             html[data-slf-match-rendering-compatibility="1"] .g3 [id^="fieldgrass"] #letsdance {
                 width: 800px !important;
@@ -59,6 +61,7 @@
 
         field.dataset.slfClassicPerformance = '1';
         field.dataset.slfClassicPitchForced = '1';
+        field.dataset.slfClassicRaster = '1';
         field.style.setProperty('width', `${FIELD_WIDTH}px`, 'important');
         field.style.setProperty('height', `${FIELD_HEIGHT}px`, 'important');
         field.style.setProperty('background', CLASSIC_PITCH_BACKGROUND, 'important');
@@ -69,6 +72,8 @@
         field.style.setProperty('margin-bottom', '0px', 'important');
         field.style.setProperty('filter', 'none', 'important');
         field.style.setProperty('box-shadow', 'none', 'important');
+        field.style.setProperty('contain', 'layout paint style', 'important');
+        field.style.setProperty('isolation', 'isolate', 'important');
 
         const canvas = field.querySelector('#letsdance');
         if (canvas) {
@@ -96,10 +101,16 @@
 
         if (!engine.__slfSmoothRenderScaleInstalled) {
             const originalSetRenderScale = engine.set_render_scale.bind(engine);
+            let lastAppliedScale = null;
             engine.set_render_scale = value => {
                 const numeric = Number(value);
                 const normalized = Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
-                return originalSetRenderScale(Math.min(normalized, MAX_RENDER_SCALE));
+                const capped = Math.min(normalized, MAX_RENDER_SCALE);
+                if (lastAppliedScale !== null && Math.abs(lastAppliedScale - capped) < 0.02) return undefined;
+                const result = originalSetRenderScale(capped);
+                lastAppliedScale = capped;
+                root.dataset.slfMatchRenderScale = String(capped);
+                return result;
             };
             Object.defineProperty(engine, '__slfSmoothRenderScaleInstalled', {
                 value: true,
@@ -109,7 +120,7 @@
         }
 
         engine.set_render_scale(MAX_RENDER_SCALE);
-        return true;
+        return root.dataset.slfMatchRenderScale === String(MAX_RENDER_SCALE);
     };
 
     const patchFieldSizer = () => {
@@ -134,19 +145,21 @@
     };
 
     const enforce = () => {
-        applyClassicGeometry();
-        patchRenderScale();
-        patchFieldSizer();
+        const geometryReady = applyClassicGeometry();
+        const scaleReady = patchRenderScale();
+        const fieldSizerReady = patchFieldSizer();
+        const ready = geometryReady && scaleReady && fieldSizerReady;
+        if (ready) root.dataset.slfMatchRenderHooks = 'ready';
+        return ready;
     };
 
-    enforce();
     pageWindow.addEventListener('resize', enforce, { passive: true });
+    if (enforce()) return;
 
     let attempts = 0;
     const timer = setInterval(() => {
         attempts += 1;
-        enforce();
-        if (attempts >= 100 || !location.pathname.includes('/game.php')) clearInterval(timer);
+        if (enforce() || attempts >= 100 || !location.pathname.includes('/game.php')) clearInterval(timer);
     }, 100);
 })();
 
