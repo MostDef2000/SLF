@@ -255,6 +255,7 @@
     {
       "name": "success with failed verification",
       "expectedErrors": [
+        "success.observable_evidence_required",
         "success.verification_must_pass"
       ],
       "record": {
