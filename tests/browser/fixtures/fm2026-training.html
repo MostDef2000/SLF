@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>SLF FM 2026 training</title>
+  <style>
+    :root {
+      --fm-panel:#171b29; --fm-panel-2:#1c2132; --fm-panel-3:#222842;
+      --fm-border-2:#38415f; --fm-text:#eef1f8; --fm-muted:#8b93ab;
+      --fm-green:#2bd97c; --fm-green-2:#43f58c; --fm-radius:14px;
+      --fm-font:"Roboto","Segoe UI",Arial,sans-serif;
+    }
+    body{margin:0;background:#0d1018;color:var(--fm-text);font-family:var(--fm-font)}
+    .fm-topbar{height:42px;background:#111522}.fm-deck{padding:10px 18px;background:#141827}.fm-card--manager{display:inline-block;padding:6px 10px;background:#1a2030;border-radius:10px}
+    .fm-stage{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;padding:16px}.fm-slots{min-height:560px;background:#121624;border-radius:12px;padding:10px}.content-ui__wrapper{min-width:0;background:#101522;border-radius:14px;padding:16px;overflow:hidden}
+    .pad2{min-width:0;background:#151a28;border:1px solid #303850;border-radius:12px;padding:12px}table{width:100%;border-collapse:collapse}th,td{padding:6px;border-bottom:1px solid #303850;text-align:left}
+  </style>
+</head>
+<body>
+  <header class="fm-topbar"><div class="fm-topbar__right">FM topbar</div></header>
+  <section class="fm-deck"><article class="fm-card--manager"><span>Менеджер</span><span class="fm-account__status">online</span></article></section>
+  <main class="fm-stage">
+    <aside class="fm-slots">Команды</aside>
+    <section class="content-ui__wrapper">
+      <div class="pad2">
+        <section id="train">
+          <h1>Тренировки</h1>
+          <table>
+            <thead><tr><th>Выбор</th><th>Игрок</th><th>Позиция</th></tr></thead>
+            <tbody data-type="1"><tr><td><input type="checkbox" name="pl_arr[]" value="4001"></td><td>Тренируемый игрок</td><td>CM</td></tr></tbody>
+          </table>
+        </section>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
