@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.282
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/team-management/team4-form-saved-choice-notice.js
+- tests/browser/fixtures/fm2026-team-main.html
+
+Approved base commit:
+- c8f45d24f1434827d52485b34c9370247a25e9f8
+
+Approved commit:
+- 410909a216ee2e8c4f184da0b7ffc51563dc2269
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.281
 
 ### Automatic latest-only build

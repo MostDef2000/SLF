@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.281
+// @version      4.4.282
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.281',
-        scriptVersion: '4.4.281',
+        version: '4.4.282',
+        scriptVersion: '4.4.282',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.281',
+        scriptVersion: '4.4.282',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -20111,6 +20111,56 @@ const SLFTeam4FormSavedChoiceNotice = (() => {
 
 SLFTeam4FormSavedChoiceNotice.start();
 
+(function installTeam4FullLineupNames() {
+    const params = new URLSearchParams(location.search || '');
+    if (!/\/team4\.php$/i.test(location.pathname || '') || params.get('action')) return;
+
+    const root = document.documentElement;
+    if (!root || root.dataset.slfTeamLineupFullNames === '1') return;
+    root.dataset.slfTeamLineupFullNames = '1';
+
+    const styleId = 'slf-team4-lineup-full-names';
+    if (document.getElementById(styleId)) return;
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+        html[data-slf-team-lineup-full-names="1"] .team-lineup .fcpitch.lineup__roster .position__wrapper {
+            min-width: 0 !important;
+            overflow: visible !important;
+        }
+        html[data-slf-team-lineup-full-names="1"] .team-lineup .fcpitch.lineup__roster .__player {
+            flex: 1 1 0 !important;
+            width: auto !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            overflow: visible !important;
+        }
+        html[data-slf-team-lineup-full-names="1"] .team-lineup .fcpitch.lineup__roster .__player_sign {
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            overflow: visible !important;
+        }
+        html[data-slf-team-lineup-full-names="1"] .team-lineup .fcpitch.lineup__roster .__fio {
+            display: block !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+            word-break: normal !important;
+            hyphens: auto !important;
+            line-height: 1.05 !important;
+            text-align: center !important;
+        }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+})();
+
 (() => {
     const PANEL_ID = 'slf-team4-championship-table';
     const STYLE_ID = 'slf-team4-championship-table-style';
@@ -21051,15 +21101,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.281',
-        scriptVersion: '4.4.281',
+        version: '4.4.282',
+        scriptVersion: '4.4.282',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.281',
+        scriptVersion: '4.4.282',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
