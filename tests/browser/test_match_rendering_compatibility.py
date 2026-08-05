@@ -35,6 +35,7 @@ MATCH_HTML = """<!doctype html>
     }
     .g3 #letsdance{width:800px;height:550px;transform:translateZ(0);filter:contrast(1.02)}
     .user-custom__game-field-23698{background-image:url('/custom-pitch.jpg') !important}
+    .user-custom__game-field-99999{background-image:url('/second-custom-pitch.jpg') !important}
   </style>
 </head>
 <body id="body" class="dark-theme">
@@ -53,7 +54,7 @@ MATCH_HTML = """<!doctype html>
         <aside></aside>
         <section class="g3-col--center">
           <div class="g3-timeline"></div>
-          <div id="fieldgrass"><canvas id="letsdance" width="3200" height="2200"></canvas></div>
+          <div id="fieldgrass" class="user-custom__game-field-23698"><canvas id="letsdance" width="3200" height="2200"></canvas></div>
         </section>
         <aside></aside>
       </div></div>
@@ -83,8 +84,7 @@ MATCH_HTML = """<!doctype html>
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?", 1)[0]
-        if path == "/custom-pitch.jpg":
-            payload = b""
+        if path in {"/custom-pitch.jpg", "/second-custom-pitch.jpg"}:
             self.send_response(204)
             self.send_header("Content-Length", "0")
             self.end_headers()
@@ -179,11 +179,13 @@ def assert_classic_geometry(page):
             filter: style.filter,
             shadow: style.boxShadow,
             marginBottom: style.marginBottom,
+            background: style.backgroundImage,
             canvasWidth: canvasStyle.width,
             canvasHeight: canvasStyle.height,
             canvasTransform: canvasStyle.transform,
             timelineWidth: timelineRect.width,
-            marker: el.dataset.slfClassicPerformance
+            marker: el.dataset.slfClassicPerformance,
+            pitchMarker: el.dataset.slfClassicPitchForced
           };
         }"""
     )
@@ -194,11 +196,15 @@ def assert_classic_geometry(page):
     assert geometry["filter"] == "none", geometry
     assert geometry["shadow"] == "none", geometry
     assert geometry["marginBottom"] == "0px", geometry
+    assert "play_field6.png" in geometry["background"], geometry
+    assert "custom-pitch.jpg" not in geometry["background"], geometry
+    assert "second-custom-pitch.jpg" not in geometry["background"], geometry
     assert geometry["canvasWidth"] == "800px", geometry
     assert geometry["canvasHeight"] == "550px", geometry
     assert geometry["canvasTransform"] == "none", geometry
     assert abs(geometry["timelineWidth"] - 800) < 0.5, geometry
     assert geometry["marker"] == "1", geometry
+    assert geometry["pitchMarker"] == "1", geometry
 
 
 def main():
@@ -219,12 +225,8 @@ def main():
         page.wait_for_function("() => window.game2dSetFieldSize?.__slfClassicMatchPerformanceInstalled === true")
 
         assert_classic_geometry(page)
-
-        style = page.locator("#fieldgrass").evaluate(
-            "el => ({background:getComputedStyle(el).backgroundImage,styleCount:document.querySelectorAll('#slf-match-rendering-compatibility').length})"
-        )
-        assert "play_field6.png" in style["background"], style
-        assert style["styleCount"] == 1, style
+        assert page.locator("#fieldgrass").evaluate("el => el.classList.contains('user-custom__game-field-23698')")
+        assert page.locator("#slf-match-rendering-compatibility").count() == 1
 
         page.evaluate("window.game2dSetFieldSize()")
         page.wait_for_timeout(150)
@@ -235,10 +237,11 @@ def main():
         page.evaluate("window.game_2d.set_render_scale(9)")
         assert page.evaluate("window.__renderScaleCalls.at(-1)") == 1.5
 
-        page.locator("#fieldgrass").evaluate("el => el.classList.add('user-custom__game-field-23698')")
-        custom_background = page.locator("#fieldgrass").evaluate("el => getComputedStyle(el).backgroundImage")
-        assert "custom-pitch.jpg" in custom_background, custom_background
-        assert "play_field6.png" not in custom_background, custom_background
+        page.locator("#fieldgrass").evaluate(
+            "el => { el.classList.remove('user-custom__game-field-23698'); el.classList.add('user-custom__game-field-99999'); }"
+        )
+        page.wait_for_timeout(150)
+        assert_classic_geometry(page)
 
         page.set_viewport_size({"width": 1600, "height": 1000})
         page.wait_for_timeout(150)
@@ -249,7 +252,7 @@ def main():
         context.close()
         browser.close()
 
-    print("[match-rendering-compatibility] passed: classic_geometry=800x550 render_scale_cap=1.5 host_resize_resisted=true custom_pitch_preserved=true")
+    print("[match-rendering-compatibility] passed: classic_geometry=800x550 render_scale_cap=1.5 host_resize_resisted=true custom_pitch_overridden=true")
 
 
 if __name__ == "__main__":
