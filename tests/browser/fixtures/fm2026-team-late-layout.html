@@ -19,6 +19,8 @@
     #generallist { width: 100%; border-collapse: collapse; }
     #generallist th, #generallist td { padding: 7px 6px; border-bottom: 1px solid #38415f; white-space: nowrap; }
     #generallist .player-column-name { min-width: 200px; }
+    .team-games__near { width: 100%; margin-top: 12px; border-collapse: collapse; }
+    .team-games__near th, .team-games__near td { padding: 4px; border-bottom: 1px solid #38415f; }
     .team-body { display: grid; grid-template-columns: 280px minmax(0, 1fr) minmax(260px, 290px); gap: 14px; align-items: start; }
   </style>
 </head>
@@ -55,6 +57,16 @@
                 </table>
               </div>
             </div>
+            <table class="team-games__near">
+              <thead><tr><th>Дата</th><th>Соперник</th><th>П</th><th>Форма</th></tr></thead>
+              <tbody>
+                <tr><td>09.08.2026</td><td><a href="/roster.php?id=41001">Ньюпорт Каунти</a></td><td>4</td><td><span>W</span><span>L</span><span>W</span><span>D</span><span>W</span></td></tr>
+                <tr><td>12.08.2026</td><td><a href="/roster.php?id=41002">Линкольн Сити</a></td><td>21</td><td><span>L</span><span>L</span><span>D</span><span>D</span><span>D</span></td></tr>
+                <tr><td>17.08.2026</td><td><a href="/roster.php?id=41003">Гримсби</a></td><td>2</td><td><span>W</span><span>W</span><span>W</span><span>W</span><span>W</span></td></tr>
+                <tr><td>20.08.2026</td><td><a href="javascript:window.__slfPwned=5">&lt;svg onload=window.__slfPwned=5&gt;</a></td><td>12</td><td><span>W</span><span>W</span><span>L</span><span>D</span><span>W</span></td></tr>
+                <tr><td>23.08.2026</td><td><a href="/team.php?id=41005">Кроули Таун</a></td><td>22</td><td><span>D</span><span>L</span><span>L</span><span>L</span><span>D</span></td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -75,6 +87,9 @@
         }
 
         window.__lateLayoutBeforePromotion = panel.dataset.slfTeamLayout;
+        window.__legacyUpcomingPresentBeforeRemoval = !!legacy.querySelector('.team-games__near');
+        legacy.querySelector('.team-games__near')?.remove();
+        window.__legacyUpcomingRemoved = !document.querySelector('.team-games__near');
         const dash = host.querySelector(':scope > .team-dash');
         const general = legacy.querySelector(':scope > #general');
         const extras = [...legacy.children].filter(node => node !== general);
