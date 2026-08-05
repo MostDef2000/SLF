@@ -172,7 +172,7 @@ def assert_transfer_history(page: Page):
     page.wait_for_selector(".content-ui__wrapper #slf-transfer-analyzer-toolbar.slf-ui.slf-panel")
     page.wait_for_selector("#slf-transfer-status")
     page.wait_for_selector(".fm-account__status #slf-version-inline-badge")
-    page.wait_for_function("() => document.getElementById('slf-transfer-status')?.textContent.includes('History')")
+    page.wait_for_function("() => document.getElementById('slf-transfer-status')?.textContent.includes('История')")
 
     assert page.locator("#slf-transfer-analyzer-toolbar").count() == 1
     assert page.locator("#slf-transfer-candidate-panel").count() == 0
