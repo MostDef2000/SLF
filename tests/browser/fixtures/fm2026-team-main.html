@@ -23,7 +23,13 @@
     .team-lineup__field{height:300px;background:repeating-linear-gradient(0deg,#1f8240 0,#1f8240 14px,#1c7639 14px,#1c7639 28px);border-radius:10px}.team-lineup__power{display:inline-block;margin:10px;padding:3px 9px;background:var(--pc-accent);border-radius:999px;color:#07130c;font-weight:700}
     .player-blocks,.team-navigation__back{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px;border-bottom:1px solid var(--pc-border)}
     .tpanel-a,.tpanel-b,.sub-panel-a,.sub-panel-b{padding:6px 12px;border-radius:999px;background:var(--pc-soft)}.tpanel-a,.sub-panel-a{background:rgba(43,217,124,.18);color:var(--pc-accent)}
-    .roster-scroll{overflow:auto}#generallist{width:100%;border-collapse:collapse;background:var(--pc-card)}#generallist th,#generallist td{padding:9px;border-bottom:1px solid var(--pc-border);text-align:left}#generallist th{color:var(--pc-muted);background:var(--pc-soft)}
+    .roster-scroll{max-width:100%;overflow-x:auto}
+    #generallist{width:100%;border-collapse:collapse;background:var(--pc-card)}
+    #generallist th,#generallist td{padding:9px 8px;border-bottom:1px solid var(--pc-border);text-align:left;white-space:nowrap}
+    #generallist th{color:var(--pc-muted);background:var(--pc-soft)}
+    #generallist .player-column-name{min-width:200px}
+    #generallist .rstat{display:inline-block;min-width:34px;padding:3px 8px;text-align:center;border-radius:999px;background:rgba(43,217,124,.14)}
+    #generallist .center{text-align:center}
     a{color:#8dc0ff}.team-mini{width:100%;border-collapse:collapse}.team-mini td{padding:6px}
   </style>
 </head>
@@ -69,10 +75,18 @@
                     </div>
                     <div class="roster-scroll">
                       <table id="generallist">
-                        <thead><tr><th>#</th><th>Фамилия, имя</th><th>Воз</th><th>Скилл</th></tr></thead>
+                        <thead>
+                          <tr>
+                            <th>#</th><th>АМ</th><th></th><th class="player-column-name">Фамилия, имя</th><th></th><th>Форма</th><th>Физ</th><th>НУ</th><th>Мор</th><th>ИГП</th><th>Воз</th><th>Тал</th><th>ПТ</th><th>ОП</th><th>Скилл</th><th>Р-скилл</th>
+                          </tr>
+                        </thead>
                         <tbody>
-                          <tr id="pltr-3001" class="view-team__player pl--1"><td>30</td><td><a href="/player.php?action=view&id=3001">Арендованный Старший</a></td><td>24</td><td>152</td></tr>
-                          <tr id="pltr-3002" class="view-team__player pl--1"><td>72</td><td><a href="/player.php?action=view&id=3002">Арендованный Молодой</a></td><td>21</td><td>148</td></tr>
+                          <tr id="pltr-3001" class="view-team__player pl--1">
+                            <td>30</td><td>AM</td><td>CM</td><td class="player-column-name"><a href="/player.php?action=view&id=3001">Арендованный Старший с длинной фамилией</a></td><td>А</td><td><span class="rstat">6.62</span></td><td><span class="rstat">100</span></td><td><span class="rstat">0</span></td><td><span class="rstat">100</span></td><td><span class="rstat">100</span></td><td class="center">24</td><td class="center">3</td><td class="center">↗</td><td class="center">0</td><td class="center">152.4</td><td class="center">167.9</td>
+                          </tr>
+                          <tr id="pltr-3002" class="view-team__player pl--1">
+                            <td>72</td><td>LD</td><td>CD</td><td class="player-column-name"><a href="/player.php?action=view&id=3002">Арендованный Молодой</a></td><td>А</td><td><span class="rstat">6.47</span></td><td><span class="rstat">100</span></td><td><span class="rstat">0</span></td><td><span class="rstat">100</span></td><td><span class="rstat">100</span></td><td class="center">21</td><td class="center">2</td><td class="center">→</td><td class="center">0</td><td class="center">148.1</td><td class="center">151.3</td>
+                          </tr>
                         </tbody>
                       </table>
                     </div>
@@ -85,5 +99,48 @@
       </div>
     </section>
   </main>
+  <script>
+    (() => {
+      let attempts = 0;
+      function verifyRosterFit() {
+        attempts += 1;
+        const table = document.getElementById('generallist');
+        const wrapper = table?.closest('.roster-scroll');
+        if (!table || !wrapper || table.dataset.slfRosterFit !== '1' || wrapper.dataset.slfRosterFit !== '1') {
+          if (attempts < 50) return setTimeout(verifyRosterFit, 50);
+          throw new Error('SLF roster-fit adapter did not attach');
+        }
+        if (innerWidth < 1280) {
+          window.__slfRosterFitEvidence = { skipped: 'host desktop roster requires at least 1280px', viewport: innerWidth };
+          return;
+        }
+        const rows = [...table.tBodies[0].rows];
+        const tableRect = table.getBoundingClientRect();
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const evidence = {
+          headerColumns: table.tHead.rows[0].cells.length,
+          bodyColumns: rows.map(row => row.cells.length),
+          tableLayout: getComputedStyle(table).tableLayout,
+          overflowX: getComputedStyle(wrapper).overflowX,
+          scrollWidth: wrapper.scrollWidth,
+          clientWidth: wrapper.clientWidth,
+          tableRight: tableRect.right,
+          wrapperRight: wrapperRect.right,
+          nameMinWidth: getComputedStyle(table.querySelector('.player-column-name')).minWidth
+        };
+        window.__slfRosterFitEvidence = evidence;
+        const passed = evidence.headerColumns === 16
+          && evidence.bodyColumns.every(count => count === 16)
+          && evidence.tableLayout === 'fixed'
+          && evidence.overflowX === 'hidden'
+          && evidence.scrollWidth <= evidence.clientWidth + 1
+          && evidence.tableRight <= evidence.wrapperRight + 1
+          && evidence.nameMinWidth !== '200px';
+        if (!passed) throw new Error(`SLF roster-fit regression: ${JSON.stringify(evidence)}`);
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(verifyRosterFit, 0), { once:true });
+      else setTimeout(verifyRosterFit, 0);
+    })();
+  </script>
 </body>
 </html>
