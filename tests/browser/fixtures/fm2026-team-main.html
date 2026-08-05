@@ -2,45 +2,85 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <title>SLF FM 2026 team main</title>
+  <title>SLF FM 2026 real players page</title>
   <style>
     :root {
       --fm-panel:#171b29; --fm-panel-2:#1c2132; --fm-panel-3:#222842;
-      --fm-border-2:#38415f; --fm-text:#eef1f8; --fm-muted:#8b93ab;
+      --fm-border:#272d42; --fm-border-2:#38415f; --fm-text:#eef1f8; --fm-muted:#8b93ab;
       --fm-green:#2bd97c; --fm-green-2:#43f58c; --fm-radius:14px;
       --fm-font:"Roboto","Segoe UI",Arial,sans-serif;
+      --pc-card:#171b29; --pc-soft:#1c2132; --pc-border:#38415f; --pc-text:#eef1f8;
+      --pc-muted:#8b93ab; --pc-accent:#2bd97c; --pc-radius:14px;
     }
-    body{margin:0;background:#0d1018;color:var(--fm-text);font-family:var(--fm-font)}
-    .fm-topbar{height:42px;background:#111522;display:flex;justify-content:flex-end;align-items:center;padding:0 18px}.fm-deck{padding:10px 18px;background:#141827}.fm-card--manager{display:inline-block;padding:6px 10px;background:#1a2030;border-radius:10px}
-    .fm-stage{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;padding:16px}.fm-slots{min-height:620px;background:#121624;border-radius:12px;padding:10px}.content-ui__wrapper{min-width:0;background:#101522;border-radius:14px;padding:16px;overflow:hidden}
-    .tf3,.team_general_calendar,.team_general_content{background:#151a28;border:1px solid #303850;border-radius:12px;padding:10px;margin-bottom:12px}.team_general_content{display:block}.team_general_calendar{display:grid;grid-template-columns:1fr}
-    table{width:100%;border-collapse:collapse}th,td{padding:6px;border-bottom:1px solid #303850;text-align:left}a{color:#8dc0ff}.tpanel-a{display:inline-block;margin-bottom:8px;padding:5px 9px;background:#202842;border-radius:8px}
+    *{box-sizing:border-box}body{margin:0;background:#0d1018;color:var(--fm-text);font-family:var(--fm-font)}
+    .fm-topbar{height:42px;background:#111522;display:flex;justify-content:flex-end;align-items:center;padding:0 18px}
+    .fm-deck{padding:10px 18px;background:#141827}.fm-card--club{display:flex;gap:10px;align-items:center}.team-name{font-weight:700}.champ-url{margin-top:3px}
+    .fm-stage{display:grid;grid-template-columns:76px minmax(0,1fr);gap:16px;padding:16px}.fm-slots{min-height:620px;background:#121624;border-radius:12px;padding:10px}
+    .content-ui__wrapper{min-width:0;background:#101522;border-radius:14px;padding:16px;overflow:hidden}
+    .team{color:var(--pc-text)}.team-head{margin-bottom:14px}.team-head__links{display:flex;gap:8px;flex-wrap:wrap}.team-head__links a{color:var(--fm-muted)}
+    .team-body{display:grid;gap:16px;align-items:start;grid-template-columns:366px minmax(0,1fr)}.team-dash{display:grid;gap:14px;align-content:start}.team-content{min-width:0}
+    .pcard,.roster-card{background:var(--pc-card);border:1px solid var(--pc-border);border-radius:var(--pc-radius);overflow:hidden}.pcard{padding:12px}.pcard__head,.pcard__head2{font-weight:700;margin-bottom:8px}
+    .team-lineup__field{height:300px;background:repeating-linear-gradient(0deg,#1f8240 0,#1f8240 14px,#1c7639 14px,#1c7639 28px);border-radius:10px}.team-lineup__power{display:inline-block;margin:10px;padding:3px 9px;background:var(--pc-accent);border-radius:999px;color:#07130c;font-weight:700}
+    .player-blocks,.team-navigation__back{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px;border-bottom:1px solid var(--pc-border)}
+    .tpanel-a,.tpanel-b,.sub-panel-a,.sub-panel-b{padding:6px 12px;border-radius:999px;background:var(--pc-soft)}.tpanel-a,.sub-panel-a{background:rgba(43,217,124,.18);color:var(--pc-accent)}
+    .roster-scroll{overflow:auto}#generallist{width:100%;border-collapse:collapse;background:var(--pc-card)}#generallist th,#generallist td{padding:9px;border-bottom:1px solid var(--pc-border);text-align:left}#generallist th{color:var(--pc-muted);background:var(--pc-soft)}
+    a{color:#8dc0ff}.team-mini{width:100%;border-collapse:collapse}.team-mini td{padding:6px}
   </style>
 </head>
 <body>
   <header class="fm-topbar"><div class="fm-topbar__right">FM topbar</div></header>
-  <section class="fm-deck"><article class="fm-card--manager"><span>Менеджер</span><span class="fm-account__status">online</span></article></section>
+  <section class="fm-deck">
+    <article class="fm-card fm-card--club tf3">
+      <a href="/roster.php?id=23698" class="team-url__a">Клуб</a>
+      <div><div class="team-name"><a href="/roster.php?id=23698">Луч</a></div><div class="champ-url"><a href="/champ.php?action=view&id=54164">Высшая лига</a></div></div>
+    </article>
+  </section>
   <main class="fm-stage">
     <aside class="fm-slots">Команды</aside>
     <section class="content-ui__wrapper">
       <div id="globalcontent" class="user-custom__team-23698">
-        <div class="tf3">
-          <a href="/roster.php?id=23698">Луч</a>
-          <span class="team-name">Луч</span>
-          <span class="champ-url"><a href="/champ.php?action=view&id=54164">Высшая лига</a></span>
-        </div>
-        <div class="team_general_calendar"><div>Календарь команды</div></div>
-        <div class="team_general_content">
-          <section id="general">
-            <div class="tpanel-a" data-tp="-1">Аренда</div>
-            <table id="generallist">
-              <thead><tr><th>Игрок</th><th>Поз.</th><th>Воз</th><th>Скилл</th></tr></thead>
-              <tbody>
-                <tr id="pltr-3001" class="view-team__player pl--1"><td><a href="/player.php?action=view&id=3001">Арендованный Старший</a></td><td>CD</td><td>24</td><td>152</td></tr>
-                <tr id="pltr-3002" class="view-team__player pl--1"><td><a href="/player.php?action=view&id=3002">Арендованный Молодой</a></td><td>CM</td><td>21</td><td>148</td></tr>
-              </tbody>
-            </table>
-          </section>
+        <div class="team">
+          <div class="team-head">
+            <div class="team-head__links"><a href="/team4.php">Игроки</a><a href="/team4.php?action=tactic">Тактика</a><a href="/champ.php?action=view&id=54164">Чемпионат</a></div>
+          </div>
+          <div class="team-body">
+            <div class="team-dash">
+              <div class="pcard team-lineup" data-school="19">
+                <div class="pcard__head">Стартовый состав на следующий матч</div>
+                <div class="team-lineup__field"><span class="team-lineup__power">Сила 1708</span></div>
+              </div>
+              <div class="pcard"><div class="pcard__head2">Лазарет клуба</div><table class="team-mini"><tr><td>Все здоровы</td></tr></table></div>
+              <div class="pcard"><div class="pcard__head2">Дисквалифицированные игроки</div><table class="team-mini"><tr><td>Нет дисквалификаций</td></tr></table></div>
+            </div>
+            <div class="team-content">
+              <div id="general">
+                <form method="post">
+                  <div class="roster-card">
+                    <div class="player-blocks">
+                      <div class="t_name"><a href="/roster.php?id=23698">Луч</a></div>
+                      <div class="tpanel-b" data-tp="0">Основная команда <span class="tpanel__count">19</span></div>
+                      <div class="tpanel-b" data-tp="1">Резерв <span class="tpanel__count">15</span></div>
+                      <div class="tpanel-b" data-tp="-3">ДЮСШ <span class="tpanel__count">15</span></div>
+                      <div class="tpanel-a" data-tp="-1">Аренды <span class="tpanel__count">2</span></div>
+                      <div class="tpanel-b" data-tp="-2">Сборная <span class="tpanel__count">0</span></div>
+                    </div>
+                    <div class="team-navigation__back">
+                      <div class="sub-panel-a">основные показатели</div><div class="sub-panel-b">финансовые показатели</div><div class="sub-panel-b">игроки в реале</div><div class="sub-panel-b">таблица скиллов</div>
+                    </div>
+                    <div class="roster-scroll">
+                      <table id="generallist">
+                        <thead><tr><th>#</th><th>Фамилия, имя</th><th>Воз</th><th>Скилл</th></tr></thead>
+                        <tbody>
+                          <tr id="pltr-3001" class="view-team__player pl--1"><td>30</td><td><a href="/player.php?action=view&id=3001">Арендованный Старший</a></td><td>24</td><td>152</td></tr>
+                          <tr id="pltr-3002" class="view-team__player pl--1"><td>72</td><td><a href="/player.php?action=view&id=3002">Арендованный Молодой</a></td><td>21</td><td>148</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
