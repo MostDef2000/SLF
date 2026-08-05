@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.269
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/transfer-analyzer/transfer-history-visible-analysis-cleanup.js
+- tests/browser/fixtures/fm2026-transfer-market.html
+
+Approved base commit:
+- 7213d1bc682b802471b48b91f829871bd4ad7952
+
+Approved commit:
+- e0137c54a8bf26758f9f5bffbf4608c763351800
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.268
 
 ### Automatic latest-only build
