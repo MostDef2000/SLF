@@ -1,5 +1,31 @@
 # Changelog
 
+## 4.4.266
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/runtime-reachability-review-v1.json
+- docs/quality/fm2026-ui-migration.md
+- src/modules/team-management/team4-leadership-upgrade-indicator.js
+- tests/browser/fixtures/fm2026-team-main.html
+- tests/browser/fixtures/fm2026-training.html
+- tests/browser/test_fm2026_design_adapter.py
+
+Approved base commit:
+- 630ddaac8149698de9a7c357610fec1d008b6d71
+
+Approved commit:
+- 1bb932a99cf0eec283875ccee895b7b4b4ea83d7
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.265
 
 ### Automatic latest-only build
