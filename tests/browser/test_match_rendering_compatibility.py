@@ -248,6 +248,9 @@ def main():
         page.wait_for_function("() => document.documentElement.dataset.slfMatchRenderScale === '1'")
         page.wait_for_function("() => window.game_2d?.__slfSmoothRenderScaleInstalled === true")
         page.wait_for_function("() => window.game2dSetFieldSize?.__slfClassicMatchPerformanceInstalled === true")
+        page.wait_for_function("() => window.__slf_match_ui_observer_state === 'ready'")
+        page.wait_for_function("() => window.__slf_ui_observer_target === 'match-content'")
+        page.wait_for_selector("#slf-match-parser-panel", state="attached")
 
         assert_classic_geometry(page)
         assert page.locator("#fieldgrass").evaluate("el => el.classList.contains('user-custom__game-field-23698')")
@@ -257,7 +260,31 @@ def main():
 
         stable_calls = page.evaluate("window.__renderScaleCalls.length")
         stable_reallocations = page.evaluate("window.__canvasReallocations")
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(900)
+        stable_observer_runs = page.evaluate("Number(window.__slf_match_ui_observer_runs || 0)")
+        assert stable_observer_runs >= 1
+
+        page.locator("#fieldgrass").evaluate(
+            """field => {
+              for (let index = 0; index < 80; index += 1) {
+                const marker = document.createElement('span');
+                marker.className = 'host-frame-marker';
+                field.appendChild(marker);
+                marker.remove();
+              }
+            }"""
+        )
+        page.wait_for_timeout(650)
+        assert page.evaluate("Number(window.__slf_match_ui_observer_runs || 0)") == stable_observer_runs
+
+        page.locator("#slf-match-parser-panel").evaluate("panel => panel.remove()")
+        page.wait_for_selector("#slf-match-parser-panel", state="attached")
+        page.wait_for_timeout(900)
+        remount_runs = page.evaluate("Number(window.__slf_match_ui_observer_runs || 0)")
+        assert remount_runs > stable_observer_runs
+        page.wait_for_timeout(650)
+        assert page.evaluate("Number(window.__slf_match_ui_observer_runs || 0)") == remount_runs
+
         assert page.evaluate("window.__renderScaleCalls.length") == stable_calls
         assert page.evaluate("window.__canvasReallocations") == stable_reallocations
 
@@ -289,7 +316,7 @@ def main():
         context.close()
         browser.close()
 
-    print("[match-rendering-compatibility] passed: classic_geometry=800x550 render_scale=1 bitmap=800x550 reallocations=1 duplicate_scale_calls=0")
+    print("[match-rendering-compatibility] passed: classic_geometry=800x550 render_scale=1 bitmap=800x550 reallocations=1 duplicate_scale_calls=0 filtered_match_observer=true")
 
 
 if __name__ == "__main__":
