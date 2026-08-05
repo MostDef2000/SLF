@@ -1,7 +1,7 @@
 // 15. App Bootstrap
 // ============================================================
 
-function installMatchRenderingCompatibility() {
+(function installMatchRenderingCompatibility() {
     if (!location.pathname.includes('/game.php')) return;
 
     const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -61,7 +61,7 @@ function installMatchRenderingCompatibility() {
             clearInterval(timer);
         }
     }, 100);
-}
+})();
 
 function applyTacticsDropdownUiPolicy() {
     if (typeof UI === 'undefined' || !UI?.addDropdown || UI.__flatSortedTacticDropdownApplied) return;
@@ -176,8 +176,6 @@ const App = {
 },
 
     start() {
-        installMatchRenderingCompatibility();
-
         // Важно: трансферный анализатор живёт отдельно от общего UI.
         // В 4.4.4 при удалении Team4 Analyzer этот вызов был случайно потерян,
         // поэтому панель на transfers.php не монтировалась.
