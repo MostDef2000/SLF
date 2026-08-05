@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>FM 2026 Team4 tactic page</title>
+  <style>
+    :root {
+      --fm-panel:#171b29; --fm-panel-2:#1c2132; --fm-panel-3:#222842;
+      --fm-border:#272d42; --fm-border-2:#38415f; --fm-text:#eef1f8; --fm-muted:#8b93ab;
+      --fm-green:#2bd97c; --fm-green-2:#43f58c; --fm-radius:14px;
+      --fm-font:"Roboto","Segoe UI",Arial,sans-serif;
+      --pc-card:#171b29; --pc-soft:#1c2132; --pc-border:#38415f; --pc-text:#eef1f8;
+      --pc-muted:#8b93ab; --pc-accent:#2bd97c; --pc-radius:14px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;min-width:1200px;background:#0d1018;color:var(--fm-text);font-family:var(--fm-font)}
+    .fm-topbar{height:42px;background:#111522;display:flex;justify-content:flex-end;align-items:center;padding:0 18px}
+    .fm-stage{width:min(100% - 48px,1480px);margin:24px auto}.content-ui__wrapper{min-width:0;background:#101522;border-radius:14px;padding:18px;overflow:hidden}
+    .team{color:var(--pc-text)}
+    .team-head{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 18px;background:var(--pc-card);border:1px solid var(--pc-border);border-radius:var(--pc-radius)}
+    .team-head__logo{width:56px;height:56px;flex:0 0 auto;border-radius:12px;background:var(--pc-soft);border:1px solid var(--pc-border)}
+    .team-head__id{flex:0 0 150px;min-width:0}.team-head__name{font-size:21px;white-space:nowrap}
+    .team-head__matches{display:flex;align-items:stretch;gap:10px;margin-left:auto;flex:0 0 340px}
+    .team-match{flex:1 1 0;min-width:0;padding:8px 12px;background:var(--pc-soft);border:1px solid var(--pc-border);border-radius:12px;text-align:center}
+    .team-match__label{font-size:9px;text-transform:uppercase;color:var(--pc-muted)}.team-match__team{margin:3px 0;font-weight:700}.team-match__score{color:var(--pc-accent);font-size:16px}
+    .team-head__links{display:flex;gap:5px;margin:10px 0;padding:8px;background:var(--pc-soft);border:1px solid var(--pc-border);border-radius:var(--pc-radius)}
+    .team-head__links a{padding:6px 13px;border-radius:999px;color:#aeb6cf;text-decoration:none}.team-head__links a.is-active{background:var(--pc-accent);color:#07130c}
+    .team-body{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}.team-content{min-width:0}
+    form{padding:14px;background:var(--pc-card);border:1px solid var(--pc-border);border-radius:var(--pc-radius)}
+    .h2{font-size:17px;margin-bottom:12px}.ui-tactic__wrap{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .ui-tactic__block{padding:12px;background:var(--pc-soft);border:1px solid var(--pc-border);border-radius:12px}.ui-tactic__caption{margin-bottom:8px;font-weight:700}
+    .control-grid{display:grid;gap:5px}.control-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.control-row>span{width:90px;color:var(--pc-muted)}
+    label{display:inline-flex;align-items:center;gap:2px;padding:3px 5px;background:var(--fm-panel-3);border-radius:5px}
+  </style>
+</head>
+<body>
+  <header class="fm-topbar"><div class="fm-topbar__right">FM topbar</div></header>
+  <main class="fm-stage">
+    <section class="content-ui__wrapper">
+      <div id="globalcontent" class="user-custom__team-19703">
+        <div class="team">
+          <div class="team-head" data-school="19">
+            <div class="team-head__logo" aria-label="Логотип клуба"></div>
+            <div class="team-head__id"><div class="team-head__name">Эйрбас</div></div>
+            <div class="team-head__matches">
+              <div class="team-match"><div class="team-match__label">последний матч</div><div class="team-match__team">Портмадог</div><div class="team-match__score">3:1</div></div>
+              <div class="team-match"><div class="team-match__label">следующий матч</div><div class="team-match__team">Александрия</div><div>Завтра 03:24</div></div>
+            </div>
+          </div>
+          <div class="team-head__links">
+            <a href="/team4.php">Игроки</a><a href="/team4.php?action=lineupvip">Состав</a><a class="is-active" href="/team4.php?action=tactic">Тактика</a><a href="/team4.php?action=personality">Роли</a>
+          </div>
+          <div class="team-body team-body--full">
+            <div class="team-content">
+              <form method="post" id="team-tactic-form">
+                <div class="h2">Тактика на матч</div>
+                <div class="ui-tactic__wrap">
+                  <section class="ui-tactic__block"><div class="ui-tactic__caption">Оборона</div><div class="control-grid" id="defence-controls"></div></section>
+                  <section class="ui-tactic__block"><div class="ui-tactic__caption">Построение атаки</div><div class="control-grid" id="build-controls"></div></section>
+                  <section class="ui-tactic__block"><div class="ui-tactic__caption">Атака</div><div class="control-grid" id="attack-controls"></div></section>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const groups = {
+        'defence-controls':['def_line','press_line','def_width','press_intense'],
+        'build-controls':['build_type','build_temp','build_long','build_fast'],
+        'attack-controls':['style','pass_risk','dribble','cross','corner','shot']
+      };
+      Object.entries(groups).forEach(([targetId,names]) => {
+        const target = document.getElementById(targetId);
+        names.forEach(name => {
+          const row = document.createElement('div');
+          row.className = 'control-row';
+          const caption = document.createElement('span');
+          caption.textContent = name;
+          row.appendChild(caption);
+          for (let value=1; value<=5; value+=1) {
+            const label = document.createElement('label');
+            const input = document.createElement('input');
+            input.type = 'radio'; input.name = name; input.value = String(value); input.checked = value === 2;
+            label.append(input, document.createTextNode(String(value)));
+            row.appendChild(label);
+          }
+          target.appendChild(row);
+        });
+      });
+      const priorityRow = document.createElement('div');
+      priorityRow.className = 'control-row';
+      const caption = document.createElement('span'); caption.textContent = 'priority'; priorityRow.appendChild(caption);
+      [['priority_l','left'],['priority_c','center'],['priority_r','right']].forEach(([name,text]) => {
+        const label = document.createElement('label');
+        const input = document.createElement('input'); input.type='checkbox'; input.name=name;
+        label.append(input,document.createTextNode(text)); priorityRow.appendChild(label);
+      });
+      document.getElementById('attack-controls').appendChild(priorityRow);
+    })();
+  </script>
+</body>
+</html>
