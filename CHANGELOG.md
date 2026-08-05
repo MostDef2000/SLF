@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.275
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/team-management/team4-leadership-upgrade-indicator.js
+- tests/browser/fixtures/fm2026-team-main.html
+
+Approved base commit:
+- 374600c30d54c5c96191c4648c3e734a8bf36ffe
+
+Approved commit:
+- 9cc50b75e142696d31d103f3f3c2101ef076c78c
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.274
 
 ### Automatic latest-only build

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.274
+// @version      4.4.275
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.274',
-        scriptVersion: '4.4.274',
+        version: '4.4.275',
+        scriptVersion: '4.4.275',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.274',
+        scriptVersion: '4.4.275',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -20562,6 +20562,22 @@ html[data-slf-design="fm2026"] #slf-team4-championship-table th,html[data-slf-de
 html[data-slf-design="fm2026"] #slf-team4-championship-table .slf-champ-title a{color:var(--slf-accent2)!important}
 html[data-slf-design="fm2026"] #slf-team4-championship-table tr.slf-active-team{background:rgba(43,217,124,.14)!important;color:var(--slf-text)!important}
 html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin-left:6px!important;padding:2px 6px!important;color:#07130c!important;background:linear-gradient(180deg,var(--slf-accent2),#1fb863)!important;border:0!important;border-radius:999px!important;font:700 9px var(--slf-font)!important;text-decoration:none!important}
+html[data-slf-design="fm2026"] .team .roster-scroll{overflow-x:hidden!important;max-width:100%!important}
+html[data-slf-design="fm2026"] .team #generallist{width:100%!important;min-width:0!important;max-width:100%!important;table-layout:fixed!important}
+html[data-slf-design="fm2026"] .team #generallist th,html[data-slf-design="fm2026"] .team #generallist td{box-sizing:border-box!important;overflow:hidden!important;text-overflow:ellipsis!important}
+html[data-slf-design="fm2026"] .team #generallist thead th{padding-left:4px!important;padding-right:4px!important}
+html[data-slf-design="fm2026"] .team #generallist tbody td{padding-left:4px!important;padding-right:4px!important;font-size:12px!important}
+html[data-slf-design="fm2026"] .team #generallist .player-column-name{min-width:0!important;width:auto!important}
+html[data-slf-design="fm2026"] .team #generallist .rstat{display:block!important;width:100%!important;min-width:0!important;box-sizing:border-box!important;padding-left:2px!important;padding-right:2px!important}
+html[data-slf-design="fm2026"] .team #generallist th:nth-child(1),html[data-slf-design="fm2026"] .team #generallist td:nth-child(1){width:26px!important}
+html[data-slf-design="fm2026"] .team #generallist th:nth-child(2),html[data-slf-design="fm2026"] .team #generallist td:nth-child(2),html[data-slf-design="fm2026"] .team #generallist th:nth-child(3),html[data-slf-design="fm2026"] .team #generallist td:nth-child(3){width:34px!important}
+html[data-slf-design="fm2026"] .team #generallist th:nth-child(5),html[data-slf-design="fm2026"] .team #generallist td:nth-child(5){width:24px!important}
+html[data-slf-design="fm2026"] .team #generallist th:nth-child(6),html[data-slf-design="fm2026"] .team #generallist td:nth-child(6){width:52px!important}
+html[data-slf-design="fm2026"] .team #generallist th:nth-child(7),html[data-slf-design="fm2026"] .team #generallist td:nth-child(7),html[data-slf-design="fm2026"] .team #generallist th:nth-child(8),html[data-slf-design="fm2026"] .team #generallist td:nth-child(8),html[data-slf-design="fm2026"] .team #generallist th:nth-child(9),html[data-slf-design="fm2026"] .team #generallist td:nth-child(9),html[data-slf-design="fm2026"] .team #generallist th:nth-child(10),html[data-slf-design="fm2026"] .team #generallist td:nth-child(10){width:54px!important}
+html[data-slf-design="fm2026"] .team #generallist th:nth-child(11),html[data-slf-design="fm2026"] .team #generallist td:nth-child(11){width:36px!important}
+html[data-slf-design="fm2026"] .team #generallist th:nth-child(12),html[data-slf-design="fm2026"] .team #generallist td:nth-child(12),html[data-slf-design="fm2026"] .team #generallist th:nth-child(13),html[data-slf-design="fm2026"] .team #generallist td:nth-child(13),html[data-slf-design="fm2026"] .team #generallist th:nth-child(14),html[data-slf-design="fm2026"] .team #generallist td:nth-child(14){width:34px!important}
+html[data-slf-design="fm2026"] .team #generallist th:nth-child(15),html[data-slf-design="fm2026"] .team #generallist td:nth-child(15){width:54px!important}
+html[data-slf-design="fm2026"] .team #generallist th:nth-child(16),html[data-slf-design="fm2026"] .team #generallist td:nth-child(16){width:60px!important}
 @media (max-width:1180px){html[data-slf-design="fm2026"] #slf-training-guide-layout,html[data-slf-design="fm2026"] .team_general_content.slf-team4-championship-layout{grid-template-columns:minmax(0,1fr)!important}html[data-slf-design="fm2026"] #slf-training-guide-panel .slf-source{grid-template-columns:minmax(70px,1fr) minmax(84px,1fr) repeat(2,minmax(72px,.8fr))!important}html[data-slf-design="fm2026"] #slf-training-guide-panel .slf-source-state{grid-column:1/-1!important}}
         `;
         (document.head || document.documentElement).appendChild(style);
@@ -20579,6 +20595,13 @@ html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin
         decorate(document.getElementById('slf-team4-form-saved-choice-notice'), true, 'fm2026-team-content');
         decorate(document.getElementById('slf-loan-limit-inline'), true, 'fm2026-team-content');
         decorate(document.getElementById('slf-team4-championship-table'), true, 'fm2026-team-content');
+
+        const roster = document.querySelector('.team #generallist');
+        if (roster) {
+            roster.dataset.slfRosterFit = '1';
+            const scroll = roster.closest('.roster-scroll');
+            if (scroll) scroll.dataset.slfRosterFit = '1';
+        }
 
         document.querySelectorAll('.slf-team4-leadership-upgrade-badge').forEach(badge => {
             badge.classList.add('slf-ui');
@@ -20915,15 +20938,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.274',
-        scriptVersion: '4.4.274',
+        version: '4.4.275',
+        scriptVersion: '4.4.275',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.274',
+        scriptVersion: '4.4.275',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
