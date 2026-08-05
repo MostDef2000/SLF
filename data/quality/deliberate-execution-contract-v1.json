@@ -1,0 +1,214 @@
+{
+  "schema": "slf_deliberate_execution_contract_v1",
+  "contractVersion": 1,
+  "status": "active",
+  "owner": "MostDef2000",
+  "purpose": "Require proportionate task decomposition, observable evidence, independent verification passes, explicit stop conditions, and residual-risk reporting without requesting or storing hidden chain-of-thought.",
+  "principles": [
+    "Decompose before changing state.",
+    "Separate facts, assumptions, and inferences.",
+    "Prefer reversible mutations before irreversible ones.",
+    "Verify in a separate pass before claiming success.",
+    "Stop when a required gate fails or evidence is unavailable.",
+    "Do not request, store, or publish hidden chain-of-thought or private scratchpad content."
+  ],
+  "privacyBoundary": {
+    "privateDeliberation": "required_for_structured_and_critical_tasks",
+    "disclosure": "prohibited",
+    "storage": "prohibited",
+    "reportableArtifacts": [
+      "classification",
+      "plan",
+      "material_assumptions",
+      "acceptance_criteria",
+      "observable_evidence",
+      "verification_results",
+      "decision_summary",
+      "residual_risks"
+    ],
+    "forbiddenRecordKeys": [
+      "chainOfThought",
+      "chain_of_thought",
+      "privateReasoning",
+      "private_reasoning",
+      "hiddenReasoning",
+      "hidden_reasoning",
+      "scratchpad"
+    ]
+  },
+  "classification": {
+    "defaultMode": "structured",
+    "modes": {
+      "direct": {
+        "useFor": [
+          "read-only lookup with an unambiguous answer",
+          "formatting or mechanical transformation",
+          "non-risky documentation correction"
+        ],
+        "requiredArtifacts": [
+          "task",
+          "mode",
+          "classificationReason",
+          "acceptanceCriteria",
+          "outcome",
+          "decisionSummary"
+        ]
+      },
+      "structured": {
+        "useFor": [
+          "normal source-code change",
+          "refactor",
+          "defect analysis",
+          "user-interface change",
+          "test or workflow change without a critical boundary"
+        ],
+        "requiredArtifacts": [
+          "task",
+          "mode",
+          "classificationReason",
+          "plan",
+          "assumptions",
+          "acceptanceCriteria",
+          "evidence",
+          "verification",
+          "outcome",
+          "decisionSummary",
+          "residualRisks"
+        ]
+      },
+      "critical": {
+        "useFor": [
+          "authentication or authorization",
+          "security control",
+          "persisted-data or schema migration",
+          "release generation or provenance",
+          "deployment or rollback",
+          "destructive or production mutation"
+        ],
+        "requiredArtifacts": [
+          "task",
+          "mode",
+          "classificationReason",
+          "plan",
+          "assumptions",
+          "alternatives",
+          "acceptanceCriteria",
+          "evidence",
+          "verification",
+          "adversarialVerification",
+          "stopConditions",
+          "rollback",
+          "approval",
+          "outcome",
+          "decisionSummary",
+          "residualRisks"
+        ]
+      }
+    },
+    "escalationRules": [
+      "Use critical mode whenever production, credentials, authorization, storage, migration, release, deployment, or destructive state is affected.",
+      "Escalate from direct to structured when an assumption, branch, external dependency, or mutation is introduced.",
+      "Escalate from structured to critical when failure can cause data loss, security exposure, unavailable rollback, or incorrect production state."
+    ]
+  },
+  "executionRules": {
+    "decomposeBeforeMutation": true,
+    "defineAcceptanceCriteriaBeforeMutation": true,
+    "recordMaterialAssumptions": true,
+    "separateFactFromInference": true,
+    "preferReversibleSteps": true,
+    "verifyBeforeClaim": true,
+    "separateGenerationAndVerificationPasses": true,
+    "stopOnFailedGate": true,
+    "stopOnMissingEvidence": true,
+    "productionDeploymentRequiresExplicitApproval": true,
+    "mergeReleaseAndDeploymentAreSeparateDecisions": true
+  },
+  "evidenceRules": {
+    "observableEvidenceRequiredForSuccess": true,
+    "allowedKinds": [
+      "test",
+      "workflow",
+      "artifact",
+      "diff",
+      "runtime_observation",
+      "contract",
+      "manual_owner_acceptance"
+    ],
+    "requiredFields": [
+      "kind",
+      "reference",
+      "result"
+    ],
+    "allowedResults": [
+      "success",
+      "failure",
+      "not_run",
+      "not_applicable"
+    ],
+    "unsupportedClaimPolicy": "block_success"
+  },
+  "verificationProtocol": {
+    "generationPass": "Produce the smallest solution that satisfies the stated acceptance criteria.",
+    "verificationPass": "Attempt to disprove the solution using negative cases, boundary cases, stale-artifact checks, fixture realism, and operational constraints.",
+    "requiredQuestions": [
+      "Which assumptions could be false?",
+      "Which evidence is missing or indirect?",
+      "Could a synthetic fixture pass while production fails?",
+      "Is the candidate artifact being tested rather than an older published artifact?",
+      "Are facts, assumptions, and inferences clearly separated?",
+      "Are irreversible effects, deployment, and rollback handled explicitly?"
+    ]
+  },
+  "stopConditions": [
+    "A required quality gate fails.",
+    "The exact candidate artifact cannot be produced or identified.",
+    "A critical assumption cannot be verified.",
+    "Required authorization or explicit production approval is absent.",
+    "Rollback is required by the mode but unavailable or unverified.",
+    "Observable evidence contradicts the proposed success claim."
+  ],
+  "recordContract": {
+    "schema": "slf_deliberate_execution_record_v1",
+    "allowedModes": [
+      "direct",
+      "structured",
+      "critical"
+    ],
+    "allowedOutcomes": [
+      "success",
+      "partial",
+      "blocked",
+      "failed"
+    ],
+    "commonRequirements": {
+      "task": "non-empty string",
+      "mode": "one of allowedModes",
+      "classificationReason": "non-empty string",
+      "acceptanceCriteria": "non-empty string array",
+      "outcome": "one of allowedOutcomes",
+      "decisionSummary": "non-empty string"
+    },
+    "structuredRequirements": {
+      "plan": "non-empty string array",
+      "assumptions": "string array",
+      "evidence": "evidence array",
+      "verification": "verification array",
+      "residualRisks": "string array"
+    },
+    "criticalRequirements": {
+      "alternatives": "non-empty string array",
+      "adversarialVerification": "non-empty verification array",
+      "stopConditions": "non-empty string array",
+      "rollback": "object with available, procedure, and verification",
+      "approval": "object with required, status, and authority"
+    }
+  },
+  "deploymentBoundary": {
+    "qualityGateMayAuthorizeDeployment": false,
+    "qualityGateMayProveCandidateReadiness": true,
+    "explicitOperationalApprovalRequired": true,
+    "postDeployEvidenceRequired": true,
+    "rollbackEvidenceRequired": true
+  }
+}
