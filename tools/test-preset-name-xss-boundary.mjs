@@ -56,7 +56,7 @@ for (const name of names) {
   assert.equal(name, name.trim());
   assert.ok(name.length > 0 && name.length <= 120, name.length);
 }
-assert.ok(names.some(name => name.includes('＜／option＞＜img')));
+assert.ok(names.some(name => name.includes('＜/option＞＜img')));
 assert.ok(names.includes('safe name'));
 assert.ok(names.includes('A＜B'));
 assert.equal(normalized['A＜B'].def_line, '2', 'first normalized collision must win deterministically');
@@ -65,10 +65,12 @@ assert.ok(names.includes('x'.repeat(120)));
 storage.set('slf_custom_presets', JSON.stringify({ [maliciousName]: tactic }));
 const loaded = PresetStorage.loadLocalRaw();
 assert.equal(Object.keys(loaded).length, 1);
-const rewritten = JSON.parse(storage.get('slf_custom_presets'));
+const rewrittenText = storage.get('slf_custom_presets');
+const rewritten = JSON.parse(rewrittenText);
 assert.deepEqual(Object.keys(rewritten), Object.keys(loaded));
-assert.equal(storage.get('slf_custom_presets').includes('<img'), false);
-assert.equal(storage.get('slf_custom_presets').includes('onerror="'), true, 'text is preserved but cannot remain markup-significant');
+assert.equal(rewrittenText.includes('<img'), false);
+assert.equal(rewrittenText.includes('onerror="'), false);
+assert.equal(rewrittenText.includes('onerror=＂'), true, 'plain text content should be retained with non-markup quotes');
 assert.equal(Object.keys(rewritten)[0].includes('<'), false);
 
 PresetStorage.saveCustom({ [maliciousName]: tactic });
