@@ -25,15 +25,29 @@ const TrainingGuidePanel = {
 
     content() {
         return `<style>
-#slf-training-guide-panel{flex:0 0 720px;width:720px;margin:0 0 12px 18px;padding:10px;background:#222;color:#fff;border:1px solid #555;border-radius:6px;font:12px Arial;box-sizing:border-box}
+#slf-training-guide-panel{display:block;width:100%;max-width:none;min-width:0;margin:0;padding:14px;background:transparent;color:#fff;border:0;border-radius:0;font:12px Arial;box-sizing:border-box}
 #slf-training-guide-panel a{color:#9ccfff}#slf-training-guide-panel .slf-title{color:#7cff7c;font-weight:bold;font-size:14px;margin-bottom:6px}
-#slf-training-guide-panel .slf-source{display:grid;grid-template-columns:80px 90px 78px 78px 1fr;gap:6px;align-items:center;margin:3px 0}
-#slf-training-guide-panel input{width:84px}#slf-training-guide-panel button{margin-top:7px;padding:5px 10px;cursor:pointer}
-#slf-training-guide-panel .slf-status{margin:7px 0;padding:5px;background:#191919;border:1px solid #444}.slf-ok{color:#78e46d}.slf-error{color:#f1aaaa}.slf-muted{color:#aaa}
-#slf-training-guide-panel .slf-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}#slf-training-guide-panel th,#slf-training-guide-panel td{padding:4px 5px;border-bottom:1px solid #444;text-align:left;vertical-align:top}
-#slf-training-guide-panel th{color:#8cf}#slf-training-guide-panel td:first-child{color:#ffd76a;font-weight:bold;white-space:nowrap}#slf-training-guide-panel .slf-pair{display:inline-block;margin:0 6px 3px 0;white-space:nowrap}#slf-training-guide-panel .slf-pair b{color:#8cf}
-#slf-training-guide-panel .slf-apply-profile{margin:0;padding:3px 7px;font-size:11px;white-space:nowrap}
-</style><div class="slf-title">Средние прокачки выбранных лиг</div><div class="slf-muted">Страницы статистики загружаются только после нажатия «Рассчитать». Динамический профиль можно применить к отмеченным игрокам без автоматического сохранения.</div><div id="slf-sources">${this.sourceRows()}</div><button id="slf-calc" type="button">Рассчитать</button><div id="slf-status" class="slf-status">Загрузка последнего результата с VPS…</div><div id="slf-result"></div>`;
+#slf-training-guide-panel .slf-section-title{color:#8cf;font-weight:bold;font-size:12px;text-transform:uppercase;letter-spacing:.02em;margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid #38415f}
+#slf-training-guide-panel #slf-training-workspace{display:grid;grid-template-columns:minmax(330px,.78fr) minmax(560px,1.45fr);gap:14px;align-items:start;margin-top:14px;min-width:0}
+#slf-training-guide-panel #slf-training-controls,#slf-training-guide-panel #slf-training-results-pane{min-width:0;padding:12px;background:rgba(10,16,30,.28);border:1px solid #38415f;border-radius:10px;box-sizing:border-box}
+#slf-training-guide-panel #slf-training-results-pane{overflow-x:auto}
+#slf-training-guide-panel .slf-source{display:grid;grid-template-columns:minmax(76px,1fr) 86px 72px 72px;gap:7px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(56,65,95,.72)}
+#slf-training-guide-panel .slf-source:last-child{border-bottom:0}#slf-training-guide-panel .slf-source-state{grid-column:1/-1;min-height:0}.slf-source-state:empty{display:none}
+#slf-training-guide-panel input{width:84px;max-width:100%;box-sizing:border-box}#slf-training-guide-panel button{margin-top:9px;padding:5px 10px;cursor:pointer}
+#slf-training-guide-panel #slf-calc{display:block;width:100%;padding:8px 12px;font-weight:bold}
+#slf-training-guide-panel .slf-status{margin:10px 0 0;padding:8px;background:#191f31;border:1px solid #38415f;border-radius:8px}.slf-ok{color:#78e46d}.slf-error{color:#f1aaaa}.slf-muted{color:#aaa}
+#slf-training-guide-panel .slf-result-meta{margin:0 0 7px}
+#slf-training-guide-panel .slf-table{width:100%;min-width:700px;border-collapse:collapse;font-size:11px;margin-top:6px}#slf-training-guide-panel th,#slf-training-guide-panel td{padding:7px 6px;border-bottom:1px solid #38415f;text-align:left;vertical-align:middle}
+#slf-training-guide-panel th{color:#8cf}#slf-training-guide-panel td:first-child{color:#ffd76a;font-weight:bold;white-space:nowrap;width:64px}#slf-training-guide-panel td:last-child{width:150px;text-align:right}
+#slf-training-guide-panel .slf-skill-grid{display:grid;grid-template-columns:repeat(5,minmax(62px,1fr));gap:5px 8px;min-width:0}
+#slf-training-guide-panel .slf-pair{display:block;white-space:nowrap}#slf-training-guide-panel .slf-pair b{color:#8cf}
+#slf-training-guide-panel .slf-apply-profile{margin:0;padding:5px 8px;font-size:11px;white-space:nowrap}
+#slf-training-benchmarks-card>#slf-training-guide-panel.slf-ui{border-bottom:0!important;overflow:visible!important}
+#slf-training-benchmarks-card>.train__champ[data-slf-suppressed="top-player-skill-averages"]{display:none!important}
+#slf-training-benchmarks-card #slf-training-guide-panel #slf-training-controls .slf-source{grid-template-columns:minmax(76px,1fr) 86px 72px 72px!important}
+@media(max-width:1180px){#slf-training-guide-panel #slf-training-workspace{grid-template-columns:minmax(0,1fr)}#slf-training-guide-panel #slf-training-results-pane{width:100%}}
+@media(max-width:720px){#slf-training-guide-panel .slf-source{grid-template-columns:minmax(72px,1fr) 86px!important}#slf-training-guide-panel .slf-source .slf-league,#slf-training-guide-panel .slf-source .slf-stats{grid-row:2}#slf-training-guide-panel .slf-source .slf-source-state{grid-row:3}#slf-training-guide-panel .slf-skill-grid{grid-template-columns:repeat(2,minmax(72px,1fr))}}
+</style><div class="slf-title">Средние прокачки выбранных лиг</div><div class="slf-muted">Страницы статистики загружаются только после нажатия «Рассчитать». Динамический профиль можно применить к отмеченным игрокам без автоматического сохранения.</div><div id="slf-training-workspace"><section id="slf-training-controls"><div class="slf-section-title">Управление средними прокачками</div><div id="slf-sources">${this.sourceRows()}</div><button id="slf-calc" type="button">Рассчитать</button><div id="slf-status" class="slf-status">Загрузка последнего результата с VPS…</div></section><section id="slf-training-results-pane"><div class="slf-section-title">Средние прокачки по ролям в выбранных лигах (VPS)</div><div id="slf-result"><div class="slf-muted">Результаты появятся после загрузки VPS-кеша или нового расчёта.</div></div></section></div>`;
     },
 
     updateLinks(row) {
@@ -106,9 +120,10 @@ const TrainingGuidePanel = {
         const total=(payload.sources||[]).length, ok=(payload.sources||[]).filter(x=>x.status==='ok').length;
         const rows=payload.profiles.map(profile => {
             const skills=this.skillOrderForRole(profile.role).map(skill=>[skill,profile.skills?.[skill]]).filter(([,data])=>data);
-            return `<tr><td>${this.esc(profile.role)}</td><td>${skills.map(([skill,data]) => { const title=(data.values||[]).map(x=>`${x.source}: ${x.value}`).join('\n')||`Источников: ${data.sample}`; return `<span class="slf-pair" title="${this.esc(title)}"><b>${this.esc(skill)}</b> ${Math.round(Number(data.value))}<sup>${data.sample}/${total||data.sample}</sup></span>`; }).join('')}</td><td><button type="button" class="slf-apply-profile" data-role="${this.esc(profile.role)}">Применить к выбранным</button></td></tr>`;
+            const cells=skills.map(([skill,data]) => { const title=(data.values||[]).map(x=>`${x.source}: ${x.value}`).join('\n')||`Источников: ${data.sample}`; return `<span class="slf-pair" title="${this.esc(title)}"><b>${this.esc(skill)}</b> ${Math.round(Number(data.value))}<sup>${data.sample}/${total||data.sample}</sup></span>`; }).join('');
+            return `<tr><td>${this.esc(profile.role)}</td><td><div class="slf-skill-grid">${cells}</div></td><td><button type="button" class="slf-apply-profile" data-role="${this.esc(profile.role)}">Применить к выбранным</button></td></tr>`;
         }).join('');
-        document.getElementById('slf-result').innerHTML=`<div class="slf-muted">${label} · ${new Date(payload.calculatedAt).toLocaleString('ru-RU')} · источников ${ok}/${total}</div><table class="slf-table"><thead><tr><th>Роль</th><th>Средние значения</th><th>Действие</th></tr></thead><tbody>${rows}</tbody></table>`;
+        document.getElementById('slf-result').innerHTML=`<div class="slf-muted slf-result-meta">${label} · ${new Date(payload.calculatedAt).toLocaleString('ru-RU')} · источников ${ok}/${total}</div><table class="slf-table"><thead><tr><th>Роль</th><th>Средние значения</th><th>Действие</th></tr></thead><tbody>${rows}</tbody></table>`;
         return true;
     },
 
@@ -121,7 +136,7 @@ const TrainingGuidePanel = {
         try {
             const {data}=await Api.getPromise(this.cacheCollection,'training league benchmarks cache');
             if (!this.render(data,'Кеш VPS')) return this.setStatus('VPS-кеш отсутствует. Выполните динамический расчёт лиг.','muted');
-            this.applyIds(data); this.setStatus('Последний расчёт загружен с VPS.','ok');
+            this.applyIds(data); this.setStatus('Последний расчёт загружен из VPS-кеша.','ok');
         } catch(error) { this.setStatus(`VPS-кеш недоступен (${error?.kind||'error'}${error?.status?'/'+error.status:''}).`,'error'); }
     },
 
@@ -236,8 +251,20 @@ const TrainingGuidePanel = {
         finally { button.disabled=false; }
     },
 
+    suppressNativeChampAverages() {
+        const champ=document.querySelector('.train__champ');
+        if (!champ) return false;
+        champ.dataset.slfSuppressed='top-player-skill-averages';
+        champ.setAttribute('aria-hidden','true');
+        champ.hidden=true;
+        champ.style.setProperty('display','none','important');
+        return true;
+    },
+
     mount() {
-        if (!this.isPage() || document.getElementById(this.panelId)) return;
+        if (!this.isPage()) return;
+        this.suppressNativeChampAverages();
+        if (document.getElementById(this.panelId)) return;
         const train=document.querySelector('#train'), pad=train?.closest('.pad2')||document.querySelector('.pad2'), panel=document.createElement('div');
         panel.id=this.panelId; panel.innerHTML=this.content();
         if (train && pad) { const wrapper=document.createElement('div'),left=document.createElement('div'); wrapper.id='slf-training-guide-layout'; wrapper.style.cssText='display:flex;align-items:flex-start;gap:18px;width:100%'; left.id='slf-training-left-column'; pad.insertBefore(wrapper,train); left.appendChild(train); wrapper.append(left,panel); }

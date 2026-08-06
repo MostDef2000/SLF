@@ -52,6 +52,31 @@ MALICIOUS_TRANSFER_ROWS = [
         "clubs": {"fromName": "<svg onload=window.__slfPwned=4>", "toName": "Клуб"},
     }
 ]
+TRAINING_ROLES = ["GK", "CD", "LD / RD", "DM", "LM / RM", "CM", "AM", "ST"]
+TRAINING_GK_SKILLS = ["ПС", "СВ", "ТВ", "СК", "РЕ", "ИВ", "ВП", "РМ", "ПИ", "ВВ"]
+TRAINING_FIELD_SKILLS = ["ПС", "СУ", "ТУ", "СК", "УС", "ОТ", "ВП", "ТХ", "БВ", "КР"]
+TRAINING_CACHE = {
+    "schema": "slf_training_league_benchmarks_v1",
+    "championshipIds": [55742, 55683, 55664, 55690, 55705],
+    "sources": [
+        {"championshipId": league_id, "name": name, "status": "ok", "error": ""}
+        for name, league_id in zip(
+            ["Италия", "Англия", "Германия", "Испания", "Франция"],
+            [55742, 55683, 55664, 55690, 55705],
+        )
+    ],
+    "profiles": [
+        {
+            "role": role,
+            "skills": {
+                skill: {"value": 10 + role_index + skill_index, "sample": 5, "values": []}
+                for skill_index, skill in enumerate(TRAINING_GK_SKILLS if role == "GK" else TRAINING_FIELD_SKILLS)
+            },
+        }
+        for role_index, role in enumerate(TRAINING_ROLES)
+    ],
+    "calculatedAt": "2026-08-02T10:00:28.000Z",
+}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -108,11 +133,13 @@ def server():
 
 def init_script(api_mode: str) -> str:
     malicious_json = json.dumps(MALICIOUS_TRANSFER_ROWS, ensure_ascii=False)
+    training_cache_json = json.dumps(TRAINING_CACHE, ensure_ascii=False)
     return f"""
 (() => {{
   'use strict';
   const apiMode = {json.dumps(api_mode)};
   const maliciousRows = {malicious_json};
+  const trainingCache = {training_cache_json};
   const store = new Map();
   window.__slfRequests = [];
   window.__slfUnhandled = [];
@@ -130,6 +157,9 @@ def init_script(api_mode: str) -> str:
     window.__slfRequests.push(row);
     setTimeout(() => {{
       let responseText = row.method === 'GET' && !row.url.includes('/api/tactics') ? '[]' : '{{}}';
+      if (row.method === 'GET' && row.url.includes('/api/training_league_benchmarks_v1')) {{
+        responseText = JSON.stringify(trainingCache);
+      }}
       if (apiMode === 'malicious' && row.method === 'GET' && row.url.includes('/api/transfer_history')) {{
         responseText = JSON.stringify(maliciousRows);
       }}
@@ -349,39 +379,68 @@ def assert_team_main(page: Page):
 def wait_training(page: Page):
     page.wait_for_selector(".content-ui__wrapper #slf-training-guide-layout.slf-ui")
     page.wait_for_selector("#slf-training-benchmarks-card > #slf-training-guide-panel.slf-ui.slf-panel")
-    page.wait_for_selector("#slf-training-benchmarks-card > .train__champ")
+    page.wait_for_selector("#slf-training-workspace > #slf-training-controls")
+    page.wait_for_selector("#slf-training-workspace > #slf-training-results-pane")
+    page.wait_for_selector("#slf-training-results-pane .slf-table tbody tr")
     page.wait_for_function("() => document.querySelector('#slf-training-guide-panel #slf-status')?.textContent.includes('VPS-кеш')")
 
 
 def assert_training(page: Page):
     wait_training(page)
-    selectors = ["#slf-training-guide-layout", "#slf-training-benchmarks-card", "#slf-training-guide-panel", ".train__champ"]
+    selectors = [
+        "#slf-training-guide-layout",
+        "#slf-training-benchmarks-card",
+        "#slf-training-guide-panel",
+        "#slf-training-workspace",
+        "#slf-training-controls",
+        "#slf-training-results-pane",
+        ".train__champ",
+    ]
     assert_inside_content(page, selectors)
     assert page.locator("#slf-training-guide-layout").get_attribute("data-slf-mount") == "fm2026-training-content"
     assert page.locator("#slf-training-guide-panel").get_attribute("data-slf-mount-violation") is None
-    structure = page.locator("#slf-training-benchmarks-card").evaluate(
-        "el => ({children:[...el.children].map(node => node.id || node.className),panelParent:document.getElementById('slf-training-guide-panel')?.parentElement?.id,champParent:document.querySelector('.train__champ')?.parentElement?.id})"
+    assert page.locator("#slf-training-controls .slf-source").count() == 5
+    assert page.locator("#slf-training-results-pane .slf-table tbody tr").count() == 8
+    assert page.locator("#slf-training-controls #slf-status").count() == 1
+    assert page.locator("#slf-training-results-pane #slf-result").count() == 1
+    workspace = page.locator("#slf-training-workspace").evaluate(
+        "el => ({children:[...el.children].map(node => node.id),display:getComputedStyle(el).display,columns:getComputedStyle(el).gridTemplateColumns})"
     )
-    assert structure == {
-        "children": ["slf-training-guide-panel", "train__champ"],
-        "panelParent": "slf-training-benchmarks-card",
-        "champParent": "slf-training-benchmarks-card",
-    }, structure
+    assert workspace["children"] == ["slf-training-controls", "slf-training-results-pane"], workspace
+    assert workspace["display"] == "grid" and len(workspace["columns"].split()) == 2, workspace
+    geometry = page.evaluate(
+        """() => {
+          const controls = document.getElementById('slf-training-controls').getBoundingClientRect();
+          const results = document.getElementById('slf-training-results-pane').getBoundingClientRect();
+          return {controlsRight:controls.right,resultsLeft:results.left,controlsTop:controls.top,resultsTop:results.top};
+        }"""
+    )
+    assert geometry["resultsLeft"] >= geometry["controlsRight"] - 1, geometry
+    assert abs(geometry["controlsTop"] - geometry["resultsTop"]) <= 1, geometry
+    native = page.locator(".train__champ")
+    assert native.count() == 1
+    assert native.get_attribute("data-slf-suppressed") == "top-player-skill-averages"
+    assert native.get_attribute("aria-hidden") == "true"
+    assert not native.is_visible()
+    native_title = page.get_by_text("Средние значения навыков ТОП игроков вашего чемпионата", exact=True)
+    assert native_title.count() == 1
+    assert native_title.is_hidden()
     card_style = page.locator("#slf-training-benchmarks-card").evaluate(
         "el => ({display:getComputedStyle(el).display,border:getComputedStyle(el).borderTopWidth,radius:getComputedStyle(el).borderRadius,overflow:getComputedStyle(el).overflow})"
     )
     assert card_style["display"] == "block" and float(card_style["border"].replace("px", "")) >= 1, card_style
     assert float(card_style["radius"].replace("px", "")) >= 10 and card_style["overflow"] == "hidden", card_style
-    page.locator("#native-skill-calc").click()
-    page.wait_for_function("() => document.getElementById('native-skill-result')?.textContent === 'рассчитано:1'")
     layout = page.locator("#slf-training-guide-layout").evaluate("el => ({display:getComputedStyle(el).display,columns:getComputedStyle(el).gridTemplateColumns})")
     assert layout["display"] == "grid" and layout["columns"] != "none", layout
     mutate_content(page, "training")
     assert page.locator("#slf-training-guide-layout").count() == 1
     assert page.locator("#slf-training-benchmarks-card").count() == 1
     assert page.locator("#slf-training-guide-panel").count() == 1
+    assert page.locator("#slf-training-workspace").count() == 1
+    assert page.locator("#slf-training-controls").count() == 1
+    assert page.locator("#slf-training-results-pane").count() == 1
     assert page.locator(".train__champ").count() == 1
-    assert page.locator("#slf-training-benchmarks-card > #slf-training-guide-panel + .train__champ").count() == 1
+    assert not page.locator(".train__champ").is_visible()
 
 
 def assert_transfer_responsive_accessibility(page: Page):
@@ -417,11 +476,29 @@ def assert_team_responsive(page: Page):
 
 def assert_training_responsive(page: Page):
     wait_training(page)
-    selectors = ["#slf-training-guide-layout", "#slf-training-benchmarks-card", "#slf-training-guide-panel", ".train__champ"]
+    selectors = [
+        "#slf-training-guide-layout",
+        "#slf-training-benchmarks-card",
+        "#slf-training-guide-panel",
+        "#slf-training-workspace",
+        "#slf-training-controls",
+        "#slf-training-results-pane",
+        ".train__champ",
+    ]
     assert_top_level_containment(page, selectors)
     columns = page.locator("#slf-training-guide-layout").evaluate("el => getComputedStyle(el).gridTemplateColumns")
     assert len(columns.split()) == 1, columns
-    assert page.locator("#slf-training-benchmarks-card > #slf-training-guide-panel + .train__champ").count() == 1
+    workspace_columns = page.locator("#slf-training-workspace").evaluate("el => getComputedStyle(el).gridTemplateColumns")
+    assert len(workspace_columns.split()) == 1, workspace_columns
+    geometry = page.evaluate(
+        """() => {
+          const controls = document.getElementById('slf-training-controls').getBoundingClientRect();
+          const results = document.getElementById('slf-training-results-pane').getBoundingClientRect();
+          return {controlsBottom:controls.bottom,resultsTop:results.top};
+        }"""
+    )
+    assert geometry["resultsTop"] >= geometry["controlsBottom"] - 1, geometry
+    assert not page.locator(".train__champ").is_visible()
     assert contrast_ratio(page, "#slf-training-benchmarks-card") >= 4.5
 
 
