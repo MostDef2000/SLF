@@ -250,13 +250,8 @@ const TacticPresetLibraryPanel = {
         const recommended = this.getLiveRecommendedPreset();
         const current = select.value || this.liveActivePreset;
         const labels = this.getLiveLabels();
-        const presets = typeof PresetStorage !== 'undefined' && PresetStorage.getAllPresets
-            ? PresetStorage.getAllPresets()
-            : {};
-
         select.innerHTML = '';
         this.livePresetOrder.forEach(name => {
-            if (!presets[name]) return;
             const option = document.createElement('option');
             option.value = name;
             option.textContent = recommended === name
