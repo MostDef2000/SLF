@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.284
+// @version      4.4.285
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.284',
-        scriptVersion: '4.4.284',
+        version: '4.4.285',
+        scriptVersion: '4.4.285',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.284',
+        scriptVersion: '4.4.285',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -20265,6 +20265,10 @@ SLFTeam4FormSavedChoiceNotice.start();
 (() => {
     const PANEL_ID = 'slf-team4-championship-table';
     const STYLE_ID = 'slf-team4-championship-table-style';
+    const EXTERNAL_CLASS = 'slf-team4-championship-external';
+    const OVERFLOW_CLASS = 'slf-team4-championship-overflow';
+    const EXTERNAL_GAP = 14;
+    const EXTERNAL_WIDTH = 290;
     const norm = value => String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
     const positiveId = value => /^\d+$/.test(String(value || '')) && Number(value) > 0 ? String(value) : '';
 
@@ -20365,16 +20369,12 @@ SLFTeam4FormSavedChoiceNotice.start();
         style.textContent = `
             .team_general_content.slf-team4-championship-layout:not(.team-body) { display:flex; align-items:flex-start; gap:12px; width:max-content; max-width:none; overflow:visible; }
             .team_general_content.slf-team4-championship-layout:not(.team-body) > #general { flex:0 0 auto; min-width:700px; }
-            html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout { display:grid!important; grid-template-columns:minmax(240px,366px) minmax(0,1fr)!important; align-items:start!important; gap:16px!important; width:100%!important; max-width:100%!important; min-width:0!important; overflow:visible!important; }
-            html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > .team-dash { grid-column:1!important; grid-row:1 / span 2!important; min-width:0!important; }
+            html[data-slf-design="fm2026"] .content-ui__wrapper.${OVERFLOW_CLASS} { overflow:visible!important; }
+            html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout { position:relative!important; display:grid!important; grid-template-columns:366px minmax(0,1fr)!important; align-items:start!important; gap:16px!important; width:100%!important; max-width:100%!important; min-width:0!important; overflow:visible!important; }
+            html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > .team-dash { grid-column:1!important; grid-row:1!important; width:366px!important; min-width:366px!important; max-width:366px!important; }
             html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > .team-content { grid-column:2!important; grid-row:1!important; min-width:0!important; }
-            html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > #${PANEL_ID} { grid-column:2!important; grid-row:2!important; justify-self:end!important; width:min(320px,100%)!important; max-width:320px!important; min-width:0!important; margin:0!important; }
-            @media (min-width:1440px) {
-                html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout { grid-template-columns:clamp(240px,18vw,280px) minmax(0,1fr) minmax(260px,290px)!important; gap:14px!important; }
-                html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > .team-dash { grid-column:1!important; grid-row:1!important; }
-                html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > .team-content { grid-column:2!important; grid-row:1!important; }
-                html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > #${PANEL_ID} { grid-column:3!important; grid-row:1!important; justify-self:stretch!important; width:100%!important; max-width:100%!important; }
-            }
+            html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout > #${PANEL_ID} { position:static!important; grid-column:1 / -1!important; grid-row:2!important; justify-self:end!important; width:min(320px,100%)!important; max-width:320px!important; min-width:0!important; margin:0!important; }
+            html[data-slf-design="fm2026"] #globalcontent .team-body.team_general_content.slf-team4-championship-layout.${EXTERNAL_CLASS} > #${PANEL_ID} { position:absolute!important; top:0!important; left:calc(100% + ${EXTERNAL_GAP}px)!important; grid-column:auto!important; grid-row:auto!important; justify-self:auto!important; width:${EXTERNAL_WIDTH}px!important; max-width:${EXTERNAL_WIDTH}px!important; min-width:${EXTERNAL_WIDTH}px!important; }
             #${PANEL_ID} { flex:0 0 300px; width:300px; box-sizing:border-box; padding:8px; border:1px solid #555; border-radius:6px; background:#181818; color:#ddd; box-shadow:0 2px 10px rgba(0,0,0,.35); font:11px Verdana,Arial,sans-serif; }
             #${PANEL_ID} .slf-champ-title { margin-bottom:7px; text-align:center; line-height:1.35; }
             #${PANEL_ID} .slf-champ-title a { color:#9cff57; font-weight:700; text-decoration:none; }
@@ -20386,6 +20386,39 @@ SLFTeam4FormSavedChoiceNotice.start();
             #${PANEL_ID} .slf-champ-state { padding:12px 5px; text-align:center; color:#aaa; line-height:1.4; }
         `;
         document.head.appendChild(style);
+    }
+
+    function syncPanelPlacement(panel, layout) {
+        if (!panel || layout?.mode !== 'fm2026-roster-side') return;
+        const contentRoot = layout.host.closest('.content-ui__wrapper');
+        const hostRect = layout.host.getBoundingClientRect();
+        const viewportRight = document.documentElement.clientWidth || window.innerWidth || 0;
+        const availableRight = Math.max(0, viewportRight - hostRect.right);
+        const external = matchMedia('(min-width: 1280px)').matches
+            && availableRight >= EXTERNAL_WIDTH + EXTERNAL_GAP + 8;
+        layout.host.classList.toggle(EXTERNAL_CLASS, external);
+        contentRoot?.classList.toggle(OVERFLOW_CLASS, external);
+        panel.dataset.slfTeamPlacement = external ? 'external-right' : 'below-content';
+    }
+
+    function installPlacementController(panel, layout) {
+        if (!panel || layout?.mode !== 'fm2026-roster-side' || panel.dataset.slfPlacementController === '1') return;
+        panel.dataset.slfPlacementController = '1';
+        let frame = 0;
+        const schedule = () => {
+            if (frame) cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => {
+                frame = 0;
+                syncPanelPlacement(panel, layout);
+            });
+        };
+        window.addEventListener('resize', schedule, { passive:true });
+        if (typeof ResizeObserver === 'function') {
+            const observer = new ResizeObserver(schedule);
+            observer.observe(layout.host);
+            panel._slfPlacementObserver = observer;
+        }
+        schedule();
     }
 
     function escapeHtml(value) {
@@ -20409,6 +20442,7 @@ SLFTeam4FormSavedChoiceNotice.start();
             } else if (panel.parentElement !== layout.host) {
                 layout.host.appendChild(panel);
             }
+            installPlacementController(panel, layout);
         } else if (!panel) {
             panel = document.createElement('aside');
             panel.id = PANEL_ID;
@@ -21253,15 +21287,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.284',
-        scriptVersion: '4.4.284',
+        version: '4.4.285',
+        scriptVersion: '4.4.285',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.284',
+        scriptVersion: '4.4.285',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

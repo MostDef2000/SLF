@@ -1,5 +1,40 @@
 # Changelog
 
+## 4.4.285
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/pull_request_template.md
+- .github/workflows/quality-integration.yml
+- contracts/SLF_GOVERNANCE.md
+- contracts/SLF_MINIMAL_CONFIRMATION_POLICY.md
+- contracts/SLF_SCOPE_APPROVAL_POLICY.md
+- data/quality/deliberate-execution-contract-v1.json
+- data/quality/deliberate-execution-fixtures-v1.json
+- data/quality/quality-gates-v1.json
+- docs/decision_records/DR-012-canonical-scope-approval-boundary.md
+- docs/decision_records/INDEX.md
+- docs/quality/deliberate-execution-contract.md
+- src/modules/team-management/team4-form-saved-choice-notice.js
+- tests/browser/fixtures/fm2026-team-main.html
+- tests/browser/test_team4_championship_external_layout.py
+- tools/test-deliberate-execution-contract.mjs
+
+Approved base commit:
+- 4288bdb1bd23fcbeb341c19159da83c77920bcc5
+
+Approved commit:
+- c0f5eb20ac0624a64255372d8a01e24f009f1acd
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.284
 
 ### Automatic latest-only build
