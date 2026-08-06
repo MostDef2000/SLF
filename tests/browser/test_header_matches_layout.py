@@ -12,6 +12,7 @@ ROOT = Path.cwd()
 ARTIFACT = ROOT / "releases" / "latest.user.js"
 FIXTURE = ROOT / "tests" / "browser" / "fixtures" / "fm2026-header-matches.html"
 VERSION = json.loads((ROOT / "data" / "version.json").read_text(encoding="utf-8"))["scriptVersion"]
+EXPECTED_TIMES = ["17:00", "18:48", "19:48", "20:24", "21:12", "03:24", "04:24"]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -79,11 +80,14 @@ def layout_metrics(page):
           const controls = document.querySelector('.fm-card--controls');
           const matches = document.querySelector('.fm-card--matches');
           const scroll = document.querySelector('.fm-matches__scroll');
+          const list = document.querySelector('.fm-fixtures');
           const children = [...controls.querySelectorAll(':scope > .fm-card')];
           const logos = [...controls.querySelectorAll('img,.fm-avatar')];
-          const rows = [...scroll.querySelectorAll('.fm-fixture')];
+          const rows = [...list.querySelectorAll(':scope > .fm-fixture')];
+          const mine = list.querySelector('.fm-fixture--mine');
           const mr = matches.getBoundingClientRect();
           const sr = scroll.getBoundingClientRect();
+          const mineStyle = getComputedStyle(mine);
           return {
             matchesLeft: mr.left,
             maxChildRight: Math.max(...children.map(node => node.getBoundingClientRect().right)),
@@ -96,7 +100,16 @@ def layout_metrics(page):
             scrollBottom: sr.bottom,
             expandDisplay: getComputedStyle(document.getElementById('fm-games-expand')).display,
             gridDisplay: getComputedStyle(controls).display,
-            gridColumns: getComputedStyle(controls).gridTemplateColumns
+            gridColumns: getComputedStyle(controls).gridTemplateColumns,
+            times: rows.map(node => node.querySelector('.fm-fixture__time')?.textContent.trim()),
+            rowIds: rows.map(node => node.dataset.fixtureId),
+            mineIndex: rows.indexOf(mine),
+            mineCount: list.querySelectorAll('.fm-fixture--mine').length,
+            mineBackground: mineStyle.backgroundColor,
+            mineBorder: mineStyle.borderTopColor,
+            minePosition: mineStyle.position,
+            rootChronological: document.documentElement.dataset.slfHeaderMatchesChronological || '',
+            listChronological: list.dataset.slfChronologicalOrder || ''
           };
         }"""
     )
@@ -118,10 +131,14 @@ def main():
             before = layout_metrics(page)
             assert before["maxChildRight"] > before["matchesLeft"] + 1, before
             assert before["scrollHeight"] > before["clientHeight"] + 1, before
+            assert before["times"][0:2] == ["18:48", "17:00"], before
+            assert before["mineIndex"] == 0, before
+            assert before["mineCount"] == 1, before
 
             page.add_script_tag(path=str(ARTIFACT))
             page.wait_for_function("expected => window.SLF?.scriptVersion === expected", arg=VERSION)
             page.wait_for_function("() => document.documentElement.dataset.slfHeaderMatchesFit === '1'")
+            page.wait_for_function("expected => [...document.querySelectorAll('.fm-fixture__time')].map(node => node.textContent.trim()).join(',') === expected.join(',')", arg=EXPECTED_TIMES)
             page.wait_for_selector("#slf-header-matches-fit", state="attached")
 
             after = layout_metrics(page)
@@ -129,15 +146,53 @@ def main():
             assert after["gridColumns"] != "none", after
             assert after["maxChildRight"] <= after["matchesLeft"] + 1, after
             assert after["maxLogoRight"] <= after["matchesLeft"] + 1, after
-            assert after["visibleRows"] == 4, after
+            assert after["visibleRows"] == 7, after
             assert after["scrollHeight"] <= after["clientHeight"] + 1, after
             assert after["maxRowBottom"] <= after["scrollBottom"] + 1, after
             assert after["overflowY"] == "visible", after
             assert after["expandDisplay"] == "none", after
+            assert after["times"] == EXPECTED_TIMES, after
+            assert after["mineIndex"] == 1, after
+            assert after["mineCount"] == 1, after
+            assert after["mineBackground"] == before["mineBackground"], (before, after)
+            assert after["mineBorder"] == before["mineBorder"], (before, after)
+            assert after["minePosition"] == "relative", after
+            assert after["rootChronological"] == "1", after
+            assert after["listChronological"] == "1", after
+
+            page.evaluate(
+                """() => {
+                  const list = document.querySelector('.fm-fixtures');
+                  const mine = list.querySelector('.fm-fixture--mine');
+                  list.prepend(mine);
+                  const createRow = (id, label) => {
+                    const row = document.createElement('div');
+                    row.className = 'fm-fixture';
+                    row.dataset.fixtureId = id;
+                    row.innerHTML = `<span class="fm-fixture__time">22:00</span><span>КТ</span><span class="fm-fixture__team">${label}</span><span class="fm-score">vs</span><span class="fm-fixture__team">Соперник</span>`;
+                    return row;
+                  };
+                  list.append(createRow('equal-a', 'Первый'));
+                  list.append(createRow('equal-b', 'Второй'));
+                }"""
+            )
+            expected_dynamic = ["17:00", "18:48", "19:48", "20:24", "21:12", "22:00", "22:00", "03:24", "04:24"]
+            page.wait_for_function("expected => [...document.querySelectorAll('.fm-fixture__time')].map(node => node.textContent.trim()).join(',') === expected.join(',')", arg=expected_dynamic)
+            dynamic = layout_metrics(page)
+            assert dynamic["times"] == expected_dynamic, dynamic
+            assert dynamic["mineIndex"] == 1, dynamic
+            assert dynamic["mineCount"] == 1, dynamic
+            assert dynamic["rowIds"].index("equal-a") < dynamic["rowIds"].index("equal-b"), dynamic
+            assert len(dynamic["rowIds"]) == len(set(dynamic["rowIds"])), dynamic
+            assert dynamic["mineBackground"] == before["mineBackground"], (before, dynamic)
+            assert dynamic["mineBorder"] == before["mineBorder"], (before, dynamic)
+            assert dynamic["scrollHeight"] <= dynamic["clientHeight"] + 1, dynamic
+            assert dynamic["maxRowBottom"] <= dynamic["scrollBottom"] + 1, dynamic
+
             page.wait_for_timeout(150)
             assert not page_errors, page_errors
             assert page.evaluate("window.__slfUnhandled.slice()") == []
-            print(f"[header-matches-e2e] passed version={VERSION} metrics={after}")
+            print(f"[header-matches-e2e] passed version={VERSION} metrics={dynamic}")
         finally:
             context.close()
             browser.close()

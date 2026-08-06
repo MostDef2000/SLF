@@ -32,6 +32,7 @@
     .fm-fixtures{display:flex;flex-direction:column}
     .fm-fixture{height:32px;display:grid;grid-template-columns:42px 70px minmax(0,1fr) 54px minmax(0,1fr);align-items:center;gap:6px;padding:3px 7px;border-radius:8px;white-space:nowrap}
     .fm-fixture:nth-child(even){background:rgba(255,255,255,.06)}
+    .fm-fixture.fm-fixture--mine{background:rgba(21,142,101,.32);border:1px solid rgb(33,184,129)}
     .fm-fixture__team{overflow:hidden;text-overflow:ellipsis}
     .fm-score{display:inline-block;text-align:center;padding:2px 6px;border-radius:6px;background:var(--fm-panel-3)}
     #fm-games-expand{width:24px;height:24px}
@@ -59,10 +60,13 @@
         <div id="field-f7">
           <div class="fm-matches__scroll" style="--fm-matches-h:110px">
             <div class="fm-fixtures">
-              <div class="fm-fixture fm-fixture--mine"><span>18:00</span><span>НП</span><span class="fm-fixture__team">Честерт</span><span class="fm-score">1-0</span><span class="fm-fixture__team">Шрусбери</span></div>
-              <div class="fm-fixture"><span>18:12</span><span>КТ</span><span class="fm-fixture__team">Боа</span><span class="fm-score">2-3</span><span class="fm-fixture__team">Комуникасьонес</span></div>
-              <div class="fm-fixture"><span>18:36</span><span>ОТ</span><span class="fm-fixture__team">Портмадог</span><span class="fm-score">1-3</span><span class="fm-fixture__team">Эйрбас</span></div>
-              <div class="fm-fixture"><span>19:48</span><span>КТ</span><span class="fm-fixture__team">Аль Шабаб</span><span class="fm-score">0-0</span><span class="fm-fixture__team">Норт Дистрикт</span></div>
+              <div class="fm-fixture fm-fixture--mine" data-fixture-id="mine-1848"><span class="fm-fixture__time">18:48</span><span>КТ</span><span class="fm-fixture__team">Норт Дистрикт</span><span class="fm-score">1-3</span><span class="fm-fixture__team">Аль-Ахли</span></div>
+              <div class="fm-fixture" data-fixture-id="1700"><span class="fm-fixture__time">17:00</span><span>КТ</span><span class="fm-fixture__team">Луч</span><span class="fm-score">1-0</span><span class="fm-fixture__team">Сокол Брозаны</span></div>
+              <div class="fm-fixture" data-fixture-id="1948"><span class="fm-fixture__time">19:48</span><span>КТ</span><span class="fm-fixture__team">Боа</span><span class="fm-score">1-0</span><span class="fm-fixture__team">Чонбук Моторс</span></div>
+              <div class="fm-fixture" data-fixture-id="2024"><span class="fm-fixture__time">20:24</span><span>КТ</span><span class="fm-fixture__team">Честер</span><span class="fm-score">vs</span><span class="fm-fixture__team">Гренобль</span></div>
+              <div class="fm-fixture" data-fixture-id="2112"><span class="fm-fixture__time">21:12</span><span>КТ</span><span class="fm-fixture__team">Каррарезе</span><span class="fm-score">vs</span><span class="fm-fixture__team">Кристианстад</span></div>
+              <div class="fm-fixture" data-fixture-id="0324"><span class="fm-fixture__time">03:24</span><span>КТ</span><span class="fm-fixture__team">Алессандрия</span><span class="fm-score">vs</span><span class="fm-fixture__team">Эйрбас</span></div>
+              <div class="fm-fixture" data-fixture-id="0424"><span class="fm-fixture__time">04:24</span><span>КТ</span><span class="fm-fixture__team">Аберистуит</span><span class="fm-score">vs</span><span class="fm-fixture__team">Пришбрам</span></div>
             </div>
           </div>
         </div>
