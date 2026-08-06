@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.287
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/bootstrap.js
+- tests/browser/test_fm2026_design_adapter.py
+
+Approved base commit:
+- ca4c07bd7e1607b420b057c88987e220f2e33a09
+
+Approved commit:
+- 088f32e74a664134a7f61e0d87980dbaa2165961
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.286
 
 ### Automatic latest-only build

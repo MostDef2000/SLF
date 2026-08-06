@@ -1,24 +1,23 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.286",
+  "scriptVersion": "4.4.287",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_286_published",
+  "status": "release_4_4_287_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "472f1e134f9ea14dddb440fcb87840e71a83009341081493584f66166006433b",
     "bundleFileCount": 56,
-    "approvedBaseCommit": "08ff239daedd0849323b774976170755cd999ebb",
-    "approvedCommit": "8d78c05fd2a266782fd629dd1fd48739635b25c3",
+    "approvedBaseCommit": "ca4c07bd7e1607b420b057c88987e220f2e33a09",
+    "approvedCommit": "088f32e74a664134a7f61e0d87980dbaa2165961",
     "approvedFiles": [
-      ".github/workflows/quality-integration.yml",
-      "src/modules/tactics-presets/tactic-preset-direction-policy.js",
-      "tools/test-tactical-situation-diversity.mjs"
+      "src/app/bootstrap.js",
+      "tests/browser/test_fm2026_design_adapter.py"
     ],
     "sourceBranch": "main",
     "releaseNotesProvided": false,
