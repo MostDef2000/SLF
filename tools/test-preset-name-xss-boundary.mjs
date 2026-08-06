@@ -45,7 +45,7 @@ const normalized = normalizePresets({
   'safe\nname': tactic,
   'A<B': tactic,
   'A＜B': { def_line: 3 },
-  'x'.repeat(200): tactic,
+  ['x'.repeat(200)]: tactic,
   empty: { notATactic: true }
 });
 
