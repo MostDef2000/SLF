@@ -10,6 +10,26 @@ updates:
       - dependencies
       - security
 
+  - package-ecosystem: pip
+    directory: /vps/exporter-rag
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+
+  - package-ecosystem: pip
+    directory: /tests/browser
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
