@@ -40,6 +40,7 @@ jobs:
           python3 -m py_compile tools/test-api-contract-compatibility.py
           python3 -m py_compile tools/test-api-adversarial.py
           python3 -m py_compile tools/test-api-multiprocess-locking.py
+          python3 -m py_compile tools/test-api-request-size-limit.py
           node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/slf-contracts-v1.schema.json', 'utf8'))"
           node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/fixtures-v1.json', 'utf8'))"
           node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/contract-policy-v1.json', 'utf8'))"
@@ -67,6 +68,7 @@ jobs:
           python3 tools/test-api-contract-compatibility.py
           python3 tools/test-api-adversarial.py
           python3 tools/test-api-multiprocess-locking.py
+          python3 tools/test-api-request-size-limit.py
 
   property-fuzz-reliability:
     runs-on: ubuntu-24.04
