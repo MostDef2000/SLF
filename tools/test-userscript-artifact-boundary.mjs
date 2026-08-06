@@ -41,6 +41,10 @@ function extractUserscriptVersion(source, relativePath) {
   return match[1];
 }
 
+function extractRequireUrls(source) {
+  return [...source.matchAll(/^\/\/\s*@require\s+(\S+)\s*$/gm)].map(match => match[1]);
+}
+
 function assertSha(value, label) {
   assert.match(value || '', /^[0-9a-f]{40}$/i, `${label} must be a 40-character Git SHA`);
 }
@@ -82,6 +86,13 @@ const metaVersion = extractUserscriptVersion(metaSource, metaPath);
 const userVersion = extractUserscriptVersion(userSource, userPath);
 assert.equal(metaVersion, manifest.scriptVersion, 'metadata artifact version must match data/version.json');
 assert.equal(userVersion, manifest.scriptVersion, 'userscript artifact version must match data/version.json');
+
+const metaRequires = extractRequireUrls(metaSource);
+const userRequires = extractRequireUrls(userSource);
+assert.deepEqual(metaRequires, [], 'metadata artifact must not declare external @require dependencies');
+assert.deepEqual(userRequires, [], 'userscript artifact must not declare external @require dependencies');
+assert.equal(userSource.includes('code.jquery.com'), false, 'userscript artifact must not reference the removed jQuery CDN');
+assert.equal(metaSource.includes('code.jquery.com'), false, 'metadata artifact must not reference the removed jQuery CDN');
 
 const runtimeVersions = [...userSource.matchAll(/scriptVersion:\s*['"]([^'"]+)['"]/g)].map(match => match[1]);
 assert.ok(runtimeVersions.length >= 2, 'userscript must expose both initial and final runtime version metadata');
@@ -135,5 +146,5 @@ for (const capability of prohibitedLegacyCapabilities) {
 }
 
 console.log(
-  `[userscript-artifact-boundary] passed: version=${manifest.scriptVersion} modules=${bundleOrder.files.length}`
+  `[userscript-artifact-boundary] passed: version=${manifest.scriptVersion} modules=${bundleOrder.files.length} externalRequires=${userRequires.length}`
 );
