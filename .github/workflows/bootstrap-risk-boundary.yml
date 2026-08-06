@@ -1,10 +1,13 @@
-name: Bootstrap risk boundary
+name: Bootstrap and match rendering debt boundary
 
 on:
   pull_request:
     paths:
       - 'src/app/bootstrap.js'
       - 'tools/test-bootstrap-risk-boundary.mjs'
+      - 'tools/match-rendering-diagnostics.js'
+      - 'tools/test-match-rendering-diagnostics-contract.mjs'
+      - 'docs/performance/match-rendering-debt-plan.md'
       - '.github/workflows/bootstrap-risk-boundary.yml'
   workflow_dispatch:
 
@@ -19,8 +22,14 @@ jobs:
       - name: Checkout reviewed revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
-      - name: Check bootstrap boundary test syntax
-        run: node --check tools/test-bootstrap-risk-boundary.mjs
+      - name: Check debt boundary tooling syntax
+        run: |
+          node --check tools/test-bootstrap-risk-boundary.mjs
+          node --check tools/match-rendering-diagnostics.js
+          node --check tools/test-match-rendering-diagnostics-contract.mjs
 
       - name: Verify bootstrap startup boundary
         run: node tools/test-bootstrap-risk-boundary.mjs
+
+      - name: Verify diagnostics read-only contract
+        run: node tools/test-match-rendering-diagnostics-contract.mjs
