@@ -12,6 +12,7 @@ ROOT = Path.cwd()
 def load_server(data_dir: str):
     os.environ["SLF_API_TOKEN"] = "contract-test-token"
     os.environ["SLF_DATA_DIR"] = data_dir
+    os.environ.pop("SLF_API_CORS_ORIGINS", None)
     module_path = ROOT / "vps" / "api" / "server.py"
     spec = importlib.util.spec_from_file_location("slf_contract_test_server", module_path)
     if spec is None or spec.loader is None:
@@ -22,11 +23,14 @@ def load_server(data_dir: str):
     return module
 
 
-def auth_headers():
-    return {
+def auth_headers(origin=None):
+    result = {
         "Authorization": "Bearer contract-test-token",
         "Content-Type": "application/json",
     }
+    if origin is not None:
+        result["Origin"] = origin
+    return result
 
 
 def post_json(client, path: str, payload):
@@ -37,6 +41,22 @@ def main():
     with tempfile.TemporaryDirectory(prefix="slf-contract-api-") as data_dir:
         server = load_server(data_dir)
         client = server.app.test_client()
+
+        allowed_origin = "https://slf.fm"
+        allowed_cors = client.get("/api/analysis", headers=auth_headers(allowed_origin))
+        assert allowed_cors.status_code == 200
+        assert allowed_cors.headers.get("Access-Control-Allow-Origin") == allowed_origin
+        assert allowed_cors.headers.get("Access-Control-Allow-Origin") != "*"
+
+        disallowed_cors = client.get(
+            "/api/analysis",
+            headers=auth_headers("https://attacker.example"),
+        )
+        assert disallowed_cors.status_code == 200
+        assert disallowed_cors.headers.get("Access-Control-Allow-Origin") is None
+
+        no_origin = client.get("/api/analysis", headers=auth_headers())
+        assert no_origin.status_code == 200
 
         unauthorized = client.post(
             "/api/match_snapshots_v2?mode=append",
@@ -126,7 +146,7 @@ def main():
         assert health["duplicateKeys"] == 0
         assert health["missingUniqueKeys"] == 0
 
-    print("[api-contract-compatibility] passed: auth, dedupe, required identity, analysis")
+    print("[api-contract-compatibility] passed: CORS, auth, dedupe, required identity, analysis")
 
 
 if __name__ == "__main__":
