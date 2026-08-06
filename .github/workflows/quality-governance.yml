@@ -16,12 +16,20 @@ jobs:
     steps:
       - name: Checkout reviewed revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
 
       - name: Check governance validator syntax
         run: |
           node --check tools/validate-quality-governance.mjs
+          node --check tools/test-changed-code-coverage.mjs
+          node --check tools/test-quality-maintenance.mjs
           node -e "JSON.parse(require('node:fs').readFileSync('data/quality/quality-gates-v1.json', 'utf8'))"
           node -e "JSON.parse(require('node:fs').readFileSync('data/quality/accepted-risks-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/quality/changed-code-coverage-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/quality/maintenance-review-v1.json', 'utf8'))"
 
-      - name: Validate ownership, rollout, and risk reviews
+      - name: Validate ownership, rollout, coverage, and maintenance reviews
+        env:
+          SLF_COVERAGE_BASE: ${{ github.event.pull_request.base.sha }}
         run: node tools/validate-quality-governance.mjs
