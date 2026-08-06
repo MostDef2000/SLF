@@ -1,0 +1,28 @@
+name: Bootstrap risk boundary
+
+on:
+  pull_request:
+    paths:
+      - 'src/app/bootstrap.js'
+      - 'tools/test-bootstrap-risk-boundary.mjs'
+      - '.github/workflows/bootstrap-risk-boundary.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap-risk-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify bootstrap startup boundary
+        run: node tools/test-bootstrap-risk-boundary.mjs
