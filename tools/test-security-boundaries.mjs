@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import './test-dom-sink-inventory.mjs';
 
 const root = process.cwd();
 
