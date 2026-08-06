@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from werkzeug.exceptions import RequestEntityTooLarge
+from urllib.parse import urlsplit
 import fcntl
 import hmac
 import os
@@ -11,6 +12,12 @@ import threading
 from contextlib import contextmanager
 
 DEFAULT_MAX_CONTENT_LENGTH = 8 * 1024 * 1024
+DEFAULT_CORS_ORIGINS = (
+    "https://slf.fm",
+    "https://www.slf.fm",
+    "https://soccerlife.ru",
+    "https://www.soccerlife.ru",
+)
 
 
 def read_positive_int_env(name, default):
@@ -26,8 +33,47 @@ def read_positive_int_env(name, default):
     return value
 
 
+def normalize_cors_origin(value):
+    origin = str(value or "").strip()
+    if not origin or origin in {"*", "null"}:
+        raise RuntimeError("SLF_API_CORS_ORIGINS must contain explicit http(s) origins")
+    parsed = urlsplit(origin)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError("SLF_API_CORS_ORIGINS must contain explicit http(s) origins")
+    if parsed.username or parsed.password or parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        raise RuntimeError("SLF_API_CORS_ORIGINS entries must not contain credentials, paths, queries, or fragments")
+    host = parsed.hostname.lower() if parsed.hostname else ""
+    if not host:
+        raise RuntimeError("SLF_API_CORS_ORIGINS must contain explicit http(s) origins")
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    return f"{parsed.scheme.lower()}://{host}{port}"
+
+
+def read_cors_origins():
+    raw_value = os.environ.get("SLF_API_CORS_ORIGINS", "").strip()
+    values = raw_value.split(",") if raw_value else DEFAULT_CORS_ORIGINS
+    origins = []
+    for value in values:
+        normalized = normalize_cors_origin(value)
+        if normalized not in origins:
+            origins.append(normalized)
+    if not origins:
+        raise RuntimeError("SLF_API_CORS_ORIGINS must contain at least one origin")
+    return tuple(origins)
+
+
 app = Flask(__name__)
-CORS(app)
+CORS_ORIGINS = read_cors_origins()
+CORS(
+    app,
+    resources={r"/api/*": {"origins": list(CORS_ORIGINS)}},
+    methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    supports_credentials=False,
+    send_wildcard=False,
+    vary_header=True,
+    max_age=600,
+)
 MAX_CONTENT_LENGTH = read_positive_int_env("SLF_API_MAX_CONTENT_LENGTH", DEFAULT_MAX_CONTENT_LENGTH)
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
