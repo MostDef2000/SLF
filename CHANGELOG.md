@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.4.291
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/tactics-presets/tactic-preset-library-panel.js
+- tests/browser/fixtures/owned-live-match.html
+- tests/browser/test_exact_userscript.py
+
+Approved base commit:
+- e731c63393fd90b40466e2e4063269c5170a1f7a
+
+Approved commit:
+- b60206a24f69a20005be4e951dd939a9f6c76bb0
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.290
 
 ### Automatic latest-only build
