@@ -65,8 +65,7 @@ def main():
             [valid_snapshot],
         )
         assert first.status_code == 200
-        first_json = first.get_json()
-        assert first_json == {
+        assert first.get_json() == {
             "status": "appended",
             "collection": "match_snapshots_v2",
             "received": 1,
@@ -97,37 +96,37 @@ def main():
             "status": "live",
             "ts": 1770000001000,
         }
-        compatibility = post_json(
+        rejected = post_json(
             client,
             "/api/match_snapshots_v2?mode=append",
             [missing_key_snapshot],
         )
-        assert compatibility.status_code == 200
-        compatibility_json = compatibility.get_json()
-        assert compatibility_json["received"] == 1
-        assert compatibility_json["added"] == 1
-        assert compatibility_json["skippedDuplicates"] == 0
-        assert compatibility_json["missingUniqueKey"] == 1
-        assert compatibility_json["count"] == 2
+        assert rejected.status_code == 422
+        assert rejected.get_json() == {
+            "error": "Tactical records require deterministic identity",
+            "kind": "missing_unique_key",
+            "collection": "match_snapshots_v2",
+            "requiredKey": "snapshotKey",
+            "invalidIndexes": [0],
+            "received": 1,
+        }
 
         collection_path = Path(data_dir) / "match_snapshots_v2.json"
         stored = json.loads(collection_path.read_text(encoding="utf-8"))
-        assert len(stored) == 2
-        assert stored[0]["snapshotKey"] == valid_snapshot["snapshotKey"]
-        assert "snapshotKey" not in stored[1]
+        assert stored == [valid_snapshot]
 
         analysis = client.get("/api/analysis", headers=auth_headers())
         assert analysis.status_code == 200
         analysis_json = analysis.get_json()
         assert analysis_json["status"] == "ok"
-        assert analysis_json["games"] == 2
+        assert analysis_json["games"] == 1
         assert isinstance(analysis_json["serverTime"], int)
         health = analysis_json["collections"]["match_snapshots_v2"]
-        assert health["count"] == 2
+        assert health["count"] == 1
         assert health["duplicateKeys"] == 0
-        assert health["missingUniqueKeys"] == 1
+        assert health["missingUniqueKeys"] == 0
 
-    print("[api-contract-compatibility] passed: auth, dedupe, missing-key reporting, analysis")
+    print("[api-contract-compatibility] passed: auth, dedupe, required identity, analysis")
 
 
 if __name__ == "__main__":
