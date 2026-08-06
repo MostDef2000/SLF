@@ -2,30 +2,65 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const bootstrapPath = new URL('../src/app/bootstrap.js', import.meta.url);
-const source = fs.readFileSync(bootstrapPath, 'utf8');
+const read = relative => fs.readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8');
 
-const appStartIndex = source.indexOf('App.start();');
+const manifest = JSON.parse(read('src/app/bundle-order.json'));
+const bootstrapFile = 'src/app/bootstrap.js';
+const runnerFile = 'src/app/compatibility-runner.js';
+const headerFile = 'src/app/header-matches-layout-compatibility.js';
+const matchFile = 'src/app/match-rendering-compatibility.js';
+const dropdownFile = 'src/app/tactics-dropdown-ui-policy.js';
+const compatibilityFiles = [runnerFile, headerFile, matchFile, dropdownFile];
+const expectedTail = [...compatibilityFiles, bootstrapFile];
+
+assert.deepEqual(
+    manifest.files.slice(-expectedTail.length),
+    expectedTail,
+    'compatibility modules must be contiguous immediately before the final bootstrap module'
+);
+assert.equal(manifest.files.at(-1), bootstrapFile, 'bootstrap must remain the final bundle module');
+
+const bootstrapSource = read(bootstrapFile);
+const appStartIndex = bootstrapSource.indexOf('App.start();');
 assert.ok(appStartIndex > 0, 'bootstrap must contain App.start()');
-assert.equal(source.indexOf('App.start();', appStartIndex + 1), -1, 'bootstrap must invoke App.start() exactly once');
+assert.equal(
+    bootstrapSource.indexOf('App.start();', appStartIndex + 1),
+    -1,
+    'bootstrap must invoke App.start() exactly once'
+);
+assert.ok(bootstrapSource.includes('const App ='), 'bootstrap must own App');
 
-const preStart = source.slice(0, appStartIndex);
+for (const forbidden of [
+    'compactSnapshotForStorage.bind',
+    'runCompatibilityAdapter(',
+    'HeaderMatchesLayoutCompatibility',
+    'MatchRenderingCompatibility',
+    'TacticsDropdownUiPolicy',
+    'applyTacticsDropdownUiPolicy'
+]) {
+    assert.equal(
+        bootstrapSource.includes(forbidden),
+        false,
+        `bootstrap must not retain compatibility implementation: ${forbidden}`
+    );
+}
 
-assert.ok(
-    !preStart.includes('compactSnapshotForStorage.bind'),
-    'known fatal startup pattern must never return before App.start()'
+const sources = new Map(compatibilityFiles.map(file => [file, read(file)]));
+const combinedCompatibilitySource = compatibilityFiles.map(file => sources.get(file)).join('\n');
+assert.equal(
+    combinedCompatibilitySource.includes('compactSnapshotForStorage.bind'),
+    false,
+    'known fatal startup pattern must never return in compatibility modules'
 );
 
-const bindMatches = [...preStart.matchAll(/([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\.bind\(([^)]*)\)/g)]
+const bindMatches = [...combinedCompatibilitySource.matchAll(/([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\.bind\(([^)]*)\)/g)]
     .map(match => `${match[1]}.bind(${match[2].trim()})`)
     .sort();
-
 const allowedCompatibilityBinds = [
     'UI.addDropdown.bind(UI)',
     'current.bind(pageWindow)',
     'engine.set_render_scale.bind(engine)'
 ].sort();
-
 assert.deepEqual(
     bindMatches,
     allowedCompatibilityBinds,
@@ -37,11 +72,7 @@ assert.deepEqual(
     ].join('\n')
 );
 
-const runnerStart = source.indexOf('function reportCompatibilityFailure');
-const runnerEnd = source.indexOf('const HeaderMatchesLayoutCompatibility', runnerStart);
-assert.ok(runnerStart >= 0 && runnerEnd > runnerStart, 'compatibility fail-open runner must be defined');
-
-const runnerSource = source.slice(runnerStart, runnerEnd);
+const runnerSource = sources.get(runnerFile);
 const sandbox = {
     console: {
         warnings: [],
@@ -52,7 +83,6 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 vm.runInContext(`${runnerSource}\nthis.runCompatibilityAdapter = runCompatibilityAdapter;`, sandbox);
-
 assert.equal(
     sandbox.runCompatibilityAdapter('healthy-adapter', () => {}),
     true,
@@ -66,39 +96,35 @@ assert.equal(
 assert.equal(sandbox.console.warnings.length, 1, 'broken compatibility adapter must emit one warning');
 assert.match(String(sandbox.console.warnings[0][0]), /broken-adapter/, 'warning must identify the failed adapter');
 
-const adapterCalls = [
-    "runCompatibilityAdapter('header-matches-layout', () => HeaderMatchesLayoutCompatibility.install());",
-    "runCompatibilityAdapter('match-rendering', () => MatchRenderingCompatibility.install());",
-    "runCompatibilityAdapter('tactics-dropdown', () => TacticsDropdownUiPolicy.install());"
+const adapters = [
+    {
+        file: headerFile,
+        owner: 'const HeaderMatchesLayoutCompatibility =',
+        call: "runCompatibilityAdapter('header-matches-layout', () => HeaderMatchesLayoutCompatibility.install());"
+    },
+    {
+        file: matchFile,
+        owner: 'const MatchRenderingCompatibility =',
+        call: "runCompatibilityAdapter('match-rendering', () => MatchRenderingCompatibility.install());"
+    },
+    {
+        file: dropdownFile,
+        owner: 'const TacticsDropdownUiPolicy =',
+        call: "runCompatibilityAdapter('tactics-dropdown', () => TacticsDropdownUiPolicy.install());"
+    }
 ];
 
-let previousIndex = runnerEnd;
-for (const call of adapterCalls) {
-    const index = source.indexOf(call);
-    assert.ok(index > previousIndex, `compatibility adapter order is invalid: ${call}`);
-    assert.ok(index < source.indexOf('const App ='), `compatibility adapter must run before App creation: ${call}`);
-    previousIndex = index;
+for (const adapter of adapters) {
+    const source = sources.get(adapter.file);
+    const ownerIndex = source.indexOf(adapter.owner);
+    const callIndex = source.indexOf(adapter.call);
+    assert.ok(ownerIndex >= 0, `compatibility owner is missing: ${adapter.file}`);
+    assert.ok(callIndex > ownerIndex, `adapter must run after its owner is declared: ${adapter.file}`);
+    assert.equal(
+        source.indexOf(adapter.call, callIndex + adapter.call.length),
+        -1,
+        `adapter must be invoked exactly once: ${adapter.file}`
+    );
 }
-
-for (const marker of [
-    'function applyTacticsDropdownUiPolicy()',
-    'const HeaderMatchesLayoutCompatibility =',
-    'const MatchRenderingCompatibility =',
-    'const TacticsDropdownUiPolicy =',
-    'const App =',
-    'App.start();'
-]) {
-    assert.ok(source.includes(marker), `bootstrap owner marker is missing: ${marker}`);
-}
-
-const compatibilityEntry = 'applyTacticsDropdownUiPolicy();';
-const compatibilityEntryIndex = source.indexOf(compatibilityEntry);
-assert.ok(compatibilityEntryIndex > previousIndex, 'compatibility owner must run after its three adapters are declared');
-assert.ok(compatibilityEntryIndex < source.indexOf('const App ='), 'compatibility owner must run before App creation');
-assert.equal(
-    source.indexOf(compatibilityEntry, compatibilityEntryIndex + compatibilityEntry.length),
-    -1,
-    'compatibility owner must be invoked exactly once'
-);
 
 console.log('Bootstrap risk boundary: OK');
