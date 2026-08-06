@@ -174,10 +174,12 @@
           wrapperRight: wrapperRect.right,
           nameMinWidth: getComputedStyle(table.querySelector('.player-column-name')).minWidth,
           panelParent: panel.parentElement?.className || '',
+          panelPlacement: panel.dataset.slfTeamPlacement || '',
           panelLeft: panelRect.left,
           rosterRight: teamContentRect.right,
           panelTop: panelRect.top,
           rosterTop: teamContentRect.top,
+          rosterBottom: teamContentRect.bottom,
           badgeParent: badge.parentElement?.className || '',
           badgeText: badge.textContent,
           badgeDisplay: badgeStyle.display,
@@ -187,7 +189,9 @@
           lineupEvidence
         };
         window.__slfRosterFitEvidence = evidence;
-        const sideBySide = innerWidth < 1440 || (evidence.panelLeft >= evidence.rosterRight + 5 && Math.abs(evidence.panelTop - evidence.rosterTop) <= 2);
+        const placementOk = evidence.panelPlacement === 'external-right'
+          ? evidence.panelLeft >= evidence.rosterRight + 5 && Math.abs(evidence.panelTop - evidence.rosterTop) <= 2
+          : evidence.panelPlacement === 'below-content' && evidence.panelTop >= evidence.rosterBottom + 5;
         const expectedNames = ['Уоррен-Смит', 'Палмер-Джонсон', 'Букенен-Младший', 'Харрисон', 'Суарес'];
         const passed = evidence.headerColumns === 16
           && evidence.bodyColumns.every(count => count === 16)
@@ -197,7 +201,7 @@
           && evidence.tableRight <= evidence.wrapperRight + 1
           && evidence.nameMinWidth !== '200px'
           && evidence.panelParent.includes('team-body')
-          && sideBySide
+          && placementOk
           && evidence.badgeParent.includes('fm-topbar__right')
           && evidence.badgeText === `SLF ${window.SLF?.scriptVersion || ''}`
           && evidence.badgeDisplay !== 'none'
