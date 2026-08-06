@@ -1,0 +1,161 @@
+{
+  "schema": "slf_changed_code_evidence_coverage_v1",
+  "coverageKind": "source_to_executable_evidence",
+  "statementCoverageClaimed": false,
+  "branchCoverageClaimed": false,
+  "repository": "MostDef2000/SLF",
+  "ratchet": {
+    "minimumRegisteredBundleModules": 56,
+    "maximumUnmappedCriticalFiles": 0,
+    "requiredChangedCriticalFileCoveragePercent": 100,
+    "minimumEvidenceRules": 8
+  },
+  "criticalFilePatterns": [
+    "^src/.*\\.js$",
+    "^src/app/bundle-order\\.json$",
+    "^vps/(?:api|ops|exporter-rag)/.*$",
+    "^\\.github/(?:workflows/.*\\.ya?ml|dependabot\\.yml|CODEOWNERS|pull_request_template\\.md)$",
+    "^data/(?:contracts|quality)/.*\\.json$",
+    "^data/version\\.json$",
+    "^releases/latest\\.(?:user|meta)\\.js$",
+    "^CHANGELOG\\.md$",
+    "^tools/(?:build-latest-userscript|check-bundle-order|validate-release-provenance|generate-release-evidence|validate-release-evidence|validate-quality-governance|test-security-boundaries|inventory-dom-sinks|test-dom-sink-inventory|test-changed-code-coverage|test-quality-maintenance)\\.mjs$",
+    "^tools/test-api-.*\\.py$",
+    "^tools/test-deployment-evidence\\.py$",
+    "^tests/browser/.*\\.(?:py|html)$",
+    "^docs/(?:quality|security|release)/.*\\.md$"
+  ],
+  "evidenceRules": [
+    {
+      "id": "runtime-userscript",
+      "filePatterns": ["^src/.*\\.js$", "^src/app/bundle-order\\.json$"],
+      "evidencePaths": [
+        "tools/test-userscript-artifact-boundary.mjs",
+        "tools/test-security-boundaries.mjs",
+        "tests/browser/test_exact_userscript.py",
+        ".github/workflows/quality-integration.yml"
+      ],
+      "workflowCommands": [
+        {"workflow": ".github/workflows/quality-integration.yml", "contains": "node tools/test-userscript-artifact-boundary.mjs"},
+        {"workflow": ".github/workflows/quality-integration.yml", "contains": "node tools/test-security-boundaries.mjs"},
+        {"workflow": ".github/workflows/quality-integration.yml", "contains": "python3 tests/browser/test_exact_userscript.py"}
+      ]
+    },
+    {
+      "id": "vps-api",
+      "filePatterns": ["^vps/api/.*$", "^tools/test-api-.*\\.py$"],
+      "evidencePaths": [
+        "tools/test-api-contract-compatibility.py",
+        "tools/test-api-adversarial.py",
+        "tools/test-api-fuzz-and-recovery.py",
+        ".github/workflows/quality-integration.yml"
+      ],
+      "workflowCommands": [
+        {"workflow": ".github/workflows/quality-integration.yml", "contains": "python3 tools/test-api-contract-compatibility.py"},
+        {"workflow": ".github/workflows/quality-integration.yml", "contains": "python3 tools/test-api-adversarial.py"},
+        {"workflow": ".github/workflows/quality-integration.yml", "contains": "python3 tools/test-api-fuzz-and-recovery.py"}
+      ]
+    },
+    {
+      "id": "deployment-and-exporter",
+      "filePatterns": ["^vps/(?:ops|exporter-rag)/.*$", "^tools/test-deployment-evidence\\.py$"],
+      "evidencePaths": [
+        "tools/test-deployment-evidence.py",
+        "vps/ops/verify_api_deployment.py",
+        ".github/workflows/release-deployment-evidence.yml"
+      ],
+      "workflowCommands": [
+        {"workflow": ".github/workflows/release-deployment-evidence.yml", "contains": "python3 tools/test-deployment-evidence.py"},
+        {"workflow": ".github/workflows/release-deployment-evidence.yml", "contains": "node tools/validate-release-evidence.mjs"}
+      ]
+    },
+    {
+      "id": "repository-governance",
+      "filePatterns": [
+        "^\\.github/(?:workflows/.*\\.ya?ml|dependabot\\.yml|CODEOWNERS|pull_request_template\\.md)$",
+        "^data/quality/.*\\.json$",
+        "^tools/(?:validate-quality-governance|test-security-boundaries|inventory-dom-sinks|test-dom-sink-inventory|test-changed-code-coverage|test-quality-maintenance)\\.mjs$",
+        "^docs/quality/.*\\.md$",
+        "^docs/security/.*\\.md$"
+      ],
+      "evidencePaths": [
+        "tools/validate-quality-governance.mjs",
+        "tools/test-security-boundaries.mjs",
+        ".github/workflows/quality-governance.yml",
+        ".github/workflows/quality-integration.yml"
+      ],
+      "workflowCommands": [
+        {"workflow": ".github/workflows/quality-governance.yml", "contains": "node tools/validate-quality-governance.mjs"},
+        {"workflow": ".github/workflows/quality-integration.yml", "contains": "node tools/validate-quality-governance.mjs"}
+      ]
+    },
+    {
+      "id": "versioned-contracts",
+      "filePatterns": ["^data/contracts/.*\\.json$"],
+      "evidencePaths": [
+        "tools/test-versioned-contracts.mjs",
+        "tools/test-api-contract-compatibility.py",
+        ".github/workflows/quality-integration.yml"
+      ],
+      "workflowCommands": [
+        {"workflow": ".github/workflows/quality-integration.yml", "contains": "node tools/test-versioned-contracts.mjs"},
+        {"workflow": ".github/workflows/quality-integration.yml", "contains": "python3 tools/test-api-contract-compatibility.py"}
+      ]
+    },
+    {
+      "id": "release-artifacts-and-build",
+      "filePatterns": [
+        "^data/version\\.json$",
+        "^releases/latest\\.(?:user|meta)\\.js$",
+        "^CHANGELOG\\.md$",
+        "^tools/(?:build-latest-userscript|check-bundle-order|validate-release-provenance|generate-release-evidence|validate-release-evidence)\\.mjs$",
+        "^docs/release/.*\\.md$"
+      ],
+      "evidencePaths": [
+        "tools/test-userscript-artifact-boundary.mjs",
+        "tools/validate-release-evidence.mjs",
+        ".github/workflows/userscript-artifact-boundary.yml",
+        ".github/workflows/release-deployment-evidence.yml"
+      ],
+      "workflowCommands": [
+        {"workflow": ".github/workflows/userscript-artifact-boundary.yml", "contains": "node tools/test-userscript-artifact-boundary.mjs"},
+        {"workflow": ".github/workflows/release-deployment-evidence.yml", "contains": "node tools/validate-release-evidence.mjs"}
+      ]
+    },
+    {
+      "id": "browser-fixtures",
+      "filePatterns": ["^tests/browser/.*\\.(?:py|html)$"],
+      "evidencePaths": [
+        "tests/browser/test_exact_userscript.py",
+        ".github/workflows/browser-e2e.yml",
+        ".github/workflows/quality-integration.yml"
+      ],
+      "workflowCommands": [
+        {"workflow": ".github/workflows/browser-e2e.yml", "contains": "python3 tests/browser/test_exact_userscript.py"},
+        {"workflow": ".github/workflows/quality-integration.yml", "contains": "python3 tests/browser/test_exact_userscript.py"}
+      ]
+    },
+    {
+      "id": "dom-security",
+      "filePatterns": [
+        "^data/quality/dom-sink-inventory-v1\\.json$",
+        "^tools/(?:inventory-dom-sinks|test-dom-sink-inventory|test-security-boundaries)\\.mjs$",
+        "^tests/browser/test_dom_xss_.*\\.py$"
+      ],
+      "evidencePaths": [
+        "tools/test-dom-sink-inventory.mjs",
+        "tools/test-security-boundaries.mjs",
+        "tests/browser/test_dom_xss_preset_names.py",
+        "tests/browser/test_dom_xss_page_text.py",
+        ".github/workflows/security-boundaries.yml",
+        ".github/workflows/browser-e2e.yml"
+      ],
+      "workflowCommands": [
+        {"workflow": ".github/workflows/security-boundaries.yml", "contains": "node tools/test-security-boundaries.mjs"},
+        {"workflow": ".github/workflows/browser-e2e.yml", "contains": "python3 tests/browser/test_dom_xss_preset_names.py"},
+        {"workflow": ".github/workflows/browser-e2e.yml", "contains": "python3 tests/browser/test_dom_xss_page_text.py"}
+      ]
+    }
+  ],
+  "exceptions": []
+}
