@@ -69,18 +69,20 @@
     {
       "id": "QR-004",
       "title": "External jQuery userscript dependency is URL-versioned but not content-addressed",
-      "status": "open",
+      "status": "closed",
       "severity": "medium",
       "owner": "MostDef2000",
       "boundary": "Userscript supply chain",
       "consequence": "A compromised external distribution path could change executed dependency bytes without a repository diff.",
       "compensatingControls": [
-        "The dependency URL is fixed to jQuery 3.6.0",
-        "The exact @require allowlist is merge-blocking",
-        "Release evidence records the declared external requirement"
+        "The userscript header contains zero external @require directives",
+        "Every registered runtime module is scanned for executable jQuery and dollar-alias references",
+        "The exact generated metadata and userscript artifacts reject any @require directive or removed CDN URL",
+        "Exact browser E2E executes the candidate without an injected external library"
       ],
-      "target": "Remove the dependency, vendor a reviewed licensed copy, or add content-digest verification to release evidence.",
-      "sourcePullRequest": 165,
+      "target": "Maintain a dependency-free userscript runtime unless a separately reviewed content-addressed dependency model is introduced.",
+      "sourcePullRequest": 216,
+      "closureEvidence": "PR #216 removes the unused jQuery @require directive. The security boundary requires an empty external dependency list and scans every bundle-order module for jQuery or dollar-alias runtime references. The exact artifact boundary requires both generated artifacts to contain zero @require directives and no code.jquery.com reference. Final exact-artifact, browser, security, governance and release evidence is recorded on the pull request; production publication is not implied.",
       "reviewBy": "2026-10-01"
     },
     {
