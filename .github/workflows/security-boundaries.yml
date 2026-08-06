@@ -7,6 +7,7 @@ on:
       - 'src/**'
       - 'tools/test-security-boundaries.mjs'
       - 'tools/test-api-adversarial.py'
+      - 'tools/test-api-multiprocess-locking.py'
       - 'vps/api/**'
       - 'data/**'
       - 'docs/security/**'
@@ -27,6 +28,7 @@ jobs:
         run: |
           node --check tools/test-security-boundaries.mjs
           python3 -m py_compile tools/test-api-adversarial.py
+          python3 -m py_compile tools/test-api-multiprocess-locking.py
 
       - name: Enforce repository security boundaries
         run: node tools/test-security-boundaries.mjs
@@ -38,4 +40,6 @@ jobs:
         run: python3 -m pip check
 
       - name: Run adversarial VPS API tests
-        run: python3 tools/test-api-adversarial.py
+        run: |
+          python3 tools/test-api-adversarial.py
+          python3 tools/test-api-multiprocess-locking.py
