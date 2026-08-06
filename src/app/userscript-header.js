@@ -13,7 +13,6 @@
 // @match        https://www.soccerlife.ru/
 // @match        https://www.soccerlife.ru/*
 // @icon         https://www.google.com/s2/favicons?domain=slf.fm
-// @require      https://code.jquery.com/jquery-3.6.0.min.js
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // @grant        GM_getValue
