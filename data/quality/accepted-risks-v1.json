@@ -78,28 +78,30 @@
         "The userscript header contains zero external @require directives",
         "Every registered runtime module is scanned for executable jQuery and dollar-alias references",
         "The exact generated metadata and userscript artifacts reject any @require directive or removed CDN URL",
-        "Exact browser E2E executes the candidate without an injected external library"
+        "A dedicated exact browser smoke test verifies startup while window.jQuery and window.$ remain undefined"
       ],
       "target": "Maintain a dependency-free userscript runtime unless a separately reviewed content-addressed dependency model is introduced.",
       "sourcePullRequest": 216,
-      "closureEvidence": "PR #216 removes the unused jQuery @require directive. The security boundary requires an empty external dependency list and scans every bundle-order module for jQuery or dollar-alias runtime references. The exact artifact boundary requires both generated artifacts to contain zero @require directives and no code.jquery.com reference. Final exact-artifact, browser, security, governance and release evidence is recorded on the pull request; production publication is not implied.",
+      "closureEvidence": "PR #216 removes the unused jQuery @require directive. The security boundary requires an empty external dependency list and scans every bundle-order module for jQuery or dollar-alias runtime references. The exact artifact boundary requires both generated artifacts to contain zero @require directives and no code.jquery.com reference. tests/browser/test_without_jquery.py verifies exact candidate startup while both globals remain undefined. Final exact-artifact, browser, security, governance and release evidence is recorded on the pull request; production publication is not implied.",
       "reviewBy": "2026-10-01"
     },
     {
       "id": "QR-005",
       "title": "Browser DOM XSS coverage is not yet sink-complete",
-      "status": "open",
+      "status": "closed",
       "severity": "high",
       "owner": "MostDef2000",
-      "boundary": "Untrusted page and API text to userscript UI",
+      "boundary": "Untrusted page, storage, import, API and remote text to userscript UI",
       "consequence": "An unsafe render path could execute or inject attacker-controlled markup in the SLF page context.",
       "compensatingControls": [
-        "Dynamic code execution sinks are prohibited",
-        "Browser E2E executes the exact artifact and fails on runtime exceptions",
-        "Security scan inventories innerHTML assignments"
+        "A deterministic scanner inventories innerHTML, outerHTML, insertAdjacentHTML, document.write, contextual fragment and HTML DOMParser sinks",
+        "All 48 discovered sinks have one committed classification with provenance, control and evidence; unregistered, duplicate, moved or stale entries block the always-running security boundary",
+        "Custom preset names are normalized on local, import and server storage boundaries before labels reach HTML templates, including migration of existing local data",
+        "Exact browser tests inject malicious storage names and malicious match-page text and assert no executable nodes, event attributes or handlers are created"
       ],
-      "target": "Classify every innerHTML assignment and add malicious-string fixtures for all untrusted data paths.",
-      "sourcePullRequest": 165,
+      "target": "Maintain the exact sink registry, executable malicious-string fixtures and storage/page text boundaries for every future HTML sink change.",
+      "sourcePullRequest": 218,
+      "closureEvidence": "PR #218 adds data/quality/dom-sink-inventory-v1.json and tools/test-dom-sink-inventory.mjs, integrated through tools/test-security-boundaries.mjs so the registry runs in both Security and aggregate Quality integration. The registry classifies 48 sinks: 10 detached parsers, 5 clear-only operations, static templates, constrained-value templates, escaped builders and one normalized storage template. PresetStorage canonicalizes HTML-significant and control characters for local, imported and VPS custom preset names. tools/test-preset-name-xss-boundary.mjs verifies normalization, deterministic collision handling, existing-storage rewrite and API merge payloads. tests/browser/test_dom_xss_preset_names.py and tests/browser/test_dom_xss_page_text.py execute malicious tags, handlers, SVG, script, quote and javascript-scheme strings against the exact candidate and assert no executable DOM is created. Final CI evidence is recorded on the pull request; production publication is not implied.",
       "reviewBy": "2026-09-01"
     },
     {
