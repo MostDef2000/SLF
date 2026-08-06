@@ -6,6 +6,7 @@ on:
       - '.github/**'
       - 'src/**'
       - 'tools/test-security-boundaries.mjs'
+      - 'tools/inventory-dom-sinks.mjs'
       - 'tools/test-api-adversarial.py'
       - 'tools/test-api-multiprocess-locking.py'
       - 'tools/test-api-request-size-limit.py'
@@ -30,11 +31,15 @@ jobs:
       - name: Check security test syntax
         run: |
           node --check tools/test-security-boundaries.mjs
+          node --check tools/inventory-dom-sinks.mjs
           python3 -m py_compile tools/test-api-adversarial.py
           python3 -m py_compile tools/test-api-multiprocess-locking.py
           python3 -m py_compile tools/test-api-request-size-limit.py
           python3 -m py_compile tools/test-api-required-tactical-identity.py
           python3 -m py_compile tools/test-api-cors-policy.py
+
+      - name: Inventory browser HTML sinks
+        run: node tools/inventory-dom-sinks.mjs
 
       - name: Enforce repository security boundaries
         run: node tools/test-security-boundaries.mjs
