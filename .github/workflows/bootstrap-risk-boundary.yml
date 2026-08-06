@@ -10,6 +10,7 @@ on:
       - 'tools/compare-match-rendering-traces.mjs'
       - 'tools/test-match-rendering-trace-comparison.mjs'
       - 'docs/performance/match-rendering-debt-plan.md'
+      - 'docs/performance/match-rendering-trace-matrix.example.json'
       - '.github/workflows/bootstrap-risk-boundary.yml'
   workflow_dispatch:
 
@@ -31,6 +32,7 @@ jobs:
           node --check tools/test-match-rendering-diagnostics-contract.mjs
           node --check tools/compare-match-rendering-traces.mjs
           node --check tools/test-match-rendering-trace-comparison.mjs
+          node -e "const m=JSON.parse(require('node:fs').readFileSync('docs/performance/match-rendering-trace-matrix.example.json','utf8')); if(m.schema!=='slf_match_rendering_trace_matrix_v1') throw new Error('unexpected trace matrix schema')"
 
       - name: Verify bootstrap startup boundary
         run: node tools/test-bootstrap-risk-boundary.mjs
