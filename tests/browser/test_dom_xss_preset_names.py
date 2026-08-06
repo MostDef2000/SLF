@@ -87,7 +87,7 @@ def main():
             )
             stored_names = list(stored.keys())
             assert len(stored_names) == 1
-            assert all(char not in stored_names[0] for char in '<>"\'`&')
+            assert all(char not in stored_names[0] for char in "<>\"'`&")
             assert page_errors == [], page_errors
             assert page.evaluate("window.__slfUnhandled.slice()") == []
         finally:
