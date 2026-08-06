@@ -2,9 +2,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = process.cwd();
-const sourceRoot = path.join(root, 'src');
 const sinkPatterns = [
   { type: 'innerHTML-assignment', expression: /\.innerHTML\s*=/g },
   { type: 'outerHTML-assignment', expression: /\.outerHTML\s*=/g },
@@ -36,26 +35,34 @@ function lineTextAt(source, lineNumber) {
   return source.split(/\r?\n/)[lineNumber - 1]?.trim() || '';
 }
 
-const sinks = [];
-for (const absolute of walk(sourceRoot)) {
-  const source = fs.readFileSync(absolute, 'utf8');
-  const relative = path.relative(root, absolute).replaceAll('\\', '/');
-  for (const pattern of sinkPatterns) {
-    pattern.expression.lastIndex = 0;
-    for (const match of source.matchAll(pattern.expression)) {
-      const line = lineNumberAt(source, match.index);
-      sinks.push({
-        id: `${relative}:${line}:${pattern.type}`,
-        file: relative,
-        line,
-        type: pattern.type,
-        source: lineTextAt(source, line)
-      });
+export function discoverDomSinks(root = process.cwd()) {
+  const sourceRoot = path.join(root, 'src');
+  const sinks = [];
+  for (const absolute of walk(sourceRoot)) {
+    const source = fs.readFileSync(absolute, 'utf8');
+    const relative = path.relative(root, absolute).replaceAll('\\', '/');
+    for (const pattern of sinkPatterns) {
+      pattern.expression.lastIndex = 0;
+      for (const match of source.matchAll(pattern.expression)) {
+        const line = lineNumberAt(source, match.index);
+        sinks.push({
+          id: `${relative}:${line}:${pattern.type}`,
+          file: relative,
+          line,
+          type: pattern.type,
+          source: lineTextAt(source, line)
+        });
+      }
     }
   }
+  return sinks.sort((left, right) =>
+    left.file.localeCompare(right.file) || left.line - right.line || left.type.localeCompare(right.type)
+  );
 }
 
-sinks.sort((left, right) => left.file.localeCompare(right.file) || left.line - right.line || left.type.localeCompare(right.type));
-
-console.log(`[dom-sink-inventory] total=${sinks.length}`);
-for (const sink of sinks) console.log(JSON.stringify(sink));
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  const sinks = discoverDomSinks();
+  console.log(`[dom-sink-inventory] total=${sinks.length}`);
+  for (const sink of sinks) console.log(JSON.stringify(sink));
+}
