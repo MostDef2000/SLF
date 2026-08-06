@@ -102,6 +102,37 @@ window.__SLF_MATCH_RENDER_DIAGNOSTICS_STOP__?.();
 
 Отдельно фиксируются browser version, OS, GPU, viewport, DPR и zoom. Hidden/background tab не используется для сравнения RAF.
 
+#### Оффлайн-сравнение серий
+
+После сохранения отчётов заполнить копию `docs/performance/match-rendering-trace-matrix.example.json`. Пути в `reports` задаются относительно файла матрицы. В каждой группе должны быть минимум три отчёта одного сценария.
+
+Запуск:
+
+```bash
+node tools/compare-match-rendering-traces.mjs path/to/matrix.json
+```
+
+Машиночитаемый вывод:
+
+```bash
+node tools/compare-match-rendering-traces.mjs path/to/matrix.json --json
+```
+
+Анализатор:
+
+- проверяет схему каждого capture;
+- требует одинаковые DPR и viewport между сравниваемыми сериями;
+- отклоняет capture с переходом вкладки в hidden/background state;
+- предупреждает, если длительности capture отличаются более чем на 25%;
+- нормализует frame gaps на 1000 RAF samples;
+- нормализует Long Tasks и observer runs по длительности capture;
+- рассчитывает абсолютную и процентную разницу относительно baseline;
+- отдельно оценивает render scale, hook readiness и Canvas state changes для условий с SLF.
+
+Код возврата `2` означает, что отчёты прочитаны, но матрица несопоставима. Код возврата `1` означает ошибку схемы, файла или структуры матрицы. Предварительные threshold checks являются только сигналом для расследования и не блокируют merge.
+
+Сырые отчёты не должны содержать токены, cookies, приватные сообщения или другие персональные данные. В репозиторий добавляется только обезличенная evidence при отдельном review.
+
 #### Предварительные цели
 
 До получения трёх production traces эти значения являются ориентирами, а не merge gate:
