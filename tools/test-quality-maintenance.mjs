@@ -16,18 +16,14 @@ function parseUtcDate(value, label) {
   return timestamp;
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function dependabotBlock(ecosystem, directory) {
-  const expression = new RegExp(
-    `(?:^|\\n)  - package-ecosystem: ${escapeRegExp(ecosystem)}\\n[\\s\\S]*?^    directory: ${escapeRegExp(directory)}\\n[\\s\\S]*?(?=^  - package-ecosystem:|\\s*$)`,
-    'm'
+  const blocks = dependabotSource.split(/\n(?=  - package-ecosystem:)/);
+  const block = blocks.find(candidate =>
+    candidate.includes(`package-ecosystem: ${ecosystem}`) &&
+    candidate.includes(`directory: ${directory}`)
   );
-  const match = dependabotSource.match(expression);
-  assert.ok(match, `Dependabot block missing: ${ecosystem} ${directory}`);
-  return match[0];
+  assert.ok(block, `Dependabot block missing: ${ecosystem} ${directory}`);
+  return block;
 }
 
 assert.equal(manifest.schema, 'slf_quality_maintenance_review_v1');
