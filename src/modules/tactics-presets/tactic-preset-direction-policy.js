@@ -319,9 +319,18 @@
         }
     }
 
+    function resolveFormationPanel() {
+        try {
+            return eval('typeof TacticPresetLibraryPanel !== "undefined" ? TacticPresetLibraryPanel : null');
+        } catch (_) {
+            return null;
+        }
+    }
+
     function patchFormationPanel() {
-        if (typeof TacticPresetLibraryPanel === 'undefined' || !TacticPresetLibraryPanel) return;
-        TacticPresetLibraryPanel.liveFormationPositions = Object.fromEntries(
+        const panel = resolveFormationPanel();
+        if (!panel) return;
+        panel.liveFormationPositions = Object.fromEntries(
             Object.entries(FORMATIONS).map(([name, positions]) => [name, positions.slice()])
         );
     }
