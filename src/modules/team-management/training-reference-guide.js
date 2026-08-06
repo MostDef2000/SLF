@@ -136,7 +136,7 @@ const TrainingGuidePanel = {
         try {
             const {data}=await Api.getPromise(this.cacheCollection,'training league benchmarks cache');
             if (!this.render(data,'Кеш VPS')) return this.setStatus('VPS-кеш отсутствует. Выполните динамический расчёт лиг.','muted');
-            this.applyIds(data); this.setStatus('Последний расчёт загружен с VPS.','ok');
+            this.applyIds(data); this.setStatus('Последний расчёт загружен из VPS-кеша.','ok');
         } catch(error) { this.setStatus(`VPS-кеш недоступен (${error?.kind||'error'}${error?.status?'/'+error.status:''}).`,'error'); }
     },
 
