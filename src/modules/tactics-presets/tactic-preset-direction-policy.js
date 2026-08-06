@@ -53,6 +53,15 @@
         catch (_) { return DEFAULT_RISK_APPETITE; }
     }
 
+    function finite(value, fallback = 0) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function bounded(value, min = 0, max = 100) {
+        return Math.max(min, Math.min(max, finite(value)));
+    }
+
     function copy(value) { return Array.isArray(value) ? value.slice() : []; }
 
     function hasSignal(signals, name) {
@@ -161,12 +170,12 @@
             signals.riskAppetite = resolveRiskAppetite(snapshot, context);
             signals.riskPolicy = Object.assign({}, RISK_APPETITES[signals.riskAppetite]);
 
-            const rawStrengthAdvantage = owner.num(signals.strengthAdvantage);
+            const rawStrengthAdvantage = finite(signals.strengthAdvantage);
             const cappedStrengthAdvantage = Math.min(rawStrengthAdvantage, 32);
             const duplicateStrength = Math.max(0, rawStrengthAdvantage - cappedStrengthAdvantage);
             signals.rawStrengthAdvantage = rawStrengthAdvantage;
             signals.strengthAdvantage = cappedStrengthAdvantage;
-            signals.pressingOpportunity = owner.clamp(owner.num(signals.pressingOpportunity) - duplicateStrength * 0.35);
+            signals.pressingOpportunity = bounded(finite(signals.pressingOpportunity) - duplicateStrength * 0.35);
 
             if (
                 signals.gameMode === 'front_foot_squeeze' &&
