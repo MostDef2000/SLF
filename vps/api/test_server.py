@@ -89,15 +89,32 @@ class ServerTestCase(unittest.TestCase):
         self.assertEqual(body["added"], 1)
         self.assertEqual(body["skippedDuplicates"], 1)
 
-    def test_missing_unique_key_remains_backward_compatible(self):
+    def test_missing_unique_key_is_rejected_without_mutation(self):
+        seed = {"effectKey": "effect-seed", "gameId": "g1"}
+        seeded = self.client.post(
+            "/api/preset_effects_v2?mode=append",
+            json=seed,
+            headers=self.auth
+        )
+        self.assertEqual(seeded.status_code, 200)
+        path = pathlib.Path(self.temp_dir.name) / "preset_effects_v2.json"
+        before = path.read_bytes()
+
         response = self.client.post(
             "/api/preset_effects_v2?mode=append",
             json={"gameId": "legacy"},
             headers=self.auth
         )
-        body = response.get_json()
-        self.assertEqual(body["added"], 1)
-        self.assertEqual(body["missingUniqueKey"], 1)
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.get_json(), {
+            "error": "Tactical records require deterministic identity",
+            "kind": "missing_unique_key",
+            "collection": "preset_effects_v2",
+            "requiredKey": "effectKey",
+            "invalidIndexes": [0],
+            "received": 1
+        })
+        self.assertEqual(path.read_bytes(), before)
 
     def test_corrupt_collection_returns_controlled_error(self):
         with open(os.path.join(self.temp_dir.name, "preset_effects_v2.json"), "w", encoding="utf-8") as file_handle:
