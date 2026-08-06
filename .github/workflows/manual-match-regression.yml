@@ -7,6 +7,10 @@ on:
       - 'src/modules/match-reading/**'
       - 'src/modules/manual-match-telemetry/**'
       - 'src/app/bootstrap.js'
+      - 'src/app/compatibility-runner.js'
+      - 'src/app/header-matches-layout-compatibility.js'
+      - 'src/app/match-rendering-compatibility.js'
+      - 'src/app/tactics-dropdown-ui-policy.js'
       - 'src/app/ui-layer.js'
       - 'src/app/userscript-header.js'
       - 'src/app/bundle-order.json'
@@ -53,5 +57,7 @@ jobs:
         run: node tools/test-manual-telemetry-legacy-boundary.mjs
       - name: Enforce final removal boundary
         run: node tools/test-manual-telemetry-final-boundary.mjs
+      - name: Build exact candidate artifact
+        run: node tools/build-latest-userscript.mjs
       - name: Revalidate reachability inventory
         run: node tools/audit-runtime-reachability.mjs --validate-review
