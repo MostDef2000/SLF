@@ -2,12 +2,12 @@
 // ============================================================
 
 function applyTacticsDropdownUiPolicy() {
-function reportCompatibilityFailure(name, error) {
+    function reportCompatibilityFailure(name, error) {
     if (typeof console === 'undefined' || typeof console.warn !== 'function') return;
     console.warn(`[SLF] compatibility adapter failed: ${name}`, error);
 }
 
-function runCompatibilityAdapter(name, install) {
+    function runCompatibilityAdapter(name, install) {
     try {
         install();
         return true;
@@ -17,7 +17,7 @@ function runCompatibilityAdapter(name, install) {
     }
 }
 
-const HeaderMatchesLayoutCompatibility = {
+    const HeaderMatchesLayoutCompatibility = {
     install() {
         const root = document.documentElement;
         if (!root || root.dataset.slfHeaderMatchesFit === '1') return;
@@ -92,7 +92,7 @@ const HeaderMatchesLayoutCompatibility = {
     }
 };
 
-const MatchRenderingCompatibility = {
+    const MatchRenderingCompatibility = {
     install() {
         if (!location.pathname.includes('/game.php')) return;
 
@@ -256,7 +256,7 @@ const MatchRenderingCompatibility = {
     }
 };
 
-const TacticsDropdownUiPolicy = {
+    const TacticsDropdownUiPolicy = {
     install() {
         if (typeof UI === 'undefined' || !UI?.addDropdown || UI.__flatSortedTacticDropdownApplied) return;
 
