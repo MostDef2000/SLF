@@ -50,18 +50,20 @@
     {
       "id": "QR-003",
       "title": "VPS API CORS policy is broad",
-      "status": "open",
+      "status": "closed",
       "severity": "medium",
       "owner": "MostDef2000",
       "boundary": "Browser to VPS API",
       "consequence": "Unexpected browser origins may attempt authenticated API access if a token is exposed to that origin.",
       "compensatingControls": [
-        "Bearer token is stored in Tampermonkey storage",
-        "token is sent only in the Authorization header",
-        "userscript connection hosts are allowlisted"
+        "CORS permission headers are limited to the four reviewed SLF game origins by default",
+        "The validated environment override rejects wildcard, null, credentials, paths, queries and fragments",
+        "Only GET, POST and OPTIONS with Authorization and Content-Type request headers are advertised",
+        "No-Origin authenticated requests remain functional for Tampermonkey extension transport"
       ],
-      "target": "Define and test explicit allowed origins without breaking Tampermonkey transport.",
-      "sourcePullRequest": 165,
+      "target": "Maintain an explicit reviewed origin allowlist and require test evidence before adding an origin.",
+      "sourcePullRequest": 214,
+      "closureEvidence": "PR #214 replaces broad CORS(app) configuration with an explicit /api/* allowlist and validated SLF_API_CORS_ORIGINS override. tools/test-api-cors-policy.py verifies every default origin, denied unrelated origins, allowed and denied preflight, no-Origin transport, normalized override behavior, disabled credential headers and invalid configuration startup failure. The aggregate API compatibility test also verifies allowed, denied and no-Origin behavior. Final CI evidence is recorded on the pull request; production deployment is not implied.",
       "reviewBy": "2026-09-15"
     },
     {
