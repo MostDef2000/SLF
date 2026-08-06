@@ -20,6 +20,7 @@ Decision Records are not task notes. Use them only when a decision changes or pr
 | DR-009 | Private VPS API bearer credential | Active |
 | DR-010 | GitHub Issues as backlog source of truth | Active |
 | DR-011 | SLF Task Intake as the entry stage | Active |
+| DR-012 | Canonical scope approval boundary | Active |
 
 ## Numbering rule
 
