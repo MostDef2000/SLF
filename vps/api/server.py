@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import RequestEntityTooLarge
 import fcntl
 import hmac
 import os
@@ -9,8 +10,26 @@ import re
 import threading
 from contextlib import contextmanager
 
+DEFAULT_MAX_CONTENT_LENGTH = 8 * 1024 * 1024
+
+
+def read_positive_int_env(name, default):
+    raw_value = os.environ.get(name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise RuntimeError(f"{name} must be a positive integer") from error
+    if value <= 0:
+        raise RuntimeError(f"{name} must be a positive integer")
+    return value
+
+
 app = Flask(__name__)
 CORS(app)
+MAX_CONTENT_LENGTH = read_positive_int_env("SLF_API_MAX_CONTENT_LENGTH", DEFAULT_MAX_CONTENT_LENGTH)
+app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
 API_TOKEN = os.environ.get("SLF_API_TOKEN", "").strip()
 if not API_TOKEN:
@@ -290,6 +309,15 @@ def collection_health(collection):
         result["oldestTimestamp"] = min(timestamps)
         result["newestTimestamp"] = max(timestamps)
     return result
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_too_large(_error):
+    return jsonify({
+        "error": "Request body too large",
+        "kind": "request_too_large",
+        "maxBytes": MAX_CONTENT_LENGTH
+    }), 413
 
 
 @app.errorhandler(CollectionCorruptError)
