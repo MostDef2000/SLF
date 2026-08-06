@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.291
+// @version      4.4.292
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.291',
-        scriptVersion: '4.4.291',
+        version: '4.4.292',
+        scriptVersion: '4.4.292',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.291',
+        scriptVersion: '4.4.292',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -21466,34 +21466,51 @@ html[data-slf-design="fm2026"] .team #generallist th:nth-child(16),html[data-slf
                 min-width: 0 !important;
                 max-width: 100% !important;
             }
+            html[data-slf-header-matches-fit="1"] .fm-deck[data-slf-matches-expanded="1"] {
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
             html[data-slf-header-matches-fit="1"] .fm-card--matches {
+                display: flex !important;
+                flex-direction: column !important;
                 width: 100% !important;
                 min-width: 0 !important;
                 max-width: 100% !important;
+                height: auto !important;
+                max-height: none !important;
                 overflow: visible !important;
+                visibility: visible !important;
+                opacity: 1 !important;
             }
-            html[data-slf-header-matches-fit="1"] .fm-deck:not(.fm-deck--collapsed) .fm-card--matches #field-f7 {
+            html[data-slf-header-matches-fit="1"] .fm-card--matches #field-f7 {
+                display: flex !important;
+                flex-direction: column !important;
                 min-height: 0 !important;
                 height: auto !important;
+                max-height: none !important;
                 overflow: visible !important;
+                visibility: visible !important;
             }
-            html[data-slf-header-matches-fit="1"] .fm-deck:not(.fm-deck--collapsed) .fm-matches__scroll {
+            html[data-slf-header-matches-fit="1"] .fm-card--matches .fm-matches__scroll {
+                display: block !important;
                 flex: 0 0 auto !important;
                 height: auto !important;
                 max-height: none !important;
                 overflow-y: visible !important;
                 scrollbar-width: none !important;
+                visibility: visible !important;
             }
-            html[data-slf-header-matches-fit="1"] .fm-deck:not(.fm-deck--collapsed) .fm-matches__scroll::-webkit-scrollbar {
+            html[data-slf-header-matches-fit="1"] .fm-card--matches .fm-matches__scroll::-webkit-scrollbar {
                 display: none !important;
                 width: 0 !important;
                 height: 0 !important;
             }
-            html[data-slf-header-matches-fit="1"] .fm-deck:not(.fm-deck--collapsed) .fm-fixture--mine {
+            html[data-slf-header-matches-fit="1"] .fm-card--matches .fm-fixture--mine {
                 position: relative !important;
                 top: auto !important;
             }
-            html[data-slf-header-matches-fit="1"] .fm-deck:not(.fm-deck--collapsed) #fm-games-expand {
+            html[data-slf-header-matches-fit="1"] .fm-card--matches #fm-games-expand {
                 display: none !important;
             }
         `;
@@ -21562,7 +21579,11 @@ html[data-slf-design="fm2026"] .team #generallist th:nth-child(16),html[data-slf
     let sortScheduled = false;
     const normalizeFixtureOrder = () => {
         sortScheduled = false;
-        document.querySelectorAll('.fm-card--matches .fm-fixtures').forEach(sortFixtureList);
+        document.querySelectorAll('.fm-card--matches').forEach(card => {
+            const deck = card.closest('.fm-deck');
+            if (deck) deck.dataset.slfMatchesExpanded = '1';
+            card.querySelectorAll('.fm-fixtures').forEach(sortFixtureList);
+        });
         root.dataset.slfHeaderMatchesChronological = '1';
     };
     const scheduleFixtureOrder = () => {
@@ -21570,11 +21591,24 @@ html[data-slf-design="fm2026"] .team #generallist th:nth-child(16),html[data-slf
         sortScheduled = true;
         setTimeout(normalizeFixtureOrder, 0);
     };
+    const mutationTouchesFixtures = mutation => {
+        const target = mutation.target?.nodeType === 1
+            ? mutation.target
+            : mutation.target?.parentElement;
+        if (target?.closest?.('.fm-card--matches')) return true;
+        return Array.from(mutation.addedNodes || []).some(node => (
+            node?.nodeType === 1
+            && (node.matches?.('.fm-card--matches, .fm-fixtures, .fm-fixture')
+                || node.querySelector?.('.fm-card--matches, .fm-fixtures, .fm-fixture'))
+        ));
+    };
 
     scheduleFixtureOrder();
-    const observerRoot = document.querySelector('.fm-deck') || document.body;
+    const observerRoot = document.body || document.documentElement;
     if (observerRoot) {
-        const observer = new MutationObserver(scheduleFixtureOrder);
+        const observer = new MutationObserver(mutations => {
+            if (mutations.some(mutationTouchesFixtures)) scheduleFixtureOrder();
+        });
         observer.observe(observerRoot, { childList: true, subtree: true, characterData: true });
     }
 })();
@@ -21971,15 +22005,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.291',
-        scriptVersion: '4.4.291',
+        version: '4.4.292',
+        scriptVersion: '4.4.292',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.291',
+        scriptVersion: '4.4.292',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
