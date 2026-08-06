@@ -37,6 +37,9 @@ jobs:
           node --check tools/test-security-boundaries.mjs
           node --check tools/validate-quality-governance.mjs
           node --check tools/test-deliberate-execution-contract.mjs
+          node --check tools/test-bootstrap-risk-boundary.mjs
+          node --check tools/match-rendering-diagnostics.js
+          node --check tools/test-match-rendering-diagnostics-contract.mjs
           python3 -m py_compile tools/test-api-contract-compatibility.py
           python3 -m py_compile tools/test-api-adversarial.py
           node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/slf-contracts-v1.schema.json', 'utf8'))"
@@ -54,6 +57,8 @@ jobs:
           node tools/test-security-boundaries.mjs
           node tools/validate-quality-governance.mjs
           node tools/test-deliberate-execution-contract.mjs
+          node tools/test-bootstrap-risk-boundary.mjs
+          node tools/test-match-rendering-diagnostics-contract.mjs
 
       - name: Install pinned VPS API dependencies
         run: python3 -m pip install --disable-pip-version-check -r vps/api/requirements.txt
