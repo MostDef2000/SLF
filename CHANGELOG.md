@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.4.286
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/quality-integration.yml
+- src/modules/tactics-presets/tactic-preset-direction-policy.js
+- tools/test-tactical-situation-diversity.mjs
+
+Approved base commit:
+- 08ff239daedd0849323b774976170755cd999ebb
+
+Approved commit:
+- 8d78c05fd2a266782fd629dd1fd48739635b25c3
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.285
 
 ### Automatic latest-only build

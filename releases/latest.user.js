@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.285
+// @version      4.4.286
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.285',
-        scriptVersion: '4.4.285',
+        version: '4.4.286',
+        scriptVersion: '4.4.286',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.285',
+        scriptVersion: '4.4.286',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -6792,14 +6792,15 @@ if (typeof window !== 'undefined') {
 
 
 // >>> src/modules/tactics-presets/tactic-preset-direction-policy.js
-// Generator 5.61 Bold Rule-Scored Tactical Policy
+// Generator 5.61 Situation-Diverse Rule-Scored Tactical Policy
 // ============================================================
-// Keeps tactic application manual while making recommendation timing configurable.
+// Keeps tactic application manual while selecting one deterministic tactic
+// whose profile is tied to the current match situation.
 
 (function tacticPresetDirectionPolicy() {
     'use strict';
 
-    if (typeof window !== 'undefined' && window.SLFTacticDirectionPolicy?.version === '5.61-bold-v3') return;
+    if (typeof window !== 'undefined' && window.SLFTacticDirectionPolicy?.version === '5.61-situation-v4') return;
 
     const REMOVED_PRESETS = new Set(['Xabi_BoxMidfield_bal3']);
     const NEUTRAL_PRIORITY_PRESETS = [
@@ -6814,9 +6815,9 @@ if (typeof window !== 'undefined') {
 
     const RISK_APPETITES = {
         conservative: { attackBonus: 0, pressBonus: 0, kloppMinute: 78, bielsaMinute: 86, explorationPct: 0, marginRelax: 0 },
-        standard: { attackBonus: 4, pressBonus: 3, kloppMinute: 74, bielsaMinute: 84, explorationPct: 0, marginRelax: 1 },
-        bold: { attackBonus: 10, pressBonus: 8, kloppMinute: 66, bielsaMinute: 80, explorationPct: 10, marginRelax: 3 },
-        experimental: { attackBonus: 14, pressBonus: 12, kloppMinute: 60, bielsaMinute: 76, explorationPct: 15, marginRelax: 5 }
+        standard: { attackBonus: 2, pressBonus: 2, kloppMinute: 74, bielsaMinute: 84, explorationPct: 0, marginRelax: 0 },
+        bold: { attackBonus: 4, pressBonus: 4, kloppMinute: 66, bielsaMinute: 80, explorationPct: 0, marginRelax: 0 },
+        experimental: { attackBonus: 6, pressBonus: 6, kloppMinute: 60, bielsaMinute: 76, explorationPct: 0, marginRelax: 0 }
     };
     const DEFAULT_RISK_APPETITE = 'bold';
 
@@ -6846,17 +6847,21 @@ if (typeof window !== 'undefined') {
         catch (_) { return DEFAULT_RISK_APPETITE; }
     }
 
-    function deterministicBucket(signals) {
-        const text = `${signals.gameId || 'unknown'}:${signals.generationWindowIndex || 0}`;
-        let hash = 2166136261;
-        for (let i = 0; i < text.length; i += 1) {
-            hash ^= text.charCodeAt(i);
-            hash = Math.imul(hash, 16777619);
-        }
-        return Math.abs(hash >>> 0) % 100;
+    function finite(value, fallback = 0) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function bounded(value, min = 0, max = 100) {
+        return Math.max(min, Math.min(max, finite(value)));
     }
 
     function copy(value) { return Array.isArray(value) ? value.slice() : []; }
+
+    function hasSignal(signals, name) {
+        return Array.isArray(signals?.signals) && signals.signals.includes(name);
+    }
+
     function removePresetFromMap(map) {
         if (!map || typeof map !== 'object') return;
         REMOVED_PRESETS.forEach(name => delete map[name]);
@@ -6880,25 +6885,107 @@ if (typeof window !== 'undefined') {
         });
     }
 
+    function classifySituation(signals = {}) {
+        const appetite = normalizeRiskAppetite(signals.riskAppetite);
+        const policy = RISK_APPETITES[appetite];
+        const attackUnder = hasSignal(signals, 'generator_attack_underperforming');
+        const attackWorking = hasSignal(signals, 'generator_attack_working');
+        const defenseUnder = hasSignal(signals, 'generator_defense_underperforming');
+        const defenseWorking = hasSignal(signals, 'generator_defense_working');
+
+        if (signals.scoreState === 'winning' && signals.minute >= 82 && signals.pressureRisk >= 60) return 'late_emergency_lock';
+        if (signals.scoreState === 'losing' && signals.minute >= policy.bielsaMinute && signals.attackNeed >= 78) return 'final_desperation';
+        if (signals.scoreState === 'losing' && signals.minute >= policy.kloppMinute && signals.attackNeed >= 58) return 'late_chase';
+        if (signals.pressFatigueRisk || signals.pressingCost >= 62 || signals.myPowerDropPct >= 4) return 'press_cooldown';
+        if (signals.scoreState === 'winning' && signals.minute >= 65 && signals.pressureRisk >= 45) return 'protect_lead';
+        if (signals.widthOpportunity >= 55 && !signals.ownCrossesBad && !signals.opponentCrossesDangerous && !signals.underPressure) return 'safe_width';
+        if (signals.underPressure || signals.transitionThreat || signals.strengthGap <= -25) return 'compact_counter';
+        if (attackUnder && defenseWorking && signals.attackNeed < 75) return 'controlled_push';
+        if (defenseUnder && attackUnder) return 'control_reset';
+        if (signals.highBadActions || signals.controlNeed >= 65) return 'control_reset';
+        if (signals.strengthGap >= 35 && signals.pressureRisk < 48 && !signals.highBadActions && (signals.attackingMomentum || attackWorking)) return 'positional_squeeze';
+        if (signals.attackNeed >= 40 && signals.attackNeed < 70 && !signals.highBadActions) return 'controlled_push';
+        if (signals.minute <= 35 && signals.pressureRisk < 50 && signals.attackNeed < 45) return 'balanced_structure';
+        return 'active_control';
+    }
+
+    function situationAffinity(name, signals = {}) {
+        const situation = signals.situationKey || classifySituation(signals);
+        const map = {
+            balanced_structure: 'Arteta_Control433_bal3',
+            active_control: 'Arteta_Control433_bal3',
+            control_reset: 'Pep_BoxControl_bal2',
+            press_cooldown: 'Pep_PressCooldown_bal2',
+            compact_counter: 'Compact_Counter_def3',
+            controlled_push: 'Pep_ControlledPush_att3',
+            positional_squeeze: 'Pep_TwoThreeFive_att3',
+            safe_width: 'Conte_WingbackWidth_bal4',
+            late_chase: 'Klopp_Gegenpress_att4',
+            protect_lead: 'Simeone_Compact442_def4',
+            late_emergency_lock: 'Simeone_LowBlock_def5',
+            final_desperation: 'Bielsa_ChaosPress_att5'
+        };
+        const preferred = map[situation] || 'Arteta_Control433_bal3';
+        let delta = name === preferred ? 28 : 0;
+
+        const familyConflicts = {
+            control_reset: ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Bielsa_ChaosPress_att5'],
+            press_cooldown: ['Klopp_Gegenpress_att4', 'Bielsa_ChaosPress_att5'],
+            compact_counter: ['Pep_TwoThreeFive_att3', 'Conte_WingbackWidth_bal4', 'Klopp_Gegenpress_att4'],
+            controlled_push: ['Pep_BoxControl_bal2', 'Bielsa_ChaosPress_att5'],
+            positional_squeeze: ['Pep_BoxControl_bal2', 'Simeone_Compact442_def4', 'Simeone_LowBlock_def5'],
+            safe_width: ['Pep_BoxControl_bal2', 'Simeone_LowBlock_def5'],
+            protect_lead: ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Bielsa_ChaosPress_att5'],
+            late_emergency_lock: ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Bielsa_ChaosPress_att5'],
+            late_chase: ['Pep_BoxControl_bal2', 'Simeone_Compact442_def4', 'Simeone_LowBlock_def5'],
+            final_desperation: ['Pep_BoxControl_bal2', 'Pep_PressCooldown_bal2', 'Simeone_Compact442_def4', 'Simeone_LowBlock_def5']
+        };
+        if ((familyConflicts[situation] || []).includes(name)) delta -= 14;
+
+        return {
+            situation,
+            preferred,
+            delta,
+            reason: name === preferred ? `соответствие сценарию: ${situation}` : ''
+        };
+    }
+
     function patchRuleEngine() {
         const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
         const scorer = engine?.PresetRuleScorer;
-        if (!engine || !scorer || scorer.__boldPolicyInstalled) return;
+        if (!engine || !scorer || scorer.__situationDiversityPolicyInstalled) return;
 
-        engine.schema = 'slf_rule_decision_v4_bold';
+        engine.schema = 'slf_rule_decision_v5_situation_diverse';
         engine.TACTIC_SIGNATURES = Object.fromEntries(Object.entries(RETUNED_SIGNATURES).map(([name, signature]) => [name, Object.assign({}, signature)]));
 
         const originalBuild = engine.MatchDecisionSignals.build.bind(engine.MatchDecisionSignals);
-        engine.MatchDecisionSignals.build = function buildBoldSignals(owner, snapshot, context = {}, runtime = null) {
+        engine.MatchDecisionSignals.build = function buildSituationSignals(owner, snapshot, context = {}, runtime = null) {
             const signals = originalBuild(owner, snapshot, context, runtime);
             signals.riskAppetite = resolveRiskAppetite(snapshot, context);
             signals.riskPolicy = Object.assign({}, RISK_APPETITES[signals.riskAppetite]);
-            signals.explorationBucket = deterministicBucket(signals);
+
+            const rawStrengthAdvantage = finite(signals.strengthAdvantage);
+            const cappedStrengthAdvantage = Math.min(rawStrengthAdvantage, 32);
+            const duplicateStrength = Math.max(0, rawStrengthAdvantage - cappedStrengthAdvantage);
+            signals.rawStrengthAdvantage = rawStrengthAdvantage;
+            signals.strengthAdvantage = cappedStrengthAdvantage;
+            signals.pressingOpportunity = bounded(finite(signals.pressingOpportunity) - duplicateStrength * 0.35);
+
+            if (
+                signals.gameMode === 'front_foot_squeeze' &&
+                !signals.attackingMomentum &&
+                !hasSignal(signals, 'generator_attack_working') &&
+                signals.attackNeed < 45
+            ) {
+                signals.gameMode = 'active_control';
+            }
+
+            signals.situationKey = classifySituation(signals);
             return signals;
         };
 
         const originalHardVeto = scorer.hardVeto.bind(scorer);
-        scorer.hardVeto = function hardVetoBold(name, signals = {}) {
+        scorer.hardVeto = function hardVetoSituation(name, signals = {}) {
             const appetite = normalizeRiskAppetite(signals.riskAppetite);
             const policy = RISK_APPETITES[appetite];
             const original = originalHardVeto(name, signals);
@@ -6918,61 +7005,79 @@ if (typeof window !== 'undefined') {
         };
 
         const originalScoreOne = scorer.scoreOne.bind(scorer);
-        scorer.scoreOne = function scoreOneBold(owner, name, signals) {
+        scorer.scoreOne = function scoreOneSituation(owner, name, signals) {
             const result = originalScoreOne(owner, name, signals);
             if (result.vetoed) return result;
             const appetite = normalizeRiskAppetite(signals.riskAppetite);
             const policy = RISK_APPETITES[appetite];
-            let bonus = 0;
+            const affinity = situationAffinity(name, signals);
+            let bonus = affinity.delta;
+
             if (['Pep_ControlledPush_att3', 'Pep_TwoThreeFive_att3', 'Conte_WingbackWidth_bal4'].includes(name)) bonus += policy.attackBonus;
             if (name === 'Klopp_Gegenpress_att4') bonus += policy.attackBonus + policy.pressBonus;
-            if (name === 'Bielsa_ChaosPress_att5') bonus += policy.attackBonus + policy.pressBonus + 4;
-            if (name === 'Compact_Counter_def3' && signals.strengthGap < 0 && signals.attackNeed >= 35) bonus += Math.round(policy.attackBonus * 0.6);
-            if (name === 'Pep_BoxControl_bal2' && appetite !== 'conservative' && !signals.highBadActions) bonus -= 5;
-            if (name === 'Arteta_Control433_bal3' && appetite === 'experimental' && signals.attackNeed >= 35) bonus -= 6;
+            if (name === 'Bielsa_ChaosPress_att5') bonus += policy.attackBonus + policy.pressBonus + 2;
+            if (name === 'Compact_Counter_def3' && signals.strengthGap < 0 && signals.attackNeed >= 35) bonus += Math.round(policy.attackBonus * 0.5);
+            if (name === 'Pep_BoxControl_bal2' && appetite !== 'conservative' && !signals.highBadActions && affinity.situation !== 'control_reset') bonus -= 4;
+
             result.score = owner.round(result.score + bonus);
             result.rawScore = owner.round(result.rawScore + bonus);
-            result.parts.riskAppetite = bonus;
-            if (bonus) result.reasons.unshift({ key: 'riskAppetite', delta: bonus, reason: `профиль смелости: ${appetite}` });
+            result.parts.riskAppetite = bonus - affinity.delta;
+            result.parts.situationFit = affinity.delta;
+            result.situationKey = affinity.situation;
+            if (affinity.reason) result.reasons.unshift({ key: 'situationFit', delta: affinity.delta, reason: affinity.reason });
+            if (bonus - affinity.delta) result.reasons.unshift({ key: 'riskAppetite', delta: bonus - affinity.delta, reason: `профиль смелости: ${appetite}` });
             return result;
         };
 
         const originalRun = scorer.run.bind(scorer);
-        scorer.run = function runBold(owner, signals, runtime, detectedPreset) {
+        scorer.run = function runSituation(owner, signals, runtime, detectedPreset) {
             const decision = originalRun(owner, signals, runtime, detectedPreset);
             const appetite = normalizeRiskAppetite(signals.riskAppetite);
-            const policy = RISK_APPETITES[appetite];
-            decision.schema = 'slf_preset_rule_score_v2_bold';
+            decision.schema = 'slf_preset_rule_score_v3_situation_diverse';
             decision.riskAppetite = appetite;
-            decision.exploration = { eligible: false, applied: false, bucket: signals.explorationBucket, threshold: policy.explorationPct };
-
-            const safe = policy.explorationPct > 0 && !decision.action.emergency && !signals.ownRedCard && !signals.highBadActions && !signals.pressFatigueRisk && signals.completeness >= 0.55;
-            if (safe && signals.explorationBucket < policy.explorationPct) {
-                const currentScore = Number(decision.action.score || 0);
-                const candidate = (decision.candidates || []).find(item =>
-                    !item.vetoed && item.preset !== decision.action.preset &&
-                    ['Pep_ControlledPush_att3', 'Pep_TwoThreeFive_att3', 'Conte_WingbackWidth_bal4', 'Klopp_Gegenpress_att4'].includes(item.preset) &&
-                    item.score >= currentScore - (8 + policy.marginRelax)
-                );
-                decision.exploration.eligible = true;
-                if (candidate) {
-                    decision.exploration.applied = true;
-                    decision.exploration.fromPreset = decision.action.preset;
-                    decision.exploration.toPreset = candidate.preset;
-                    decision.action.preset = candidate.preset;
-                    decision.action.presetStatus = owner.getPresetStatus(candidate.preset);
-                    decision.action.score = candidate.score;
-                    decision.action.reason = `controlled exploration ${appetite}: безопасная альтернатива в допустимом score gap`;
-                    decision.action.guardType = 'controlled_exploration';
-                    decision.action.guardReason = `bucket ${signals.explorationBucket} < ${policy.explorationPct}`;
-                    decision.action.exploration = true;
-                }
-            }
+            decision.situationKey = signals.situationKey || classifySituation(signals);
+            decision.exploration = {
+                eligible: false,
+                applied: false,
+                threshold: 0,
+                policy: 'disabled_deterministic_situation_selection'
+            };
             decision.action.riskAppetite = appetite;
+            decision.action.situationKey = decision.situationKey;
             return decision;
         };
 
         scorer.__boldPolicyInstalled = true;
+        scorer.__situationDiversityPolicyInstalled = true;
+    }
+
+    function stripCandidateBlock(html) {
+        return String(html || '').replace(
+            /\s*<div[^>]*>\s*<b>Кандидаты:<\/b>[\s\S]*?<\/div>/i,
+            ''
+        );
+    }
+
+    function patchSingleTacticRendering() {
+        if (typeof RecommendationEngine === 'undefined' || !RecommendationEngine) return false;
+        if (RecommendationEngine.__singleTacticCoachModePatched) return true;
+        if (typeof RecommendationEngine.compactPlan !== 'function') return false;
+
+        const originalCompactPlan = RecommendationEngine.compactPlan.bind(RecommendationEngine);
+        RecommendationEngine.compactPlan = function compactSingleTacticPlan() {
+            return stripCandidateBlock(originalCompactPlan(...arguments));
+        };
+        RecommendationEngine.__singleTacticCoachModePatched = true;
+        return true;
+    }
+
+    function scheduleSingleTacticRenderingPatch() {
+        if (patchSingleTacticRendering()) return;
+        let attempts = 0;
+        const timer = setInterval(() => {
+            attempts += 1;
+            if (patchSingleTacticRendering() || attempts >= 40) clearInterval(timer);
+        }, 50);
     }
 
     function evaluateRuleDecision(snapshot = {}, state = {}) {
@@ -6995,13 +7100,13 @@ if (typeof window !== 'undefined') {
         registry.active = (registry.active || []).filter(name => !REMOVED_PRESETS.has(name));
         registry.removed = Array.from(new Set([...(registry.removed || []), ...REMOVED_PRESETS]));
         registry.choosePreset = (state = {}, snapshot = {}) => selectEvidencePreset(state, snapshot);
-        registry.ruleDecisionSchema = 'slf_rule_decision_v4_bold';
+        registry.ruleDecisionSchema = 'slf_rule_decision_v5_situation_diverse';
         registry.riskAppetites = Object.assign({}, RISK_APPETITES);
         registry.defaultRiskAppetite = DEFAULT_RISK_APPETITE;
     }
 
     function patchRecommendationSelection() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__generator561BoldRuleScorerApplied) return;
+        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__generator561SituationRuleScorerApplied) return;
         RecommendationEngine.selectRawPreset = function selectGenerator561ScoredPreset(snapshot, state = {}) {
             const candidate = selectEvidencePreset(state, snapshot || {});
             if (snapshot && candidate?.ruleDecision) snapshot.ruleDecision = candidate.ruleDecision;
@@ -7011,6 +7116,7 @@ if (typeof window !== 'undefined') {
         RecommendationEngine.__generator561SelectionApplied = true;
         RecommendationEngine.__generator561RuleScorerApplied = true;
         RecommendationEngine.__generator561BoldRuleScorerApplied = true;
+        RecommendationEngine.__generator561SituationRuleScorerApplied = true;
     }
 
     function applyPolicy() {
@@ -7019,6 +7125,7 @@ if (typeof window !== 'undefined') {
         patchRuleEngine();
         patchActiveRegistry();
         patchRecommendationSelection();
+        scheduleSingleTacticRenderingPatch();
     }
 
     applyPolicy();
@@ -7026,7 +7133,7 @@ if (typeof window !== 'undefined') {
     if (typeof window !== 'undefined') {
         window.SLFTacticDirectionPolicy = {
             applied: true,
-            version: '5.61-bold-v3',
+            version: '5.61-situation-v4',
             generatorVersion: '5.61',
             autoApply: false,
             removedPresets: Array.from(REMOVED_PRESETS),
@@ -7034,8 +7141,11 @@ if (typeof window !== 'undefined') {
             riskAppetites: Object.assign({}, RISK_APPETITES),
             defaultRiskAppetite: DEFAULT_RISK_APPETITE,
             normalizeRiskAppetite,
+            classifySituation,
+            situationAffinity,
             selectEvidencePreset,
             evaluateRuleDecision,
+            stripCandidateBlock,
             refresh() { applyPolicy(); return true; }
         };
     }
@@ -21287,15 +21397,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.285',
-        scriptVersion: '4.4.285',
+        version: '4.4.286',
+        scriptVersion: '4.4.286',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.285',
+        scriptVersion: '4.4.286',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
