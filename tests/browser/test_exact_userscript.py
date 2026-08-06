@@ -77,6 +77,7 @@ def browser_init_script(api_mode: str) -> str:
   'use strict';
   const apiMode = {json.dumps(api_mode)};
   const gmStore = new Map();
+  const jqDataStore = new WeakMap();
 
   window.__slfRequests = [];
   window.__slfMenuCommands = [];
@@ -133,14 +134,30 @@ def browser_init_script(api_mode: str) -> str:
     return {{ abort() {{}} }};
   }};
 
-  const jq = function() {{
-    return {{
+  const jq = function(target) {{
+    const element = target && target.nodeType ? target : null;
+    const api = {{
       on() {{ return this; }}, off() {{ return this; }}, find() {{ return this; }},
       each() {{ return this; }}, first() {{ return this; }}, text() {{ return ''; }},
-      val() {{ return ''; }}, attr() {{ return undefined; }}, data() {{ return undefined; }},
+      val() {{ return ''; }}, attr() {{ return undefined; }},
+      data(key, value) {{
+        if (!element) return arguments.length > 1 ? this : undefined;
+        let store = jqDataStore.get(element);
+        if (!store) {{
+          store = {{}};
+          jqDataStore.set(element, store);
+        }}
+        if (!Object.prototype.hasOwnProperty.call(store, key) && element.dataset && key in element.dataset) {{
+          store[key] = element.dataset[key];
+        }}
+        if (arguments.length === 1) return store[key];
+        store[key] = value;
+        return this;
+      }},
       append() {{ return this; }}, prepend() {{ return this; }}, remove() {{ return this; }},
-      length: 0
+      length: element ? 1 : 0
     }};
+    return api;
   }};
   jq.ajax = () => Promise.resolve({{}});
   window.$ = window.jQuery = jq;
@@ -205,10 +222,14 @@ def assert_owned_live(page: Page):
     page.wait_for_selector("#slf-match-parser-panel")
     page.wait_for_selector("#slf-manual-recommendation-btn")
     page.wait_for_selector("#slf-tactics-dropdown")
+    page.wait_for_selector("#slf-live-lineup-preset-panel")
+    page.wait_for_selector("#slf-live-lineup-preset-select")
 
     assert page.locator("#slf-match-parser-panel").count() == 1
     assert page.locator("#slf-manual-recommendation-btn").count() == 1
     assert page.locator("#slf-tactics-dropdown").count() == 1
+    assert page.locator("#slf-live-lineup-preset-panel").count() == 1
+    assert page.locator("#slf-live-lineup-preset-select option").count() == 11
 
     page.locator("#slf-manual-recommendation-btn").click()
     page.wait_for_function(
@@ -232,6 +253,70 @@ def assert_owned_live(page: Page):
     assert record["source"]["scriptVersion"] == EXPECTED_VERSION
 
     page.evaluate("""
+      window.__tacticPresetChanges = [];
+      document.querySelector('#slf-tactics-dropdown select').addEventListener('change', event => {
+        window.__tacticPresetChanges.push(event.target.value);
+      });
+      document.getElementById('slf-parser-recommendation').textContent =
+        'Coach Mode рекомендует Simeone_Compact442_def4';
+    """)
+    lineup_select = page.locator("#slf-live-lineup-preset-select")
+    lineup_select.focus()
+    recommended = page.locator('#slf-live-lineup-preset-select option[data-recommended="1"]')
+    assert recommended.count() == 1
+    assert recommended.get_attribute("value") == "Simeone_Compact442_def4"
+    assert "рекомендовано" in recommended.text_content()
+
+    expected_compact = {
+        "gk", "ld", "cd1", "cd3", "rd", "lm", "cm2", "dm2", "rm", "st1", "st2"
+    }
+    lineup_select.select_option("Simeone_Compact442_def4")
+    page.wait_for_function(
+        "() => document.getElementById('slf-live-lineup-preset-status')?.textContent.includes('Расстановка подготовлена')"
+    )
+    page.wait_for_function(
+        "() => window.__tacticPresetChanges.includes('Simeone_Compact442_def4')"
+    )
+
+    field_positions = set(page.eval_on_selector_all(
+        ".cf1-pitch .control_line > .control_lineup",
+        "cards => cards.map(card => card.parentElement.dataset.position)",
+    ))
+    assert field_positions == expected_compact, field_positions
+    assert page.locator(".cf1-pitch .control_line > .control_lineup").count() == 11
+    assert page.locator('#control_gk > .control_lineup[data-player="p-gk"]').count() == 1
+    assert page.locator('#control_sub1 > .control_lineup[data-player="p-sub1"]').count() == 1
+    assert page.locator(".cf1-pitch .control_lineup.position_modify").count() >= 1
+    assert page.evaluate("window.__lineupSaveClicks") == 0
+    assert page.evaluate("window.__lineupPreviewCalls") == 1
+
+    lineup_select.select_option("Arteta_Control433_bal3")
+    lineup_select.select_option("Simeone_Compact442_def4")
+    assert page.locator("#slf-live-lineup-preset-panel").count() == 1
+    assert page.locator('#control_sub1 > .control_lineup[data-player="p-sub1"]').count() == 1
+    assert page.evaluate("window.__lineupSaveClicks") == 0
+
+    page.evaluate("""
+      const card = document.querySelector('.control_lineup[data-player="p-lw"]');
+      const target = document.getElementById('control_am1');
+      target.appendChild(card);
+      card.dataset.position = 'am1';
+      window.jQuery(card).data('position', 'am1');
+      card.classList.add('position_modify');
+      card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      window.cf1_options_load();
+    """)
+    assert page.evaluate("window.__playerBindingHits") == 1
+    assert page.locator('#control_am1 > .control_lineup[data-player="p-lw"]').count() == 1
+    assert page.evaluate("window.__lineupSaveClicks") == 0
+
+    page.locator(".lineup_send").click()
+    assert page.evaluate("window.__lineupSaveClicks") == 1
+    save_payload = page.evaluate("window.__lineupSavePayload")
+    assert save_payload["am1"] == "p-lw", save_payload
+    assert save_payload["sub1"] == "p-sub1", save_payload
+
+    page.evaluate("""
       for (let index = 0; index < 40; index += 1) {
         const node = document.createElement('span');
         node.textContent = `mutation-${index}`;
@@ -243,6 +328,7 @@ def assert_owned_live(page: Page):
     assert page.locator("#slf-match-parser-panel").count() == 1
     assert page.locator("#slf-manual-recommendation-btn").count() == 1
     assert page.locator("#slf-tactics-dropdown").count() == 1
+    assert page.locator("#slf-live-lineup-preset-panel").count() == 1
 
 
 def assert_offline_bootstrap(page: Page):
