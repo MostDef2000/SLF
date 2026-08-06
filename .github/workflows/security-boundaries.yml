@@ -7,6 +7,7 @@ on:
       - 'src/**'
       - 'tools/test-security-boundaries.mjs'
       - 'tools/inventory-dom-sinks.mjs'
+      - 'tools/test-preset-name-xss-boundary.mjs'
       - 'tools/test-api-adversarial.py'
       - 'tools/test-api-multiprocess-locking.py'
       - 'tools/test-api-request-size-limit.py'
@@ -32,6 +33,7 @@ jobs:
         run: |
           node --check tools/test-security-boundaries.mjs
           node --check tools/inventory-dom-sinks.mjs
+          node --check tools/test-preset-name-xss-boundary.mjs
           python3 -m py_compile tools/test-api-adversarial.py
           python3 -m py_compile tools/test-api-multiprocess-locking.py
           python3 -m py_compile tools/test-api-request-size-limit.py
@@ -40,6 +42,9 @@ jobs:
 
       - name: Inventory browser HTML sinks
         run: node tools/inventory-dom-sinks.mjs
+
+      - name: Enforce browser text boundaries
+        run: node tools/test-preset-name-xss-boundary.mjs
 
       - name: Enforce repository security boundaries
         run: node tools/test-security-boundaries.mjs
