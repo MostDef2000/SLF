@@ -81,6 +81,7 @@ for (const call of adapterCalls) {
 }
 
 for (const marker of [
+    'function applyTacticsDropdownUiPolicy()',
     'const HeaderMatchesLayoutCompatibility =',
     'const MatchRenderingCompatibility =',
     'const TacticsDropdownUiPolicy =',
@@ -90,10 +91,14 @@ for (const marker of [
     assert.ok(source.includes(marker), `bootstrap owner marker is missing: ${marker}`);
 }
 
+const compatibilityEntry = 'applyTacticsDropdownUiPolicy();';
+const compatibilityEntryIndex = source.indexOf(compatibilityEntry);
+assert.ok(compatibilityEntryIndex > previousIndex, 'compatibility owner must run after its three adapters are declared');
+assert.ok(compatibilityEntryIndex < source.indexOf('const App ='), 'compatibility owner must run before App creation');
 assert.equal(
-    source.includes('applyTacticsDropdownUiPolicy();'),
-    false,
-    'legacy unguarded dropdown policy invocation must not return'
+    source.indexOf(compatibilityEntry, compatibilityEntryIndex + compatibilityEntry.length),
+    -1,
+    'compatibility owner must be invoked exactly once'
 );
 
 console.log('Bootstrap risk boundary: OK');
