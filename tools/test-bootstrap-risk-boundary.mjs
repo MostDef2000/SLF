@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
 
 const bootstrapPath = new URL('../src/app/bootstrap.js', import.meta.url);
 const source = fs.readFileSync(bootstrapPath, 'utf8');
 
 const appStartIndex = source.indexOf('App.start();');
 assert.ok(appStartIndex > 0, 'bootstrap must contain App.start()');
+assert.equal(source.indexOf('App.start();', appStartIndex + 1), -1, 'bootstrap must invoke App.start() exactly once');
 
 const preStart = source.slice(0, appStartIndex);
 
@@ -18,7 +20,7 @@ const bindMatches = [...preStart.matchAll(/([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]
     .map(match => `${match[1]}.bind(${match[2].trim()})`)
     .sort();
 
-const allowedTopLevelBinds = [
+const allowedCompatibilityBinds = [
     'UI.addDropdown.bind(UI)',
     'current.bind(pageWindow)',
     'engine.set_render_scale.bind(engine)'
@@ -26,28 +28,72 @@ const allowedTopLevelBinds = [
 
 assert.deepEqual(
     bindMatches,
-    allowedTopLevelBinds,
+    allowedCompatibilityBinds,
     [
-        'top-level bind boundary changed before App.start()',
-        'New compatibility patches must be isolated or explicitly reviewed here.',
-        `Expected: ${allowedTopLevelBinds.join(', ')}`,
+        'compatibility bind boundary changed before App.start()',
+        'New monkey patches must be isolated behind runCompatibilityAdapter or explicitly reviewed here.',
+        `Expected: ${allowedCompatibilityBinds.join(', ')}`,
         `Actual: ${bindMatches.join(', ')}`
     ].join('\n')
 );
 
-const requiredStartupOrder = [
-    'installHeaderMatchesLayoutCompatibility',
-    'installMatchRenderingCompatibility',
-    'applyTacticsDropdownUiPolicy();',
-    'const App =',
-    'App.start();'
+const runnerStart = source.indexOf('function reportCompatibilityFailure');
+const runnerEnd = source.indexOf('\n\nconst HeaderMatchesLayoutCompatibility', runnerStart);
+assert.ok(runnerStart >= 0 && runnerEnd > runnerStart, 'compatibility fail-open runner must be defined');
+
+const runnerSource = source.slice(runnerStart, runnerEnd);
+const sandbox = {
+    console: {
+        warnings: [],
+        warn(...args) {
+            this.warnings.push(args);
+        }
+    }
+};
+vm.createContext(sandbox);
+vm.runInContext(`${runnerSource}\nthis.runCompatibilityAdapter = runCompatibilityAdapter;`, sandbox);
+
+assert.equal(
+    sandbox.runCompatibilityAdapter('healthy-adapter', () => {}),
+    true,
+    'healthy compatibility adapter must report success'
+);
+assert.equal(
+    sandbox.runCompatibilityAdapter('broken-adapter', () => { throw new Error('expected failure'); }),
+    false,
+    'broken compatibility adapter must fail open'
+);
+assert.equal(sandbox.console.warnings.length, 1, 'broken compatibility adapter must emit one warning');
+assert.match(String(sandbox.console.warnings[0][0]), /broken-adapter/, 'warning must identify the failed adapter');
+
+const adapterCalls = [
+    "runCompatibilityAdapter('header-matches-layout', () => HeaderMatchesLayoutCompatibility.install());",
+    "runCompatibilityAdapter('match-rendering', () => MatchRenderingCompatibility.install());",
+    "runCompatibilityAdapter('tactics-dropdown', () => TacticsDropdownUiPolicy.install());"
 ];
 
-let previousIndex = -1;
-for (const marker of requiredStartupOrder) {
-    const index = source.indexOf(marker);
-    assert.ok(index > previousIndex, `bootstrap startup order is invalid at marker: ${marker}`);
+let previousIndex = runnerEnd;
+for (const call of adapterCalls) {
+    const index = source.indexOf(call);
+    assert.ok(index > previousIndex, `compatibility adapter order is invalid: ${call}`);
+    assert.ok(index < source.indexOf('const App ='), `compatibility adapter must run before App creation: ${call}`);
     previousIndex = index;
 }
+
+for (const marker of [
+    'const HeaderMatchesLayoutCompatibility =',
+    'const MatchRenderingCompatibility =',
+    'const TacticsDropdownUiPolicy =',
+    'const App =',
+    'App.start();'
+]) {
+    assert.ok(source.includes(marker), `bootstrap owner marker is missing: ${marker}`);
+}
+
+assert.equal(
+    source.includes('applyTacticsDropdownUiPolicy();'),
+    false,
+    'legacy unguarded dropdown policy invocation must not return'
+);
 
 console.log('Bootstrap risk boundary: OK');
