@@ -30,18 +30,20 @@
     {
       "id": "QR-002",
       "title": "VPS API has no explicit request-body size limit",
-      "status": "open",
+      "status": "closed",
       "severity": "medium",
       "owner": "MostDef2000",
       "boundary": "HTTP request parsing",
       "consequence": "Oversized authenticated requests can consume memory, CPU, and storage.",
       "compensatingControls": [
-        "API requires bearer authentication",
-        "CI fuzz payloads are bounded",
-        "deployment remains private operational infrastructure"
+        "Flask MAX_CONTENT_LENGTH defaults to 8 MiB and accepts only a positive integer environment override",
+        "Oversized requests return a stable machine-readable HTTP 413 response before persistence",
+        "Regression tests verify rejected append and replace payloads leave existing collection bytes unchanged",
+        "The request-size regression runs in both the security workflow and the always-running aggregate quality gate"
       ],
-      "target": "Introduce a reviewed MAX_CONTENT_LENGTH and negative tests with an explicit operational limit.",
-      "sourcePullRequest": 165,
+      "target": "Maintain the tested request-size boundary and require reviewed evidence for any operational limit increase.",
+      "sourcePullRequest": 210,
+      "closureEvidence": "PR #210 adds the configurable 8 MiB MAX_CONTENT_LENGTH boundary and tools/test-api-request-size-limit.py verifies default and invalid configuration, stable 413 JSON, authentication order, byte-for-byte non-mutation, successful follow-up requests, and clean temporary-file state. Final workflow evidence is recorded on the pull request; production deployment is not implied.",
       "reviewBy": "2026-09-01"
     },
     {
