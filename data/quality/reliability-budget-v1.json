@@ -6,7 +6,7 @@
     "maxParseMilliseconds": 1500
   },
   "bundle": {
-    "expectedModules": 56
+    "expectedModules": 60
   },
   "runtimeStaticInventory": {
     "maxSetIntervalCalls": 20,
@@ -24,6 +24,7 @@
   },
   "notes": [
     "Budgets are merge-blocking upper bounds, not performance targets.",
+    "The expected module count is 60 after the reviewed physical split of four bootstrap compatibility owners.",
     "A budget increase requires a reviewed reason and replacement evidence.",
     "Budgets should be ratcheted downward when stable production evidence permits it."
   ]
