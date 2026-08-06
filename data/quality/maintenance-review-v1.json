@@ -1,0 +1,76 @@
+{
+  "schema": "slf_quality_maintenance_review_v1",
+  "repository": "MostDef2000/SLF",
+  "cadence": "quarterly",
+  "lastReviewed": "2026-08-06",
+  "nextReviewBy": "2026-11-04",
+  "maximumReviewWindowDays": 100,
+  "owner": "MostDef2000",
+  "reviewAreas": [
+    {
+      "id": "dependencies",
+      "evidencePaths": [
+        ".github/dependabot.yml",
+        "vps/api/requirements.txt",
+        "vps/exporter-rag/requirements.txt",
+        "tests/browser/requirements.txt"
+      ],
+      "result": "Weekly Dependabot coverage includes all three Python dependency directories and GitHub Actions. Pinned requirement files remain the install source for CI and deployment tooling."
+    },
+    {
+      "id": "fixtures",
+      "evidencePaths": [
+        "tests/browser/fixtures",
+        "tests/browser/test_exact_userscript.py",
+        "tests/browser/test_dom_xss_preset_names.py",
+        "tests/browser/test_dom_xss_page_text.py"
+      ],
+      "result": "Exact-artifact fixtures cover owned, foreign, finished, incomplete, tactic, transfer, API-failure, malicious storage-label and malicious match-page text boundaries."
+    },
+    {
+      "id": "threat-model",
+      "evidencePaths": [
+        "docs/security/threat-model.md",
+        "docs/security/dom-xss-sink-policy.md",
+        "docs/security/userscript-external-dependency-policy.md",
+        "docs/security/api-cors-origin-policy.md"
+      ],
+      "result": "Browser, userscript supply-chain, API origin and DOM rendering trust boundaries were reconciled with the current controls and risk closures."
+    },
+    {
+      "id": "control-mapping",
+      "evidencePaths": [
+        "data/quality/quality-gates-v1.json",
+        "data/quality/changed-code-coverage-v1.json",
+        "data/quality/dom-sink-inventory-v1.json",
+        "tools/test-security-boundaries.mjs",
+        "tools/validate-quality-governance.mjs"
+      ],
+      "result": "Critical files map to executable evidence rules; DOM sinks map one-to-one to provenance and controls; aggregate quality remains the intended enforcement context."
+    },
+    {
+      "id": "accepted-risks",
+      "evidencePaths": [
+        "data/quality/accepted-risks-v1.json",
+        "data/quality/quality-gates-v1.json"
+      ],
+      "result": "QR-001 through QR-005 are closed by repository evidence, QR-006 remains open for GitHub settings enforcement, and QR-007 remains explicitly accepted pending an independent reviewer."
+    }
+  ],
+  "dependencyMonitoring": {
+    "schedule": "weekly",
+    "day": "monday",
+    "pipDirectories": [
+      "/vps/api",
+      "/vps/exporter-rag",
+      "/tests/browser"
+    ],
+    "githubActionsDirectory": "/"
+  },
+  "governanceMonitoring": {
+    "workflow": ".github/workflows/quality-governance.yml",
+    "cron": "17 6 * * 1",
+    "pullRequestValidation": true,
+    "manualDispatch": true
+  }
+}
