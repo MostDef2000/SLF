@@ -1,7 +1,7 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
   "reviewedAt": "2026-08-06",
-  "reviewCandidateCount": 18,
+  "reviewCandidateCount": 17,
   "scope": "Runtime review after splitting bootstrap compatibility owners into audited modules. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
