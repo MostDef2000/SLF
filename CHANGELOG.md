@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.4.290
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/bootstrap.js
+- tests/browser/fixtures/fm2026-header-matches.html
+- tests/browser/test_header_matches_layout.py
+
+Approved base commit:
+- cc4d992dbf666f836405694fa9c7890a72cd6911
+
+Approved commit:
+- 5436966636bc5de4a945f54f9a9d2eb1e2ef5021
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.289
 
 ### Automatic latest-only build
