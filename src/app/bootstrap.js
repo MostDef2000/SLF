@@ -338,10 +338,22 @@ const App = {
         const champ = document.querySelector('.train__champ');
         if (!panel || !champ || !champ.parentNode) return false;
 
-        if (panel.nextElementSibling !== champ || panel.parentNode !== champ.parentNode) {
-            champ.parentNode.insertBefore(panel, champ);
+        const cardId = 'slf-training-benchmarks-card';
+        let card = document.getElementById(cardId);
+        if (!card) {
+            card = document.createElement('section');
+            card.id = cardId;
+            champ.parentNode.insertBefore(card, champ);
+        } else if (!card.contains(champ) && card.parentNode !== champ.parentNode) {
+            champ.parentNode.insertBefore(card, champ);
         }
 
+        if (panel.parentNode !== card) card.appendChild(panel);
+        if (champ.parentNode !== card) card.appendChild(champ);
+        if (card.firstElementChild !== panel) card.insertBefore(panel, card.firstElementChild);
+        if (panel.nextElementSibling !== champ) card.insertBefore(champ, panel.nextElementSibling);
+
+        card.dataset.slfMount = 'fm2026-training-benchmarks-card';
         panel.dataset.slfMount = 'fm2026-training-before-champ';
 
         const styleId = 'slf-training-guide-block-layout';
@@ -349,28 +361,56 @@ const App = {
             const style = document.createElement('style');
             style.id = styleId;
             style.textContent = `
-                #slf-training-guide-panel[data-slf-mount="fm2026-training-before-champ"] {
+                #slf-training-benchmarks-card {
                     display: block !important;
                     width: 100% !important;
                     max-width: none !important;
-                    flex: none !important;
+                    min-width: 0 !important;
                     margin: 18px 0 14px !important;
-                    padding: 14px !important;
+                    padding: 0 !important;
                     box-sizing: border-box !important;
                     background: var(--fm-panel, #171b29) !important;
                     border: 1px solid var(--fm-border-2, #38415f) !important;
                     border-radius: var(--fm-radius, 14px) !important;
                     color: var(--fm-text, #eef1f8) !important;
+                    overflow: hidden !important;
+                }
+                #slf-training-benchmarks-card > #slf-training-guide-panel {
+                    display: block !important;
+                    width: 100% !important;
+                    max-width: none !important;
+                    min-width: 0 !important;
+                    flex: none !important;
+                    margin: 0 !important;
+                    padding: 14px !important;
+                    box-sizing: border-box !important;
+                    background: transparent !important;
+                    border: 0 !important;
+                    border-bottom: 1px solid var(--fm-border-2, #38415f) !important;
+                    border-radius: 0 !important;
                     overflow-x: auto !important;
                 }
-                #slf-training-guide-panel[data-slf-mount="fm2026-training-before-champ"] .slf-source {
+                #slf-training-benchmarks-card > .train__champ {
+                    display: block !important;
+                    width: 100% !important;
+                    max-width: none !important;
+                    min-width: 0 !important;
+                    margin: 0 !important;
+                    padding: 14px !important;
+                    box-sizing: border-box !important;
+                    background: transparent !important;
+                    border: 0 !important;
+                    border-radius: 0 !important;
+                    overflow-x: auto !important;
+                }
+                #slf-training-benchmarks-card > #slf-training-guide-panel .slf-source {
                     grid-template-columns: minmax(80px, 1fr) 90px minmax(78px, .8fr) minmax(78px, .8fr) minmax(0, 1fr) !important;
                 }
                 @media (max-width: 1050px) {
-                    #slf-training-guide-panel[data-slf-mount="fm2026-training-before-champ"] .slf-source {
+                    #slf-training-benchmarks-card > #slf-training-guide-panel .slf-source {
                         grid-template-columns: 80px 90px 1fr 1fr !important;
                     }
-                    #slf-training-guide-panel[data-slf-mount="fm2026-training-before-champ"] .slf-source-state {
+                    #slf-training-benchmarks-card > #slf-training-guide-panel .slf-source-state {
                         grid-column: 1 / -1;
                     }
                 }
