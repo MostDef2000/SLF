@@ -59,12 +59,16 @@
     "src/modules/team-management/team4-alter-current-season-minutes-fix.js",
     "src/modules/team-management/team4-form-saved-choice-notice.js",
     "src/modules/team-management/team4-leadership-upgrade-indicator.js",
+    "src/app/compatibility-runner.js",
+    "src/app/header-matches-layout-compatibility.js",
+    "src/app/match-rendering-compatibility.js",
+    "src/app/tactics-dropdown-ui-policy.js",
     "src/app/bootstrap.js"
   ],
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 56,
+    "expectedModuleCount": 60,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -1800,9 +1804,100 @@
         ]
       },
       {
+        "file": "src/app/compatibility-runner.js",
+        "declares": [
+          "reportCompatibilityFailure",
+          "runCompatibilityAdapter"
+        ],
+        "public": [
+          "runCompatibilityAdapter"
+        ],
+        "requires": [],
+        "hostCapabilities": [
+          "console"
+        ]
+      },
+      {
+        "file": "src/app/header-matches-layout-compatibility.js",
+        "declares": [
+          "HeaderMatchesLayoutCompatibility"
+        ],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/app/compatibility-runner.js",
+            "symbols": [
+              "runCompatibilityAdapter"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document"
+        ]
+      },
+      {
+        "file": "src/app/match-rendering-compatibility.js",
+        "declares": [
+          "MatchRenderingCompatibility"
+        ],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/app/compatibility-runner.js",
+            "symbols": [
+              "runCompatibilityAdapter"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document",
+          "location",
+          "window",
+          "unsafeWindow",
+          "setInterval",
+          "clearInterval"
+        ]
+      },
+      {
+        "file": "src/app/tactics-dropdown-ui-policy.js",
+        "declares": [
+          "TacticsDropdownUiPolicy"
+        ],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/app/compatibility-runner.js",
+            "symbols": [
+              "runCompatibilityAdapter"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/preset-storage.js",
+            "symbols": [
+              "PresetStorage"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/app/ui-layer.js",
+            "symbols": [
+              "UI"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "MutationObserver",
+          "document",
+          "setTimeout"
+        ]
+      },
+      {
         "file": "src/app/bootstrap.js",
         "declares": [
-          "applyTacticsDropdownUiPolicy",
           "App"
         ],
         "public": [],
@@ -1858,9 +1953,8 @@
           }
         ],
         "hostCapabilities": [
-          "MutationObserver",
           "document",
-          "setTimeout"
+          "location"
         ]
       }
     ]
