@@ -51,6 +51,63 @@
       <label><input type="radio" name="shot" value="2" checked>shot</label>
       <label><input type="checkbox" name="priority_c" value="1" checked>priority center</label>
     </section>
+
+    <section class="control_field control_field_1">
+      <div class="system_message"></div>
+      <div class="cf1-pitch">
+        <div class="control_line" id="control_gk" data-position="gk"><div class="control_lineup" data-player="p-gk" data-position="gk" data-start="gk">GK</div></div>
+        <div class="control_line" id="control_ld" data-position="ld"><div class="control_lineup" data-player="p-ld" data-position="ld" data-start="ld">LD</div></div>
+        <div class="control_line" id="control_cd1" data-position="cd1"><div class="control_lineup" data-player="p-cd1" data-position="cd1" data-start="cd1">CD1</div></div>
+        <div class="control_line" id="control_cd2" data-position="cd2"></div>
+        <div class="control_line" id="control_cd3" data-position="cd3"><div class="control_lineup" data-player="p-cd3" data-position="cd3" data-start="cd3">CD3</div></div>
+        <div class="control_line" id="control_rd" data-position="rd"><div class="control_lineup" data-player="p-rd" data-position="rd" data-start="rd">RD</div></div>
+        <div class="control_line" id="control_lb" data-position="lb"></div>
+        <div class="control_line" id="control_dm1" data-position="dm1"></div>
+        <div class="control_line" id="control_dm2" data-position="dm2"><div class="control_lineup" data-player="p-dm2" data-position="dm2" data-start="dm2">DM2</div></div>
+        <div class="control_line" id="control_dm3" data-position="dm3"></div>
+        <div class="control_line" id="control_rb" data-position="rb"></div>
+        <div class="control_line" id="control_lm" data-position="lm"></div>
+        <div class="control_line" id="control_cm1" data-position="cm1"></div>
+        <div class="control_line" id="control_cm2" data-position="cm2"><div class="control_lineup" data-player="p-cm2" data-position="cm2" data-start="cm2">CM2</div></div>
+        <div class="control_line" id="control_cm3" data-position="cm3"></div>
+        <div class="control_line" id="control_rm" data-position="rm"></div>
+        <div class="control_line" id="control_lw" data-position="lw"><div class="control_lineup" data-player="p-lw" data-position="lw" data-start="lw">LW</div></div>
+        <div class="control_line" id="control_am1" data-position="am1"></div>
+        <div class="control_line" id="control_am2" data-position="am2"><div class="control_lineup" data-player="p-am2" data-position="am2" data-start="am2">AM2</div></div>
+        <div class="control_line" id="control_am3" data-position="am3"></div>
+        <div class="control_line" id="control_rw" data-position="rw"><div class="control_lineup" data-player="p-rw" data-position="rw" data-start="rw">RW</div></div>
+        <div class="control_line" id="control_st1" data-position="st1"></div>
+        <div class="control_line" id="control_st2" data-position="st2"><div class="control_lineup" data-player="p-st2" data-position="st2" data-start="st2">ST2</div></div>
+        <div class="control_line" id="control_st3" data-position="st3"></div>
+      </div>
+      <div class="cf1-bottom">
+        <div class="cf1-bench">
+          <div class="cf1-bench__slots">
+            <div class="control_line" id="control_sub1" data-position="sub1"><div class="control_lineup" data-player="p-sub1" data-position="sub1" data-start="sub1">SUB1</div></div>
+          </div>
+        </div>
+        <button type="button" class="lineup_send">сохранить изменения</button>
+      </div>
+    </section>
   </main>
+  <script>
+    window.__lineupPreviewCalls = 0;
+    window.__lineupSaveClicks = 0;
+    window.__lineupSavePayload = null;
+    window.__playerBindingHits = 0;
+    window.cf1_options_load = function () { window.__lineupPreviewCalls += 1; };
+    document.querySelectorAll('.control_field_1 .control_lineup').forEach(function (card) {
+      card.addEventListener('mousedown', function () { window.__playerBindingHits += 1; });
+    });
+    document.querySelector('.lineup_send').addEventListener('click', function () {
+      window.__lineupSaveClicks += 1;
+      var payload = {};
+      document.querySelectorAll('.control_field_1 .control_lineup').forEach(function (card) {
+        var position = window.jQuery(card).data('position') || card.dataset.position;
+        payload[position] = card.dataset.player;
+      });
+      window.__lineupSavePayload = payload;
+    });
+  </script>
 </body>
 </html>
