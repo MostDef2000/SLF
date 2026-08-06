@@ -3,9 +3,12 @@
   "contractVersion": 1,
   "status": "active",
   "owner": "MostDef2000",
-  "purpose": "Require proportionate task decomposition, observable evidence, independent verification passes, explicit stop conditions, and residual-risk reporting without requesting or storing hidden chain-of-thought.",
+  "purpose": "Require proportionate task decomposition, canonical scope approval, observable evidence, independent verification passes, explicit stop conditions, and residual-risk reporting without requesting or storing hidden chain-of-thought.",
   "principles": [
     "Decompose before changing state.",
+    "Present behavioural scope before repository mutation.",
+    "Use the exact canonical repository approval phrase commit approved.",
+    "Keep unsolicited implementation detail out of the pre-approval user boundary.",
     "Separate facts, assumptions, and inferences.",
     "Prefer reversible mutations before irreversible ones.",
     "Verify in a separate pass before claiming success.",
@@ -21,6 +24,8 @@
       "plan",
       "material_assumptions",
       "acceptance_criteria",
+      "approved_scope",
+      "repository_approval",
       "observable_evidence",
       "verification_results",
       "decision_summary",
@@ -36,6 +41,44 @@
       "scratchpad"
     ]
   },
+  "interactionBoundary": {
+    "scopeCheckHeading": "Implementation Scope Check",
+    "scopeCheckRequiredBeforeRepositoryMutation": true,
+    "scopePresentation": "behavioral_plain_language",
+    "canonicalRepositoryApprovalPhrase": "commit approved",
+    "acceptedRepositoryApprovalPhrases": [
+      "commit approved"
+    ],
+    "preApprovalTechnicalDisclosure": "prohibited_unless_user_requested",
+    "technicalDisclosureKinds": [
+      "code",
+      "diff",
+      "selectors",
+      "commands",
+      "implementation_recipe",
+      "speculative_patch"
+    ],
+    "preApprovalTechnicalDetailRecordValues": [
+      "not_shown",
+      "user_requested"
+    ],
+    "approvalPersistsForExactScope": true,
+    "reapprovalRequiredFor": [
+      "behavioral_scope_expansion",
+      "changed_files_outside_approved_scope",
+      "destructive_or_irreversible_action",
+      "new_secret_or_credential_handling",
+      "storage_schema_or_migration_expansion",
+      "behavior_redesign_after_validation_failure",
+      "separately_governed_production_operation"
+    ],
+    "requiredContractBootstrap": [
+      "contracts/SLF_GOVERNANCE.md",
+      "contracts/branches/project-manager.md",
+      "contracts/runtime/SLF_TASK_RUNTIME.md",
+      "relevant domain contract under contracts/branches/"
+    ]
+  },
   "classification": {
     "defaultMode": "structured",
     "modes": {
@@ -49,6 +92,7 @@
           "task",
           "mode",
           "classificationReason",
+          "repositoryMutation",
           "acceptanceCriteria",
           "outcome",
           "decisionSummary"
@@ -66,6 +110,7 @@
           "task",
           "mode",
           "classificationReason",
+          "repositoryMutation",
           "plan",
           "assumptions",
           "acceptanceCriteria",
@@ -80,7 +125,7 @@
         "useFor": [
           "authentication or authorization",
           "security control",
-          "persisted-data or schema migration",
+          "persisted data or schema migration",
           "release generation or provenance",
           "deployment or rollback",
           "destructive or production mutation"
@@ -89,6 +134,7 @@
           "task",
           "mode",
           "classificationReason",
+          "repositoryMutation",
           "plan",
           "assumptions",
           "alternatives",
@@ -121,6 +167,10 @@
     "separateGenerationAndVerificationPasses": true,
     "stopOnFailedGate": true,
     "stopOnMissingEvidence": true,
+    "canonicalApprovalRequiredBeforeRepositoryMutation": true,
+    "preApprovalCodeDisclosureProhibitedUnlessRequested": true,
+    "contractBootstrapBeforeScope": true,
+    "scopeExpansionRequiresReapproval": true,
     "productionDeploymentRequiresExplicitApproval": true,
     "mergeReleaseAndDeploymentAreSeparateDecisions": true
   },
@@ -149,13 +199,18 @@
     "unsupportedClaimPolicy": "block_success"
   },
   "verificationProtocol": {
-    "generationPass": "Produce the smallest solution that satisfies the stated acceptance criteria.",
-    "verificationPass": "Attempt to disprove the solution using negative cases, boundary cases, stale-artifact checks, fixture realism, and operational constraints.",
+    "generationPass": "Produce the smallest solution that satisfies the stated acceptance criteria and approved behavioural scope.",
+    "verificationPass": "Attempt to disprove the solution using negative cases, boundary cases, stale-artifact checks, fixture realism, approval evidence, changed-file scope, and operational constraints.",
     "requiredQuestions": [
+      "Was the current governance, PM, runtime, and relevant domain contract reread from main before scope presentation?",
+      "Was Implementation Scope Check presented before the repository mutation?",
+      "Was the exact canonical phrase commit approved used?",
+      "Was unsolicited code, diff, selector, command, implementation recipe, or speculative patch kept out of the pre-approval user boundary?",
+      "Do actual changed files and behavior remain inside the approved scope?",
       "Which assumptions could be false?",
       "Which evidence is missing or indirect?",
       "Could a synthetic fixture pass while production fails?",
-      "Is the candidate artifact being tested rather than an older published artifact?",
+      "Is the exact candidate artifact being tested rather than an older published artifact?",
       "Are facts, assumptions, and inferences clearly separated?",
       "Are irreversible effects, deployment, and rollback handled explicitly?"
     ]
@@ -163,6 +218,8 @@
   "stopConditions": [
     "A required quality gate fails.",
     "The exact candidate artifact cannot be produced or identified.",
+    "A repository mutation lacks a preceding Implementation Scope Check and exact commit approved evidence.",
+    "Actual changed files or behavior exceed the approved scope.",
     "A critical assumption cannot be verified.",
     "Required authorization or explicit production approval is absent.",
     "Rollback is required by the mode but unavailable or unverified.",
@@ -185,9 +242,14 @@
       "task": "non-empty string",
       "mode": "one of allowedModes",
       "classificationReason": "non-empty string",
+      "repositoryMutation": "boolean",
       "acceptanceCriteria": "non-empty string array",
       "outcome": "one of allowedOutcomes",
       "decisionSummary": "non-empty string"
+    },
+    "repositoryMutationRequirements": {
+      "approvedScope": "object with behavior, changedFiles, and outOfScope",
+      "repositoryApproval": "object with required, status, authority, phrase, scopeCheckPresented, preApprovalTechnicalDetail, and contractBootstrap"
     },
     "structuredRequirements": {
       "plan": "non-empty string array",

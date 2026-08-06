@@ -9,6 +9,25 @@
 - Affected boundaries: browser / API / storage / release / deployment / workflow / documentation
 - Failure consequence:
 
+## Scope approval
+
+- Repository mutation: yes / no
+- Approved behavioural scope:
+- Approved changed files:
+- Out of scope:
+- Scope check presented before approval: yes / no
+- Repository approval phrase: `commit approved` / not applicable
+- Pre-approval technical detail: not shown / user explicitly requested
+- Contract bootstrap from current `main`:
+  - [ ] `contracts/SLF_GOVERNANCE.md`
+  - [ ] `contracts/branches/project-manager.md`
+  - [ ] `contracts/runtime/SLF_TASK_RUNTIME.md`
+  - [ ] relevant domain contract under `contracts/branches/`
+
+- [ ] No repository write occurred before `commit approved`.
+- [ ] No code, diff, selectors, commands, implementation recipe, or speculative patch was shown before approval unless the user explicitly requested technical detail.
+- [ ] Changed files and behavior remain inside the approved scope.
+
 ## Deliberate execution
 
 - Reasoning mode: direct / structured / critical
@@ -25,7 +44,7 @@
 - [ ] Facts, assumptions, and inferences are separated.
 - [ ] Success claims are backed by observable evidence.
 - [ ] Generation and verification were performed as separate passes for structured or critical work.
-- [ ] Critical work includes explicit approval and rollback evidence where applicable.
+- [ ] Critical work includes explicit operational approval and rollback evidence where applicable.
 
 ## Test design
 

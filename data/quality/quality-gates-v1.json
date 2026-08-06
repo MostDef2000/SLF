@@ -14,7 +14,11 @@
     "aggregateDomain": "static-contract-security",
     "hiddenChainOfThoughtRequiredInEvidence": false,
     "observableEvidenceRequired": true,
-    "explicitDeploymentApprovalRequired": true
+    "explicitDeploymentApprovalRequired": true,
+    "canonicalRepositoryApprovalPhrase": "commit approved",
+    "scopeCheckRequiredBeforeRepositoryMutation": true,
+    "preApprovalTechnicalDisclosure": "prohibited_unless_user_requested",
+    "contractBootstrapRequired": true
   },
   "prerequisitesIntegrated": true,
   "prerequisitePullRequests": [159, 163, 164, 165, 166, 167, 168],

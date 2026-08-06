@@ -3,27 +3,96 @@
   "contract": "data/quality/deliberate-execution-contract-v1.json",
   "validRecords": [
     {
-      "name": "direct documentation correction",
+      "name": "direct read-only lookup",
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Read the current repository version without changing state.",
+        "mode": "direct",
+        "classificationReason": "The task is a read-only lookup with an unambiguous answer.",
+        "repositoryMutation": false,
+        "acceptanceCriteria": [
+          "The current version is reported from repository evidence.",
+          "No repository state changes."
+        ],
+        "outcome": "success",
+        "decisionSummary": "The repository version was read without mutation."
+      }
+    },
+    {
+      "name": "direct documentation correction with canonical approval",
       "record": {
         "schema": "slf_deliberate_execution_record_v1",
         "task": "Correct one unambiguous documentation typo without changing behaviour.",
         "mode": "direct",
-        "classificationReason": "The change is mechanical, read-only with respect to runtime state, and has an unambiguous expected result.",
+        "classificationReason": "The change is mechanical and has an unambiguous expected result.",
+        "repositoryMutation": true,
+        "approvedScope": {
+          "behavior": "Correct one documentation typo only.",
+          "changedFiles": [
+            "docs/example.md"
+          ],
+          "outOfScope": [
+            "runtime behaviour",
+            "release artifacts"
+          ]
+        },
+        "repositoryApproval": {
+          "required": true,
+          "status": "approved",
+          "authority": "repository owner",
+          "phrase": "commit approved",
+          "scopeCheckPresented": true,
+          "preApprovalTechnicalDetail": "not_shown",
+          "contractBootstrap": [
+            "contracts/SLF_GOVERNANCE.md",
+            "contracts/branches/project-manager.md",
+            "contracts/runtime/SLF_TASK_RUNTIME.md",
+            "relevant domain contract under contracts/branches/"
+          ]
+        },
         "acceptanceCriteria": [
           "The intended word is corrected.",
           "No runtime or contract file changes."
         ],
         "outcome": "success",
-        "decisionSummary": "The isolated documentation typo was corrected and the surrounding text was unchanged."
+        "decisionSummary": "The isolated documentation typo was corrected inside the approved scope."
       }
     },
     {
-      "name": "structured user interface change",
+      "name": "structured user interface change with canonical approval",
       "record": {
         "schema": "slf_deliberate_execution_record_v1",
         "task": "Compact the transfer workspace without changing handlers, API calls, storage, or mount order.",
         "mode": "structured",
         "classificationReason": "This is a source-code and browser-fixture change with reversible presentation mutations and no critical data boundary.",
+        "repositoryMutation": true,
+        "approvedScope": {
+          "behavior": "Compact the transfer workspace while preserving all existing functional boundaries.",
+          "changedFiles": [
+            "src/modules/transfer-analyzer/presentation.js",
+            "tests/browser/fixtures/transfer.html"
+          ],
+          "outOfScope": [
+            "API calls",
+            "storage",
+            "mount order",
+            "release artifacts"
+          ]
+        },
+        "repositoryApproval": {
+          "required": true,
+          "status": "approved",
+          "authority": "repository owner",
+          "phrase": "commit approved",
+          "scopeCheckPresented": true,
+          "preApprovalTechnicalDetail": "not_shown",
+          "contractBootstrap": [
+            "contracts/SLF_GOVERNANCE.md",
+            "contracts/branches/project-manager.md",
+            "contracts/runtime/SLF_TASK_RUNTIME.md",
+            "relevant domain contract under contracts/branches/"
+          ]
+        },
         "plan": [
           "Inspect the live DOM contract and current module IDs.",
           "Apply a late presentation adapter without replacing handlers.",
@@ -69,12 +138,39 @@
       }
     },
     {
-      "name": "critical deployment readiness assessment",
+      "name": "critical deployment readiness assessment with repository and operational approval",
       "record": {
         "schema": "slf_deliberate_execution_record_v1",
-        "task": "Assess whether a fixed userscript artifact is ready for an explicitly approved production deployment.",
+        "task": "Update deployment verification tooling and assess whether a fixed userscript artifact is ready for an explicitly approved production deployment.",
         "mode": "critical",
-        "classificationReason": "The task crosses release, deployment, production-state, and rollback boundaries.",
+        "classificationReason": "The task changes repository tooling and crosses release, deployment, production-state, and rollback boundaries.",
+        "repositoryMutation": true,
+        "approvedScope": {
+          "behavior": "Strengthen deployment verification without deploying production.",
+          "changedFiles": [
+            "vps/ops/verify_api_deployment.py",
+            "tools/test-deployment-evidence.py"
+          ],
+          "outOfScope": [
+            "production deployment",
+            "credentials",
+            "live data"
+          ]
+        },
+        "repositoryApproval": {
+          "required": true,
+          "status": "approved",
+          "authority": "repository owner",
+          "phrase": "commit approved",
+          "scopeCheckPresented": true,
+          "preApprovalTechnicalDetail": "user_requested",
+          "contractBootstrap": [
+            "contracts/SLF_GOVERNANCE.md",
+            "contracts/branches/project-manager.md",
+            "contracts/runtime/SLF_TASK_RUNTIME.md",
+            "relevant domain contract under contracts/branches/"
+          ]
+        },
         "plan": [
           "Identify the exact source commit and artifact digest.",
           "Run deterministic rebuild and exact-artifact checks.",
@@ -121,7 +217,7 @@
         ],
         "adversarialVerification": [
           {
-            "check": "Attempt deployment with missing approval and require a blocked result.",
+            "check": "Attempt deployment with missing operational approval and require a blocked result.",
             "result": "success"
           },
           {
@@ -132,7 +228,7 @@
         "stopConditions": [
           "Any mandatory quality domain fails.",
           "The reviewed artifact digest cannot be matched.",
-          "Explicit approval or rollback evidence is absent."
+          "Explicit operational approval or rollback evidence is absent."
         ],
         "rollback": {
           "available": true,
@@ -145,7 +241,7 @@
           "authority": "repository owner and authorized production operator"
         },
         "outcome": "success",
-        "decisionSummary": "The candidate is ready for a separately approved deployment; the quality gate itself does not perform or imply deployment.",
+        "decisionSummary": "The repository tooling change is complete and the candidate is ready for a separately approved deployment; the quality gate itself does not perform or imply deployment.",
         "residualRisks": [
           "Production-only environmental differences remain until post-deploy verification completes."
         ]
@@ -164,6 +260,28 @@
         "task": "Change a runtime module.",
         "mode": "structured",
         "classificationReason": "Source code changes require structured execution.",
+        "repositoryMutation": true,
+        "approvedScope": {
+          "behavior": "Change one runtime module.",
+          "changedFiles": [
+            "src/example.js"
+          ],
+          "outOfScope": []
+        },
+        "repositoryApproval": {
+          "required": true,
+          "status": "approved",
+          "authority": "repository owner",
+          "phrase": "commit approved",
+          "scopeCheckPresented": true,
+          "preApprovalTechnicalDetail": "not_shown",
+          "contractBootstrap": [
+            "contracts/SLF_GOVERNANCE.md",
+            "contracts/branches/project-manager.md",
+            "contracts/runtime/SLF_TASK_RUNTIME.md",
+            "relevant domain contract under contracts/branches/"
+          ]
+        },
         "plan": [
           "Edit code.",
           "Run tests."
@@ -185,16 +303,17 @@
       }
     },
     {
-      "name": "critical record without rollback and approval",
+      "name": "critical record without rollback and operational approval",
       "expectedErrors": [
-        "critical.rollback_required",
-        "critical.approval_required"
+        "critical.approval_required",
+        "critical.rollback_required"
       ],
       "record": {
         "schema": "slf_deliberate_execution_record_v1",
         "task": "Deploy a new API revision to production.",
         "mode": "critical",
         "classificationReason": "This changes production state.",
+        "repositoryMutation": false,
         "plan": [
           "Deploy the revision."
         ],
@@ -244,6 +363,7 @@
         "task": "Analyze a defect.",
         "mode": "direct",
         "classificationReason": "Fixture intentionally violates the privacy boundary.",
+        "repositoryMutation": false,
         "acceptanceCriteria": [
           "No hidden reasoning is stored."
         ],
@@ -260,11 +380,11 @@
       ],
       "record": {
         "schema": "slf_deliberate_execution_record_v1",
-        "task": "Modify a browser integration.",
+        "task": "Analyze a browser integration without writing the repository.",
         "mode": "structured",
-        "classificationReason": "The task changes runtime integration behaviour.",
+        "classificationReason": "The task evaluates runtime integration behaviour.",
+        "repositoryMutation": false,
         "plan": [
-          "Modify the integration.",
           "Run the browser suite."
         ],
         "assumptions": [],
@@ -285,8 +405,184 @@
           }
         ],
         "outcome": "success",
-        "decisionSummary": "The change succeeded despite a failed check.",
+        "decisionSummary": "The analysis succeeded despite a failed check.",
         "residualRisks": []
+      }
+    },
+    {
+      "name": "repository mutation without approval",
+      "expectedErrors": [
+        "repository.approval_required"
+      ],
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Edit one documentation file.",
+        "mode": "direct",
+        "classificationReason": "The edit is mechanical.",
+        "repositoryMutation": true,
+        "approvedScope": {
+          "behavior": "Correct one documentation typo.",
+          "changedFiles": [
+            "docs/example.md"
+          ],
+          "outOfScope": []
+        },
+        "acceptanceCriteria": [
+          "The typo is corrected."
+        ],
+        "outcome": "failed",
+        "decisionSummary": "The mutation is unauthorized."
+      }
+    },
+    {
+      "name": "repository mutation with noncanonical phrase",
+      "expectedErrors": [
+        "repository.approval_phrase_invalid"
+      ],
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Edit one documentation file.",
+        "mode": "direct",
+        "classificationReason": "The edit is mechanical.",
+        "repositoryMutation": true,
+        "approvedScope": {
+          "behavior": "Correct one documentation typo.",
+          "changedFiles": [
+            "docs/example.md"
+          ],
+          "outOfScope": []
+        },
+        "repositoryApproval": {
+          "required": true,
+          "status": "approved",
+          "authority": "repository owner",
+          "phrase": "делай",
+          "scopeCheckPresented": true,
+          "preApprovalTechnicalDetail": "not_shown",
+          "contractBootstrap": [
+            "contracts/SLF_GOVERNANCE.md",
+            "contracts/branches/project-manager.md",
+            "contracts/runtime/SLF_TASK_RUNTIME.md",
+            "relevant domain contract under contracts/branches/"
+          ]
+        },
+        "acceptanceCriteria": [
+          "The typo is corrected."
+        ],
+        "outcome": "failed",
+        "decisionSummary": "The approval phrase is invalid."
+      }
+    },
+    {
+      "name": "repository mutation with unsolicited technical detail",
+      "expectedErrors": [
+        "repository.preapproval_technical_detail_invalid"
+      ],
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Edit one source file.",
+        "mode": "direct",
+        "classificationReason": "The edit is mechanical.",
+        "repositoryMutation": true,
+        "approvedScope": {
+          "behavior": "Correct one source comment.",
+          "changedFiles": [
+            "src/example.js"
+          ],
+          "outOfScope": []
+        },
+        "repositoryApproval": {
+          "required": true,
+          "status": "approved",
+          "authority": "repository owner",
+          "phrase": "commit approved",
+          "scopeCheckPresented": true,
+          "preApprovalTechnicalDetail": "shown_without_request",
+          "contractBootstrap": [
+            "contracts/SLF_GOVERNANCE.md",
+            "contracts/branches/project-manager.md",
+            "contracts/runtime/SLF_TASK_RUNTIME.md",
+            "relevant domain contract under contracts/branches/"
+          ]
+        },
+        "acceptanceCriteria": [
+          "The comment is corrected."
+        ],
+        "outcome": "failed",
+        "decisionSummary": "The pre-approval boundary was violated."
+      }
+    },
+    {
+      "name": "repository mutation without current contract bootstrap",
+      "expectedErrors": [
+        "repository.contract_bootstrap_invalid"
+      ],
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Edit one source file.",
+        "mode": "direct",
+        "classificationReason": "The edit is mechanical.",
+        "repositoryMutation": true,
+        "approvedScope": {
+          "behavior": "Correct one source comment.",
+          "changedFiles": [
+            "src/example.js"
+          ],
+          "outOfScope": []
+        },
+        "repositoryApproval": {
+          "required": true,
+          "status": "approved",
+          "authority": "repository owner",
+          "phrase": "commit approved",
+          "scopeCheckPresented": true,
+          "preApprovalTechnicalDetail": "not_shown",
+          "contractBootstrap": [
+            "contracts/SLF_GOVERNANCE.md"
+          ]
+        },
+        "acceptanceCriteria": [
+          "The comment is corrected."
+        ],
+        "outcome": "failed",
+        "decisionSummary": "The contract bootstrap is incomplete."
+      }
+    },
+    {
+      "name": "repository mutation without approved changed files",
+      "expectedErrors": [
+        "repository.changed_files_required"
+      ],
+      "record": {
+        "schema": "slf_deliberate_execution_record_v1",
+        "task": "Edit repository files.",
+        "mode": "direct",
+        "classificationReason": "The edit is mechanical.",
+        "repositoryMutation": true,
+        "approvedScope": {
+          "behavior": "Correct documentation.",
+          "changedFiles": [],
+          "outOfScope": []
+        },
+        "repositoryApproval": {
+          "required": true,
+          "status": "approved",
+          "authority": "repository owner",
+          "phrase": "commit approved",
+          "scopeCheckPresented": true,
+          "preApprovalTechnicalDetail": "not_shown",
+          "contractBootstrap": [
+            "contracts/SLF_GOVERNANCE.md",
+            "contracts/branches/project-manager.md",
+            "contracts/runtime/SLF_TASK_RUNTIME.md",
+            "relevant domain contract under contracts/branches/"
+          ]
+        },
+        "acceptanceCriteria": [
+          "The documentation is corrected."
+        ],
+        "outcome": "failed",
+        "decisionSummary": "The changed-file scope is missing."
       }
     }
   ]

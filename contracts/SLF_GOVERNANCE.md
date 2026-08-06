@@ -1,6 +1,6 @@
 # SLF Governance
 
-Version: 2.4.0
+Version: 2.5.0
 Status: Active
 Applies to: all SLF agents, implementation workflows, release workflows, and user handoffs
 Source of truth: GitHub repository contracts
@@ -10,15 +10,18 @@ Source of truth: GitHub repository contracts
 All agents must follow:
 
 - `contracts/SLF_GOVERNANCE.md`;
+- `contracts/SLF_SCOPE_APPROVAL_POLICY.md`;
 - `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`;
 - `contracts/branches/task-intake.md` for new-task normalization;
 - `contracts/branches/project-manager.md` for orchestration;
 - the relevant domain branch contract;
 - runtime and release-gate contracts.
 
+`contracts/SLF_SCOPE_APPROVAL_POLICY.md` overrides older wording that accepts repository-write approval phrases other than the exact canonical phrase `commit approved` or permits unsolicited technical implementation detail before approval.
+
 `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md` overrides older wording that requires routine manual GitHub Actions execution.
 
-## 2. Main source of truth
+## 2. Main source of truth and contract bootstrap
 
 `main` is the only long-term source of truth after integration.
 
@@ -29,26 +32,36 @@ Editable implementation source is:
 
 `releases/latest.user.js` and `releases/latest.meta.js` are generated Tampermonkey artifacts, not editable implementation source.
 
-Agents must not implement from memory, stale branches, or generated release files.
+Agents must not implement from memory, stale branches, generated release files, or stale chat summaries.
+
+Before presenting a new implementation scope, the responsible agent must reread the current versions from `main` of:
+
+- `contracts/SLF_GOVERNANCE.md`;
+- `contracts/branches/project-manager.md`;
+- `contracts/runtime/SLF_TASK_RUNTIME.md`;
+- the relevant active domain contract under `contracts/branches/`.
 
 ## 3. Approval boundary
-
-Repository writes require explicit approval through one of:
-
-- `COMMIT APPROVED`;
-- `commit approved`;
-- `делай`;
-- `внедряй`;
-- `готовь ветку`;
-- `делай реализацию`.
-
-These approval phrases authorize repository writes only after the PM has emitted an `Implementation Scope Check` for the exact task, file set, scope, and intended behavior. Earlier intake or discussion wording must not be treated as repository-write approval.
 
 Before implementation writes, the responsible agent must emit:
 
 ```text
 Implementation Scope Check
 ```
+
+The scope check must describe intended product behaviour, intended changed files or file categories, out-of-scope areas, material risks, verification, and release impact in plain language.
+
+Before approval, the agent must not provide code, diffs, selectors, commands, implementation recipes, or speculative patches unless the user explicitly asks for technical detail.
+
+The only phrase that authorizes repository writes is:
+
+```text
+commit approved
+```
+
+The phrase is valid only after the current `Implementation Scope Check` has been presented.
+
+No other phrase authorizes repository writes. `делай`, `продолжай`, `внедряй`, `готовь ветку`, `делай реализацию`, uppercase variants, silence, and general satisfaction remain discussion context until the exact canonical phrase is provided.
 
 After approval, the PM is authorized to execute the full deterministic safe lifecycle inside the approved scope:
 
@@ -58,21 +71,24 @@ implementation
 → pull request
 → CI validation
 → merge into main
-→ automatic release
+→ automatic release when applicable
 → release verification
 → Tampermonkey update instruction
 ```
 
 No separate confirmation is required before PR creation, merge, or automatic release.
 
-A new confirmation is required only for:
+A new scope check and new `commit approved` are required only for:
 
 - scope expansion;
+- changed files outside the approved set or categories;
 - destructive action;
 - protected-file permission not already granted;
 - secrets or credentials;
+- storage, schema, migration, or key changes beyond the approved plan;
 - behavior redesign after validation failure;
-- non-recoverable ambiguous conflict.
+- non-recoverable ambiguous conflict;
+- a separately governed production operation not included in the approved scope.
 
 ## 4. Disposable task branches
 
@@ -119,7 +135,9 @@ Default flow:
 Task Intake normalization
 → canonical Task Brief
 → Project Manager triage
-→ domain implementation after approval
+→ Implementation Scope Check
+→ commit approved
+→ domain implementation
 → internal handoff
 → PM validation
 → Core Release integration
@@ -131,6 +149,8 @@ Task Intake normalization
 ```
 
 The user must not be asked to copy handoffs, choose agents, merge PRs, or manually run Actions when the system can continue safely.
+
+The agent must not substitute speculative code or a technical recipe for implementation when repository execution remains available.
 
 ## 7. Core Release handoff safety
 
@@ -344,8 +364,7 @@ These rules are permanent governance requirements for all SLF agents.
 
 ### 18.1 Approval Persistence
 
-Repository-write approval is attached to the exact task scope, file set, and
-intended behavior.
+Repository-write approval is attached to the exact task scope, file set, and intended behavior.
 
 It remains valid until:
 
@@ -355,8 +374,7 @@ It remains valid until:
 - explicit user cancellation;
 - approved scope expansion requiring new consent.
 
-Approval is not invalidated by interruptions, tool changes, retries, manual
-fallback steps, or continuation in a later message.
+Approval is not invalidated by interruptions, tool changes, retries, manual fallback steps, or continuation in a later message.
 
 ### 18.2 Protected-File Permission Persistence
 
@@ -367,19 +385,15 @@ Permission granted for a protected file remains valid for:
 - the declared modification;
 - the complete approved lifecycle.
 
-Existing secrets or credentials inside that file do not require the user to
-reveal them when the approved operation preserves them unchanged.
+Existing secrets or credentials inside that file do not require the user to reveal them when the approved operation preserves them unchanged.
 
-Agents must not display secret values and must not replace protected files from
-partial or truncated content.
+Agents must not display secret values and must not replace protected files from partial or truncated content.
 
 ### 18.3 Capability Gate
 
-Before the first repository write, the responsible agent must verify an
-end-to-end path for the complete approved lifecycle.
+Before the first repository write, the responsible agent must verify an end-to-end path for the complete approved lifecycle.
 
-For multi-file work, the agent must know how every required file will be safely
-written before the first partial write.
+For multi-file work, the agent must know how every required file will be safely written before the first partial write.
 
 ### 18.4 Execution Method Governance
 
@@ -391,8 +405,7 @@ Approved execution methods, in priority order, are:
 4. authenticated `gh`;
 5. one consolidated GitHub UI manual step.
 
-A lower-priority method may be used immediately when a higher-priority method is
-unsafe or unavailable.
+A lower-priority method may be used immediately when a higher-priority method is unsafe or unavailable.
 
 ### 18.5 Manual Step Governance
 
@@ -406,8 +419,7 @@ A manual instruction must be:
 - inside the approved scope;
 - independently verifiable.
 
-After completion, the responsible agent must verify and resume the lifecycle
-without a new approval.
+After completion, the responsible agent must verify and resume the lifecycle without a new approval.
 
 ### 18.6 Blocker Evidence Governance
 
@@ -426,15 +438,13 @@ A limitation of one tool is not a project blocker.
 
 The user should normally receive:
 
-1. one scope/approval boundary;
+1. one behavioural scope/approval boundary without unsolicited implementation code;
 2. one manual package only when unavoidable;
 3. one terminal result.
 
-Intermediate operational messages must be omitted when the user requests
-terminal-only reporting.
+Intermediate operational messages must be omitted when the user requests terminal-only reporting.
 
-Internal runtime tracking must continue even when intermediate status is not
-shown.
+Internal runtime tracking must continue even when intermediate status is not shown.
 
 ## 19. SLF Task Intake governance
 
@@ -453,4 +463,4 @@ Task Intake must:
 
 Task Intake must not create Issues, branches, files, commits, pull requests, or implementation changes. It must not introduce a new runtime phase and must not silently expand the user's request.
 
-The PM remains responsible for duplicate-Issue checks, Issue creation or update, `Implementation Scope Check`, repository-write approval, implementation orchestration, PR/CI/merge, and release verification.
+The PM remains responsible for duplicate-Issue checks, Issue creation or update, `Implementation Scope Check`, canonical repository-write approval, implementation orchestration, PR/CI/merge, and release verification.
