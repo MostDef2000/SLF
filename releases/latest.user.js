@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.288
+// @version      4.4.289
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.288',
-        scriptVersion: '4.4.288',
+        version: '4.4.289',
+        scriptVersion: '4.4.289',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.288',
+        scriptVersion: '4.4.289',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -6800,7 +6800,7 @@ if (typeof window !== 'undefined') {
 (function tacticPresetDirectionPolicy() {
     'use strict';
 
-    if (typeof window !== 'undefined' && window.SLFTacticDirectionPolicy?.version === '5.61-situation-v4') return;
+    if (typeof window !== 'undefined' && window.SLFTacticDirectionPolicy?.version === '5.61-situation-v5') return;
 
     const REMOVED_PRESETS = new Set(['Xabi_BoxMidfield_bal3']);
     const NEUTRAL_PRIORITY_PRESETS = [
@@ -6862,6 +6862,79 @@ if (typeof window !== 'undefined') {
         return Array.isArray(signals?.signals) && signals.signals.includes(name);
     }
 
+    function hasAnySignal(signals, names) {
+        return names.some(name => hasSignal(signals, name));
+    }
+
+    function deriveCounterTransitionContext(signals = {}) {
+        const myXg = finite(signals.myXg);
+        const oppXg = finite(signals.oppXg);
+        const myXT = finite(signals.myXT);
+        const oppXT = finite(signals.oppXT);
+        const myShots = finite(signals.myShots);
+        const oppShots = finite(signals.oppShots);
+        const myPossession = finite(signals.myPossession);
+        const oppPossession = finite(signals.oppPossession);
+        const myPressVector = finite(signals.myPressVector);
+        const oppPressVector = finite(signals.oppPressVector);
+        const myDefVector = finite(signals.myDefVector);
+        const oppDefVector = finite(signals.oppDefVector);
+
+        const xgDominance = oppXg >= myXg + 0.45;
+        const xtDominance = oppXT >= myXT + 0.22;
+        const shotDominance = oppShots >= myShots + 4;
+        const possessionDominance = oppPossession >= 54 && oppPossession >= myPossession + 12;
+        const dominanceVotes = [xgDominance, xtDominance, shotDominance, possessionDominance].filter(Boolean).length;
+
+        const explicitHighVectors = hasAnySignal(signals, [
+            'opponent_attack_vectors_high',
+            'opponent_attack_wave_high',
+            'opponent_sustained_attack',
+            'sustained_siege'
+        ]);
+        const lineVectorDominance = oppPressVector >= myPressVector + 8 && oppDefVector >= myDefVector + 5;
+        const opponentHighAttackVectors = explicitHighVectors || oppXT >= myXT + 0.3 || lineVectorDominance;
+        const opponentAttackDominance = dominanceVotes >= 2;
+        const sustainedSiege = Boolean(
+            signals.underPressure &&
+            opponentAttackDominance &&
+            opponentHighAttackVectors &&
+            (finite(signals.pressureRisk) >= 55 || dominanceVotes >= 3)
+        );
+
+        const explicitExit = hasAnySignal(signals, [
+            'counter_exit_available',
+            'space_behind_press',
+            'opponent_structure_broken',
+            'clean_first_pass'
+        ]);
+        const blockedExit = hasAnySignal(signals, [
+            'counter_exit_blocked',
+            'first_pass_trapped',
+            'isolated_forward',
+            'sustained_siege'
+        ]);
+        const transitionProgress =
+            finite(signals.myXgDelta) >= 0.08 ||
+            finite(signals.myShotsDelta) >= 1 ||
+            (myXT >= 0.18 && myXT >= oppXT * 0.55) ||
+            Boolean(signals.attackingMomentum);
+        const possessionOutlet = myPossession >= 38 && oppPossession - myPossession <= 15 && myXT >= 0.1;
+        const counterExitAvailable = Boolean(
+            !blockedExit &&
+            !sustainedSiege &&
+            (explicitExit || transitionProgress || possessionOutlet)
+        );
+
+        return {
+            opponentAttackDominance,
+            opponentHighAttackVectors,
+            sustainedSiege,
+            counterExitAvailable,
+            counterDominanceVotes: dominanceVotes
+        };
+    }
+
     function removePresetFromMap(map) {
         if (!map || typeof map !== 'object') return;
         REMOVED_PRESETS.forEach(name => delete map[name]);
@@ -6892,6 +6965,7 @@ if (typeof window !== 'undefined') {
         const attackWorking = hasSignal(signals, 'generator_attack_working');
         const defenseUnder = hasSignal(signals, 'generator_defense_underperforming');
         const defenseWorking = hasSignal(signals, 'generator_defense_working');
+        const pressureContext = signals.underPressure || signals.transitionThreat || signals.strengthGap <= -25;
 
         if (signals.scoreState === 'winning' && signals.minute >= 82 && signals.pressureRisk >= 60) return 'late_emergency_lock';
         if (signals.scoreState === 'losing' && signals.minute >= policy.bielsaMinute && signals.attackNeed >= 78) return 'final_desperation';
@@ -6899,7 +6973,8 @@ if (typeof window !== 'undefined') {
         if (signals.pressFatigueRisk || signals.pressingCost >= 62 || signals.myPowerDropPct >= 4) return 'press_cooldown';
         if (signals.scoreState === 'winning' && signals.minute >= 65 && signals.pressureRisk >= 45) return 'protect_lead';
         if (signals.widthOpportunity >= 55 && !signals.ownCrossesBad && !signals.opponentCrossesDangerous && !signals.underPressure) return 'safe_width';
-        if (signals.underPressure || signals.transitionThreat || signals.strengthGap <= -25) return 'compact_counter';
+        if (pressureContext && signals.counterExitAvailable === false) return 'pressure_escape';
+        if (pressureContext) return 'compact_counter';
         if (attackUnder && defenseWorking && signals.attackNeed < 75) return 'controlled_push';
         if (defenseUnder && attackUnder) return 'control_reset';
         if (signals.highBadActions || signals.controlNeed >= 65) return 'control_reset';
@@ -6915,6 +6990,7 @@ if (typeof window !== 'undefined') {
             balanced_structure: 'Arteta_Control433_bal3',
             active_control: 'Arteta_Control433_bal3',
             control_reset: 'Pep_BoxControl_bal2',
+            pressure_escape: 'Pep_BoxControl_bal2',
             press_cooldown: 'Pep_PressCooldown_bal2',
             compact_counter: 'Compact_Counter_def3',
             controlled_push: 'Pep_ControlledPush_att3',
@@ -6925,11 +7001,16 @@ if (typeof window !== 'undefined') {
             late_emergency_lock: 'Simeone_LowBlock_def5',
             final_desperation: 'Bielsa_ChaosPress_att5'
         };
+        const situationReasons = {
+            pressure_escape: 'соперник ведёт непрерывную атаку, а подтверждённого выхода в контратаку нет',
+            compact_counter: 'есть подтверждённый выход из давления и пространство для перехода'
+        };
         const preferred = map[situation] || 'Arteta_Control433_bal3';
         let delta = name === preferred ? 28 : 0;
 
         const familyConflicts = {
             control_reset: ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Bielsa_ChaosPress_att5'],
+            pressure_escape: ['Compact_Counter_def3', 'Pep_TwoThreeFive_att3', 'Conte_WingbackWidth_bal4', 'Klopp_Gegenpress_att4', 'Bielsa_ChaosPress_att5'],
             press_cooldown: ['Klopp_Gegenpress_att4', 'Bielsa_ChaosPress_att5'],
             compact_counter: ['Pep_TwoThreeFive_att3', 'Conte_WingbackWidth_bal4', 'Klopp_Gegenpress_att4'],
             controlled_push: ['Pep_BoxControl_bal2', 'Bielsa_ChaosPress_att5'],
@@ -6946,7 +7027,7 @@ if (typeof window !== 'undefined') {
             situation,
             preferred,
             delta,
-            reason: name === preferred ? `соответствие сценарию: ${situation}` : ''
+            reason: name === preferred ? (situationReasons[situation] || `соответствие сценарию: ${situation}`) : ''
         };
     }
 
@@ -6980,6 +7061,7 @@ if (typeof window !== 'undefined') {
                 signals.gameMode = 'active_control';
             }
 
+            Object.assign(signals, deriveCounterTransitionContext(signals));
             signals.situationKey = classifySituation(signals);
             return signals;
         };
@@ -7001,6 +7083,11 @@ if (typeof window !== 'undefined') {
             if (name === 'Bielsa_ChaosPress_att5' && !(signals.scoreState === 'losing' && signals.minute >= policy.bielsaMinute && signals.attackNeed >= 72 && signals.lowBadActions && pressSafe && (!signals.transitionThreat || signals.minute >= 86))) {
                 reasons.push(`Bielsa требует appetite=${appetite}, проигрыш и минуту ${policy.bielsaMinute}+`);
             }
+            if (name === 'Compact_Counter_def3' && signals.sustainedSiege) {
+                reasons.push('непрерывная осада и высокий атакующий импульс соперника блокируют контратаку');
+            } else if (name === 'Compact_Counter_def3' && signals.counterExitAvailable === false) {
+                reasons.push('контратака требует подтверждённого первого выхода или собственного прогресса после отбора');
+            }
             return { vetoed: reasons.length > 0, reasons: Array.from(new Set(reasons)) };
         };
 
@@ -7017,7 +7104,7 @@ if (typeof window !== 'undefined') {
             if (name === 'Klopp_Gegenpress_att4') bonus += policy.attackBonus + policy.pressBonus;
             if (name === 'Bielsa_ChaosPress_att5') bonus += policy.attackBonus + policy.pressBonus + 2;
             if (name === 'Compact_Counter_def3' && signals.strengthGap < 0 && signals.attackNeed >= 35) bonus += Math.round(policy.attackBonus * 0.5);
-            if (name === 'Pep_BoxControl_bal2' && appetite !== 'conservative' && !signals.highBadActions && affinity.situation !== 'control_reset') bonus -= 4;
+            if (name === 'Pep_BoxControl_bal2' && appetite !== 'conservative' && !signals.highBadActions && affinity.situation !== 'control_reset' && affinity.situation !== 'pressure_escape') bonus -= 4;
 
             result.score = owner.round(result.score + bonus);
             result.rawScore = owner.round(result.rawScore + bonus);
@@ -7133,7 +7220,7 @@ if (typeof window !== 'undefined') {
     if (typeof window !== 'undefined') {
         window.SLFTacticDirectionPolicy = {
             applied: true,
-            version: '5.61-situation-v4',
+            version: '5.61-situation-v5',
             generatorVersion: '5.61',
             autoApply: false,
             removedPresets: Array.from(REMOVED_PRESETS),
@@ -7141,6 +7228,7 @@ if (typeof window !== 'undefined') {
             riskAppetites: Object.assign({}, RISK_APPETITES),
             defaultRiskAppetite: DEFAULT_RISK_APPETITE,
             normalizeRiskAppetite,
+            deriveCounterTransitionContext,
             classifySituation,
             situationAffinity,
             selectEvidencePreset,
@@ -21464,15 +21552,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.288',
-        scriptVersion: '4.4.288',
+        version: '4.4.289',
+        scriptVersion: '4.4.289',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.288',
+        scriptVersion: '4.4.289',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

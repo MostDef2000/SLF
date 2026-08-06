@@ -1,23 +1,23 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.288",
+  "scriptVersion": "4.4.289",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_288_published",
+  "status": "release_4_4_289_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "472f1e134f9ea14dddb440fcb87840e71a83009341081493584f66166006433b",
     "bundleFileCount": 56,
-    "approvedBaseCommit": "ed5a66f8e85e8952d38afae4477ea1d13a98c78b",
-    "approvedCommit": "adcc4d481f2b6a1cdc41c6579f41c878610359fb",
+    "approvedBaseCommit": "b8436e2654118fab0d8fd1594719aa2292de1795",
+    "approvedCommit": "128b6fcdf1ef0684c9753bf50a5dc047dd4444f1",
     "approvedFiles": [
-      "src/modules/team-management/training-reference-guide.js",
-      "tests/browser/test_fm2026_design_adapter.py"
+      "src/modules/tactics-presets/tactic-preset-direction-policy.js",
+      "tools/test-tactical-situation-diversity.mjs"
     ],
     "sourceBranch": "main",
     "releaseNotesProvided": false,

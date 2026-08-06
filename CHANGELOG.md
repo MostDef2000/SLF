@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.289
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/tactics-presets/tactic-preset-direction-policy.js
+- tools/test-tactical-situation-diversity.mjs
+
+Approved base commit:
+- b8436e2654118fab0d8fd1594719aa2292de1795
+
+Approved commit:
+- 128b6fcdf1ef0684c9753bf50a5dc047dd4444f1
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.288
 
 ### Automatic latest-only build
