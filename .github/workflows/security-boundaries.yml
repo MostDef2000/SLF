@@ -9,6 +9,7 @@ on:
       - 'tools/test-api-adversarial.py'
       - 'tools/test-api-multiprocess-locking.py'
       - 'tools/test-api-request-size-limit.py'
+      - 'tools/test-api-required-tactical-identity.py'
       - 'vps/api/**'
       - 'data/**'
       - 'docs/security/**'
@@ -31,6 +32,7 @@ jobs:
           python3 -m py_compile tools/test-api-adversarial.py
           python3 -m py_compile tools/test-api-multiprocess-locking.py
           python3 -m py_compile tools/test-api-request-size-limit.py
+          python3 -m py_compile tools/test-api-required-tactical-identity.py
 
       - name: Enforce repository security boundaries
         run: node tools/test-security-boundaries.mjs
@@ -46,3 +48,4 @@ jobs:
           python3 tools/test-api-adversarial.py
           python3 tools/test-api-multiprocess-locking.py
           python3 tools/test-api-request-size-limit.py
+          python3 tools/test-api-required-tactical-identity.py
