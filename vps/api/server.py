@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import fcntl
 import hmac
 import os
 import json
@@ -27,8 +28,11 @@ TACTICAL_UNIQUE_KEYS = {
     "preset_events_v2": "eventKey",
     "preset_effects_v2": "effectKey"
 }
+_COLLECTION_LOCK_DIR = os.path.join(DATA_DIR, ".locks")
+os.makedirs(_COLLECTION_LOCK_DIR, exist_ok=True)
 _COLLECTION_LOCKS = {}
 _COLLECTION_LOCKS_GUARD = threading.Lock()
+_COLLECTION_LOCK_STATE = threading.local()
 
 
 class CollectionCorruptError(RuntimeError):
@@ -48,6 +52,12 @@ def get_file_path(collection):
     return os.path.join(DATA_DIR, f"{collection}.json")
 
 
+def get_collection_lock_path(collection):
+    if not is_valid_collection(collection):
+        raise ValueError("invalid collection lock name")
+    return os.path.join(_COLLECTION_LOCK_DIR, f"{collection}.lock")
+
+
 def get_collection_lock(collection):
     with _COLLECTION_LOCKS_GUARD:
         if collection not in _COLLECTION_LOCKS:
@@ -55,14 +65,42 @@ def get_collection_lock(collection):
         return _COLLECTION_LOCKS[collection]
 
 
+def get_collection_lock_depths():
+    depths = getattr(_COLLECTION_LOCK_STATE, "depths", None)
+    if depths is None:
+        depths = {}
+        _COLLECTION_LOCK_STATE.depths = depths
+    return depths
+
+
 @contextmanager
 def collection_lock(collection):
-    lock = get_collection_lock(collection)
-    lock.acquire()
+    thread_lock = get_collection_lock(collection)
+    thread_lock.acquire()
+    depths = get_collection_lock_depths()
+    previous_depth = depths.get(collection, 0)
+    lock_handle = None
+    file_locked = False
     try:
+        if previous_depth == 0:
+            lock_fd = os.open(get_collection_lock_path(collection), os.O_CREAT | os.O_RDWR, 0o600)
+            lock_handle = os.fdopen(lock_fd, "r+")
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            file_locked = True
+        depths[collection] = previous_depth + 1
         yield
     finally:
-        lock.release()
+        current_depth = depths.get(collection, 0)
+        if current_depth <= 1:
+            depths.pop(collection, None)
+        else:
+            depths[collection] = current_depth - 1
+        if previous_depth == 0:
+            if file_locked and lock_handle is not None:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+            if lock_handle is not None:
+                lock_handle.close()
+        thread_lock.release()
 
 
 def load_collection(collection, default=None):
