@@ -1,8 +1,8 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
-  "reviewedAt": "2026-08-05",
-  "reviewCandidateCount": 17,
-  "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains.",
+  "reviewedAt": "2026-08-06",
+  "reviewCandidateCount": 18,
+  "scope": "Runtime review after splitting bootstrap compatibility owners into audited modules. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
     "ACTIVE_BUT_MISNAMED": "Active code stored under a historical or misleading namespace.",
@@ -13,11 +13,44 @@
   },
   "moduleReviews": [
     {
+      "file": "src/app/compatibility-runner.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "The three compatibility modules declare runtime dependencies on runCompatibilityAdapter.",
+        "The runner catches adapter installation failures so one optional patch cannot prevent later modules or App.start()."
+      ]
+    },
+    {
+      "file": "src/app/header-matches-layout-compatibility.js",
+      "auditStatus": "UNREFERENCED_CANDIDATE",
+      "classification": "ACTIVE",
+      "evidence": [
+        "The module executes a guarded installation side effect before bootstrap and injects the FM 2026 header/matches layout policy.",
+        "The header layout browser fixture verifies the resulting layout contract; absence of a public symbol consumer is expected for this side-effect owner."
+      ]
+    },
+    {
+      "file": "src/app/match-rendering-compatibility.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "The module installs the guarded 800x550 classic pitch geometry, render-scale cap, resize hook and bounded readiness polling on game.php.",
+        "The exact candidate match-rendering browser fixture verifies one initial allocation, scale 1 and no repeated reallocation."
+      ]
+    },
+    {
+      "file": "src/app/tactics-dropdown-ui-policy.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "The module patches UI.addDropdown through the fail-open runner and maintains the flat sorted preset option contract.",
+        "The exact candidate tactic and match fixtures exercise dropdown creation while duplicate rewrite and observer guards remain bounded."
+      ]
+    },
+    {
       "file": "src/app/bootstrap.js",
       "classification": "ACTIVE",
       "evidence": [
-        "App.start() is the bundle entrypoint.",
-        "The bootstrap explicitly declares manual-only Coach Hint mode and does not call live parser auto-resume."
+        "App.start() is the final bundle entrypoint and bootstrap now contains application orchestration only.",
+        "Compatibility owners execute in dedicated modules immediately before bootstrap; bootstrap does not own their monkey patches."
       ]
     },
     {
