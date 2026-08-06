@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.283
+// @version      4.4.284
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.283',
-        scriptVersion: '4.4.283',
+        version: '4.4.284',
+        scriptVersion: '4.4.284',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.283',
+        scriptVersion: '4.4.284',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -21158,6 +21158,56 @@ function applyTacticsDropdownUiPolicy() {
 applyTacticsDropdownUiPolicy();
 
 const App = {
+    placeTrainingGuideBeforeChampAverages() {
+        if (!/^\/train\.php$/i.test(location.pathname || '') || (location.search || '')) return false;
+
+        const panel = document.getElementById('slf-training-guide-panel');
+        const champ = document.querySelector('.train__champ');
+        if (!panel || !champ || !champ.parentNode) return false;
+
+        if (panel.nextElementSibling !== champ || panel.parentNode !== champ.parentNode) {
+            champ.parentNode.insertBefore(panel, champ);
+        }
+
+        panel.dataset.slfMount = 'fm2026-training-before-champ';
+
+        const styleId = 'slf-training-guide-block-layout';
+        if (!document.getElementById(styleId)) {
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+                #slf-training-guide-panel[data-slf-mount="fm2026-training-before-champ"] {
+                    display: block !important;
+                    width: 100% !important;
+                    max-width: none !important;
+                    flex: none !important;
+                    margin: 18px 0 14px !important;
+                    padding: 14px !important;
+                    box-sizing: border-box !important;
+                    background: var(--fm-panel, #171b29) !important;
+                    border: 1px solid var(--fm-border-2, #38415f) !important;
+                    border-radius: var(--fm-radius, 14px) !important;
+                    color: var(--fm-text, #eef1f8) !important;
+                    overflow-x: auto !important;
+                }
+                #slf-training-guide-panel[data-slf-mount="fm2026-training-before-champ"] .slf-source {
+                    grid-template-columns: minmax(80px, 1fr) 90px minmax(78px, .8fr) minmax(78px, .8fr) minmax(0, 1fr) !important;
+                }
+                @media (max-width: 1050px) {
+                    #slf-training-guide-panel[data-slf-mount="fm2026-training-before-champ"] .slf-source {
+                        grid-template-columns: 80px 90px 1fr 1fr !important;
+                    }
+                    #slf-training-guide-panel[data-slf-mount="fm2026-training-before-champ"] .slf-source-state {
+                        grid-column: 1 / -1;
+                    }
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+        }
+
+        return true;
+    },
+
     mountUI() {
     UI.addMatchParserPanel();
     // Manual-only Coach Hint mode:
@@ -21167,6 +21217,7 @@ const App = {
     // Keep the library module loaded for preset metadata, but do not mount its visible reference panel.
     void TacticPresetLibraryPanel;
     TrainingGuidePanel.mount();
+    this.placeTrainingGuideBeforeChampAverages();
     LoanLimitPanel.mount();
 
 
@@ -21202,15 +21253,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.283',
-        scriptVersion: '4.4.283',
+        version: '4.4.284',
+        scriptVersion: '4.4.284',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.283',
+        scriptVersion: '4.4.284',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
