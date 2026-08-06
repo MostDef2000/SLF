@@ -18,6 +18,10 @@ const evidence = readJsonFile(evidencePath);
 const sbom = readJsonFile(sbomPath);
 const manifest = readJsonFile(path.join(root, 'data/version.json'));
 const bundleOrder = readJsonFile(path.join(root, 'src/app/bundle-order.json'));
+const userscriptHeader = fs.readFileSync(path.join(root, 'src/app/userscript-header.js'), 'utf8');
+const userscriptRequireUrls = [...userscriptHeader.matchAll(/^\/\/\s*@require\s+(\S+)\s*$/gm)]
+  .map(match => match[1])
+  .sort();
 
 assert.equal(evidence.schema, 'slf_release_evidence_v1');
 assert.equal(evidence.scriptVersion, manifest.scriptVersion);
@@ -106,9 +110,24 @@ for (const item of sbom.packages) {
   assert.equal(item.filesAnalyzed, false);
   assert.equal(item.licenseConcluded, 'NOASSERTION');
 }
-for (const requiredName of ['Flask', 'flask-cors', 'gunicorn', 'jquery']) {
+for (const requiredName of ['Flask', 'flask-cors', 'gunicorn']) {
   assert.ok(sbom.packages.some(item => item.name.toLowerCase() === requiredName.toLowerCase()), `SBOM missing ${requiredName}`);
 }
+
+const sbomUserscriptUrls = sbom.packages
+  .map(item => item.downloadLocation)
+  .filter(value => value && value !== 'NOASSERTION')
+  .sort();
+assert.deepEqual(
+  sbomUserscriptUrls,
+  userscriptRequireUrls,
+  'SBOM userscript URL dependencies must exactly match source @require directives'
+);
+assert.equal(
+  sbom.packages.some(item => item.name.toLowerCase() === 'jquery'),
+  userscriptRequireUrls.some(url => /jquery/i.test(url)),
+  'SBOM jQuery component must match the actual userscript requirement'
+);
 
 const sums = fs.readFileSync(sumsPath, 'utf8').trim().split(/\r?\n/).filter(Boolean);
 assert.equal(sums.length, 2);
@@ -133,5 +152,5 @@ for (const pattern of [
 }
 
 console.log(
-  `[release-evidence-validation] passed: version=${evidence.scriptVersion} modules=${sourcePaths.size} dependencies=${sbom.packages.length}`
+  `[release-evidence-validation] passed: version=${evidence.scriptVersion} modules=${sourcePaths.size} dependencies=${sbom.packages.length} userscriptRequires=${userscriptRequireUrls.length}`
 );
