@@ -202,6 +202,18 @@ def unique_keys_for_item(collection, item):
     return [f"{field}:{item[field]}"]
 
 
+def invalid_tactical_identity_indexes(collection, incoming):
+    required_key = TACTICAL_UNIQUE_KEYS.get(collection)
+    if not required_key:
+        return []
+    invalid = []
+    for index, item in enumerate(incoming):
+        value = item.get(required_key) if isinstance(item, dict) else None
+        if not isinstance(value, str) or not value.strip():
+            invalid.append(index)
+    return invalid
+
+
 def filter_append_duplicates(collection, existing, incoming):
     existing_keys = set()
     for item in existing:
@@ -358,11 +370,21 @@ def api_post(collection):
     mode = request.args.get("mode", "replace")
     with collection_lock(collection):
         if mode == "append":
+            received = len(data) if isinstance(data, list) else 1
+            incoming = data if isinstance(data, list) else [data]
+            invalid_indexes = invalid_tactical_identity_indexes(collection, incoming)
+            if invalid_indexes:
+                return jsonify({
+                    "error": "Tactical records require deterministic identity",
+                    "kind": "missing_unique_key",
+                    "collection": collection,
+                    "requiredKey": TACTICAL_UNIQUE_KEYS[collection],
+                    "invalidIndexes": invalid_indexes,
+                    "received": received
+                }), 422
             existing = load_collection(collection, default=[])
             if not isinstance(existing, list):
                 return jsonify({"error": "Append requires list collection", "kind": "collection_type"}), 409
-            received = len(data) if isinstance(data, list) else 1
-            incoming = data if isinstance(data, list) else [data]
             accepted, skipped_duplicates, missing_unique_key = filter_append_duplicates(collection, existing, incoming)
             existing.extend(accepted)
             save_collection(collection, existing)
