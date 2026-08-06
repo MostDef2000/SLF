@@ -7,6 +7,8 @@ on:
       - 'tools/test-bootstrap-risk-boundary.mjs'
       - 'tools/match-rendering-diagnostics.js'
       - 'tools/test-match-rendering-diagnostics-contract.mjs'
+      - 'tools/compare-match-rendering-traces.mjs'
+      - 'tools/test-match-rendering-trace-comparison.mjs'
       - 'docs/performance/match-rendering-debt-plan.md'
       - '.github/workflows/bootstrap-risk-boundary.yml'
   workflow_dispatch:
@@ -27,9 +29,14 @@ jobs:
           node --check tools/test-bootstrap-risk-boundary.mjs
           node --check tools/match-rendering-diagnostics.js
           node --check tools/test-match-rendering-diagnostics-contract.mjs
+          node --check tools/compare-match-rendering-traces.mjs
+          node --check tools/test-match-rendering-trace-comparison.mjs
 
       - name: Verify bootstrap startup boundary
         run: node tools/test-bootstrap-risk-boundary.mjs
 
       - name: Verify diagnostics read-only contract
         run: node tools/test-match-rendering-diagnostics-contract.mjs
+
+      - name: Verify offline trace comparison contract
+        run: node tools/test-match-rendering-trace-comparison.mjs
