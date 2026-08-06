@@ -1,6 +1,7 @@
 // 15. App Bootstrap
 // ============================================================
 
+function applyTacticsDropdownUiPolicy() {
 function reportCompatibilityFailure(name, error) {
     if (typeof console === 'undefined' || typeof console.warn !== 'function') return;
     console.warn(`[SLF] compatibility adapter failed: ${name}`, error);
@@ -352,6 +353,9 @@ const TacticsDropdownUiPolicy = {
 runCompatibilityAdapter('header-matches-layout', () => HeaderMatchesLayoutCompatibility.install());
 runCompatibilityAdapter('match-rendering', () => MatchRenderingCompatibility.install());
 runCompatibilityAdapter('tactics-dropdown', () => TacticsDropdownUiPolicy.install());
+}
+
+applyTacticsDropdownUiPolicy();
 
 const App = {
     placeTrainingGuideBeforeChampAverages() {
