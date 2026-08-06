@@ -26,6 +26,85 @@ function linesMatching(source, expression) {
   return source.split(/\r?\n/).filter(line => expression.test(line));
 }
 
+function maskCommentsAndStrings(source) {
+  const chars = [...source];
+  let state = 'code';
+  let escaped = false;
+
+  for (let index = 0; index < chars.length; index += 1) {
+    const char = chars[index];
+    const next = chars[index + 1];
+
+    if (state === 'line-comment') {
+      if (char === '\n') state = 'code';
+      else chars[index] = ' ';
+      continue;
+    }
+    if (state === 'block-comment') {
+      if (char === '*' && next === '/') {
+        chars[index] = ' ';
+        chars[index + 1] = ' ';
+        index += 1;
+        state = 'code';
+      } else if (char !== '\n') {
+        chars[index] = ' ';
+      }
+      continue;
+    }
+    if (state === 'single' || state === 'double' || state === 'template') {
+      const terminator = state === 'single' ? "'" : state === 'double' ? '"' : '`';
+      if (char !== '\n') chars[index] = ' ';
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === terminator) state = 'code';
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      chars[index] = ' ';
+      chars[index + 1] = ' ';
+      index += 1;
+      state = 'line-comment';
+    } else if (char === '/' && next === '*') {
+      chars[index] = ' ';
+      chars[index + 1] = ' ';
+      index += 1;
+      state = 'block-comment';
+    } else if (char === "'") {
+      chars[index] = ' ';
+      state = 'single';
+    } else if (char === '"') {
+      chars[index] = ' ';
+      state = 'double';
+    } else if (char === '`') {
+      chars[index] = ' ';
+      state = 'template';
+    }
+  }
+  return chars.join('');
+}
+
+function assertNoJqueryRuntimeReference(file) {
+  const source = maskCommentsAndStrings(read(file));
+  const patterns = [
+    { expression: /\bjQuery\b/, label: 'jQuery identifier' },
+    { expression: /(?:^|[^\w$])\$\s*(?:\(|\.|\[)/m, label: '$ invocation/property identifier' },
+    { expression: /\b(?:const|let|var|function)\s+\$\b/, label: '$ declaration' },
+    { expression: /\b(?:window|globalThis|unsafeWindow)\s*\.\s*\$/, label: 'global $ access' },
+    { expression: /(?:\(|,)\s*\$\s*(?:,|\))/, label: '$ function parameter' },
+    { expression: /\b\$\s*=>/, label: '$ arrow parameter' }
+  ];
+  for (const pattern of patterns) {
+    assert.equal(pattern.expression.test(source), false, `${file} contains prohibited ${pattern.label}`);
+  }
+}
+
 function assertExplicitWorkflowPermissions(source, file) {
   if (/^permissions:\s*$/m.test(source)) return;
 
@@ -49,6 +128,7 @@ function assertExplicitWorkflowPermissions(source, file) {
 }
 
 const header = read('src/app/userscript-header.js');
+const bundleOrder = JSON.parse(read('src/app/bundle-order.json'));
 const apiSource = read('src/core/api.js');
 const tokenSource = read('src/core/token-storage.js');
 const serverSource = read('vps/api/server.py');
@@ -82,11 +162,9 @@ assert.deepEqual(actualConnectHosts, expectedConnectHosts, 'userscript connect a
 assert.equal(actualConnectHosts.has('*'), false, 'userscript must not use wildcard @connect');
 
 const requireUrls = [...header.matchAll(/^\/\/\s*@require\s+(\S+)\s*$/gm)].map(match => match[1]);
-assert.deepEqual(
-  requireUrls,
-  ['https://code.jquery.com/jquery-3.6.0.min.js'],
-  'external userscript dependencies changed; supply-chain review is required'
-);
+assert.deepEqual(requireUrls, [], 'userscript must not execute external @require dependencies');
+assert.ok(Array.isArray(bundleOrder.files) && bundleOrder.files.length > 0, 'bundle manifest must list runtime modules');
+for (const file of bundleOrder.files) assertNoJqueryRuntimeReference(file);
 
 assert.ok(apiSource.includes('"Authorization": buildApiAuthorizationHeader()'), 'API token must be sent through Authorization header');
 assert.ok(apiSource.includes("return \"Bearer \" + token"), 'API authorization must use Bearer token format');
@@ -174,5 +252,5 @@ const htmlSinkCount = executableFiles.reduce((total, file) => {
 }, 0);
 
 console.log(
-  `[security-boundaries] passed: workflows=${workflowFiles.length} scannedFiles=${secretScanFiles.length} innerHtmlInventory=${htmlSinkCount}`
+  `[security-boundaries] passed: workflows=${workflowFiles.length} scannedFiles=${secretScanFiles.length} runtimeModules=${bundleOrder.files.length} externalRequires=${requireUrls.length} innerHtmlInventory=${htmlSinkCount}`
 );
