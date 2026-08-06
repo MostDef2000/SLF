@@ -33,6 +33,8 @@ jobs:
         run: |
           python3 -m py_compile tests/browser/test_exact_userscript.py
           python3 -m py_compile tests/browser/test_fm2026_design_adapter.py
+          python3 -m py_compile tests/browser/test_without_jquery.py
+          python3 -m py_compile tests/browser/test_dom_xss_preset_names.py
 
       - name: Install pinned browser test dependencies
         run: python3 -m pip install --disable-pip-version-check -r tests/browser/requirements.txt
@@ -47,6 +49,8 @@ jobs:
         run: |
           python3 tests/browser/test_exact_userscript.py
           python3 tests/browser/test_fm2026_design_adapter.py
+          python3 tests/browser/test_without_jquery.py
+          python3 tests/browser/test_dom_xss_preset_names.py
 
       - name: Upload browser failure evidence
         if: failure() && hashFiles('tests/browser/artifacts/**') != ''
