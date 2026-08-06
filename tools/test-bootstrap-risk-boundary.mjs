@@ -38,7 +38,7 @@ assert.deepEqual(
 );
 
 const runnerStart = source.indexOf('function reportCompatibilityFailure');
-const runnerEnd = source.indexOf('\n\nconst HeaderMatchesLayoutCompatibility', runnerStart);
+const runnerEnd = source.indexOf('const HeaderMatchesLayoutCompatibility', runnerStart);
 assert.ok(runnerStart >= 0 && runnerEnd > runnerStart, 'compatibility fail-open runner must be defined');
 
 const runnerSource = source.slice(runnerStart, runnerEnd);
