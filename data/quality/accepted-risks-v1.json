@@ -12,19 +12,20 @@
     {
       "id": "QR-001",
       "title": "VPS accepts tactical records without the configured unique key",
-      "status": "open",
+      "status": "closed",
       "severity": "high",
       "owner": "MostDef2000",
       "boundary": "VPS API persistence",
       "consequence": "Records without identity cannot be deduplicated reliably and may inflate tactical collections.",
       "compensatingControls": [
-        "SLF client contracts require snapshotKey, resultKey, eventKey, or effectKey",
-        "append responses report missingUniqueKey",
-        "analysis health reports missingUniqueKeys",
-        "contract and compatibility tests cover the current behaviour"
+        "All four tactical source producers create their configured deterministic identity key",
+        "The API rejects the complete append transaction when any tactical row lacks a non-empty string key",
+        "The 422 response identifies the collection, required key and every invalid row index",
+        "Contract and four-collection regression tests verify atomic rejection and unchanged duplicate behavior"
       ],
-      "target": "Reject missing tactical identity before persistence after producer compatibility verification and a separately tested deployment change.",
-      "sourcePullRequest": 164,
+      "target": "Maintain fail-closed tactical identity validation before persistence and require a separately reviewed migration design for any legacy exception.",
+      "sourcePullRequest": 212,
+      "closureEvidence": "PR #212 adds pre-persistence validation for snapshotKey, resultKey, eventKey and effectKey. tools/test-api-required-tactical-identity.py verifies missing, blank, non-object and mixed batches across all four tactical collections, byte-for-byte non-mutation, no temporary files, valid append/dedupe behavior and non-tactical compatibility. The updated API compatibility contract verifies analysis remains at zero missing keys. Final CI evidence is recorded on the pull request; production deployment is not implied.",
       "reviewBy": "2026-09-01"
     },
     {
