@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.4.288
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/team-management/training-reference-guide.js
+- tests/browser/test_fm2026_design_adapter.py
+
+Approved base commit:
+- ed5a66f8e85e8952d38afae4477ea1d13a98c78b
+
+Approved commit:
+- adcc4d481f2b6a1cdc41c6579f41c878610359fb
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.287
 
 ### Automatic latest-only build
