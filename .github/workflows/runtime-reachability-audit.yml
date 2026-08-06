@@ -24,6 +24,8 @@ jobs:
         run: |
           node --check tools/audit-runtime-reachability.mjs
           node -e "JSON.parse(require('node:fs').readFileSync('data/audit/runtime-reachability-review-v1.json', 'utf8'))"
+      - name: Build exact candidate artifact
+        run: node tools/build-latest-userscript.mjs
       - name: Run reachability audit
         run: node tools/audit-runtime-reachability.mjs --validate-review
       - name: Validate machine-readable report
