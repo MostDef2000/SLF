@@ -43,26 +43,44 @@
         if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
 
         const result = {};
+        const htmlSignificantMap = {
+            '&': '＆',
+            '<': '＜',
+            '>': '＞',
+            '"': '＂',
+            "'": '＇',
+            '`': '｀'
+        };
 
         for (let key in data) {
             const preset = data[key];
             if (!isTacticObject(preset)) continue;
 
-            result[key] = Object.assign({}, preset);
-            delete result[key]['dark-theme'];
+            const safeKey = String(key ?? '')
+                .normalize('NFKC')
+                .replace(/[\u0000-\u001f\u007f]/g, ' ')
+                .replace(/[&<>"'`]/g, char => htmlSignificantMap[char])
+                .replace(/\s+/g, ' ')
+                .trim()
+                .slice(0, 120);
 
-            for (let field in result[key]) {
-                if (field !== 'priority' && result[key][field] != null) {
-                    result[key][field] = String(result[key][field]);
+            if (!safeKey || Object.prototype.hasOwnProperty.call(result, safeKey)) continue;
+
+            result[safeKey] = Object.assign({}, preset);
+            delete result[safeKey]['dark-theme'];
+
+            for (let field in result[safeKey]) {
+                if (field !== 'priority' && result[safeKey][field] != null) {
+                    result[safeKey][field] = String(result[safeKey][field]);
                 }
             }
 
-            if (typeof result[key].priority === 'string') {
-                result[key].priority = [result[key].priority];
+            if (typeof result[safeKey].priority === 'string') {
+                result[safeKey].priority = [result[safeKey].priority];
             }
 
-            if (!Array.isArray(result[key].priority)) {
-                result[key].priority = [];
+            if (!Array.isArray(result[safeKey].priority)) {
+                result[safeKey].priority = [];
             }
         }
 
@@ -77,10 +95,10 @@
 
                 const parsed = JSON.parse(data);
                 const normalized = normalizePresets(parsed);
-                const before = Object.keys(parsed || {}).sort().join('|');
-                const after = Object.keys(normalized || {}).sort().join('|');
+                const before = JSON.stringify(parsed || {});
+                const after = JSON.stringify(normalized || {});
                 if (before !== after) {
-                    localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(normalized));
+                    localStorage.setItem(CONFIG.STORAGE_KEY, after);
                 }
                 return normalized;
             } catch (e) {
