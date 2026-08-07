@@ -2,6 +2,8 @@
     // ============================================================
 
     const UI = {
+        __flatSortedTacticDropdownApplied: true,
+
         updateParserStatus(text) {
             const el = document.getElementById('slf-parser-status');
             if (el) el.textContent = text;
