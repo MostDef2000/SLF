@@ -1,5 +1,53 @@
 # Changelog
 
+## 4.4.293
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/browser-e2e.yml
+- .github/workflows/build-latest-release.yml
+- .github/workflows/manual-match-regression.yml
+- .github/workflows/property-fuzz-reliability.yml
+- .github/workflows/quality-governance.yml
+- .github/workflows/quality-integration.yml
+- .github/workflows/release-deployment-evidence.yml
+- .github/workflows/runtime-reachability-audit.yml
+- .github/workflows/security-boundaries.yml
+- .github/workflows/tactic-analytics-smoke.yml
+- .github/workflows/userscript-artifact-boundary.yml
+- .github/workflows/versioned-contracts.yml
+- contracts/SLF_AUTOMATIC_RELEASE_POLICY.md
+- contracts/SLF_GOVERNANCE.md
+- contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md
+- contracts/branches/core-release.md
+- contracts/branches/project-manager.md
+- contracts/runtime/RELEASE_READINESS_GATE.md
+- contracts/runtime/SLF_TASK_RUNTIME.md
+- data/quality/quality-gates-v1.json
+- data/quality/workflow-inventory-v1.json
+- docs/decision_records/DR-013-consolidated-ci-release-workflows.md
+- docs/decision_records/INDEX.md
+- src/modules/tactics-presets/tactic-preset-direction-policy.js
+- src/modules/tactics-presets/tactic-preset-library-panel.js
+- tools/test-tactical-situation-diversity.mjs
+- tools/validate-quality-governance.mjs
+- tools/validate-workflow-inventory.mjs
+
+Approved base commit:
+- 39e4a63da8835690f36d054a3440372a7cfa69a1
+
+Approved commit:
+- 2b60c4bb6a853eb92c5c85214927d5dd72ab8a99
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.292
 
 ### Automatic latest-only build
