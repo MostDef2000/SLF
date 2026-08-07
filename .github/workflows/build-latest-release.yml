@@ -17,7 +17,7 @@ on:
         type: string
 
 concurrency:
-  group: slf-main-release
+  group: slf-release-branch
   cancel-in-progress: false
 
 jobs:
@@ -27,14 +27,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout main with full history
+      - name: Checkout current main with full history
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           ref: main
           fetch-depth: 0
           show-progress: false
 
-      - name: Resolve exact release provenance
+      - name: Resolve exact release provenance from generated release branch
         id: provenance
         shell: bash
         env:
@@ -59,28 +59,53 @@ jobs:
             exit 1
           fi
 
-          BASE_COMMIT=$(git log -1 --format=%H "$SOURCE_COMMIT" -- data/version.json)
-          test -n "$BASE_COMMIT"
+          git fetch origin '+refs/heads/release:refs/remotes/origin/release'
+          RELEASE_REF=$(git rev-parse refs/remotes/origin/release)
+          RELEASE_MANIFEST=$(git show refs/remotes/origin/release:data/version.json)
+          BASE_COMMIT=$(printf '%s' "$RELEASE_MANIFEST" | node -e "let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log(JSON.parse(s).build.approvedCommit));")
+          PREVIOUS_VERSION=$(printf '%s' "$RELEASE_MANIFEST" | node -e "let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log(JSON.parse(s).scriptVersion));")
+          if ! [[ "$BASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "release manifest approvedCommit is invalid: $BASE_COMMIT" >&2
+            exit 1
+          fi
+          if ! [[ "$PREVIOUS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release manifest scriptVersion is invalid: $PREVIOUS_VERSION" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$BASE_COMMIT" "$SOURCE_COMMIT"; then
+            echo "previous approved source $BASE_COMMIT is not an ancestor of current main $SOURCE_COMMIT" >&2
+            exit 1
+          fi
+
           if [ "$BASE_COMMIT" = "$SOURCE_COMMIT" ]; then
-            echo 'Current main is already a published release commit; nothing to publish.'
+            echo 'Current main source commit is already published on the release branch.'
             echo 'release_required=false' >> "$GITHUB_OUTPUT"
             echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
             echo "base_commit=$BASE_COMMIT" >> "$GITHUB_OUTPUT"
+            echo "release_ref=$RELEASE_REF" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          mapfile -t APPROVED_FILES < <(git diff --name-only "$BASE_COMMIT" "$SOURCE_COMMIT" | sed '/^$/d')
+          mapfile -t APPROVED_FILES < <(
+            git diff --name-only "$BASE_COMMIT" "$SOURCE_COMMIT" |
+              awk 'NF && $0 != "CHANGELOG.md" && $0 != "data/version.json" && $0 != "releases/latest.user.js" && $0 != "releases/latest.meta.js"'
+          )
           if [ "${#APPROVED_FILES[@]}" -eq 0 ]; then
-            echo 'No unpublished files found; release is already current.'
+            echo 'No unpublished source files found after excluding generated release outputs.'
             echo 'release_required=false' >> "$GITHUB_OUTPUT"
             echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
             echo "base_commit=$BASE_COMMIT" >> "$GITHUB_OUTPUT"
+            echo "release_ref=$RELEASE_REF" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
+          TARGET_VERSION=$(node -e "const p=process.argv[1].split('.').map(Number);p[2]+=1;console.log(p.join('.'));" "$PREVIOUS_VERSION")
           echo 'release_required=true' >> "$GITHUB_OUTPUT"
           echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "base_commit=$BASE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "release_ref=$RELEASE_REF" >> "$GITHUB_OUTPUT"
+          echo "previous_version=$PREVIOUS_VERSION" >> "$GITHUB_OUTPUT"
+          echo "target_version=$TARGET_VERSION" >> "$GITHUB_OUTPUT"
           echo 'approved_files<<EOF' >> "$GITHUB_OUTPUT"
           printf '%s\n' "${APPROVED_FILES[@]}" >> "$GITHUB_OUTPUT"
           echo 'EOF' >> "$GITHUB_OUTPUT"
@@ -104,12 +129,18 @@ jobs:
           APPROVED_COMMIT: ${{ steps.provenance.outputs.source_commit }}
           APPROVED_FILES: ${{ steps.provenance.outputs.approved_files }}
           SOURCE_BRANCH: main
+          TARGET_VERSION: ${{ steps.provenance.outputs.target_version }}
         run: |
           set -euo pipefail
+          git show refs/remotes/origin/release:CHANGELOG.md > CHANGELOG.md
           node tools/build-latest-userscript.mjs
           VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync('data/version.json','utf8')).scriptVersion)")
+          if [ "$VERSION" != "$TARGET_VERSION" ]; then
+            echo "built version $VERSION does not match target $TARGET_VERSION" >&2
+            exit 1
+          fi
           sha256sum releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md > "$RUNNER_TEMP/slf-release.sha256"
-          TARGET_VERSION="$VERSION" node tools/build-latest-userscript.mjs
+          node tools/build-latest-userscript.mjs
           sha256sum --check "$RUNNER_TEMP/slf-release.sha256"
 
       - name: Validate latest-only release
@@ -126,47 +157,36 @@ jobs:
           node tools/validate-release-provenance.mjs
           node tools/test-userscript-artifact-boundary.mjs
 
-      - name: Commit latest-only release outputs to main
+      - name: Publish generated release branch only
         if: steps.provenance.outputs.release_required == 'true'
-        id: commit_release
         shell: bash
         env:
           SOURCE_COMMIT: ${{ steps.provenance.outputs.source_commit }}
+          EXPECTED_RELEASE_REF: ${{ steps.provenance.outputs.release_ref }}
         run: |
           set -euo pipefail
-          git fetch origin main
+          git fetch origin main '+refs/heads/release:refs/remotes/origin/release'
           CURRENT_MAIN=$(git rev-parse origin/main)
+          CURRENT_RELEASE=$(git rev-parse refs/remotes/origin/release)
           if [ "$CURRENT_MAIN" != "$SOURCE_COMMIT" ]; then
-            echo "main advanced from $SOURCE_COMMIT to $CURRENT_MAIN; refusing stale artifact push" >&2
+            echo "main advanced from $SOURCE_COMMIT to $CURRENT_MAIN; refusing stale publication" >&2
             exit 1
           fi
+          if [ "$CURRENT_RELEASE" != "$EXPECTED_RELEASE_REF" ]; then
+            echo "release branch advanced from $EXPECTED_RELEASE_REF to $CURRENT_RELEASE; refusing stale publication" >&2
+            exit 1
+          fi
+
           VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync('data/version.json','utf8')).scriptVersion)")
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md
           if git diff --cached --quiet; then
-            echo 'No release output changes to commit.'
-            echo 'release_commit=' >> "$GITHUB_OUTPUT"
-            exit 0
+            echo 'Expected generated release output changes, but the release tree is unchanged.' >&2
+            exit 1
           fi
           git diff --cached --name-only
           git commit -m "release: publish SLF $VERSION latest-only"
           RELEASE_COMMIT=$(git rev-parse HEAD)
-          git push origin HEAD:main
-          echo "release_commit=$RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
-
-      - name: Mirror handoff release to generated release branch
-        if: steps.commit_release.outputs.release_commit != ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          RELEASE_COMMIT='${{ steps.commit_release.outputs.release_commit }}'
-          test -n "$RELEASE_COMMIT"
-          git fetch origin '+refs/heads/release:refs/remotes/origin/release' || true
-          if git show-ref --verify --quiet refs/remotes/origin/release; then
-            EXPECTED=$(git rev-parse refs/remotes/origin/release)
-            git push --force-with-lease=refs/heads/release:"$EXPECTED" origin "$RELEASE_COMMIT":refs/heads/release
-          else
-            git push origin "$RELEASE_COMMIT":refs/heads/release
-          fi
-          echo "Mirrored release commit $RELEASE_COMMIT to generated branch release."
+          git push --force-with-lease=refs/heads/release:"$EXPECTED_RELEASE_REF" origin "$RELEASE_COMMIT":refs/heads/release
+          echo "Published SLF $VERSION to generated release branch at $RELEASE_COMMIT; main remains $SOURCE_COMMIT."
