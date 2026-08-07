@@ -1,17 +1,31 @@
     // 3. Preset Storage
     // ============================================================
 
-    const ALLOWED_HENTA_PRESET = 'Henta_LeftTrap_att3';
+    const RETIRED_SLF_BUILT_IN_PRESET_NAMES = new Set([
+        'Mourinho_WeakSide_def3',
+        'Henta_Hold_def3',
+        'Pep_StandardControl_bal3',
+        'Xabi_VerticalBox_att3',
+        'Xabi_BoxMidfield_bal3',
+        'DeZerbi_BaitPress_bal3',
+        'DeZerbi_Release_att4',
+        'Klopp_WideTrap_att4',
+        'Henta_LeftTrap_att3',
+        'Henta_RightTrap_att3',
+        'Henta_WideTrap_att3',
+        'Henta_CounterTrap_att4',
+        'Henta_CentralTrap_att3',
+        'Nagelsmann_WidePress_att4'
+    ]);
 
-    function isDeprecatedHentaPreset(name) {
-        const key = String(name || '');
-        return key.startsWith('Henta_') && key !== ALLOWED_HENTA_PRESET;
+    function isRetiredBuiltInPreset(name) {
+        return RETIRED_SLF_BUILT_IN_PRESET_NAMES.has(String(name || ''));
     }
 
-    function filterDeprecatedPresetMap(map) {
+    function filterUnavailablePresetMap(map) {
         const result = {};
         Object.entries(map || {}).forEach(([key, value]) => {
-            if (!isDeprecatedHentaPreset(key)) result[key] = value;
+            if (!isRetiredBuiltInPreset(key)) result[key] = value;
         });
         return result;
     }
@@ -45,6 +59,8 @@
         const result = {};
 
         for (let key in data) {
+            if (isRetiredBuiltInPreset(key)) continue;
+
             const preset = data[key];
             if (!isTacticObject(preset)) continue;
 
@@ -66,10 +82,18 @@
             }
         }
 
-        return filterDeprecatedPresetMap(result);
+        return filterUnavailablePresetMap(result);
     }
 
     const PresetStorage = {
+        isRetiredBuiltInPreset(name) {
+            return isRetiredBuiltInPreset(name);
+        },
+
+        getRetiredBuiltInPresetNames() {
+            return Array.from(RETIRED_SLF_BUILT_IN_PRESET_NAMES);
+        },
+
         loadLocalRaw() {
             try {
                 const data = localStorage.getItem(CONFIG.STORAGE_KEY);
@@ -136,8 +160,8 @@
 
         getAllPresets() {
             // Built-in canonical library wins over older locally/server-saved copies with the same names.
-            // User custom presets with unique names are still preserved.
-            return filterDeprecatedPresetMap(Object.assign({}, this.loadCustom(), BASE_PRESETS));
+            // Exact retired SLF built-in IDs are removed at the storage boundary; unique user presets remain.
+            return filterUnavailablePresetMap(Object.assign({}, this.loadCustom(), BASE_PRESETS));
         },
 
         getAllLabels() {
@@ -148,7 +172,7 @@
                 labels[key] = BASE_LABELS[key] || key;
             }
 
-            return filterDeprecatedPresetMap(labels);
+            return filterUnavailablePresetMap(labels);
         }
     };
 
