@@ -1,110 +1,100 @@
 # SLF Release Readiness Gate
 
-Version: 1.1.0
+Version: 1.2.0
 Status: Active
 Applies to: all SLF release workflows
 Source of truth: GitHub repository contracts
 
 ## 1. Purpose
 
-The Release Readiness Gate defines the final validation layer before SLF enters automatic release execution.
+The Release Readiness Gate is the final validation boundary before latest-only userscript publication. It prevents publication when source integration, canonical PR CI, or release provenance is incomplete.
 
-Its purpose is to prevent premature or unsafe publication when source integration or build state is incomplete.
-
-The automatic lifecycle is governed by `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`.
+The automatic lifecycle is governed by `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`; workflow topology is governed by `contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md`.
 
 ## 2. Gate definition
 
-A runtime/build-affecting change is eligible for automatic release only if all conditions are satisfied:
+A runtime/build-affecting change is eligible for publication only when:
 
 ```text
 Release Readiness Gate
+- Final PR head canonical CI: SUCCESS
 - Source files committed to main: YES
 - Changed files verified on main: YES
-- Runtime/build-affecting files changed: YES
-- Release artifacts already rebuilt for this change: NO
-- AUTOMATIC RELEASE: YES
+- Runtime/build/release-affecting files changed: YES
+- Release artifacts already rebuilt for this source commit: NO
+- Exact release source commit equals current main: YES
 - Safe to continue now: YES
 ```
 
-## 3. Conditions
+## 3. Canonical PR prerequisite
 
-### Source files committed to main
+Before source merge, exact `SLF CI / ci` must have concluded `success` on the final PR head SHA.
 
-All approved changes must be present in `main`.
+`PENDING`, `FAILED`, and `UNKNOWN` do not satisfy release readiness and cannot be converted into merge permission by `mergeable=true`, custom harnesses, or empty connector lookups.
 
-### Changed files verified on main
+## 4. Release applicability
 
-The exact approved files must exist in `main` and match the validated implementation.
-
-### Runtime/build-affecting files changed
-
-At least one of the following must be impacted:
+Publication is required when the integrated unpublished diff affects:
 
 - `src/**`;
 - `tools/check-bundle-order.mjs`;
 - `tools/build-latest-userscript.mjs`;
+- `tools/validate-release-provenance.mjs`;
 - `.github/workflows/build-latest-release.yml`.
 
-Governance, contracts, architecture documents, and decision records alone do not require a userscript release.
+Contracts/governance/docs alone do not require a userscript version unless one of the release-affecting paths above is also changed.
 
-### Release artifacts already rebuilt
+## 5. Exact source commit
 
-If latest release artifacts already reflect the approved change, a second release must not be triggered.
+`SLF Release` must publish only the exact current `main` source commit. A manual `source_commit` request that does not equal current `main` must fail closed.
 
-## 4. Decision rules
+The cumulative unpublished file set is calculated from the most recent commit that changed `data/version.json` through the current source commit. This prevents a failed prior release from silently omitting earlier unpublished source changes.
 
-### AUTOMATIC RELEASE = YES
+## 6. Idempotency
 
-Only when:
+If current `main` is already the published release commit, or no unpublished file diff exists, release dispatch must exit successfully without creating another version.
 
-- source is fully integrated into `main`;
-- runtime/build-affecting changes exist;
-- release artifacts are not yet updated for the change;
-- unified workflow execution is available.
+Generated release-only commits must not recursively trigger another publication.
 
-The PM/Core Release must continue without asking the user to press `Run workflow`.
+## 7. Validation before publication
 
-### AUTOMATIC RELEASE = NO
+Before generated artifacts are committed, the release workflow must run relevant source gates including:
 
-If any required condition is false.
+- bundle/dependency order;
+- security boundaries;
+- tactical situation regression when applicable;
+- workflow inventory/governance validation;
+- deterministic build/rebuild;
+- release provenance validation;
+- exact userscript artifact boundary.
 
-### MANUAL FALLBACK = YES
+Generated release artifacts are produced only by workflow/build tooling and are never edited manually.
 
-Only when:
+## 8. Evidence requirement
 
-- automatic workflow did not start;
-- automatic workflow failed for a recoverable infrastructure reason;
-- the agent cannot safely dispatch or rerun it;
-- exact manual steps are provided.
+A successful release requires verification of:
 
-## 5. Evidence requirement
+- merged source commit on `main`;
+- exact changed-file scope on `main`;
+- `data/version.json` new version;
+- `build.approvedCommit` equal to merged source commit;
+- coherent cumulative `build.approvedFiles`;
+- matching version in `latest.user.js` and `latest.meta.js`;
+- release commit on `main`;
+- canonical update/download URLs;
+- no archive userscript.
 
-The agent must verify:
+A green PR alone is not publication evidence. Workflow metadata is supplemental to repository artifact evidence.
 
-- commit presence on `main`;
-- changed-file list match;
-- build relevance;
-- automatic workflow start;
-- workflow result;
-- release commit;
-- published version.
+## 9. Manual fallback
 
-A green PR validation alone is not evidence that the release was published.
+Manual `workflow_dispatch` is fallback-only, but it executes the real publish path. The agent must use available rerun/dispatch tools before involving the user.
 
-## 6. Safe user instruction rule
+A user manual step is permitted only when the platform operation cannot be executed through available tools; the instruction must identify `SLF Release`, branch `main`, exact source commit, UI path, and expected new manifest/release commit.
 
-Normal successful path:
+## 10. Tampermonkey gate
 
-```text
-User action: NONE
-```
-
-The user may be instructed to run GitHub Actions only in manual fallback state.
-
-## 7. Tampermonkey decision gate
-
-After release execution, report:
+After publication report:
 
 ```text
 Tampermonkey update
@@ -113,26 +103,13 @@ Tampermonkey update
 - User action: update/reinstall/check for updates / none / wait
 ```
 
-Rules:
+A verified new runtime release means `YES`. Release pending/failed means `NOT YET`. Docs/governance-only task with no release means `NO`.
 
-- New runtime release verified: `YES`.
-- Docs/contracts-only task: `NO`.
-- Release pending or failed: `NOT YET`.
+## 11. Related contracts
 
-## 8. Failure modes
-
-If automatic release readiness or result cannot be verified:
-
-```text
-BLOCKED
-Reason: Cannot verify automatic release lifecycle
-Next action: exact manual fallback or recovery step
-```
-
-## 9. Relationship to other contracts
-
-- `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`
 - `contracts/SLF_GOVERNANCE.md`
+- `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`
+- `contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md`
 - `contracts/branches/project-manager.md`
 - `contracts/branches/core-release.md`
 - `contracts/runtime/SLF_TASK_RUNTIME.md`
