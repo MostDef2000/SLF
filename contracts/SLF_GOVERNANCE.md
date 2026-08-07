@@ -37,11 +37,13 @@ Before a new implementation scope, reread current `main` versions of Governance,
 
 Before repository writes, present an `Implementation Scope Check` describing intended behavior, file categories, exclusions, risks, verification, and release impact in plain language.
 
-The only repository-write authorization is the exact lowercase phrase:
+The only phrase that authorizes repository writes is:
 
 ```text
 commit approved
 ```
+
+It must be the exact lowercase phrase shown above and applies only to the approved scope.
 
 After approval, the PM owns the full deterministic safe lifecycle inside the approved scope:
 
