@@ -8,8 +8,8 @@ const ROOT = process.cwd();
 const MANIFEST_PATH = 'src/app/bundle-order.json';
 const VERSION_MANIFEST_PATH = 'data/version.json';
 const VERSION_TOKEN = '__SLF_VERSION__';
-const UPDATE_URL = 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js';
-const DOWNLOAD_URL = 'https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js';
+const UPDATE_URL = 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js';
+const DOWNLOAD_URL = 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js';
 
 const p = rel => path.join(ROOT, rel);
 const read = rel => fs.readFileSync(p(rel), 'utf8');
