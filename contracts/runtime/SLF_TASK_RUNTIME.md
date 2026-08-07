@@ -1,9 +1,9 @@
 # SLF Task Runtime Contract
 
-Version: 1.4.0
+Version: 1.5.0
 Status: Active
 Applies to: all SLF implementation, release, governance, fallback, and acceptance workflows
-Source of truth: GitHub repository contracts
+Source of truth: protected GitHub `main` for source, repository contracts, and generated `release` branch for published latest-only artifacts
 
 ## 1. Purpose
 
@@ -56,9 +56,9 @@ FAILED
 - `PR_CI_UNKNOWN` — CI result cannot be established; fail closed and do not merge.
 - `MERGE_ALLOWED` — final head is current, scope-clean, and canonical CI is successful.
 - `CORE_RELEASE_INTEGRATING` — approved source is being merged.
-- `SOURCE_INTEGRATED` — source/tooling files are verified on `main`; this is not release completion.
-- `RELEASE_PENDING` — `SLF Release` is expected/running or repository release evidence is not yet updated.
-- `RELEASE_SUCCESS` — release commit/version/provenance/artifacts are verified.
+- `SOURCE_INTEGRATED` — source/tooling files are verified on protected `main`; this is not release completion.
+- `RELEASE_PENDING` — `SLF Release` is expected/running or generated `release` branch evidence is not yet updated.
+- `RELEASE_SUCCESS` — generated release-branch commit/version/provenance/artifacts are verified and `main` was not advanced by publication.
 - `MANUAL_STEP_REQUIRED` — one narrow platform operation cannot be performed by available tools.
 - `BROWSER_ACCEPTANCE` — post-release browser/Tampermonkey acceptance is required.
 - `COMPLETE` — every applicable gate is verified or explicitly not applicable.
@@ -116,7 +116,8 @@ SLF Task Runtime
 - Changed files:
 - Canonical CI evidence:
 - Core Release integration:
-- main updated:
+- main source SHA:
+- release publication SHA:
 - Release evidence:
 - Safe user action:
 - Final state:
@@ -132,8 +133,8 @@ implementation
 → PR
 → canonical CI
 → in-scope CI fixes if required
-→ merge
-→ automatic release when applicable
+→ merge source to main
+→ automatic publication to release when applicable
 → release verification
 → final handoff
 ```
@@ -144,7 +145,7 @@ Waiting for CI, mergeability, release trigger, or release artifacts is not `BLOC
 
 After repository writes and before merge readiness:
 
-1. fetch complete changed files from the branch;
+1. fetch complete changed files from the task branch;
 2. verify structure/endings and no truncation;
 3. validate changed executable syntax when tooling is available;
 4. run relevant canonical static gates;
@@ -153,6 +154,8 @@ After repository writes and before merge readiness:
 7. confirm generated release outputs were not manually edited.
 
 A failure returns to `IMPLEMENTING`.
+
+Placeholder/noop repository writes are prohibited.
 
 ## 9. CI failure handling
 
@@ -173,17 +176,31 @@ SOURCE_INTEGRATED
 → COMPLETE or BROWSER_ACCEPTANCE
 ```
 
-Release verification prioritizes repository evidence:
+Canonical release verification prioritizes repository evidence on `release` while retaining source evidence on `main`:
 
-1. `data/version.json` expected version;
-2. `build.approvedCommit` equals merged source SHA;
-3. `releases/latest.user.js` same version;
-4. `releases/latest.meta.js` same version;
-5. matching release commit.
+1. merged source SHA remains the current expected `main` source commit;
+2. generated publication did not push another commit to `main`;
+3. `release/data/version.json` has the expected new version;
+4. `release` manifest `build.approvedCommit` equals merged source SHA;
+5. `release` manifest `build.approvedBaseCommit` equals the previous published source SHA;
+6. `build.approvedFiles` is the coherent unpublished source range excluding generated outputs;
+7. `release/releases/latest.user.js` has the same version;
+8. `release/releases/latest.meta.js` has the same version and canonical release-branch URLs;
+9. matching generated release commit exists on `release`.
+
+Historical generated snapshots on `main` are not publication evidence after the release-branch handoff.
 
 Push-workflow lookup is supplemental and an empty result does not imply the release did not run.
 
-## 11. Manual step semantics
+## 11. Protected-main invariant
+
+`main` is source-only under normal operation. Generated publication belongs to `release` and must not require a GitHub Actions bypass for `main`.
+
+A desired `main` ruleset may therefore require pull requests and `SLF CI / ci`, require conversation resolution, and block deletion/force pushes with an empty publication bypass list.
+
+If a future release implementation requires a direct generated push to `main`, runtime must return to `DISCUSSION`/scope review rather than weakening branch protection silently.
+
+## 12. Manual step semantics
 
 `MANUAL_STEP_REQUIRED` is non-terminal and permitted only when one specific platform operation is unavailable to connected tools after safe fallbacks are exhausted, such as repository branch-protection settings.
 
@@ -191,21 +208,23 @@ The instruction must include exact UI location, exact setting/value, verificatio
 
 It must not be used for ordinary CI waiting, PR creation, merge, release waiting, or repository edits that the agent can perform.
 
-## 12. Capability fallback
+## 13. Capability fallback
 
 Changing execution mechanism does not invalidate approval. Safe fallbacks include connector/Contents operations, Git Data API, local git, authenticated `gh`, and finally one consolidated GitHub UI step.
 
 Enter `BLOCKED` only after the required operation failed, evidence exists, safe fallbacks were evaluated, no agent-executable path remains, and the issue cannot be recovered as `MANUAL_STEP_REQUIRED`.
 
-## 13. User-action rules
+## 14. User-action rules
 
 Do not ask the user to manually run normal GitHub Actions, merge routine PRs, copy handoffs between agents, or trust unstated assumptions. The PM/Core Release owns those transitions when tools allow them.
 
-## 14. Final response gate
+The user may be asked to save/verify a `main` ruleset only when the connector exposes no settings mutation endpoint.
+
+## 15. Final response gate
 
 After repository-write approval, no final response is permitted in a non-terminal phase. Progress updates are allowed, but execution continues immediately.
 
-## 15. Tampermonkey handoff
+## 16. Tampermonkey handoff
 
 Every terminal implementation/release response states:
 
@@ -221,9 +240,9 @@ Tampermonkey update
 - User action: update/reinstall/check for updates / none / wait
 ```
 
-Never instruct an update before release commit/version/provenance are verified.
+Never instruct an update before generated `release` commit/version/provenance are verified.
 
-## 16. Related contracts
+## 17. Related contracts
 
 - `contracts/SLF_GOVERNANCE.md`
 - `contracts/SLF_AUTOMATIC_RELEASE_POLICY.md`

@@ -1,11 +1,11 @@
 # SLF Project Manager Agent Contract
 
-Version: 3.4.0
+Version: 3.5.0
 Status: Active
 Agent: AI Project Manager Agent
 Project: SLF
-Architecture: SLF Control Plane v2 — Automatic Release Lifecycle
-Source of truth: GitHub `main`, repository contracts, and architecture documents
+Architecture: SLF Control Plane v2 — Protected Main + Generated Release Branch
+Source of truth: GitHub `main` for source, repository contracts, and generated `release` branch for published latest-only artifacts
 
 ## 1. Role
 
@@ -28,7 +28,7 @@ Read and obey:
 - the relevant domain contract;
 - architecture/system contracts when the task crosses those boundaries.
 
-Automatic Release and Workflow Lifecycle policies override older workflow names, routine manual Actions wording, and ambiguous CI-state handling.
+Automatic Release and Workflow Lifecycle policies override older workflow names, routine manual Actions wording, ambiguous CI-state handling, and legacy generated-release commits on `main`.
 
 ## 3. User boundary and approval
 
@@ -41,8 +41,8 @@ implementation
 → branch integrity
 → PR
 → SLF CI / ci
-→ merge
-→ SLF Release when applicable
+→ merge to main
+→ SLF Release to release branch when applicable
 → release verification
 → final handoff
 ```
@@ -51,8 +51,10 @@ Do not request another approval for an in-scope CI fix that preserves approved b
 
 ## 4. Source and branch rules
 
-- `main` is long-term source of truth.
+- `main` is protected long-term source of truth.
+- `release` is generated latest-only publication state, not implementation source.
 - Generated release files are never editable implementation source.
+- Historical generated files on `main` are compatibility snapshots after the release-branch handoff, not canonical publication state.
 - Task branches are disposable and must start from current `main` unless an approved active diff is explicitly reconciled.
 - Before merge, recheck freshness and exact changed-file scope.
 - Placeholder/noop repository commits are prohibited.
@@ -111,7 +113,7 @@ A cross-module dependency must be declared or moved to its owner module. Canonic
 
 Normal PR validation must run only through `SLF CI`. Standalone duplicate PR workflows are not allowed unless the workflow inventory records a bounded exception.
 
-`SLF Maintenance` owns scheduled governance. `SLF Release` owns publication. Completed migration workflows are deleted; historical Actions records may remain visible.
+`SLF Maintenance` owns scheduled governance. `SLF Release` owns generated publication to `release`. Completed migration workflows are deleted; historical Actions records may remain visible.
 
 ## 10. Core Release flow
 
@@ -121,21 +123,31 @@ For approved runtime/build changes:
 2. obtain canonical green CI on final head;
 3. reconcile with current `main` if it advanced, then rerun CI if head changed;
 4. enter `MERGE_ALLOWED` only after the green gate;
-5. merge/squash into `main`;
+5. merge/squash source into `main`;
 6. verify exact source commit and changed files on `main`;
-7. verify `SLF Release`/repository release evidence;
-8. verify version, `approvedCommit`, userscript/meta and release commit;
-9. return the Tampermonkey update decision.
+7. enter `RELEASE_PENDING` when publication is applicable;
+8. verify `SLF Release`/repository evidence on the generated `release` branch;
+9. verify version, `approvedBaseCommit`, `approvedCommit`, userscript/meta, release URLs and generated release commit;
+10. verify generated publication did not advance `main`;
+11. return the Tampermonkey update decision.
 
-Publication must never be claimed before release-commit evidence exists.
+Publication must never be claimed before release-branch commit evidence exists.
 
 ## 11. Release applicability
 
 Release is required for changes affecting `src/**`, build/provenance tooling, or the release workflow as defined by `SLF_AUTOMATIC_RELEASE_POLICY.md` and Release Readiness Gate.
 
-Docs/contracts-only changes do not create a userscript version unless release-affecting files are part of the same task.
+Docs/contracts-only changes do not create a userscript version unless release-affecting files are part of the same unpublished source range.
 
-## 12. Manual fallback
+## 12. Protected-main invariant
+
+Normal generated publication must require no bypass for the `main` ruleset.
+
+The desired `main` ruleset requires PR integration and `SLF CI / ci`, resolves conversations, blocks deletion and force pushes, and can keep the publication bypass list empty because `SLF Release` writes generated state only to `release`.
+
+If a future design requires a workflow to push generated output directly to `main`, treat that as a release architecture change requiring explicit review rather than weakening branch protection.
+
+## 13. Manual fallback
 
 The PM must use agent-executable rerun/dispatch paths before involving the user.
 
@@ -143,7 +155,7 @@ The PM must use agent-executable rerun/dispatch paths before involving the user.
 
 Branch protection/ruleset configuration is a valid example when connected GitHub tools do not expose settings mutation.
 
-## 13. Runtime model
+## 14. Runtime model
 
 Use `contracts/runtime/SLF_TASK_RUNTIME.md`.
 
@@ -164,13 +176,13 @@ READY_FOR_IMPLEMENTATION
 
 `PR_CI_PENDING`, `PR_CI_FAILED`, and `PR_CI_UNKNOWN` cannot transition directly to `MERGE_ALLOWED`.
 
-## 14. Completion semantics
+## 15. Completion semantics
 
-Runtime/build work is `COMPLETE` only when implementation is on `main`, final-head canonical CI succeeded, required release succeeded, release version/provenance/artifacts were verified, and the final Tampermonkey instruction was returned.
+Runtime/build work is `COMPLETE` only when implementation is on protected `main`, final-head canonical CI succeeded, required generated publication on `release` succeeded, release version/provenance/artifacts were verified, `main` was not advanced by generated publication, and the final Tampermonkey instruction was returned.
 
 Governance-only work may complete without publication when release is not applicable.
 
-## 15. Final user handoff
+## 16. Final user handoff
 
 Every terminal implementation/release/governance response includes:
 
@@ -188,6 +200,6 @@ Tampermonkey update
 
 Keep progress updates concise. Do not send a final answer from a non-terminal state.
 
-## 16. Task Intake handoff
+## 17. Task Intake handoff
 
 Accept a normalized Task Brief internally. Search repository Issues for duplicates, use/create the canonical Issue after repository-write approval when needed, and do not require the user to copy handoffs between agents.

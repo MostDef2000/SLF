@@ -2,8 +2,8 @@
   "schema": "slf_quality_gate_rollout_v1",
   "repository": "MostDef2000/SLF",
   "defaultBranch": "main",
-  "state": "consolidated_ci_verified_settings_not_enforced",
-  "reason": "The repository workflow architecture is consolidated to one canonical PR CI, one release workflow and one maintenance workflow. SLF CI / ci succeeded on PR #234; branch protection is not yet applied or verified.",
+  "state": "consolidated_ci_verified_release_branch_pending_ruleset",
+  "reason": "The repository workflow architecture is consolidated to one canonical PR CI, one release workflow and one maintenance workflow. SLF CI / ci is verified; the zero-downtime Tampermonkey handoff to the generated release branch succeeded at 4.4.294. The final release-branch-only workflow must pass CI and publication verification before the main ruleset is saved.",
   "roadmapIssue": 160,
   "currentIssue": 233,
   "reviewModel": "single_maintainer_owner_acceptance_with_compensating_controls",
@@ -22,7 +22,7 @@
     "contractBootstrapRequired": true
   },
   "prerequisitesIntegrated": true,
-  "prerequisitePullRequests": [159, 163, 164, 165, 166, 167, 168, 175],
+  "prerequisitePullRequests": [159, 163, 164, 165, 166, 167, 168, 175, 234, 235],
   "workflowLifecyclePolicy": "contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md",
   "workflowInventory": "data/quality/workflow-inventory-v1.json",
   "componentWorkflows": [
@@ -38,7 +38,7 @@
       "workflow": "SLF Release",
       "path": ".github/workflows/build-latest-release.yml",
       "role": "RELEASE",
-      "purpose": "validate current main and publish deterministic latest-only userscript artifacts",
+      "purpose": "validate exact current main source and publish deterministic latest-only generated artifacts to the release branch without generated writes to main",
       "existing": true
     },
     {
@@ -50,17 +50,20 @@
     }
   ],
   "enforcementPlan": {
-    "strategy": "single_required_ci_context",
+    "strategy": "single_required_ci_context_protected_main_release_branch",
     "aggregateWorkflow": ".github/workflows/quality-integration.yml",
     "aggregateContext": "SLF CI / ci",
     "ciStatePolicy": {
       "allowedToMerge": ["SUCCESS"],
       "blockedFromMerge": ["PENDING", "FAILED", "UNKNOWN"]
     },
-    "why": "One unfiltered pull-request context avoids path-filter deadlocks and prevents green status in one specialist workflow from masking a failure elsewhere.",
+    "publicationBranch": "release",
+    "mainPublicationBypassRequired": false,
+    "why": "One unfiltered pull-request context protects source integration while generated userscript publication occurs on a dedicated release branch, so main can remain PR-only without an Actions bypass.",
     "remainingActions": [
-      "apply the single-maintainer branch-protection target in GitHub settings after the release workflow is verified",
-      "verify the protection requires SLF CI / ci before source merge without blocking the release automation"
+      "verify the release-branch-only workflow with canonical CI and one automatic publication",
+      "apply the single-maintainer protect-main ruleset in GitHub settings with an empty bypass list",
+      "verify the ruleset requires SLF CI / ci before source merge and blocks main deletion/force pushes"
     ]
   },
   "aggregateVerification": {
@@ -69,8 +72,8 @@
     "context": "SLF CI / ci",
     "sourceIssue": 233,
     "sourcePullRequest": 234,
-    "runId": 31135425581,
-    "jobId": 92733798099,
+    "runId": 31135537375,
+    "jobId": 92734136953,
     "verifiedAt": "2026-08-07",
     "domains": [
       "static-contract-security",
@@ -79,6 +82,16 @@
       "browser-e2e",
       "release-deployment-evidence"
     ]
+  },
+  "releaseBranchHandoff": {
+    "result": "success",
+    "sourcePullRequest": 235,
+    "sourceCommit": "2f18a83b255e306dcfd2ef1dbe6e01a05635d369",
+    "publishedVersion": "4.4.294",
+    "generatedCommit": "0239e3cc7810171d29ba29174a24d091bd02eac3",
+    "publicationBranch": "release",
+    "tampermonkeyUrlsPointToRelease": true,
+    "mainAndReleaseMatchedAtHandoff": true
   },
   "branchProtectionTarget": {
     "requirePullRequest": true,
@@ -91,10 +104,11 @@
     "blockForcePushes": true,
     "blockBranchDeletion": true,
     "allowAdminBypass": false,
+    "publicationBypassRequired": false,
     "singleMaintainerException": "No independent reviewer is currently available. Owner acceptance is explicit and the single mandatory automated CI context is the primary compensating control."
   },
   "branchProtectionApplied": false,
   "branchProtectionVerified": false,
-  "connectorLimitation": "The connected GitHub tool set does not expose branch-protection or ruleset mutation actions; this platform setting is the only expected manual step after the new context and release automation are verified.",
+  "connectorLimitation": "The connected GitHub tool set does not expose branch-protection or ruleset mutation actions; saving and verifying protect-main is the only expected manual platform step after release-branch-only publication is verified.",
   "productionDeploymentImplied": false
 }
