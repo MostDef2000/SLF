@@ -2,8 +2,8 @@
   "schema": "slf_quality_gate_rollout_v1",
   "repository": "MostDef2000/SLF",
   "defaultBranch": "main",
-  "state": "consolidated_ci_pending_verification",
-  "reason": "The repository workflow architecture is consolidated to one canonical PR CI, one release workflow and one maintenance workflow. The new SLF CI context must pass on the consolidation pull request before merge; branch protection is not yet applied.",
+  "state": "consolidated_ci_verified_settings_not_enforced",
+  "reason": "The repository workflow architecture is consolidated to one canonical PR CI, one release workflow and one maintenance workflow. SLF CI / ci succeeded on PR #234; branch protection is not yet applied or verified.",
   "roadmapIssue": 160,
   "currentIssue": 233,
   "reviewModel": "single_maintainer_owner_acceptance_with_compensating_controls",
@@ -59,20 +59,19 @@
     },
     "why": "One unfiltered pull-request context avoids path-filter deadlocks and prevents green status in one specialist workflow from masking a failure elsewhere.",
     "remainingActions": [
-      "verify SLF CI / ci succeeds on the consolidation pull request",
-      "apply the single-maintainer branch-protection target in GitHub settings",
-      "verify the protection requires SLF CI / ci before source merge"
+      "apply the single-maintainer branch-protection target in GitHub settings after the release workflow is verified",
+      "verify the protection requires SLF CI / ci before source merge without blocking the release automation"
     ]
   },
   "aggregateVerification": {
-    "result": "pending",
+    "result": "success",
     "workflow": "SLF CI",
     "context": "SLF CI / ci",
     "sourceIssue": 233,
-    "sourcePullRequest": null,
-    "runId": null,
-    "jobId": null,
-    "verifiedAt": null,
+    "sourcePullRequest": 234,
+    "runId": 31135425581,
+    "jobId": 92733798099,
+    "verifiedAt": "2026-08-07",
     "domains": [
       "static-contract-security",
       "runtime-tactics",
@@ -96,6 +95,6 @@
   },
   "branchProtectionApplied": false,
   "branchProtectionVerified": false,
-  "connectorLimitation": "The connected GitHub tool set does not expose branch-protection or ruleset mutation actions; this platform setting is the only expected manual step after the new context is observed green.",
+  "connectorLimitation": "The connected GitHub tool set does not expose branch-protection or ruleset mutation actions; this platform setting is the only expected manual step after the new context and release automation are verified.",
   "productionDeploymentImplied": false
 }
