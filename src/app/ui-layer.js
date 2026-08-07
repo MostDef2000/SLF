@@ -2,6 +2,8 @@
     // ============================================================
 
     const UI = {
+        __flatSortedTacticDropdownApplied: true,
+
         updateParserStatus(text) {
             const el = document.getElementById('slf-parser-status');
             if (el) el.textContent = text;
@@ -28,40 +30,12 @@
             return window['SLFActivePresetRegistry'] || null;
         },
 
-        getPresetIdFromOption(option) {
-            return String(option?.dataset?.presetId || option?.value || '');
-        },
-
-        getSelectedPresetId(select) {
-            if (!select) return '';
-            const option = select.selectedOptions?.[0] || select.options?.[select.selectedIndex] || null;
-            return this.getPresetIdFromOption(option);
-        },
-
-        findPresetOption(select, presetId) {
-            if (!select) return null;
-            const id = String(presetId || '');
-            return Array.from(select.options || []).find(option => this.getPresetIdFromOption(option) === id) || null;
-        },
-
-        selectPresetById(select, presetId) {
-            const option = this.findPresetOption(select, presetId);
-            if (!option) return false;
-            select.value = option.value;
-            return true;
-        },
-
         getVisiblePresetLabels() {
             const labels = PresetStorage.getAllLabels();
             const registry = this.getPresetDisplayRegistry();
             const retired = new Set(Array.isArray(registry?.removed) ? registry.removed : []);
             return Object.fromEntries(
-                Object.entries(labels).filter(([key]) => {
-                    if (typeof PresetStorage.isRetiredBuiltInPreset === 'function' && PresetStorage.isRetiredBuiltInPreset(key)) {
-                        return false;
-                    }
-                    return !retired.has(key);
-                })
+                Object.entries(labels).filter(([key]) => !retired.has(key))
             );
         },
 
@@ -314,7 +288,6 @@ if (!isTacticPage) return;
             row.style.cssText = 'display:flex;align-items:center;gap:5px;flex-wrap:wrap;';
 
             const select = document.createElement('select');
-            select.dataset.presetValueContract = 'ordered-token-v1';
             select.style.cssText =
                 'flex:1;min-width:120px;padding:5px;background:#333;color:#fff;border:1px solid #555;border-radius:3px;font-size:14px;';
 
@@ -342,9 +315,7 @@ if (!isTacticPage) return;
                     const requestedStyle = String(preset.style || meta.style || '3');
                     const style = Object.prototype.hasOwnProperty.call(groups, requestedStyle) ? requestedStyle : '3';
                     const isSystem = Object.prototype.hasOwnProperty.call(BASE_PRESETS, key);
-                    const trainer = String(
-                        meta.trainer || (key === 'standard' ? '' : String(value || '').trim().split(/\s+/)[0] || '')
-                    ).trim();
+                    const trainer = String(meta.trainer || '').trim();
                     groups[style].push({ key, value, isSystem, trainer });
                 });
 
@@ -353,7 +324,7 @@ if (!isTacticPage) return;
                         if (a.key === 'standard') return -1;
                         if (b.key === 'standard') return 1;
 
-                        if (a.isSystem && b.isSystem && systemOrderIndex.size) {
+                        if (a.isSystem && b.isSystem) {
                             const ai = systemOrderIndex.has(a.key) ? systemOrderIndex.get(a.key) : Number.MAX_SAFE_INTEGER;
                             const bi = systemOrderIndex.has(b.key) ? systemOrderIndex.get(b.key) : Number.MAX_SAFE_INTEGER;
                             if (ai !== bi) return ai - bi;
@@ -370,11 +341,10 @@ if (!isTacticPage) return;
                 return groups;
             }
 
-            function refreshSelect(keepPresetId) {
+            function refreshSelect(keepValue) {
                 const labels = UI.getVisiblePresetLabels();
-                const currentPresetId = keepPresetId || UI.getSelectedPresetId(select);
+                const cur = keepValue || select.value;
                 const groups = buildStyleGroupedOptions(labels);
-                let sortIndex = 0;
 
                 select.innerHTML = '';
 
@@ -388,20 +358,19 @@ if (!isTacticPage) return;
 
                     items.forEach(item => {
                         const opt = document.createElement('option');
-                        opt.value = `slf-${String(sortIndex).padStart(4, '0')}:${item.key}`;
+                        opt.value = item.key;
                         opt.textContent = item.value;
-                        opt.dataset.presetId = item.key;
                         opt.dataset.systemPreset = item.isSystem ? '1' : '0';
-                        opt.dataset.sortIndex = String(sortIndex);
-                        sortIndex += 1;
                         optgroup.appendChild(opt);
                     });
 
                     select.appendChild(optgroup);
                 });
 
-                if (!UI.selectPresetById(select, currentPresetId) && select.options.length > 0) {
-                    select.selectedIndex = 0;
+                if (Object.prototype.hasOwnProperty.call(labels, cur)) {
+                    select.value = cur;
+                } else if (select.options.length > 0) {
+                    select.value = select.options[0].value;
                 }
             }
 
@@ -410,9 +379,8 @@ if (!isTacticPage) return;
             schemeLabel.style.cssText = 'font-size:12px;color:#ffb86c;white-space:normal;width:100%;max-width:100%;line-height:1.3;margin-top:5px;box-sizing:border-box;';
 
             function updateSchemeLabel() {
-                const presetId = UI.getSelectedPresetId(select);
                 const scheme = TacticPresetLibrary?.getSchemeForPreset
-                    ? TacticPresetLibrary.getSchemeForPreset(presetId)
+                    ? TacticPresetLibrary.getSchemeForPreset(select.value)
                     : '';
 
                 schemeLabel.textContent = scheme ? `Схема: ${scheme}` : '';
@@ -423,8 +391,7 @@ if (!isTacticPage) return;
 
             select.addEventListener('change', async () => {
                 updateSchemeLabel();
-                const presetId = UI.getSelectedPresetId(select);
-                if (presetId) await applyPresetAsync(presetId);
+                await applyPresetAsync(select.value);
             });
 
             const applyBtn = document.createElement('button');
@@ -433,8 +400,7 @@ if (!isTacticPage) return;
             applyBtn.style.cssText = 'padding:5px 8px;background:#444;color:#fff;border:1px solid #666;border-radius:3px;cursor:pointer;font-size:16px;';
             applyBtn.addEventListener('click', async () => {
                 applyBtn.disabled = true;
-                const presetId = UI.getSelectedPresetId(select);
-                if (presetId) await applyPresetAsync(presetId);
+                await applyPresetAsync(select.value);
                 applyBtn.disabled = false;
             });
 
@@ -464,7 +430,7 @@ if (!isTacticPage) return;
             deleteBtn.title = 'Удалить выбранный пресет';
             deleteBtn.style.cssText = 'padding:5px 8px;background:#444;color:#fff;border:1px solid #666;border-radius:3px;cursor:pointer;font-size:16px;';
             deleteBtn.addEventListener('click', () => {
-                const name = UI.getSelectedPresetId(select);
+                const name = select.value;
 
                 if (Object.prototype.hasOwnProperty.call(BASE_PRESETS, name)) {
                     alert('Встроенный пресет удалить нельзя.');
