@@ -66,12 +66,48 @@
             <tbody>
               <tr id="tl-7001"><td>ST</td><td><a href="/player.php?action=view&id=1001">Игрок Один</a></td><td>Клуб A</td><td>22</td><td>5</td><td>4</td><td>151</td><td>1.20 H 120M</td><td>06.08.2026 12:00</td><td>2</td></tr>
               <tr id="tl-7002"><td>CM</td><td><a href="/player.php?action=view&id=1002">Игрок Два</a></td><td>Клуб B</td><td>24</td><td>4</td><td>3</td><td>146</td><td>0.95 H 82M</td><td>06.08.2026 13:00</td><td>1</td></tr>
-              <tr id="tl-7003"><td>CD</td><td><a href="/player.php?action=view&id=1003">Игрок Три</a></td><td>Клуб C</td><td>21</td><td>6</td><td>5</td><td>158</td><td>1.40 H 165M</td><td>06.08.2026 14:00</td><td>4</td></tr>
+              <tr id="tl-7003"><td>CD</td><td>Игрок Три <a href="/transfers.php?action=view&transfer_id=7003">перейти</a></td><td>Клуб C</td><td>21</td><td>6</td><td>5</td><td>158</td><td>1.40 H 165M</td><td>06.08.2026 14:00</td><td>4</td></tr>
+              <tr id="tl-7004"><td>GK</td><td>Игрок Четыре <a href="/transfers.php?action=view&transfer_id=7004">перейти</a></td><td>Клуб D</td><td>23</td><td>5</td><td>4</td><td>155</td><td>1.05 H 95M</td><td>06.08.2026 15:00</td><td>0</td></tr>
+              <tr id="tl-7005"><td>AM</td><td>Игрок Пять <a href="/transfers.php?action=view&transfer_id=7005">перейти</a></td><td>Клуб E</td><td>25</td><td>4</td><td>3</td><td>149</td><td>0.88 H 74M</td><td>06.08.2026 16:00</td><td>1</td></tr>
             </tbody>
           </table>
+          <div class="transfers-ui__pages">Страницы: <span>1</span> <a href="/transfers.php?page=1">2</a> <a href="/transfers.php?page=2">3</a></div>
         </div>
       </div>
     </section>
   </main>
+  <script>
+    (() => {
+      const startedAt = Date.now();
+      const timer = setInterval(() => {
+        if (Date.now() - startedAt > 6000) {
+          clearInterval(timer);
+          throw new Error('transfer-runtime-compat-check-timeout');
+        }
+        try {
+          if (typeof TransferCandidateScanner === 'undefined' || typeof TransferMarketAnalyzer === 'undefined') return;
+          if (typeof TransferMarketAnalyzer.parseVisibleRowsCompat !== 'function') return;
+          if (typeof TransferCandidateScanner.pageUrlCandidates !== 'function') return;
+
+          const scannerRows = TransferCandidateScanner.parsePage(document, 0, location.href);
+          const analyzerRows = TransferMarketAnalyzer.parseVisibleRowsCompat();
+          if (scannerRows.length !== 5) throw new Error(`scanner-row-compat:${scannerRows.length}`);
+          if (analyzerRows.length !== 5) throw new Error(`analyzer-row-compat:${analyzerRows.length}`);
+          if (scannerRows.filter(row => row.transferId && !row.playerId).length !== 3) {
+            throw new Error('scanner-transfer-detail-row-compat');
+          }
+          const candidates = TransferCandidateScanner.pageUrlCandidates(1);
+          if (!candidates.some(value => new URL(value).searchParams.get('page') === '2')) {
+            throw new Error('scanner-pagination-probe-missing');
+          }
+          clearInterval(timer);
+          window.__slfTransferRuntimeCompatChecked = true;
+        } catch (error) {
+          clearInterval(timer);
+          setTimeout(() => { throw error; }, 0);
+        }
+      }, 50);
+    })();
+  </script>
 </body>
 </html>
