@@ -26,12 +26,19 @@
 
     const REMOVED_PRESET_NAMES = [
         'Mourinho_WeakSide_def3',
+        'Henta_Hold_def3',
+        'Pep_StandardControl_bal3',
         'Xabi_VerticalBox_att3',
         'Xabi_BoxMidfield_bal3',
         'DeZerbi_BaitPress_bal3',
         'DeZerbi_Release_att4',
-        'Nagelsmann_WidePress_att4',
-        'Henta_LeftTrap_att3'
+        'Klopp_WideTrap_att4',
+        'Henta_LeftTrap_att3',
+        'Henta_RightTrap_att3',
+        'Henta_WideTrap_att3',
+        'Henta_CounterTrap_att4',
+        'Henta_CentralTrap_att3',
+        'Nagelsmann_WidePress_att4'
     ];
 
     const ACTIVE = new Set(['standard', ...ACTIVE_PRESET_NAMES]);
@@ -51,18 +58,54 @@
     };
 
     const LABELS = {
-        Arteta_Control433_bal3: 'Arteta Control 4-3-3',
-        Pep_BoxControl_bal2: 'Pep Box Control',
-        Pep_PressCooldown_bal2: 'Pep Press Cooldown',
-        Compact_Counter_def3: 'Compact Counter',
-        Pep_ControlledPush_att3: 'Pep Controlled Push',
-        Pep_TwoThreeFive_att3: 'Pep Positional Attack',
-        Conte_WingbackWidth_bal4: 'Conte Wingback Width',
-        Klopp_Gegenpress_att4: 'Klopp Gegenpress',
-        Simeone_Compact442_def4: 'Simeone Compact 4-4-2',
-        Simeone_LowBlock_def5: 'Simeone Low Block',
-        Bielsa_ChaosPress_att5: 'Bielsa Chaos Press'
+        standard: 'Стандартная 4-2-3-1_att1',
+        Arteta_Control433_bal3: 'Arteta Structural Control 4-3-3_neutr',
+        Pep_BoxControl_bal2: 'Guardiola Press-Resistant Control 4-1-2-2-1_neutr',
+        Pep_PressCooldown_bal2: 'Guardiola Press Cooldown 4-1-4-1_def1',
+        Compact_Counter_def3: 'Mourinho Compact Counter 4-4-1-1_neutr',
+        Pep_ControlledPush_att3: 'Guardiola Controlled Push 4-2-3-1_att1',
+        Pep_TwoThreeFive_att3: 'Guardiola Positional Attack 3-2-5_att2',
+        Conte_WingbackWidth_bal4: 'Conte Wingback Width 3-4-3_att1',
+        Klopp_Gegenpress_att4: 'Klopp Gegenpress 4-2-4_att2',
+        Simeone_Compact442_def4: 'Simeone Compact 4-4-2_def2',
+        Simeone_LowBlock_def5: 'Simeone Low Block 5-4-1_def2',
+        Bielsa_ChaosPress_att5: 'Bielsa Chaos Press 3-3-4_att2'
     };
+
+    const STYLE_GROUPS = [
+        { style: '5', label: 'Атака+ · _att2', suffix: '_att2' },
+        { style: '4', label: 'Атака · _att1', suffix: '_att1' },
+        { style: '3', label: 'Обычный · _neutr', suffix: '_neutr' },
+        { style: '2', label: 'Защита · _def1', suffix: '_def1' },
+        { style: '1', label: 'Защ+ · _def2', suffix: '_def2' }
+    ];
+
+    const DISPLAY_META = {
+        standard: { trainer: '', formation: '4-2-3-1', style: '4', suffix: '_att1' },
+        Arteta_Control433_bal3: { trainer: 'Arteta', formation: '4-3-3', style: '3', suffix: '_neutr' },
+        Pep_BoxControl_bal2: { trainer: 'Guardiola', formation: '4-1-2-2-1', style: '3', suffix: '_neutr' },
+        Pep_PressCooldown_bal2: { trainer: 'Guardiola', formation: '4-1-4-1', style: '2', suffix: '_def1' },
+        Compact_Counter_def3: { trainer: 'Mourinho', formation: '4-4-1-1', style: '3', suffix: '_neutr' },
+        Pep_ControlledPush_att3: { trainer: 'Guardiola', formation: '4-2-3-1', style: '4', suffix: '_att1' },
+        Pep_TwoThreeFive_att3: { trainer: 'Guardiola', formation: '3-2-5', style: '5', suffix: '_att2' },
+        Conte_WingbackWidth_bal4: { trainer: 'Conte', formation: '3-4-3', style: '4', suffix: '_att1' },
+        Klopp_Gegenpress_att4: { trainer: 'Klopp', formation: '4-2-4', style: '5', suffix: '_att2' },
+        Simeone_Compact442_def4: { trainer: 'Simeone', formation: '4-4-2', style: '1', suffix: '_def2' },
+        Simeone_LowBlock_def5: { trainer: 'Simeone', formation: '5-4-1', style: '1', suffix: '_def2' },
+        Bielsa_ChaosPress_att5: { trainer: 'Bielsa', formation: '3-3-4', style: '5', suffix: '_att2' }
+    };
+
+    const DISPLAY_ORDER = Object.keys(DISPLAY_META).sort((a, b) => {
+        const ma = DISPLAY_META[a];
+        const mb = DISPLAY_META[b];
+        const styleDiff = Number(mb.style) - Number(ma.style);
+        if (styleDiff) return styleDiff;
+        if (a === 'standard') return -1;
+        if (b === 'standard') return 1;
+        const trainerDiff = String(ma.trainer).localeCompare(String(mb.trainer), 'en', { sensitivity: 'base' });
+        if (trainerDiff) return trainerDiff;
+        return String(LABELS[a]).localeCompare(String(LABELS[b]), 'en', { sensitivity: 'base' });
+    });
 
     const META = {
         Arteta_Control433_bal3: { group: 'balance', rank: 3, title: LABELS.Arteta_Control433_bal3, idea: 'структурный контроль с умеренным прессингом и ограниченным риском', use: 'равная игра без сильного аварийного сигнала', risk: 'не даёт резкого роста давления, когда уже нужен гол' },
@@ -248,6 +291,9 @@
             presetSchemeState: Object.assign({}, PRESET_SCHEME_STATE),
             traits: Object.fromEntries(Object.entries(TRAITS).map(([name, traits]) => [name, Object.assign({}, traits, { attackLanes: (traits.attackLanes || []).slice(), requires: (traits.requires || []).slice(), avoids: (traits.avoids || []).slice() })])),
             ladders: Object.fromEntries(Object.entries(LADDERS).map(([group, names]) => [group, names.slice()])),
+            displayMeta: Object.fromEntries(Object.entries(DISPLAY_META).map(([name, meta]) => [name, Object.assign({}, meta)])),
+            displayOrder: DISPLAY_ORDER.slice(),
+            styleGroups: STYLE_GROUPS.map(group => Object.assign({}, group)),
             fallbackPolicy: '5.61-pressure-response-v6-aligned',
             choosePreset,
             applyHintPolicy
