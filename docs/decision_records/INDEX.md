@@ -21,6 +21,7 @@ Decision Records are not task notes. Use them only when a decision changes or pr
 | DR-010 | GitHub Issues as backlog source of truth | Active |
 | DR-011 | SLF Task Intake as the entry stage | Active |
 | DR-012 | Canonical scope approval boundary | Active |
+| DR-013 | Consolidated CI and release workflows | Active |
 
 ## Numbering rule
 
