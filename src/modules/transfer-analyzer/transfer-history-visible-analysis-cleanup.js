@@ -71,8 +71,9 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design
         if (!results || !head) return;
         const rankingTabs = [...results.children].find(node => node.querySelector?.('[data-slf-ranking]'));
         if (rankingTabs) {
+            [...head.querySelectorAll(':scope > .slf-transfer-ranking-tabs')].forEach(node => node.remove());
             rankingTabs.classList.add('slf-transfer-ranking-tabs');
-            if (rankingTabs.parentElement !== head) head.appendChild(rankingTabs);
+            head.appendChild(rankingTabs);
         }
         const hasRankedTable = !!results.querySelector('[style*="position:sticky"]');
         results.classList.toggle('slf-transfer-results-idle', !hasRankedTable);
