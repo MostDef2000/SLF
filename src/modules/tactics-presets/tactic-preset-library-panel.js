@@ -25,13 +25,13 @@ const TacticPresetLibraryPanel = {
     ],
     liveFormationPositions: {
         Arteta_Control433_bal3: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'cm1', 'dm2', 'cm3', 'lw', 'st2', 'rw'],
-        Pep_BoxControl_bal2: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'dm2', 'cm2', 'am1', 'am2', 'st1', 'st2'],
+        Pep_BoxControl_bal2: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'dm2', 'cm1', 'cm3', 'am1', 'am2', 'st2'],
         Pep_PressCooldown_bal2: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'dm2', 'lm', 'cm2', 'cm3', 'rm', 'st2'],
-        Compact_Counter_def3: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'lm', 'dm2', 'cm2', 'cm3', 'rm', 'st2'],
+        Compact_Counter_def3: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'lm', 'dm2', 'cm2', 'rm', 'am2', 'st2'],
         Pep_ControlledPush_att3: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'dm2', 'cm2', 'lw', 'am2', 'rw', 'st2'],
-        Pep_TwoThreeFive_att3: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'dm2', 'cm2', 'lw', 'am2', 'rw', 'st2'],
+        Pep_TwoThreeFive_att3: ['gk', 'cd1', 'cd2', 'cd3', 'dm2', 'cm2', 'lw', 'am1', 'st1', 'am2', 'rw'],
         Conte_WingbackWidth_bal4: ['gk', 'cd1', 'cd2', 'cd3', 'lb', 'dm2', 'cm2', 'rb', 'lw', 'st2', 'rw'],
-        Klopp_Gegenpress_att4: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'cm1', 'dm2', 'cm3', 'lw', 'st2', 'rw'],
+        Klopp_Gegenpress_att4: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'dm2', 'cm2', 'lw', 'st1', 'st2', 'rw'],
         Simeone_Compact442_def4: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'lm', 'cm2', 'dm2', 'rm', 'st1', 'st2'],
         Simeone_LowBlock_def5: ['gk', 'lb', 'cd1', 'cd2', 'cd3', 'rb', 'lm', 'dm2', 'cm2', 'rm', 'st2'],
         Bielsa_ChaosPress_att5: ['gk', 'cd1', 'cd2', 'cd3', 'lm', 'dm2', 'rm', 'lw', 'st1', 'st2', 'rw']

@@ -1,66 +1,31 @@
 # SLF Automatic Release Policy
 
-Version: 1.2.0
+Version: 1.3.0
 Status: Active
 Applies to: Project Manager, domain agents, Core Release, runtime state, release gate, GitHub Actions, and Tampermonkey user handoff
 Source of truth: GitHub repository contracts and `.github/workflows/build-latest-release.yml`
 
-## 1. Purpose
+## 1. Purpose and priority
 
-This policy defines the default end-to-end lifecycle after explicit repository-write approval.
+This policy defines the default end-to-end lifecycle after explicit repository-write approval. It supersedes older wording that requires routine manual GitHub Actions execution or treats an unobserved CI result as permission to continue.
 
-It supersedes older contract wording that requires the user to manually run GitHub Actions after source integration.
-
-Where this policy conflicts with older wording in:
-
-- `contracts/SLF_GOVERNANCE.md`;
-- `contracts/branches/project-manager.md`;
-- `contracts/branches/core-release.md`;
-- `contracts/runtime/SLF_TASK_RUNTIME.md`;
-- `contracts/runtime/RELEASE_READINESS_GATE.md`;
-- `docs/architecture/slf-control-plane.md`;
-
-the automatic lifecycle defined here has priority.
+Where this policy conflicts with older wording in Governance, Project Manager, Core Release, Task Runtime, Release Readiness, or architecture docs, this policy and `contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md` have priority for CI/release lifecycle behavior.
 
 ## 2. Approval boundary
 
-The following phrases authorize repository writes for the approved scope:
-
-- `COMMIT APPROVED`;
-- `commit approved`;
-- `делай`;
-- `внедряй`;
-- `готовь ветку`;
-- `делай реализацию`.
-
-After approval, the PM owns continuation through all deterministic safe phases without requesting separate confirmations for each step.
-
-The approved lifecycle is:
+Repository writes are authorized only by the exact lowercase phrase:
 
 ```text
-implementation
-→ branch commit
-→ post-write integrity verification
-→ pull request
-→ CI validation
-→ merge into main
-→ automatic validate-and-release workflow
-→ release commit/version verification
-→ Tampermonkey update instruction
+commit approved
 ```
 
-Separate confirmation is required only when:
+and only after the current Implementation Scope Check. Approval persists for the exact approved scope through implementation, PR, CI fixes that preserve behavior, merge, automatic release, verification, and narrow tool fallbacks.
 
-- scope must expand;
-- destructive or irreversible action appears;
-- changed files no longer match the approved scope;
-- secrets or credentials are required;
-- validation fails and the fix changes approved behavior;
-- a non-recoverable platform or permission blocker remains.
+A new approval is required only for scope expansion, destructive action, secret/credential handling outside the approved scope, storage/schema migration beyond scope, or behavior redesign.
 
-## 3. Automatic continuation rule
+## 3. Automatic continuation
 
-After approval, the PM must execute the lifecycle as a continuation loop until one terminal state is reached:
+After approval, the PM must continue until one terminal state is reached:
 
 ```text
 COMPLETE
@@ -68,113 +33,154 @@ BLOCKED
 FAILED
 ```
 
-The PM must not stop and wait for another user message after a deterministic safe step.
+Intermediate states are progress only. Waiting for CI, mergeability, workflow start, or release publication is not a terminal response.
 
-Waiting for CI, mergeability calculation, an automatic workflow trigger, or release publication is not `BLOCKED`.
+## 4. Canonical PR CI gate
 
-Intermediate status updates are allowed, but they do not end the task and must be followed by continued execution.
+The only canonical pull-request merge context is:
 
-## 4. Post-write integrity rule
+```text
+SLF CI / ci
+```
 
-Before a pull request may be created or updated, every written file must pass the following gate:
+CI state is one of `PENDING`, `SUCCESS`, `FAILED`, `UNKNOWN`.
 
-1. fetch the complete file from the branch;
-2. verify that it is not truncated;
-3. verify expected structural markers and ending;
-4. run syntax validation for changed executable files;
-5. compare the branch against `main`;
-6. verify that changed files remain inside the approved scope.
+Only `SUCCESS` allows merge. `PENDING`, `FAILED`, and `UNKNOWN` are fail-closed. In particular:
 
-A failed integrity check returns the task to implementation. It is not a review-ready or blocked state unless recovery itself requires a new approval or unavailable permission.
+- `mergeable=true` is not CI evidence;
+- an empty connector workflow/status lookup is not evidence that CI is absent;
+- a green specialist/custom harness is not a substitute for the canonical context;
+- a speculative CI fix must not be merged without the final canonical context succeeding on the final PR head.
 
-## 5. Automatic release rule
+When a CI failure is observable, inspect the exact failed job/step/log before changing implementation. A custom local harness may supplement but not replace the failing canonical command.
 
-For approved runtime/build-affecting changes, the PM/Core Release must:
+## 5. Post-write integrity
 
-1. create or refresh a branch from current `main`;
-2. implement only the approved scope;
-3. complete the post-write integrity gate;
-4. create a pull request;
-5. wait for required validation;
-6. merge when checks pass and branch freshness remains safe;
-7. verify that `SLF Validate and Release` starts automatically on `main`;
-8. verify the release commit and published version;
-9. report the final Tampermonkey action.
+Before a PR is made ready for merge:
 
-The user must not be told to manually press `Run workflow` during the normal successful path.
+1. fetch complete written files from the branch;
+2. verify expected structure and file endings;
+3. run available syntax and canonical static checks;
+4. compare branch against current `main`;
+5. verify all changed files remain in approved scope;
+6. verify generated release outputs were not manually edited.
 
-## 6. Release verification hierarchy
+Sequential branch commits are permitted when connector limitations prevent an atomic tree commit, but the complete branch diff must be verified before merge and the final integration should use squash when appropriate.
 
-Post-merge release verification must use this order of evidence:
+## 6. Dependency and security integrity
 
-1. `data/version.json` on `main`;
-2. expected `scriptVersion`;
-3. `build.approvedCommit` matching the merged source commit;
-4. the same version in `releases/latest.user.js`;
-5. a release commit for that version.
+Dynamic execution or name-obfuscation must never be used to bypass dependency, ownership, security, or bundle audits. This includes `eval`, `Function`, string indirection, and alias tricks intended to hide a cross-module dependency.
 
-Workflow-run lookup is supplemental. An empty workflow lookup must not be treated as proof that no push-triggered workflow ran.
+A real cross-module dependency must either be declared in the canonical dependency audit or moved to the module that owns that behavior.
 
-## 7. Manual fallback
+## 7. Automatic release applicability
 
-Manual GitHub Actions execution is fallback-only.
-
-It is permitted only when:
-
-- automatic release did not start;
-- automatic release was cancelled or failed for a recoverable infrastructure reason;
-- the agent cannot safely re-run or dispatch the workflow with available tools;
-- the user explicitly asks for a manual rerun.
-
-Fallback state must be `BLOCKED` or `MANUAL_STEP_REQUIRED`, with an exact UI path and reason.
-
-## 8. Workflow trigger scope
-
-Automatic release on `main` must be limited to runtime/build-affecting files:
+A userscript release is required after approved changes reach `main` when they affect:
 
 - `src/**`;
 - `tools/check-bundle-order.mjs`;
 - `tools/build-latest-userscript.mjs`;
+- `tools/validate-release-provenance.mjs`;
 - `.github/workflows/build-latest-release.yml`.
 
-Contracts, architecture documents, decision records, issues, and other documentation-only changes must not publish a new userscript version.
+Contracts/docs/governance alone do not publish a userscript unless a release-affecting file is changed in the same task.
 
-Generated release-only commits must not recursively start another release.
+Generated release-only commits must not recursively start a release.
 
-## 9. Runtime semantics
+## 8. Canonical release workflow
 
-`ACTIONS_REQUIRED` is no longer the normal user action after source integration.
-
-Normal automatic phases are:
+The canonical workflow is:
 
 ```text
-SOURCE_INTEGRATED
-→ ACTIONS_RUNNING
-→ ACTIONS_COMPLETED
-→ BROWSER_ACCEPTANCE or COMPLETE
+SLF Release
 ```
 
-`ACTIONS_REQUIRED` is reserved for manual fallback when automatic execution is unavailable and user action is genuinely required.
+It does not duplicate pull-request validation. On an eligible push to `main`, it validates the exact current main source commit, calculates the cumulative unpublished diff from the previous release manifest commit, builds and verifies latest-only artifacts, and commits the generated outputs.
 
-## 10. Terminal response rule
+## 9. Manual publish fallback
 
-After repository-write approval, the PM must not send a final response while the task is in a non-terminal phase.
+`workflow_dispatch` is fallback-only, but it must be a real publication path, not a validation-only approximation.
 
-Allowed final states are only:
+A manual run:
+
+- is pinned to the exact current `main` source commit via optional `source_commit` input;
+- fails if the requested commit is not current `main`;
+- executes the same source validation, build, provenance validation, and publication path as automatic release;
+- is idempotent: if current `main` is already the published release commit, it exits successfully without creating another version.
+
+The agent must dispatch or rerun with available tools before asking the user to press `Run workflow`.
+
+## 10. Release verification hierarchy
+
+A release is complete only after verifying, in order:
+
+1. `data/version.json` on `main` contains the new `scriptVersion`;
+2. `build.approvedCommit` equals the merged source commit;
+3. `build.approvedFiles` represents the cumulative unpublished source diff;
+4. `releases/latest.user.js` has the same version;
+5. `releases/latest.meta.js` has the same version;
+6. a release commit for that version exists on `main`;
+7. generated update/download URLs remain canonical;
+8. no archive userscript was created.
+
+Workflow-run lookup is supplemental. An empty lookup never proves the push workflow did not run.
+
+## 11. Manual fallback state
+
+A user manual step is allowed only when the required platform operation cannot be performed by the connected tools and no safe automated fallback remains. The state must be `MANUAL_STEP_REQUIRED`, with one consolidated UI instruction and a verification criterion.
+
+For release recovery the required block is:
 
 ```text
-COMPLETE
-BLOCKED
-FAILED
+Manual fallback
+- Reason:
+- Workflow: SLF Release
+- Required branch: main
+- Source commit:
+- Exact GitHub UI path:
+- Expected result:
 ```
 
-A progress update such as `ACTIONS_RUNNING`, `SOURCE_INTEGRATED`, or `HANDOFF_VALIDATED` is not a final handoff.
+Normal successful work must not instruct the user to press `Run workflow`.
 
-## 11. Mandatory final user handoff
+## 12. Runtime semantics
 
-Every completed SLF implementation/release response must explicitly state both release automation status and Tampermonkey action.
+Normal path:
 
-Required format:
+```text
+IMPLEMENTING
+→ PR_CI_PENDING
+→ PR_CI_SUCCESS
+→ MERGE_ALLOWED
+→ SOURCE_INTEGRATED
+→ RELEASE_PENDING
+→ RELEASE_SUCCESS
+→ COMPLETE
+```
+
+Forbidden transitions:
+
+```text
+PR_CI_PENDING → MERGE_ALLOWED
+PR_CI_FAILED → MERGE_ALLOWED
+PR_CI_UNKNOWN → MERGE_ALLOWED
+```
+
+Manual fallback is represented separately as `MANUAL_STEP_REQUIRED`.
+
+## 13. Completion rule
+
+An approved runtime/build task is not `COMPLETE` until:
+
+- implementation is integrated into `main`;
+- canonical PR CI succeeded on the final head;
+- the release commit exists when required;
+- version/provenance/artifact checks match;
+- the final Tampermonkey instruction is returned.
+
+## 14. Mandatory final handoff
+
+Every final implementation/release response must explicitly state:
 
 ```text
 GitHub Actions
@@ -188,142 +194,31 @@ Tampermonkey update
 - User action: update/reinstall/check for updates / none / wait
 ```
 
-Decision rules:
+## 15. Capability fallback
 
-- Runtime-visible change and a newer release was published:
-  - `Required: YES`;
-  - state the exact published version;
-  - instruct the user to update/check for updates in Tampermonkey.
-- Governance/docs-only change:
-  - `Required: NO`;
-  - `Published version: NOT APPLICABLE`;
-  - `User action: none`.
-- Release still running or failed:
-  - `Required: NOT YET`;
-  - do not tell the user to update until a release commit is verified.
-- Release artifacts already contained the approved change before the task:
-  - `Required: NO`, unless a newer version must still be installed in the browser.
+Before the first repository write, verify a safe path for complete reads/writes, branch updates, post-write validation, PR creation, CI inspection, merge, and release verification.
 
-## 12. Completion rule
+Repository-write fallback order:
 
-An approved runtime task is not `COMPLETE` until all applicable steps are verified:
+1. GitHub connector/Contents API;
+2. Git Data API;
+3. local git;
+4. authenticated `gh`;
+5. one consolidated GitHub UI manual step;
+6. `BLOCKED` only after no safe path remains.
 
-- implementation committed;
-- post-write integrity gate passed;
-- PR validated;
-- merged into `main`;
-- automatic release succeeded;
-- release commit/version verified;
-- Tampermonkey update instruction returned.
+Existing protected/secret-bearing ranges must not be displayed or unintentionally replaced.
 
-Governance/docs-only tasks may complete without a userscript release after CI and merge are verified.
+## 16. Workflow lifecycle
 
-## 13. Related contracts
+The active Actions topology is governed by `contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md` and `data/quality/workflow-inventory-v1.json`. Completed migration workflows are deleted; their run history may remain visible in the GitHub Actions sidebar.
+
+## 17. Related contracts
 
 - `contracts/SLF_GOVERNANCE.md`
+- `contracts/SLF_SCOPE_APPROVAL_POLICY.md`
+- `contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md`
 - `contracts/branches/project-manager.md`
 - `contracts/branches/core-release.md`
 - `contracts/runtime/SLF_TASK_RUNTIME.md`
 - `contracts/runtime/RELEASE_READINESS_GATE.md`
-- `docs/architecture/slf-control-plane.md`
-- `docs/decision_records/DR-002-latest-only-release-model.md`
-
-## 14. Capability-aware execution amendment
-
-This section extends the approved lifecycle and has priority where earlier
-sections do not define execution-method fallback.
-
-### 14.1 End-to-End Capability Preflight
-
-Before the first repository write, the PM must verify that it has a safe path
-for:
-
-- every approved file write;
-- complete post-write validation;
-- PR creation;
-- CI inspection;
-- merge;
-- release verification when applicable.
-
-For a required multi-file change, partial writes must not begin until a safe
-strategy exists for the complete file set.
-
-### 14.2 Approval Persistence
-
-Approval remains valid for the exact approved scope through the complete
-lifecycle.
-
-Approval is preserved across:
-
-- tool failures;
-- connector changes;
-- retry attempts;
-- GitHub Contents API;
-- Git Data API;
-- local git;
-- `gh`;
-- GitHub UI fallback;
-- continuation in a later user message.
-
-A new approval is required only when the scope or behavior changes.
-
-### 14.3 Repository Write Fallback Ladder
-
-For an approved repository write, use the first safe available method:
-
-1. GitHub Contents API;
-2. Git Data API using blob, tree, commit, and branch-ref operations;
-3. local git and authenticated push;
-4. authenticated `gh`;
-5. one consolidated GitHub UI manual step;
-6. `BLOCKED` only when no safe method remains.
-
-Failure of one method is not evidence that the repository task is blocked.
-
-For protected or secret-bearing files:
-
-- existing secrets must never be displayed;
-- unrelated secret-bearing ranges must remain unchanged;
-- incomplete or truncated file content must never be used for replacement;
-- verification may use hashes, redacted comparisons, or unchanged-range checks.
-
-### 14.4 Single-Shot Manual Repository Fallback
-
-When user action is unavoidable, all known manual repository changes must be
-delivered in one package containing:
-
-- branch;
-- file list;
-- exact content or replacements;
-- commit message;
-- PR title and description;
-- verification criteria.
-
-After the manual commit or PR is created, the PM must resume validation,
-merge, and completion automatically where tools permit.
-
-### 14.5 Push Workflow Observability
-
-An empty workflow-run lookup must never be treated as proof that a push-triggered
-workflow did not run.
-
-Post-merge release verification must immediately use this hierarchy:
-
-1. `data/version.json`;
-2. expected `scriptVersion`;
-3. `build.approvedCommit`;
-4. `releases/latest.user.js`;
-5. release commit.
-
-Workflow-run metadata is supplemental only.
-
-### 14.6 Blocker Threshold
-
-The task may be declared `BLOCKED` only after:
-
-- the required operation failed;
-- the primary execution method was attempted;
-- safe fallback methods were evaluated;
-- no agent-executable path remains;
-- no narrow manual step can recover the lifecycle;
-- exact error evidence and recovery action are available.

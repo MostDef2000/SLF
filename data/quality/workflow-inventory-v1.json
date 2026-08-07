@@ -1,0 +1,37 @@
+{
+  "schema": "slf_workflow_inventory_v1",
+  "repository": "MostDef2000/SLF",
+  "defaultBranch": "main",
+  "maxPermanentWorkflows": 3,
+  "canonicalRequiredContext": "SLF CI / ci",
+  "workflows": [
+    {
+      "path": ".github/workflows/quality-integration.yml",
+      "name": "SLF CI",
+      "classification": "PERMANENT",
+      "role": "CI",
+      "owner": "MostDef2000",
+      "triggers": ["pull_request", "workflow_dispatch"],
+      "requiredContext": "SLF CI / ci",
+      "purpose": "Single pull-request quality gate covering static/contracts/security, runtime/tactics, reliability, browser and release evidence."
+    },
+    {
+      "path": ".github/workflows/build-latest-release.yml",
+      "name": "SLF Release",
+      "classification": "PERMANENT",
+      "role": "RELEASE",
+      "owner": "MostDef2000",
+      "triggers": ["push:main", "workflow_dispatch"],
+      "purpose": "Validate the exact current main source commit and publish deterministic latest-only userscript artifacts."
+    },
+    {
+      "path": ".github/workflows/quality-governance.yml",
+      "name": "SLF Maintenance",
+      "classification": "PERMANENT",
+      "role": "MAINTENANCE",
+      "owner": "MostDef2000",
+      "triggers": ["schedule", "workflow_dispatch"],
+      "purpose": "Weekly and manual governance, risk, workflow-lifecycle and maintenance review."
+    }
+  ]
+}

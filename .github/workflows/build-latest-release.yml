@@ -1,188 +1,109 @@
-name: SLF Validate and Release
+name: SLF Release
 
 on:
-  pull_request:
-    paths:
-      - 'src/**'
-      - 'tools/check-bundle-order.mjs'
-      - 'tools/build-latest-userscript.mjs'
-      - 'tools/validate-team-management.mjs'
-      - 'tools/validate-release-provenance.mjs'
-      - '.github/workflows/build-latest-release.yml'
   push:
     branches: [main]
     paths:
       - 'src/**'
       - 'tools/check-bundle-order.mjs'
       - 'tools/build-latest-userscript.mjs'
+      - 'tools/validate-release-provenance.mjs'
       - '.github/workflows/build-latest-release.yml'
   workflow_dispatch:
+    inputs:
+      source_commit:
+        description: 'Exact current main source commit to publish; blank uses the current main SHA'
+        required: false
+        type: string
+
+concurrency:
+  group: slf-main-release
+  cancel-in-progress: false
 
 jobs:
-  validate:
-    name: Validate SLF source
-    runs-on: ubuntu-latest
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
-      contents: read
+      contents: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Checkout main with full history
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
+          ref: main
           fetch-depth: 0
           show-progress: false
 
-      - name: Resolve validation provenance
+      - name: Resolve exact release provenance
         id: provenance
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: |
-          set -euo pipefail
-          TARGET_VERSION=''
-          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
-            SOURCE_COMMIT=$(node -e "const fs=require('fs'); const v=JSON.parse(fs.readFileSync('data/version.json','utf8')); process.stdout.write(v.build.approvedCommit)")
-            BASE_COMMIT=$(node -e "const fs=require('fs'); const v=JSON.parse(fs.readFileSync('data/version.json','utf8')); process.stdout.write(v.build.approvedBaseCommit)")
-            SOURCE_BRANCH=$(node -e "const fs=require('fs'); const v=JSON.parse(fs.readFileSync('data/version.json','utf8')); process.stdout.write(v.build.sourceBranch || 'main')")
-            TARGET_VERSION=$(node -e "const fs=require('fs'); const v=JSON.parse(fs.readFileSync('data/version.json','utf8')); process.stdout.write(v.scriptVersion)")
-            mapfile -t APPROVED_FILES < <(node -e "const fs=require('fs'); const v=JSON.parse(fs.readFileSync('data/version.json','utf8')); process.stdout.write(v.build.approvedFiles.join('\\n'))")
-          else
-            SOURCE_COMMIT=$(git rev-parse HEAD)
-            if [ "$EVENT_NAME" = 'pull_request' ]; then
-              BASE_COMMIT="$PR_BASE_SHA"
-            else
-              BASE_COMMIT=$(git log -1 --format=%H "$SOURCE_COMMIT" -- data/version.json)
-            fi
-            mapfile -t APPROVED_FILES < <(git diff --name-only "$BASE_COMMIT" "$SOURCE_COMMIT" | sed '/^$/d')
-          fi
-          test -n "$SOURCE_COMMIT"
-          test -n "$BASE_COMMIT"
-          git cat-file -e "${SOURCE_COMMIT}^{commit}"
-          git cat-file -e "${BASE_COMMIT}^{commit}"
-          if [ "${#APPROVED_FILES[@]}" -eq 0 ]; then
-            echo 'No approved files found for validation provenance.' >&2
-            exit 1
-          fi
-          {
-            echo "source_commit=$SOURCE_COMMIT"
-            echo "base_commit=$BASE_COMMIT"
-            echo "source_branch=$SOURCE_BRANCH"
-            echo "target_version=$TARGET_VERSION"
-            echo 'approved_files<<EOF'
-            printf '%s\n' "${APPROVED_FILES[@]}"
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Build deterministic validation artifacts
-        shell: bash
-        env:
-          APPROVED_BASE_COMMIT: ${{ steps.provenance.outputs.base_commit }}
-          APPROVED_COMMIT: ${{ steps.provenance.outputs.source_commit }}
-          APPROVED_FILES: ${{ steps.provenance.outputs.approved_files }}
-          SOURCE_BRANCH: ${{ steps.provenance.outputs.source_branch }}
-          TARGET_VERSION: ${{ steps.provenance.outputs.target_version }}
-        run: |
-          set -euo pipefail
-          node tools/build-latest-userscript.mjs
-          VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync('data/version.json','utf8')).scriptVersion)")
-          sha256sum releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md > "$RUNNER_TEMP/slf-release.sha256"
-          TARGET_VERSION="$VERSION" node tools/build-latest-userscript.mjs
-          sha256sum --check "$RUNNER_TEMP/slf-release.sha256"
-          mapfile -t GENERATED < <(git diff --name-only | sed '/^$/d')
-          for file in "${GENERATED[@]}"; do
-            case "$file" in
-              releases/latest.user.js|releases/latest.meta.js|data/version.json|CHANGELOG.md) ;;
-              *) echo "Unexpected generated file: $file" >&2; exit 1 ;;
-            esac
-          done
-
-      - name: Validate bundle manifest
-        id: bundle_check
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          node tools/check-bundle-order.mjs 2>&1 | tee bundle-order-report.txt
-
-      - name: Upload bundle-order report
-        if: always() && hashFiles('bundle-order-report.txt') != ''
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: bundle-order-report
-          path: bundle-order-report.txt
-          if-no-files-found: error
-          retention-days: 3
-
-      - name: Enforce bundle-order result
-        if: steps.bundle_check.outcome != 'success'
-        run: exit 1
-
-      - name: Validate domain and release invariants
-        shell: bash
-        env:
-          EXPECTED_APPROVED_BASE_COMMIT: ${{ steps.provenance.outputs.base_commit }}
-          EXPECTED_APPROVED_COMMIT: ${{ steps.provenance.outputs.source_commit }}
-          EXPECTED_APPROVED_FILES: ${{ steps.provenance.outputs.approved_files }}
-        run: |
-          set -euo pipefail
-          node tools/validate-team-management.mjs
-          node tools/validate-release-provenance.mjs
-
-  release:
-    name: Build and publish latest SLF
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: validate
-    runs-on: ubuntu-latest
-    concurrency:
-      group: slf-main-release
-      cancel-in-progress: false
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout exact source commit
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          show-progress: false
-
-      - name: Resolve release provenance
-        id: provenance
-        shell: bash
-        env:
           EVENT_SHA: ${{ github.sha }}
-          SOURCE_BRANCH: ${{ github.ref_name }}
+          REQUESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
         run: |
           set -euo pipefail
+          git fetch origin main
           SOURCE_COMMIT=$(git rev-parse HEAD)
-          if [ "$SOURCE_COMMIT" != "$EVENT_SHA" ]; then
-            echo "Checked-out source $SOURCE_COMMIT does not match event SHA $EVENT_SHA" >&2
+          CURRENT_MAIN=$(git rev-parse origin/main)
+          if [ "$SOURCE_COMMIT" != "$CURRENT_MAIN" ]; then
+            echo "checkout $SOURCE_COMMIT does not match current main $CURRENT_MAIN" >&2
             exit 1
           fi
+          if [ "$EVENT_NAME" = 'push' ] && [ "$EVENT_SHA" != "$SOURCE_COMMIT" ]; then
+            echo "push source $EVENT_SHA does not match checked-out main $SOURCE_COMMIT" >&2
+            exit 1
+          fi
+          if [ -n "$REQUESTED_SOURCE_COMMIT" ] && [ "$REQUESTED_SOURCE_COMMIT" != "$SOURCE_COMMIT" ]; then
+            echo "requested source $REQUESTED_SOURCE_COMMIT does not match current main $SOURCE_COMMIT" >&2
+            exit 1
+          fi
+
           BASE_COMMIT=$(git log -1 --format=%H "$SOURCE_COMMIT" -- data/version.json)
           test -n "$BASE_COMMIT"
+          if [ "$BASE_COMMIT" = "$SOURCE_COMMIT" ]; then
+            echo 'Current main is already a published release commit; nothing to publish.'
+            echo 'release_required=false' >> "$GITHUB_OUTPUT"
+            echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+            echo "base_commit=$BASE_COMMIT" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           mapfile -t APPROVED_FILES < <(git diff --name-only "$BASE_COMMIT" "$SOURCE_COMMIT" | sed '/^$/d')
           if [ "${#APPROVED_FILES[@]}" -eq 0 ]; then
-            echo 'No source changes found since the latest published release.' >&2
-            exit 1
+            echo 'No unpublished files found; release is already current.'
+            echo 'release_required=false' >> "$GITHUB_OUTPUT"
+            echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+            echo "base_commit=$BASE_COMMIT" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          {
-            echo "source_commit=$SOURCE_COMMIT"
-            echo "base_commit=$BASE_COMMIT"
-            echo "source_branch=$SOURCE_BRANCH"
-            echo 'approved_files<<EOF'
-            printf '%s\n' "${APPROVED_FILES[@]}"
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
+
+          echo 'release_required=true' >> "$GITHUB_OUTPUT"
+          echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "base_commit=$BASE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo 'approved_files<<EOF' >> "$GITHUB_OUTPUT"
+          printf '%s\n' "${APPROVED_FILES[@]}" >> "$GITHUB_OUTPUT"
+          echo 'EOF' >> "$GITHUB_OUTPUT"
+
+      - name: Validate exact source before publication
+        if: steps.provenance.outputs.release_required == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/check-bundle-order.mjs
+          node tools/test-security-boundaries.mjs
+          node tools/test-tactical-situation-diversity.mjs
+          node tools/validate-workflow-inventory.mjs
+          node tools/validate-quality-governance.mjs
 
       - name: Build deterministic latest-only userscript
+        if: steps.provenance.outputs.release_required == 'true'
         shell: bash
         env:
           APPROVED_BASE_COMMIT: ${{ steps.provenance.outputs.base_commit }}
           APPROVED_COMMIT: ${{ steps.provenance.outputs.source_commit }}
           APPROVED_FILES: ${{ steps.provenance.outputs.approved_files }}
-          SOURCE_BRANCH: ${{ steps.provenance.outputs.source_branch }}
+          SOURCE_BRANCH: main
         run: |
           set -euo pipefail
           node tools/build-latest-userscript.mjs
@@ -192,6 +113,7 @@ jobs:
           sha256sum --check "$RUNNER_TEMP/slf-release.sha256"
 
       - name: Validate latest-only release
+        if: steps.provenance.outputs.release_required == 'true'
         shell: bash
         env:
           EXPECTED_APPROVED_BASE_COMMIT: ${{ steps.provenance.outputs.base_commit }}
@@ -202,8 +124,10 @@ jobs:
           node tools/check-bundle-order.mjs
           node tools/validate-team-management.mjs
           node tools/validate-release-provenance.mjs
+          node tools/test-userscript-artifact-boundary.mjs
 
       - name: Commit latest-only release outputs
+        if: steps.provenance.outputs.release_required == 'true'
         shell: bash
         env:
           SOURCE_COMMIT: ${{ steps.provenance.outputs.source_commit }}

@@ -1,7 +1,6 @@
-name: Quality governance
+name: SLF Maintenance
 
 on:
-  pull_request:
   workflow_dispatch:
   schedule:
     - cron: '17 6 * * 1'
@@ -10,18 +9,24 @@ permissions:
   contents: read
 
 jobs:
-  governance:
+  maintenance:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Checkout reviewed revision
+      - name: Checkout current main
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
 
-      - name: Check governance validator syntax
+      - name: Check maintenance validators
         run: |
           node --check tools/validate-quality-governance.mjs
+          node --check tools/validate-workflow-inventory.mjs
           node -e "JSON.parse(require('node:fs').readFileSync('data/quality/quality-gates-v1.json', 'utf8'))"
           node -e "JSON.parse(require('node:fs').readFileSync('data/quality/accepted-risks-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/quality/workflow-inventory-v1.json', 'utf8'))"
 
-      - name: Validate ownership, rollout, and risk reviews
-        run: node tools/validate-quality-governance.mjs
+      - name: Validate governance and workflow lifecycle
+        run: |
+          node tools/validate-quality-governance.mjs
+          node tools/validate-workflow-inventory.mjs

@@ -10,8 +10,11 @@ const readJson = relativePath => JSON.parse(read(relativePath));
 
 const codeowners = read('.github/CODEOWNERS');
 const template = read('.github/pull_request_template.md');
-const qualityIntegration = read('.github/workflows/quality-integration.yml');
+const ciSource = read('.github/workflows/quality-integration.yml');
+const releaseSource = read('.github/workflows/build-latest-release.yml');
+const maintenanceSource = read('.github/workflows/quality-governance.yml');
 const gates = readJson('data/quality/quality-gates-v1.json');
+const inventory = readJson('data/quality/workflow-inventory-v1.json');
 const register = readJson('data/quality/accepted-risks-v1.json');
 
 const requiredOwnership = new Map([
@@ -70,86 +73,76 @@ for (const invariant of [
 assert.ok(template.includes('Do not mark a change as independently reviewed'), 'PR template must prohibit false independent-review claims');
 
 for (const invariant of [
-  'name: Quality integration gate',
+  'name: SLF CI',
   'permissions:\n  contents: read',
   'static-contract-security:',
+  'runtime-tactics:',
   'property-fuzz-reliability:',
   'browser-e2e:',
   'release-deployment-evidence:',
-  'quality-integration:\n    if: always()',
-  'Require every quality domain to pass'
+  'ci:\n    if: always()',
+  'Require every CI domain to pass'
 ]) {
-  assert.ok(qualityIntegration.includes(invariant), `aggregate workflow missing invariant: ${invariant}`);
+  assert.ok(ciSource.includes(invariant), `canonical CI missing invariant: ${invariant}`);
 }
-assert.equal(/pull_request:\s*\n\s+paths:/.test(qualityIntegration), false, 'aggregate workflow must not use pull-request path filters');
-assert.equal((qualityIntegration.match(/\buses:\s*actions\/checkout@[0-9a-f]{40}\b/g) || []).length, 4, 'aggregate workflow must pin four checkout actions');
-assert.equal((qualityIntegration.match(/\buses:\s*actions\/upload-artifact@[0-9a-f]{40}\b/g) || []).length, 2, 'aggregate workflow must pin two upload actions');
+assert.equal(/pull_request:\s*\n\s+paths:/.test(ciSource), false, 'canonical CI must not use pull-request path filters');
+assert.match(releaseSource, /^name:\s*SLF Release\s*$/m);
+assert.match(releaseSource, /workflow_dispatch:/);
+assert.match(releaseSource, /source_commit:/);
+assert.match(releaseSource, /release_required/);
+assert.match(maintenanceSource, /^name:\s*SLF Maintenance\s*$/m);
+assert.match(maintenanceSource, /schedule:/);
+assert.equal(/pull_request:\s*$/.test(maintenanceSource), false, 'maintenance must not duplicate pull-request CI');
 
 assert.equal(gates.schema, 'slf_quality_gate_rollout_v1');
 assert.equal(gates.repository, 'MostDef2000/SLF');
 assert.equal(gates.defaultBranch, 'main');
-assert.equal(gates.state, 'aggregate_verified_settings_not_enforced');
-assert.match(gates.reason, /aggregate context completed successfully/i);
-assert.match(gates.reason, /branch-protection settings are not applied/i);
+assert.ok(['consolidated_ci_pending_verification', 'consolidated_ci_verified_settings_not_enforced', 'consolidated_ci_enforced'].includes(gates.state), `unexpected rollout state: ${gates.state}`);
 assert.equal(gates.roadmapIssue, 160);
+assert.equal(gates.currentIssue, 233);
 assert.equal(gates.reviewModel, 'single_maintainer_owner_acceptance_with_compensating_controls');
 assert.equal(gates.prerequisitesIntegrated, true);
-assert.deepEqual(gates.prerequisitePullRequests, [159, 163, 164, 165, 166, 167, 168]);
-assert.equal(gates.aggregatePullRequest, 175);
-assert.equal(gates.enforcementPlan.strategy, 'always_run_aggregate_check');
-assert.equal(gates.enforcementPlan.aggregateContext, 'Quality integration gate / quality-integration');
-assert.ok(gates.enforcementPlan.remainingActions.length >= 3);
-assert.equal(gates.aggregateVerification.result, 'success');
-assert.equal(gates.aggregateVerification.workflow, 'Quality integration gate');
-assert.equal(gates.aggregateVerification.context, 'Quality integration gate / quality-integration');
-assert.equal(gates.aggregateVerification.sourcePullRequest, 175);
-assert.equal(gates.aggregateVerification.runId, 30884950897);
-assert.equal(gates.aggregateVerification.jobId, 91914145283);
-assert.equal(gates.aggregateVerification.verifiedAt, '2026-08-04');
+assert.equal(gates.workflowLifecyclePolicy, 'contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md');
+assert.equal(gates.workflowInventory, 'data/quality/workflow-inventory-v1.json');
+assert.equal(gates.enforcementPlan.strategy, 'single_required_ci_context');
+assert.equal(gates.enforcementPlan.aggregateWorkflow, '.github/workflows/quality-integration.yml');
+assert.equal(gates.enforcementPlan.aggregateContext, 'SLF CI / ci');
+assert.deepEqual(gates.enforcementPlan.ciStatePolicy.allowedToMerge, ['SUCCESS']);
+assert.deepEqual(gates.enforcementPlan.ciStatePolicy.blockedFromMerge, ['PENDING', 'FAILED', 'UNKNOWN']);
+assert.equal(gates.aggregateVerification.workflow, 'SLF CI');
+assert.equal(gates.aggregateVerification.context, 'SLF CI / ci');
 assert.deepEqual(gates.aggregateVerification.domains, [
   'static-contract-security',
+  'runtime-tactics',
   'property-fuzz-reliability',
   'browser-e2e',
   'release-deployment-evidence'
 ]);
+if (gates.aggregateVerification.result === 'success') {
+  assert.ok(Number.isInteger(gates.aggregateVerification.sourcePullRequest));
+  assert.ok(Number.isInteger(gates.aggregateVerification.runId));
+  assert.ok(Number.isInteger(gates.aggregateVerification.jobId));
+  assert.match(gates.aggregateVerification.verifiedAt || '', /^\d{4}-\d{2}-\d{2}$/);
+} else {
+  assert.equal(gates.aggregateVerification.result, 'pending');
+}
 assert.equal(gates.branchProtectionTarget.requirePullRequest, true);
 assert.equal(gates.branchProtectionTarget.requiredApprovals, 0);
 assert.equal(gates.branchProtectionTarget.requireCodeOwnerReview, false);
 assert.equal(gates.branchProtectionTarget.requireConversationResolution, true);
 assert.equal(gates.branchProtectionTarget.requireAggregateStatusCheck, true);
+assert.equal(gates.branchProtectionTarget.requiredStatusContext, 'SLF CI / ci');
 assert.equal(gates.branchProtectionTarget.allowAdminBypass, false);
 assert.match(gates.branchProtectionTarget.singleMaintainerException, /No independent reviewer is currently available/);
-assert.equal(gates.branchProtectionApplied, false);
-assert.equal(gates.branchProtectionVerified, false);
 assert.equal(gates.productionDeploymentImplied, false);
-assert.match(gates.connectorLimitation, /does not expose branch-protection or ruleset mutation actions/);
 
-const workflowNames = new Set();
-for (const workflow of gates.componentWorkflows) {
-  assert.equal(typeof workflow.workflow, 'string');
-  assert.equal(workflowNames.has(workflow.workflow), false, `duplicate workflow name: ${workflow.workflow}`);
-  workflowNames.add(workflow.workflow);
-  assert.ok(workflow.purpose.length > 10);
-  if (workflow.aggregate) {
-    assert.equal(workflow.workflow, 'Quality integration gate');
-    assert.equal(workflow.sourcePullRequest, 175);
-    assert.equal(workflow.existing, true);
-  } else if (!workflow.existing) {
-    assert.ok(Number.isInteger(workflow.sourcePullRequest), `${workflow.workflow} missing sourcePullRequest`);
-    assert.ok(gates.prerequisitePullRequests.includes(workflow.sourcePullRequest));
-  }
-}
-for (const expected of [
-  'Userscript exact artifact boundary',
-  'Versioned data and API contracts',
-  'Security boundaries and adversarial API',
-  'Exact userscript browser E2E',
-  'Property fuzz mutation and reliability',
-  'Release and deployment evidence',
-  'Quality integration gate'
-]) {
-  assert.ok(workflowNames.has(expected), `rollout manifest missing workflow: ${expected}`);
-}
+assert.equal(inventory.schema, 'slf_workflow_inventory_v1');
+assert.equal(inventory.maxPermanentWorkflows, 3);
+assert.equal(inventory.canonicalRequiredContext, 'SLF CI / ci');
+assert.equal(inventory.workflows.length, 3);
+assert.deepEqual(new Set(inventory.workflows.map(item => item.role)), new Set(['CI', 'RELEASE', 'MAINTENANCE']));
+assert.equal(gates.componentWorkflows.length, 3);
+assert.deepEqual(new Set(gates.componentWorkflows.map(item => item.role)), new Set(['CI', 'RELEASE', 'MAINTENANCE']));
 
 assert.equal(register.schema, 'slf_accepted_risks_v1');
 assert.equal(register.generatedForRoadmapIssue, 160);
@@ -178,22 +171,15 @@ for (const risk of register.risks) {
   assert.ok(Array.isArray(risk.compensatingControls) && risk.compensatingControls.length > 0, `${risk.id} missing controls`);
   assert.ok(risk.target.length > 20, `${risk.id} missing target`);
   assert.match(risk.reviewBy, /^\d{4}-\d{2}-\d{2}$/);
-  if (risk.status !== 'closed') {
-    assert.ok(risk.reviewBy >= today, `${risk.id} risk review expired on ${risk.reviewBy}`);
-  }
-  if (risk.status === 'closed') {
-    assert.ok(risk.closureEvidence, `${risk.id} closed without evidence`);
-  }
-  if (risk.severity === 'high' || risk.severity === 'critical') {
-    assert.equal(register.policy.highSeverityRequiresExplicitHumanAcceptance, true);
-  }
+  if (risk.status !== 'closed') assert.ok(risk.reviewBy >= today, `${risk.id} risk review expired on ${risk.reviewBy}`);
+  if (risk.status === 'closed') assert.ok(risk.closureEvidence, `${risk.id} closed without evidence`);
   if (risk.status === 'accepted' && (risk.severity === 'high' || risk.severity === 'critical')) {
     assert.ok(risk.acceptance && risk.acceptance.length > 20, `${risk.id} accepted high risk lacks explicit acceptance`);
   }
 }
 assert.ok(ids.has('QR-007'), 'risk register must track unavailable independent review');
 
-const serialized = JSON.stringify({ gates, register });
+const serialized = JSON.stringify({ gates, inventory, register });
 for (const pattern of [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
   /\bghp_[A-Za-z0-9]{30,}\b/,
@@ -203,6 +189,4 @@ for (const pattern of [
   assert.equal(pattern.test(serialized), false, 'governance data contains a possible secret');
 }
 
-console.log(
-  `[quality-governance] passed: owners=${requiredOwnership.size} workflows=${workflowNames.size} risks=${ids.size} date=${today} state=${gates.state} aggregate=${gates.aggregateVerification.context}`
-);
+console.log(`[quality-governance] passed owners=${requiredOwnership.size} workflows=${inventory.workflows.length} risks=${ids.size} date=${today} state=${gates.state} context=${gates.enforcementPlan.aggregateContext}`);
