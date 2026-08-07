@@ -1,6 +1,6 @@
 # Branch Contract: core-release
 
-Version: 3.3.0
+Version: 3.4.0
 Status: Active
 Role: Core Release Orchestrator
 
@@ -21,7 +21,7 @@ Core Release follows:
 - `contracts/runtime/SLF_TASK_RUNTIME.md`;
 - `contracts/runtime/RELEASE_READINESS_GATE.md`.
 
-Workflow Lifecycle and Automatic Release policies override stale workflow names and routine manual Actions wording.
+Workflow Lifecycle and Automatic Release policies override stale workflow names, routine manual Actions wording, and legacy generated-release commits on `main`.
 
 ## 3. Approval persistence
 
@@ -31,13 +31,15 @@ New approval is required only for scope expansion, destructive action, new secre
 
 ## 4. Source and artifact rules
 
-- `main` is long-term source of truth.
+- `main` is the protected long-term source of truth.
 - Task branches are disposable.
+- `release` is generated latest-only publication state, not editable source.
 - Generated release outputs are never editable source:
   - `releases/latest.user.js`;
   - `releases/latest.meta.js`;
   - `data/version.json`;
   - `CHANGELOG.md`.
+- After the protected-main handoff, canonical generated outputs are verified on `release`; historical copies on `main` are compatibility snapshots only.
 - Module agents do not bump versions or create archive userscripts.
 
 ## 5. Mandatory intake and integrity
@@ -106,7 +108,7 @@ Then merge using the repository-supported method, preferring squash for branch h
 
 A release is required when integrated changes affect the runtime/build/release paths defined by `SLF_AUTOMATIC_RELEASE_POLICY.md` and Release Readiness Gate, including `src/**` and the release workflow itself.
 
-Governance/docs-only changes do not publish unless a release-affecting path is changed in the same task.
+Governance/docs-only changes do not publish unless a release-affecting path is changed in the same unpublished source range.
 
 ## 10. Canonical release workflow
 
@@ -116,33 +118,60 @@ Publication belongs only to:
 SLF Release
 ```
 
-Normal path is eligible push to `main`. Manual `workflow_dispatch` is fallback-only but must execute the same publish path, pinned to exact current `main`, and must be idempotent when already published.
+Normal trigger is an eligible push to protected `main`. The workflow validates the exact current `main` source SHA, derives prior version/provenance from the generated `release` branch, builds deterministic latest-only outputs, then updates `release` only.
+
+Generated publication must not push to `main` and must not require a `main` ruleset bypass.
+
+Manual `workflow_dispatch` is fallback-only but must execute the same publication path, pinned to exact current `main`, using the expected current `release` ref and failing closed on stale source or stale release state.
 
 Core Release should dispatch/rerun with available tools before asking for a manual GitHub UI run.
 
-## 11. Release verification
+## 11. Release branch safety
+
+`release` is explicitly generated and latest-only. `SLF Release` may update it with `--force-with-lease` only when the branch still equals the ref observed at provenance resolution.
+
+This exception does not apply to `main`. Force pushes, direct generated pushes, and workflow bypasses on `main` remain prohibited.
+
+The published release commit may be based on the exact current source commit while containing changes only in the four generated release outputs.
+
+## 12. Release verification
 
 Runtime publication is complete only after verifying:
 
-- merged source commit exists on `main`;
-- new `data/version.json` version exists;
-- `build.approvedCommit` equals the merged source SHA;
-- cumulative `build.approvedFiles` is coherent;
-- `releases/latest.user.js` version matches;
-- `releases/latest.meta.js` version matches;
-- release commit exists on `main`;
-- update/download URLs remain canonical;
+- merged source commit remains on `main`;
+- release publication did not advance `main`;
+- new `data/version.json` version exists on `release`;
+- `release` manifest `build.approvedCommit` equals the merged source SHA;
+- `build.approvedBaseCommit` equals the previous published source SHA;
+- cumulative `build.approvedFiles` is coherent and excludes generated outputs;
+- `releases/latest.user.js` version on `release` matches;
+- `releases/latest.meta.js` version on `release` matches;
+- generated release commit exists on `release`;
+- update/download URLs point to the canonical `release` branch;
 - no forbidden archive file exists.
 
 Workflow-run metadata is supplemental. An empty push-run lookup never proves no release occurred.
 
-## 12. Manual platform step
+## 13. Protected-main platform rule
+
+The desired `main` ruleset is:
+
+- pull request required;
+- canonical required status `SLF CI / ci`;
+- conversation resolution required;
+- branch deletion blocked;
+- force pushes blocked;
+- no GitHub Actions bypass required for release publication.
+
+If connected tools cannot mutate rulesets, configuration is one narrow `MANUAL_STEP_REQUIRED`. Do not weaken the rule to accommodate generated releases; generated publication belongs on `release`.
+
+## 14. Manual platform step
 
 `MANUAL_STEP_REQUIRED` is permitted only when an exact platform operation is unavailable through connected tools and no safe automated fallback remains. Give one consolidated UI instruction and verification criterion, then resume automatically after user completion under the same approval.
 
 Branch-protection/ruleset configuration is such a platform step when the connector exposes no settings mutation endpoint.
 
-## 13. Capability fallback
+## 15. Capability fallback
 
 Before integration, confirm safe capability for complete reads/writes, branch update, PR, CI jobs/logs, merge, and release verification.
 
@@ -157,7 +186,7 @@ Fallback order:
 
 A tool-specific failure, waiting state, or empty lookup is not a blocker while another safe method remains.
 
-## 14. Runtime path
+## 16. Runtime path
 
 Normal runtime path:
 
@@ -183,7 +212,7 @@ PR_CI_UNKNOWN → MERGE_ALLOWED
 
 Terminal states are `COMPLETE`, `BLOCKED`, or `FAILED`.
 
-## 15. Final response requirements
+## 17. Final response requirements
 
 Every terminal response includes:
 
@@ -195,7 +224,7 @@ Final State
 Source Integration
 - status:
 - commit hash:
-- main advanced: YES/NO
+- main advanced by generated release: YES/NO
 - changed files:
 - verification:
 
@@ -210,4 +239,4 @@ Tampermonkey update
 - User action: update/reinstall/check for updates / none / wait
 ```
 
-Never claim release success without release-commit evidence and never stop at an intermediate commit/PR/CI state when the lifecycle can continue.
+Never claim release success without generated `release`-branch commit evidence and never stop at an intermediate commit/PR/CI state when the lifecycle can continue.
