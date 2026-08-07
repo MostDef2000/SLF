@@ -55,7 +55,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
 
     TransferCandidateScanner.eligibleRows = function allIndexedPlayers() {
         return (this.rows || [])
-            .filter(row => !!row?.playerId)
+            .filter(row => !!(row?.playerId || row?.transferId || row?.transferDetailUrl))
             .sort((a, b) => Number(b.preScore || 0) - Number(a.preScore || 0));
     };
 
@@ -76,16 +76,21 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         }).length;
         this.state.enrichedPlayers = done;
 
-        for (const row of candidates) {
+        for (const sourceRow of candidates) {
             if (this.stopRequested) break;
 
-            const saved = enrichedByKey.get(row.key);
+            const saved = enrichedByKey.get(sourceRow.key);
             if (saved?.enrichment?.completedAt && !saved.enrichment.error) continue;
 
-            this.status(`Анализ ${done + 1}/${candidates.length}: ${row.name}`);
+            this.status(`Анализ ${done + 1}/${candidates.length}: ${sourceRow.name}`);
             let enrichedRow;
 
             try {
+                const row = typeof this.resolvePlayerIdentity === 'function'
+                    ? await this.resolvePlayerIdentity({ ...sourceRow })
+                    : sourceRow;
+                if (!row?.playerId) throw new Error(`player_identity_missing_${row?.transferId || row?.key || 'unknown'}`);
+
                 const alter = await SLFAlterLayer.getByPlayerId(row.playerId);
                 let tm = null;
                 try {
@@ -96,7 +101,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
                 enrichedRow = { ...row, enrichment: this.buildEnrichment(row, alter, tm) };
             } catch (error) {
                 enrichedRow = {
-                    ...row,
+                    ...sourceRow,
                     enrichment: {
                         completedAt: Date.now(),
                         error: this.errorText ? this.errorText(error) : String(error?.message || error || 'enrichment_failed')
@@ -104,8 +109,8 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
                 };
             }
 
-            await this.appendCollection(this.enrichedCollection, [enrichedRow], `candidate enriched ${row.playerId}`);
-            enrichedByKey.set(row.key, enrichedRow);
+            await this.appendCollection(this.enrichedCollection, [enrichedRow], `candidate enriched ${enrichedRow.playerId || enrichedRow.transferId || enrichedRow.key}`);
+            enrichedByKey.set(sourceRow.key, enrichedRow);
 
             if (!enrichedRow.enrichment?.error) done++;
             this.state.enrichedPlayers = done;
