@@ -319,22 +319,6 @@
         }
     }
 
-    function resolveFormationPanel() {
-        try {
-            return eval('typeof TacticPresetLibraryPanel !== "undefined" ? TacticPresetLibraryPanel : null');
-        } catch (_) {
-            return null;
-        }
-    }
-
-    function patchFormationPanel() {
-        const panel = resolveFormationPanel();
-        if (!panel) return;
-        panel.liveFormationPositions = Object.fromEntries(
-            Object.entries(FORMATIONS).map(([name, positions]) => [name, positions.slice()])
-        );
-    }
-
     function selectEscalationCandidate(decision, signals, policy) {
         const candidateMap = new Map((decision?.candidates || []).map(item => [item.preset, item]));
         const allowed = name => {
@@ -572,7 +556,6 @@
     function applyPolicy() {
         patchBasePresets();
         patchLibrary();
-        patchFormationPanel();
         patchRuleEngine();
         patchActiveRegistry();
         patchRecommendationSelection();
