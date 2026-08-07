@@ -422,6 +422,9 @@
             if (name === 'Simeone_LowBlock_def5' && !lowBlockAllowed) {
                 reasons.push('low block разрешён только как временный siege lock или позднее аварийное удержание');
             }
+            if (signals.situationKey === 'siege_lock' && name !== 'Simeone_LowBlock_def5') {
+                reasons.push('критическая осада требует временного полного lock с обязательной переоценкой');
+            }
             if (name === 'Compact_Counter_def3' && signals.counterExitAvailable !== true) {
                 reasons.push('прямая контратака требует подтверждённого первого выхода или пространства за прессингом');
             }
