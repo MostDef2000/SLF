@@ -2,8 +2,8 @@
   "schema": "slf_quality_gate_rollout_v1",
   "repository": "MostDef2000/SLF",
   "defaultBranch": "main",
-  "state": "consolidated_ci_verified_release_branch_pending_ruleset",
-  "reason": "The repository workflow architecture is consolidated to one canonical PR CI, one release workflow and one maintenance workflow. SLF CI / ci is verified; the zero-downtime Tampermonkey handoff to the generated release branch succeeded at 4.4.294. The final release-branch-only workflow must pass CI and publication verification before the main ruleset is saved.",
+  "state": "consolidated_ci_enforced",
+  "reason": "The repository workflow architecture is consolidated to one canonical PR CI, one release workflow and one maintenance workflow. Release-branch-only publication was verified at 4.4.295, and the active protect-main ruleset now targets the default branch with an empty bypass list, PR-only source integration, the GitHub Actions ci status check, conversation resolution, deletion protection, and force-push protection.",
   "roadmapIssue": 160,
   "currentIssue": 233,
   "reviewModel": "single_maintainer_owner_acceptance_with_compensating_controls",
@@ -22,7 +22,7 @@
     "contractBootstrapRequired": true
   },
   "prerequisitesIntegrated": true,
-  "prerequisitePullRequests": [159, 163, 164, 165, 166, 167, 168, 175, 234, 235],
+  "prerequisitePullRequests": [159, 163, 164, 165, 166, 167, 168, 175, 234, 235, 236],
   "workflowLifecyclePolicy": "contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md",
   "workflowInventory": "data/quality/workflow-inventory-v1.json",
   "componentWorkflows": [
@@ -59,12 +59,8 @@
     },
     "publicationBranch": "release",
     "mainPublicationBypassRequired": false,
-    "why": "One unfiltered pull-request context protects source integration while generated userscript publication occurs on a dedicated release branch, so main can remain PR-only without an Actions bypass.",
-    "remainingActions": [
-      "verify the release-branch-only workflow with canonical CI and one automatic publication",
-      "apply the single-maintainer protect-main ruleset in GitHub settings with an empty bypass list",
-      "verify the ruleset requires SLF CI / ci before source merge and blocks main deletion/force pushes"
-    ]
+    "why": "One unfiltered pull-request context protects source integration while generated userscript publication occurs on a dedicated release branch, so main remains PR-only without an Actions bypass.",
+    "remainingActions": []
   },
   "aggregateVerification": {
     "result": "success",
@@ -93,6 +89,16 @@
     "tampermonkeyUrlsPointToRelease": true,
     "mainAndReleaseMatchedAtHandoff": true
   },
+  "releaseBranchOnlyPublication": {
+    "result": "success",
+    "sourcePullRequest": 236,
+    "sourceCommit": "6c9278bfe8f344aec755e5e35643dc410e7428a1",
+    "publishedVersion": "4.4.295",
+    "generatedCommit": "8cef37bd946bea118ab1e1c43eddc452c528b96b",
+    "publicationBranch": "release",
+    "mainRemainedSourceOnly": true,
+    "approvedCommitMatched": true
+  },
   "branchProtectionTarget": {
     "requirePullRequest": true,
     "requiredApprovals": 0,
@@ -107,8 +113,22 @@
     "publicationBypassRequired": false,
     "singleMaintainerException": "No independent reviewer is currently available. Owner acceptance is explicit and the single mandatory automated CI context is the primary compensating control."
   },
-  "branchProtectionApplied": false,
-  "branchProtectionVerified": false,
-  "connectorLimitation": "The connected GitHub tool set does not expose branch-protection or ruleset mutation actions; saving and verifying protect-main is the only expected manual platform step after release-branch-only publication is verified.",
+  "branchProtectionEvidence": {
+    "result": "success",
+    "ruleset": "protect-main",
+    "target": "default",
+    "observedAt": "2026-08-07",
+    "bypassListEmpty": true,
+    "requirePullRequest": true,
+    "requiredStatusCheck": "ci",
+    "requiredStatusApp": "GitHub Actions",
+    "requireConversationResolution": true,
+    "blockForcePushes": true,
+    "blockBranchDeletion": true,
+    "verificationMethod": "Repository owner applied the active GitHub ruleset through Settings and supplied visual evidence in the approved task session."
+  },
+  "branchProtectionApplied": true,
+  "branchProtectionVerified": true,
+  "connectorLimitation": "The connected GitHub tool set does not expose branch-protection or ruleset mutation actions. The required manual platform step was completed by the repository owner and is now recorded as applied and verified.",
   "productionDeploymentImplied": false
 }
