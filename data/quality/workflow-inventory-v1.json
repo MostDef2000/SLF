@@ -22,7 +22,7 @@
       "role": "RELEASE",
       "owner": "MostDef2000",
       "triggers": ["push:main", "workflow_dispatch"],
-      "purpose": "Validate the exact current main source commit and publish deterministic latest-only userscript artifacts."
+      "purpose": "Validate the exact current main source commit and publish deterministic latest-only generated artifacts to the release branch without writing generated commits to protected main."
     },
     {
       "path": ".github/workflows/quality-governance.yml",
