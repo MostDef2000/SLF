@@ -1,23 +1,20 @@
-name: Quality integration gate
+name: SLF CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: quality-integration-${{ github.workflow }}-${{ github.ref }}
+  group: slf-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   static-contract-security:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout reviewed revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -29,13 +26,15 @@ jobs:
           set -euo pipefail
           node tools/build-latest-userscript.mjs
 
-      - name: Check static, contract, and security tooling syntax
+      - name: Check static, contract, security and governance tooling syntax
         run: |
           node --check releases/latest.user.js
+          node --check tools/check-bundle-order.mjs
           node --check tools/test-userscript-artifact-boundary.mjs
           node --check tools/test-versioned-contracts.mjs
           node --check tools/test-security-boundaries.mjs
           node --check tools/validate-quality-governance.mjs
+          node --check tools/validate-workflow-inventory.mjs
           node --check tools/test-deliberate-execution-contract.mjs
           node --check tools/test-tactical-situation-diversity.mjs
           python3 -m py_compile tools/test-api-contract-compatibility.py
@@ -45,15 +44,19 @@ jobs:
           node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/contract-policy-v1.json', 'utf8'))"
           node -e "JSON.parse(require('node:fs').readFileSync('data/quality/quality-gates-v1.json', 'utf8'))"
           node -e "JSON.parse(require('node:fs').readFileSync('data/quality/accepted-risks-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/quality/workflow-inventory-v1.json', 'utf8'))"
           node -e "JSON.parse(require('node:fs').readFileSync('data/quality/deliberate-execution-contract-v1.json', 'utf8'))"
           node -e "JSON.parse(require('node:fs').readFileSync('data/quality/deliberate-execution-fixtures-v1.json', 'utf8'))"
 
-      - name: Enforce exact artifact, contracts, security, and governance
+      - name: Enforce bundle, artifact, contracts, security and governance
         run: |
+          set -euo pipefail
+          node tools/check-bundle-order.mjs
           node tools/test-userscript-artifact-boundary.mjs
           node tools/test-versioned-contracts.mjs
           node tools/test-security-boundaries.mjs
           node tools/validate-quality-governance.mjs
+          node tools/validate-workflow-inventory.mjs
           node tools/test-deliberate-execution-contract.mjs
           node tools/test-tactical-situation-diversity.mjs
 
@@ -67,6 +70,87 @@ jobs:
         run: |
           python3 tools/test-api-contract-compatibility.py
           python3 tools/test-api-adversarial.py
+
+  runtime-tactics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Build exact candidate artifact from reviewed source
+        run: |
+          set -euo pipefail
+          node tools/build-latest-userscript.mjs
+
+      - name: Use pinned Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+
+      - name: Install API test dependencies
+        run: python -m pip install --disable-pip-version-check -r vps/api/requirements.txt
+
+      - name: Check runtime and tactics tooling syntax
+        run: |
+          node --check src/modules/manual-match-telemetry/manual-match-runtime.js
+          node --check tools/test-manual-match-runtime.mjs
+          node --check tools/test-manual-match-workflow.mjs
+          node --check tools/test-manual-match-state-bridge.mjs
+          node --check tools/test-manual-telemetry-legacy-boundary.mjs
+          node --check tools/test-manual-telemetry-final-boundary.mjs
+          node --check tools/audit-runtime-reachability.mjs
+          node --check tools/test-tactic-telemetry-envelope.mjs
+          node --check tools/test-tactical-record-keys.mjs
+          node --check tools/aggregate-tactic-performance.mjs
+          node --check tools/enrich-tactic-match-outcomes.mjs
+          node --check tools/export-tactic-telemetry.mjs
+          node --check tools/validate-tactic-data-quality.mjs
+          node --check tools/generate-tactic-policy-proposals.mjs
+          node --check tools/test-tactic-analytics-pipeline.mjs
+          node --check tools/test-tactic-match-outcomes.mjs
+          bash -n tools/run-tactic-analytics-pipeline.sh
+          python -m py_compile \
+            vps/api/server.py \
+            vps/api/test_server.py \
+            vps/ops/test_service_contract.py \
+            vps/ops/verify_api_deployment.py \
+            vps/ops/test_verify_api_deployment.py
+          python -m gunicorn --version
+          node -e "JSON.parse(require('node:fs').readFileSync('data/audit/manual-match-symbol-review-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/audit/manual-state-envelope-v1.json', 'utf8'))"
+          node -e "JSON.parse(require('node:fs').readFileSync('data/audit/runtime-reachability-review-v1.json', 'utf8'))"
+
+      - name: Run manual runtime and migration regressions
+        run: |
+          node tools/test-manual-match-runtime.mjs
+          node tools/test-manual-match-workflow.mjs
+          node tools/test-manual-match-state-bridge.mjs
+          node tools/test-manual-telemetry-legacy-boundary.mjs
+          node tools/test-manual-telemetry-final-boundary.mjs
+
+      - name: Run reachability audit
+        run: |
+          node tools/audit-runtime-reachability.mjs --validate-review
+          node tools/audit-runtime-reachability.mjs --json --validate-review > /tmp/runtime-reachability-report.json
+          node -e "const r=JSON.parse(require('node:fs').readFileSync('/tmp/runtime-reachability-report.json','utf8')); if(r.schema!=='slf_runtime_reachability_audit_v1') throw new Error('unexpected schema'); if(r.summary.bundleModules!==r.summary.sourceFilesRead) throw new Error('missing source files'); if(r.inputs.expectedModuleCount!=null&&r.summary.bundleModules!==r.inputs.expectedModuleCount) throw new Error('module count mismatch'); if(r.summary.releaseMarkerMismatches.length) throw new Error('release marker mismatch'); if(r.summary.unreviewedCandidates.length) throw new Error('unreviewed candidates'); if(r.summary.staleManualReviews.length) throw new Error('stale manual reviews'); console.log(JSON.stringify(r.summary,null,2));"
+
+      - name: Run tactic runtime and analytics regressions
+        run: |
+          node tools/check-bundle-order.mjs
+          node tools/test-tactic-telemetry-envelope.mjs
+          node tools/test-tactical-record-keys.mjs
+          node tools/test-tactical-situation-diversity.mjs
+          node tools/test-tactic-analytics-pipeline.mjs
+          node tools/test-tactic-match-outcomes.mjs
+
+      - name: Run VPS API and deployment contract tests
+        run: |
+          python -m unittest vps/api/test_server.py -v
+          python -m unittest vps/ops/test_service_contract.py -v
+          python -m unittest vps/ops/test_verify_api_deployment.py -v
 
   property-fuzz-reliability:
     runs-on: ubuntu-24.04
@@ -94,7 +178,7 @@ jobs:
       - name: Install pinned VPS API dependencies
         run: python3 -m pip install --disable-pip-version-check -r vps/api/requirements.txt
 
-      - name: Verify browser dependency consistency
+      - name: Verify installed dependency consistency
         run: python3 -m pip check
 
       - name: Run API fuzz and recovery properties
@@ -102,7 +186,7 @@ jobs:
 
   browser-e2e:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout reviewed revision
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -145,7 +229,7 @@ jobs:
         if: failure() && hashFiles('tests/browser/artifacts/**') != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: quality-integration-browser-failure-evidence
+          name: slf-ci-browser-failure-evidence
           path: tests/browser/artifacts
           if-no-files-found: ignore
           retention-days: 7
@@ -205,34 +289,37 @@ jobs:
       - name: Upload release evidence bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: quality-integration-release-evidence
+          name: slf-ci-release-evidence
           path: artifacts/release-evidence
           if-no-files-found: error
           retention-days: 14
 
-  quality-integration:
+  ci:
     if: always()
     needs:
       - static-contract-security
+      - runtime-tactics
       - property-fuzz-reliability
       - browser-e2e
       - release-deployment-evidence
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every quality domain to pass
+      - name: Require every CI domain to pass
         env:
           STATIC_RESULT: ${{ needs.static-contract-security.result }}
+          RUNTIME_RESULT: ${{ needs.runtime-tactics.result }}
           RELIABILITY_RESULT: ${{ needs.property-fuzz-reliability.result }}
           BROWSER_RESULT: ${{ needs.browser-e2e.result }}
           EVIDENCE_RESULT: ${{ needs.release-deployment-evidence.result }}
         run: |
           set -euo pipefail
           printf 'static-contract-security=%s\n' "$STATIC_RESULT"
+          printf 'runtime-tactics=%s\n' "$RUNTIME_RESULT"
           printf 'property-fuzz-reliability=%s\n' "$RELIABILITY_RESULT"
           printf 'browser-e2e=%s\n' "$BROWSER_RESULT"
           printf 'release-deployment-evidence=%s\n' "$EVIDENCE_RESULT"
-          for result in "$STATIC_RESULT" "$RELIABILITY_RESULT" "$BROWSER_RESULT" "$EVIDENCE_RESULT"; do
+          for result in "$STATIC_RESULT" "$RUNTIME_RESULT" "$RELIABILITY_RESULT" "$BROWSER_RESULT" "$EVIDENCE_RESULT"; do
             test "$result" = 'success'
           done
-          echo 'Quality integration gate passed.'
+          echo 'SLF CI passed.'
