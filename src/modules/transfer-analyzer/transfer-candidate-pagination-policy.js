@@ -51,29 +51,60 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         };
     });
 
+    TransferCandidateScanner.hasNumericPagination = function hasNumericPagination(element) {
+        if (!element) return false;
+        return [...element.querySelectorAll('a[href], span, strong, b')]
+            .some(node => /^\d+$/.test(this.text(node.textContent)));
+    };
+
     TransferCandidateScanner.findPaginationContainer = function findPaginationContainer(doc) {
         const explicit = [...doc.querySelectorAll('.transfers-ui__pages')]
-            .filter(element => element.querySelector('a[href*="page="]'));
+            .filter(element => this.hasNumericPagination(element));
         if (explicit.length) return explicit[0];
 
         return [...doc.querySelectorAll('div,nav,td,p,span')]
             .filter(element => {
                 const text = this.text(element.textContent);
-                return /^Страницы\s*:/i.test(text) && text.length < 500 && element.querySelector('a[href*="page="]');
+                return /^Страницы\s*:/i.test(text) && text.length < 500 && this.hasNumericPagination(element);
             })
             .sort((a, b) => this.text(a.textContent).length - this.text(b.textContent).length)[0] || null;
     };
 
-    TransferCandidateScanner.paginationPairs = function paginationPairs(doc) {
+    TransferCandidateScanner.paginationEntries = function paginationEntries(doc) {
         const container = this.findPaginationContainer(doc);
         if (!container) return [];
-        return [...container.querySelectorAll('a[href*="page="]')].map(anchor => {
+
+        return [...container.querySelectorAll('a[href]')].map(anchor => {
             const label = this.text(anchor.textContent);
             const displayPage = /^\d+$/.test(label) ? Number(label) : null;
-            const href = anchor.getAttribute('href') || '';
-            const rawPage = Number(href.match(/[?&]page=(\d+)/)?.[1]);
-            if (!Number.isInteger(displayPage) || displayPage < 1 || !Number.isInteger(rawPage) || rawPage < 0) return null;
-            return { displayPage, rawPage, offset: rawPage - (displayPage - 1) };
+            if (!Number.isInteger(displayPage) || displayPage < 1) return null;
+
+            try {
+                const url = new URL(anchor.getAttribute('href') || '', location.href);
+                if (url.origin !== location.origin || url.pathname !== '/transfers.php') return null;
+                return { displayPage, url: url.toString() };
+            } catch (error) {
+                return null;
+            }
+        }).filter(Boolean);
+    };
+
+    TransferCandidateScanner.rememberPaginationLinks = function rememberPaginationLinks(doc) {
+        if (!(this.nativePageUrls instanceof Map)) this.nativePageUrls = new Map();
+        this.paginationEntries(doc).forEach(entry => {
+            this.nativePageUrls.set(entry.displayPage - 1, entry.url);
+        });
+    };
+
+    TransferCandidateScanner.paginationPairs = function paginationPairs(doc) {
+        return this.paginationEntries(doc).map(entry => {
+            const rawPage = Number(new URL(entry.url).searchParams.get('page'));
+            if (!Number.isInteger(rawPage) || rawPage < 0) return null;
+            return {
+                displayPage: entry.displayPage,
+                rawPage,
+                offset: rawPage - (entry.displayPage - 1)
+            };
         }).filter(Boolean);
     };
 
@@ -92,7 +123,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         if (!container) return -1;
 
         const displayIndexes = [];
-        container.querySelectorAll('a[href*="page="], span').forEach(element => {
+        container.querySelectorAll('a[href], span, strong, b').forEach(element => {
             const text = this.text(element.textContent);
             if (/^\d+$/.test(text)) displayIndexes.push(Number(text) - 1);
         });
@@ -113,10 +144,13 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         return this.canonicalMarketUrl();
     };
 
-    TransferCandidateScanner.pageUrl = function pageUrlWithDetectedIndex(pageIndex) {
+    TransferCandidateScanner.pageUrl = function pageUrlWithNativePagination(pageIndex) {
+        const index = Math.max(0, Number(pageIndex || 0));
+        const nativeUrl = this.nativePageUrls instanceof Map ? this.nativePageUrls.get(index) : null;
+        if (nativeUrl) return nativeUrl;
+
         const url = new URL(this.state?.baseUrl || this.canonicalMarketUrl(), location.origin);
         url.searchParams.delete('page');
-        const index = Math.max(0, Number(pageIndex || 0));
         if (index > 0) {
             const offset = Number.isInteger(this.pageParamOffset) ? this.pageParamOffset : 1;
             url.searchParams.set('page', String(index + offset));
@@ -143,10 +177,21 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         return keys.length ? `${keys.length}:${keys.join('|')}` : '';
     };
 
+    TransferCandidateScanner.pageRequestLabel = function pageRequestLabel(value) {
+        try {
+            const url = new URL(value, location.origin);
+            return `${url.pathname}${url.search}`;
+        } catch (error) {
+            return String(value || 'unknown_url');
+        }
+    };
+
     TransferCandidateScanner.runOriginal = TransferCandidateScanner.run;
 
     TransferCandidateScanner.run = async function runWithStablePagination(resume) {
         const uiRows = this.parsePage(document, 0, location.href);
+        this.nativePageUrls = new Map();
+        this.rememberPaginationLinks(document);
         this.pageParamOffset = this.detectPageParamOffset(document);
         if (!Number.isInteger(this.pageParamOffset)) this.pageParamOffset = 1;
         const uiTotalPages = this.detectInitialTotalPages(document, uiRows);
@@ -202,14 +247,15 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
             const result = page === 0
                 ? { doc: document, pageUrl: this.canonicalMarketUrl() }
                 : await this.fetchPage(page);
+            this.rememberPaginationLinks(result.doc);
             const pageRows = this.parsePage(result.doc, page, result.pageUrl);
             const signature = this.pageSignature(pageRows);
 
             if (!pageRows.length) {
-                throw new Error(`Пустая страница рынка ${page + 1}/${totalPages}. Выдача изменилась; нажми «Сбросить».`);
+                throw new Error(`Пустая страница рынка ${page + 1}/${totalPages}. Запрос: ${this.pageRequestLabel(result.pageUrl)}. Нажми «Сбросить».`);
             }
             if (signature && seenSignatures.has(signature)) {
-                throw new Error(`Повторная страница рынка ${page + 1}/${totalPages}. Выдача изменилась; нажми «Сбросить».`);
+                throw new Error(`Повторная страница рынка ${page + 1}/${totalPages}. Запрос: ${this.pageRequestLabel(result.pageUrl)}. Нажми «Сбросить».`);
             }
 
             this.status(`Сканирование страницы ${page + 1}/${totalPages}...`);
