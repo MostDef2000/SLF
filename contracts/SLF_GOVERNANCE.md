@@ -35,7 +35,7 @@ Before a new implementation scope, reread current `main` versions of Governance,
 
 ## 3. Approval boundary
 
-Before repository writes, present an `Implementation Scope Check` describing intended behavior, file categories, exclusions, risks, verification, and release impact in plain language.
+Before repository writes, present an `Implementation Scope Check` describing intended behavior, file categories, exclusions, risks, verification, and release impact in plain language. Before approval, the PM must not provide code, diffs, selectors, commands, implementation recipes, or speculative patches unless the user explicitly requests technical discussion under the scope policy.
 
 The only phrase that authorizes repository writes is:
 
@@ -43,7 +43,7 @@ The only phrase that authorizes repository writes is:
 commit approved
 ```
 
-It must be the exact lowercase phrase shown above and applies only to the approved scope.
+No other phrase authorizes repository writes. It must be the exact lowercase phrase shown above and applies only to the approved scope.
 
 After approval, the PM owns the full deterministic safe lifecycle inside the approved scope:
 
@@ -72,7 +72,7 @@ Placeholder/noop repository writes used only to route tools are prohibited.
 
 Domain agents may edit only approved files/categories. They must not manually edit generated release artifacts, bump versions, publish the common userscript, introduce secrets, or expand behavior beyond scope.
 
-The PM may operationally switch between domain and Core Release roles in one chat while obeying each contract.
+The PM may operationally switch between domain and Core Release roles in one chat while obeying each relevant contract.
 
 ## 6. Canonical pull-request CI
 
