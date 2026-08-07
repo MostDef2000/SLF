@@ -286,9 +286,14 @@ const TacticPresetLibraryPanel = {
 
     dispatchLiveTacticPreset(name) {
         const tacticSelect = document.querySelector('#slf-tactics-dropdown select');
-        if (!tacticSelect || !Array.from(tacticSelect.options).some(option => option.value === name)) return false;
+        if (!tacticSelect) return false;
 
-        tacticSelect.value = name;
+        const tacticOption = Array.from(tacticSelect.options).find(option => (
+            String(option.dataset.presetId || option.value) === String(name || '')
+        ));
+        if (!tacticOption) return false;
+
+        tacticSelect.value = tacticOption.value;
         const event = document.createEvent('Event');
         event.initEvent('change', true, true);
         tacticSelect.dispatchEvent(event);
