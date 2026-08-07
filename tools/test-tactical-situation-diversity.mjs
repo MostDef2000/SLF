@@ -48,6 +48,7 @@ const context = {
   },
   clearTimeout() {},
   BASE_PRESETS: Object.fromEntries(activePresets.map(name => [name, { priority: [] }])),
+  BASE_LABELS: Object.fromEntries(activePresets.map(name => [name, name])),
   TacticPresetLibrary: {
     meta: Object.fromEntries(activePresets.map(name => [name, {}])),
     traits: Object.fromEntries(activePresets.map(name => [name, {}])),
@@ -68,6 +69,76 @@ vm.runInContext(source('src/modules/tactics-presets/tactic-preset-library-panel.
   filename: 'tactic-preset-library-panel.js'
 });
 const panel = vm.runInContext('TacticPresetLibraryPanel', context);
+vm.runInContext(source('src/modules/tactics-presets/active-preset-registry.js'), context, {
+  filename: 'active-preset-registry.js'
+});
+
+const registry = context.window.SLFActivePresetRegistry;
+assert.ok(registry, 'active preset registry must be exposed');
+assert.equal(registry.active.length, 11);
+assert.equal(registry.fallbackPolicy, '5.61-pressure-response-v6-aligned');
+assert.equal(context.BASE_PRESETS.Pep_BoxControl_bal2.build_fast, '2');
+assert.equal(context.BASE_PRESETS.Pep_BoxControl_bal2.pass_risk, '2');
+assert.equal(context.BASE_PRESETS.Compact_Counter_def3.priority.length, 0);
+assert.equal(context.BASE_PRESETS.Simeone_LowBlock_def5.build_fast, '2');
+assert.match(context.TacticPresetLibrary.schemeStates.Pep_BoxControl_bal2, /4-1-2-2-1/);
+assert.match(context.TacticPresetLibrary.schemeStates.Compact_Counter_def3, /4-4-1-1/);
+assert.match(context.TacticPresetLibrary.schemeStates.Pep_TwoThreeFive_att3, /3-2-5/);
+assert.match(context.TacticPresetLibrary.schemeStates.Klopp_Gegenpress_att4, /4-2-4/);
+assert.match(context.TacticPresetLibrary.schemeStates.Simeone_LowBlock_def5, /emergency lock/);
+assert.equal(context.TacticPresetLibrary.traits.Pep_BoxControl_bal2.build, 'press_resistant_control');
+assert.deepEqual(Array.from(context.TacticPresetLibrary.traits.Compact_Counter_def3.requires), ['confirmed_counter_exit']);
+assert.deepEqual(Array.from(context.TacticPresetLibrary.traits.Simeone_LowBlock_def5.requires), ['mandatory_reassessment_next_window']);
+assert.deepEqual(Array.from(registry.ladders.attack), [
+  'Pep_ControlledPush_att3',
+  'Pep_TwoThreeFive_att3',
+  'Klopp_Gegenpress_att4',
+  'Bielsa_ChaosPress_att5'
+]);
+assert.deepEqual(Array.from(registry.ladders.defensive), [
+  'Arteta_Control433_bal3',
+  'Simeone_Compact442_def4',
+  'Simeone_LowBlock_def5',
+  'Pep_PressCooldown_bal2'
+]);
+assert.equal(registry.choosePreset({
+  minute: 52,
+  score: { state: 'draw' },
+  myXg: 0.3,
+  oppXg: 0.9,
+  myXT: 0.15,
+  oppXT: 0.6,
+  pressureRisk: 70,
+  tags: ['under_pressure', 'counter_exit_blocked']
+}).name, 'Pep_BoxControl_bal2');
+assert.equal(registry.choosePreset({
+  minute: 52,
+  score: { state: 'draw' },
+  myXg: 0.3,
+  oppXg: 0.9,
+  myXT: 0.15,
+  oppXT: 0.6,
+  pressureRisk: 70,
+  tags: ['under_pressure', 'counter_exit_available']
+}).name, 'Compact_Counter_def3');
+assert.equal(registry.choosePreset({
+  minute: 56,
+  score: { state: 'draw' },
+  myBad: 22,
+  myXg: 0.2,
+  oppXg: 1.2,
+  myXT: 0.1,
+  oppXT: 0.8,
+  pressureRisk: 90,
+  tags: ['under_pressure', 'sustained_siege', 'counter_exit_blocked']
+}).name, 'Simeone_LowBlock_def5');
+assert.equal(registry.choosePreset({
+  minute: 80,
+  score: { state: 'losing' },
+  attackNeed: 90,
+  tags: []
+}).name, 'Bielsa_ChaosPress_att5');
+
 vm.runInContext(source('src/modules/tactics-presets/tactic-preset-direction-policy.js'), context, {
   filename: 'tactic-preset-direction-policy.js'
 });
@@ -310,4 +381,4 @@ assert.doesNotMatch(rendered, /Кандидаты:/);
 const distinct = new Set(scenarios.map(([, signals]) => select(signals)));
 assert.equal(distinct.size, 11, 'the scenario matrix must exercise all 11 active tactics');
 
-console.log(`[tactical-situation-diversity] passed scenarios=${scenarios.length} distinct=${distinct.size} policy=${policy.version}`);
+console.log(`[tactical-situation-diversity] passed scenarios=${scenarios.length} distinct=${distinct.size} policy=${policy.version} registry=${registry.fallbackPolicy}`);
