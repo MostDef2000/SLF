@@ -64,21 +64,43 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
             .sort((a, b) => this.text(a.textContent).length - this.text(b.textContent).length)[0] || null;
     };
 
+    TransferCandidateScanner.paginationPairs = function paginationPairs(doc) {
+        const container = this.findPaginationContainer(doc);
+        if (!container) return [];
+        return [...container.querySelectorAll('a[href*="page="]')].map(anchor => {
+            const label = this.text(anchor.textContent);
+            const displayPage = /^\d+$/.test(label) ? Number(label) : null;
+            const href = anchor.getAttribute('href') || '';
+            const rawPage = Number(href.match(/[?&]page=(\d+)/)?.[1]);
+            if (!Number.isInteger(displayPage) || displayPage < 1 || !Number.isInteger(rawPage) || rawPage < 0) return null;
+            return { displayPage, rawPage, offset: rawPage - (displayPage - 1) };
+        }).filter(Boolean);
+    };
+
+    TransferCandidateScanner.detectPageParamOffset = function detectPageParamOffset(doc) {
+        const counts = new Map();
+        this.paginationPairs(doc).forEach(pair => {
+            if (pair.offset !== 0 && pair.offset !== 1) return;
+            counts.set(pair.offset, Number(counts.get(pair.offset) || 0) + 1);
+        });
+        if (!counts.size) return null;
+        return [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
+    };
+
     TransferCandidateScanner.extractLastPaginationPage = function extractLastPaginationPage(doc) {
         const container = this.findPaginationContainer(doc);
         if (!container) return -1;
 
-        const pageIndexes = [];
+        const displayIndexes = [];
         container.querySelectorAll('a[href*="page="], span').forEach(element => {
             const text = this.text(element.textContent);
-            const href = element.getAttribute?.('href') || '';
-            const hrefMatch = href.match(/[?&]page=(\d+)/);
-            const textMatch = text.match(/^\d+$/);
-            const value = hrefMatch ? Number(hrefMatch[1]) : (textMatch ? Number(text) - 1 : null);
-            if (Number.isFinite(value) && value >= 0) pageIndexes.push(value);
+            if (/^\d+$/.test(text)) displayIndexes.push(Number(text) - 1);
         });
+        if (displayIndexes.length) return Math.max(...displayIndexes);
 
-        return pageIndexes.length ? Math.max(...pageIndexes) : -1;
+        const offset = Number.isInteger(this.pageParamOffset) ? this.pageParamOffset : 1;
+        const rawIndexes = this.paginationPairs(doc).map(pair => pair.rawPage - offset);
+        return rawIndexes.length ? Math.max(...rawIndexes) : -1;
     };
 
     TransferCandidateScanner.canonicalMarketUrl = function canonicalMarketUrl() {
@@ -89,6 +111,17 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
 
     TransferCandidateScanner.baseUrl = function baseUrlWithCurrentMarketQuery() {
         return this.canonicalMarketUrl();
+    };
+
+    TransferCandidateScanner.pageUrl = function pageUrlWithDetectedIndex(pageIndex) {
+        const url = new URL(this.state?.baseUrl || this.canonicalMarketUrl(), location.origin);
+        url.searchParams.delete('page');
+        const index = Math.max(0, Number(pageIndex || 0));
+        if (index > 0) {
+            const offset = Number.isInteger(this.pageParamOffset) ? this.pageParamOffset : 1;
+            url.searchParams.set('page', String(index + offset));
+        }
+        return url.toString();
     };
 
     TransferCandidateScanner.detectInitialTotalPages = function detectInitialTotalPages(doc, pageRows) {
@@ -105,10 +138,17 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         return Math.max(1, Number(this.fixedTotalPages || this.state.totalPages || 1));
     };
 
+    TransferCandidateScanner.pageSignature = function pageSignature(rows) {
+        const keys = (rows || []).map(row => row?.key).filter(Boolean);
+        return keys.length ? `${keys.length}:${keys.join('|')}` : '';
+    };
+
     TransferCandidateScanner.runOriginal = TransferCandidateScanner.run;
 
     TransferCandidateScanner.run = async function runWithStablePagination(resume) {
         const uiRows = this.parsePage(document, 0, location.href);
+        this.pageParamOffset = this.detectPageParamOffset(document);
+        if (!Number.isInteger(this.pageParamOffset)) this.pageParamOffset = 1;
         const uiTotalPages = this.detectInitialTotalPages(document, uiRows);
         this.expectedCanonicalBaseUrl = this.canonicalMarketUrl();
         this.fixedTotalPages = uiTotalPages;
@@ -148,7 +188,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         const totalPages = Math.max(1, Number(this.fixedTotalPages || this.state.totalPages || 1));
         this.state.totalPages = totalPages;
         let page = resume ? Number(this.state.nextPage || 0) : 0;
-        let previousSignature = '';
+        const seenSignatures = new Set();
 
         if (page >= totalPages) {
             this.state.phase = 'enrich';
@@ -160,16 +200,16 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
 
         for (; !this.stopRequested && page < totalPages; page++) {
             const result = page === 0
-                ? { doc: document, pageUrl: location.href }
+                ? { doc: document, pageUrl: this.canonicalMarketUrl() }
                 : await this.fetchPage(page);
             const pageRows = this.parsePage(result.doc, page, result.pageUrl);
+            const signature = this.pageSignature(pageRows);
 
-            const signature = pageRows.slice(0, 10).map(row => row.key).join('|');
             if (!pageRows.length) {
-                throw new Error(`empty_transfer_page_${page + 1}_of_${totalPages}`);
+                throw new Error(`Пустая страница рынка ${page + 1}/${totalPages}. Выдача изменилась; нажми «Сбросить».`);
             }
-            if (page > 0 && signature && signature === previousSignature) {
-                throw new Error(`duplicate_transfer_page_${page + 1}_of_${totalPages}`);
+            if (signature && seenSignatures.has(signature)) {
+                throw new Error(`Повторная страница рынка ${page + 1}/${totalPages}. Выдача изменилась; нажми «Сбросить».`);
             }
 
             this.status(`Сканирование страницы ${page + 1}/${totalPages}...`);
@@ -180,7 +220,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
             this.saveMeta();
             this.renderProgress();
 
-            previousSignature = signature;
+            if (signature) seenSignatures.add(signature);
             await this.delay(250);
         }
 
@@ -190,7 +230,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         }
 
         if (Number(this.state.scannedPages || 0) !== totalPages) {
-            throw new Error(`incomplete_transfer_scan_${this.state.scannedPages}_of_${totalPages}`);
+            throw new Error(`Неполный обход рынка: ${this.state.scannedPages}/${totalPages}. Нажми «Продолжить» или «Сбросить».`);
         }
 
         this.state.phase = 'enrich';
