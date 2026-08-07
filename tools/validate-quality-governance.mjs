@@ -86,10 +86,22 @@ for (const invariant of [
   assert.ok(ciSource.includes(invariant), `canonical CI missing invariant: ${invariant}`);
 }
 assert.equal(/pull_request:\s*\n\s+paths:/.test(ciSource), false, 'canonical CI must not use pull-request path filters');
-assert.match(releaseSource, /^name:\s*SLF Release\s*$/m);
-assert.match(releaseSource, /workflow_dispatch:/);
-assert.match(releaseSource, /source_commit:/);
-assert.match(releaseSource, /release_required/);
+
+for (const invariant of [
+  'name: SLF Release',
+  'workflow_dispatch:',
+  'source_commit:',
+  'release_required',
+  "refs/heads/release",
+  'release:data/version.json',
+  'Publish generated release branch only',
+  '--force-with-lease=refs/heads/release:'
+]) {
+  assert.ok(releaseSource.includes(invariant), `release workflow missing protected-main invariant: ${invariant}`);
+}
+assert.equal(/git push[^\n]*HEAD:main/.test(releaseSource), false, 'release workflow must not push generated commits to main');
+assert.equal(/git push[^\n]*refs\/heads\/main/.test(releaseSource), false, 'release workflow must not update main directly');
+
 assert.match(maintenanceSource, /^name:\s*SLF Maintenance\s*$/m);
 assert.match(maintenanceSource, /schedule:/);
 assert.equal(/pull_request:\s*$/.test(maintenanceSource), false, 'maintenance must not duplicate pull-request CI');
@@ -97,18 +109,27 @@ assert.equal(/pull_request:\s*$/.test(maintenanceSource), false, 'maintenance mu
 assert.equal(gates.schema, 'slf_quality_gate_rollout_v1');
 assert.equal(gates.repository, 'MostDef2000/SLF');
 assert.equal(gates.defaultBranch, 'main');
-assert.ok(['consolidated_ci_pending_verification', 'consolidated_ci_verified_settings_not_enforced', 'consolidated_ci_enforced'].includes(gates.state), `unexpected rollout state: ${gates.state}`);
+assert.ok([
+  'consolidated_ci_pending_verification',
+  'consolidated_ci_verified_settings_not_enforced',
+  'consolidated_ci_verified_release_branch_pending_ruleset',
+  'consolidated_ci_enforced'
+].includes(gates.state), `unexpected rollout state: ${gates.state}`);
 assert.equal(gates.roadmapIssue, 160);
 assert.equal(gates.currentIssue, 233);
 assert.equal(gates.reviewModel, 'single_maintainer_owner_acceptance_with_compensating_controls');
 assert.equal(gates.prerequisitesIntegrated, true);
 assert.equal(gates.workflowLifecyclePolicy, 'contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md');
 assert.equal(gates.workflowInventory, 'data/quality/workflow-inventory-v1.json');
-assert.equal(gates.enforcementPlan.strategy, 'single_required_ci_context');
+assert.ok(['single_required_ci_context', 'single_required_ci_context_protected_main_release_branch'].includes(gates.enforcementPlan.strategy));
 assert.equal(gates.enforcementPlan.aggregateWorkflow, '.github/workflows/quality-integration.yml');
 assert.equal(gates.enforcementPlan.aggregateContext, 'SLF CI / ci');
 assert.deepEqual(gates.enforcementPlan.ciStatePolicy.allowedToMerge, ['SUCCESS']);
 assert.deepEqual(gates.enforcementPlan.ciStatePolicy.blockedFromMerge, ['PENDING', 'FAILED', 'UNKNOWN']);
+if (gates.enforcementPlan.strategy === 'single_required_ci_context_protected_main_release_branch') {
+  assert.equal(gates.enforcementPlan.publicationBranch, 'release');
+  assert.equal(gates.enforcementPlan.mainPublicationBypassRequired, false);
+}
 assert.equal(gates.aggregateVerification.workflow, 'SLF CI');
 assert.equal(gates.aggregateVerification.context, 'SLF CI / ci');
 assert.deepEqual(gates.aggregateVerification.domains, [
@@ -126,13 +147,27 @@ if (gates.aggregateVerification.result === 'success') {
 } else {
   assert.equal(gates.aggregateVerification.result, 'pending');
 }
+if (gates.releaseBranchHandoff) {
+  assert.equal(gates.releaseBranchHandoff.result, 'success');
+  assert.equal(gates.releaseBranchHandoff.publicationBranch, 'release');
+  assert.equal(gates.releaseBranchHandoff.tampermonkeyUrlsPointToRelease, true);
+  assert.equal(gates.releaseBranchHandoff.mainAndReleaseMatchedAtHandoff, true);
+  assert.match(gates.releaseBranchHandoff.sourceCommit, /^[0-9a-f]{40}$/);
+  assert.match(gates.releaseBranchHandoff.generatedCommit, /^[0-9a-f]{40}$/);
+  assert.match(gates.releaseBranchHandoff.publishedVersion, /^\d+\.\d+\.\d+$/);
+}
 assert.equal(gates.branchProtectionTarget.requirePullRequest, true);
 assert.equal(gates.branchProtectionTarget.requiredApprovals, 0);
 assert.equal(gates.branchProtectionTarget.requireCodeOwnerReview, false);
 assert.equal(gates.branchProtectionTarget.requireConversationResolution, true);
 assert.equal(gates.branchProtectionTarget.requireAggregateStatusCheck, true);
 assert.equal(gates.branchProtectionTarget.requiredStatusContext, 'SLF CI / ci');
+assert.equal(gates.branchProtectionTarget.blockForcePushes, true);
+assert.equal(gates.branchProtectionTarget.blockBranchDeletion, true);
 assert.equal(gates.branchProtectionTarget.allowAdminBypass, false);
+if (Object.hasOwn(gates.branchProtectionTarget, 'publicationBypassRequired')) {
+  assert.equal(gates.branchProtectionTarget.publicationBypassRequired, false);
+}
 assert.match(gates.branchProtectionTarget.singleMaintainerException, /No independent reviewer is currently available/);
 assert.equal(gates.productionDeploymentImplied, false);
 
@@ -141,6 +176,10 @@ assert.equal(inventory.maxPermanentWorkflows, 3);
 assert.equal(inventory.canonicalRequiredContext, 'SLF CI / ci');
 assert.equal(inventory.workflows.length, 3);
 assert.deepEqual(new Set(inventory.workflows.map(item => item.role)), new Set(['CI', 'RELEASE', 'MAINTENANCE']));
+const releaseInventory = inventory.workflows.find(item => item.role === 'RELEASE');
+assert.ok(releaseInventory, 'workflow inventory missing RELEASE role');
+assert.match(releaseInventory.purpose, /release branch/i);
+assert.match(releaseInventory.purpose, /protected main/i);
 assert.equal(gates.componentWorkflows.length, 3);
 assert.deepEqual(new Set(gates.componentWorkflows.map(item => item.role)), new Set(['CI', 'RELEASE', 'MAINTENANCE']));
 
