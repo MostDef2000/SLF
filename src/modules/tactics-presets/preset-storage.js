@@ -1,31 +1,32 @@
     // 3. Preset Storage
     // ============================================================
 
-    const RETIRED_SLF_BUILT_IN_PRESET_NAMES = new Set([
-        'Mourinho_WeakSide_def3',
-        'Henta_Hold_def3',
-        'Pep_StandardControl_bal3',
-        'Xabi_VerticalBox_att3',
-        'Xabi_BoxMidfield_bal3',
-        'DeZerbi_BaitPress_bal3',
-        'DeZerbi_Release_att4',
-        'Klopp_WideTrap_att4',
-        'Henta_LeftTrap_att3',
-        'Henta_RightTrap_att3',
-        'Henta_WideTrap_att3',
-        'Henta_CounterTrap_att4',
-        'Henta_CentralTrap_att3',
-        'Nagelsmann_WidePress_att4'
-    ]);
+    const ALLOWED_HENTA_PRESET = 'Henta abuse';
 
-    function isRetiredBuiltInPreset(name) {
-        return RETIRED_SLF_BUILT_IN_PRESET_NAMES.has(String(name || ''));
+    function isDeprecatedHentaPreset(name) {
+        const key = String(name || '');
+        return [
+            'Mourinho_WeakSide_def3',
+            'Henta_Hold_def3',
+            'Pep_StandardControl_bal3',
+            'Xabi_VerticalBox_att3',
+            'Xabi_BoxMidfield_bal3',
+            'DeZerbi_BaitPress_bal3',
+            'DeZerbi_Release_att4',
+            'Klopp_WideTrap_att4',
+            'Henta_LeftTrap_att3',
+            'Henta_RightTrap_att3',
+            'Henta_WideTrap_att3',
+            'Henta_CounterTrap_att4',
+            'Henta_CentralTrap_att3',
+            'Nagelsmann_WidePress_att4'
+        ].includes(key);
     }
 
-    function filterUnavailablePresetMap(map) {
+    function filterDeprecatedPresetMap(map) {
         const result = {};
         Object.entries(map || {}).forEach(([key, value]) => {
-            if (!isRetiredBuiltInPreset(key)) result[key] = value;
+            if (!isDeprecatedHentaPreset(key)) result[key] = value;
         });
         return result;
     }
@@ -59,7 +60,7 @@
         const result = {};
 
         for (let key in data) {
-            if (isRetiredBuiltInPreset(key)) continue;
+            if (isDeprecatedHentaPreset(key)) continue;
 
             const preset = data[key];
             if (!isTacticObject(preset)) continue;
@@ -82,16 +83,31 @@
             }
         }
 
-        return filterUnavailablePresetMap(result);
+        return filterDeprecatedPresetMap(result);
     }
 
     const PresetStorage = {
         isRetiredBuiltInPreset(name) {
-            return isRetiredBuiltInPreset(name);
+            return isDeprecatedHentaPreset(name);
         },
 
         getRetiredBuiltInPresetNames() {
-            return Array.from(RETIRED_SLF_BUILT_IN_PRESET_NAMES);
+            return [
+                'Mourinho_WeakSide_def3',
+                'Henta_Hold_def3',
+                'Pep_StandardControl_bal3',
+                'Xabi_VerticalBox_att3',
+                'Xabi_BoxMidfield_bal3',
+                'DeZerbi_BaitPress_bal3',
+                'DeZerbi_Release_att4',
+                'Klopp_WideTrap_att4',
+                'Henta_LeftTrap_att3',
+                'Henta_RightTrap_att3',
+                'Henta_WideTrap_att3',
+                'Henta_CounterTrap_att4',
+                'Henta_CentralTrap_att3',
+                'Nagelsmann_WidePress_att4'
+            ];
         },
 
         loadLocalRaw() {
@@ -161,7 +177,7 @@
         getAllPresets() {
             // Built-in canonical library wins over older locally/server-saved copies with the same names.
             // Exact retired SLF built-in IDs are removed at the storage boundary; unique user presets remain.
-            return filterUnavailablePresetMap(Object.assign({}, this.loadCustom(), BASE_PRESETS));
+            return filterDeprecatedPresetMap(Object.assign({}, this.loadCustom(), BASE_PRESETS));
         },
 
         getAllLabels() {
@@ -172,7 +188,7 @@
                 labels[key] = BASE_LABELS[key] || key;
             }
 
-            return filterUnavailablePresetMap(labels);
+            return filterDeprecatedPresetMap(labels);
         }
     };
 
