@@ -47,8 +47,11 @@ const context = {
     return 1;
   },
   clearTimeout() {},
-  BASE_PRESETS: Object.fromEntries(activePresets.map(name => [name, { priority: [] }])),
-  BASE_LABELS: Object.fromEntries(activePresets.map(name => [name, name])),
+  BASE_PRESETS: Object.assign(
+    { standard: { priority: [], style: '4' } },
+    Object.fromEntries(activePresets.map(name => [name, { priority: [] }]))
+  ),
+  BASE_LABELS: Object.fromEntries(['standard', ...activePresets].map(name => [name, name])),
   TacticPresetLibrary: {
     meta: Object.fromEntries(activePresets.map(name => [name, {}])),
     traits: Object.fromEntries(activePresets.map(name => [name, {}])),
@@ -101,6 +104,64 @@ assert.deepEqual(Array.from(registry.ladders.defensive), [
   'Simeone_LowBlock_def5',
   'Pep_PressCooldown_bal2'
 ]);
+
+const expectedDisplayLabels = {
+  standard: 'Стандартная 4-2-3-1_att1',
+  Arteta_Control433_bal3: 'Arteta Structural Control 4-3-3_neutr',
+  Pep_BoxControl_bal2: 'Guardiola Press-Resistant Control 4-1-2-2-1_neutr',
+  Pep_PressCooldown_bal2: 'Guardiola Press Cooldown 4-1-4-1_def1',
+  Compact_Counter_def3: 'Mourinho Compact Counter 4-4-1-1_neutr',
+  Pep_ControlledPush_att3: 'Guardiola Controlled Push 4-2-3-1_att1',
+  Pep_TwoThreeFive_att3: 'Guardiola Positional Attack 3-2-5_att2',
+  Conte_WingbackWidth_bal4: 'Conte Wingback Width 3-4-3_att1',
+  Klopp_Gegenpress_att4: 'Klopp Gegenpress 4-2-4_att2',
+  Simeone_Compact442_def4: 'Simeone Compact 4-4-2_def2',
+  Simeone_LowBlock_def5: 'Simeone Low Block 5-4-1_def2',
+  Bielsa_ChaosPress_att5: 'Bielsa Chaos Press 3-3-4_att2'
+};
+assert.deepEqual(
+  Object.fromEntries(Object.keys(expectedDisplayLabels).map(name => [name, context.BASE_LABELS[name]])),
+  expectedDisplayLabels
+);
+assert.deepEqual(Array.from(registry.styleGroups, group => String(group.style)), ['5', '4', '3', '2', '1']);
+assert.deepEqual(Array.from(registry.displayOrder), [
+  'Bielsa_ChaosPress_att5',
+  'Pep_TwoThreeFive_att3',
+  'Klopp_Gegenpress_att4',
+  'standard',
+  'Conte_WingbackWidth_bal4',
+  'Pep_ControlledPush_att3',
+  'Arteta_Control433_bal3',
+  'Pep_BoxControl_bal2',
+  'Compact_Counter_def3',
+  'Pep_PressCooldown_bal2',
+  'Simeone_Compact442_def4',
+  'Simeone_LowBlock_def5'
+]);
+for (const [name, meta] of Object.entries(registry.displayMeta)) {
+  const label = context.BASE_LABELS[name];
+  const actualStyle = String(context.BASE_PRESETS[name]?.style || meta.style || '');
+  assert.equal(actualStyle, String(meta.style), `${name}: display style must match actual tactic style`);
+  assert.ok(label.includes(meta.formation), `${name}: display label must include formation ${meta.formation}`);
+  assert.ok(label.endsWith(meta.suffix), `${name}: display label must end with ${meta.suffix}`);
+}
+for (const legacyName of [
+  'Mourinho_WeakSide_def3',
+  'Pep_StandardControl_bal3',
+  'Xabi_BoxMidfield_bal3',
+  'DeZerbi_BaitPress_bal3',
+  'DeZerbi_Release_att4',
+  'Klopp_WideTrap_att4',
+  'Henta_LeftTrap_att3'
+]) {
+  assert.ok(registry.removed.includes(legacyName), `${legacyName}: legacy built-in must be retired from UI`);
+}
+const uiSource = source('src/app/ui-layer.js');
+assert.equal(uiSource.includes('function getCoachGroup'), false, 'legacy coach-first dropdown grouping must be removed');
+assert.match(uiSource, /buildStyleGroupedOptions/);
+assert.match(uiSource, /getVisiblePresetLabels/);
+assert.match(uiSource, /styleGroups\.forEach/);
+
 assert.equal(registry.choosePreset({
   minute: 52,
   score: { state: 'draw' },
