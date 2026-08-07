@@ -30,6 +30,7 @@ const context = {
   window: {
     SLFActivePresetRegistry: { active: activePresets.slice(), removed: [], ladders: {} }
   },
+  location: { pathname: '/noop.php', search: '' },
   localStorage: {
     getItem(key) {
       return key === 'slf:tactics:risk-appetite' ? 'bold' : null;
@@ -53,7 +54,6 @@ const context = {
     schemeStates: {},
     presetSchemeState: {}
   },
-  TacticPresetLibraryPanel: { liveFormationPositions: {} },
   RecommendationEngine: recommendationEngine
 };
 context.globalThis = context;
@@ -64,6 +64,10 @@ const source = relative => fs.readFileSync(new URL(relative, root), 'utf8');
 vm.runInContext(source('src/modules/strategy-data-recommendations/current-action-hint-engine.js'), context, {
   filename: 'current-action-hint-engine.js'
 });
+vm.runInContext(source('src/modules/tactics-presets/tactic-preset-library-panel.js'), context, {
+  filename: 'tactic-preset-library-panel.js'
+});
+const panel = vm.runInContext('TacticPresetLibraryPanel', context);
 vm.runInContext(source('src/modules/tactics-presets/tactic-preset-direction-policy.js'), context, {
   filename: 'tactic-preset-direction-policy.js'
 });
@@ -75,6 +79,7 @@ assert.equal(policy.version, '5.61-situation-v6');
 assert.equal(policy.autoApply, false);
 assert.equal(engine.ACTIVE_PRESETS.length, 11);
 assert.equal(engine.schema, 'slf_rule_decision_v6_pressure_response');
+assert.equal(source('src/modules/tactics-presets/tactic-preset-direction-policy.js').includes('eval('), false, 'direction policy must not bypass dependency/security audit with eval');
 
 function baseSignals(overrides = {}) {
   return {
@@ -288,7 +293,7 @@ assert.ok(['Pep_ControlledPush_att3', 'Pep_TwoThreeFive_att3', 'Klopp_Gegenpress
 for (const [name, positions] of Object.entries(policy.formations)) {
   assert.equal(positions.length, 11, `${name}: formation must contain eleven positions`);
   assert.equal(new Set(positions).size, 11, `${name}: formation positions must be unique`);
-  assert.deepEqual(Array.from(context.TacticPresetLibraryPanel.liveFormationPositions[name]), Array.from(positions));
+  assert.deepEqual(Array.from(panel.liveFormationPositions[name]), Array.from(positions));
 }
 assert.notDeepEqual(Array.from(policy.formations.Pep_TwoThreeFive_att3), Array.from(policy.formations.Pep_ControlledPush_att3));
 assert.notDeepEqual(Array.from(policy.formations.Klopp_Gegenpress_att4), Array.from(policy.formations.Arteta_Control433_bal3));
