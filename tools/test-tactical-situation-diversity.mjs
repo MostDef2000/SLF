@@ -223,7 +223,8 @@ const scenarios = [
     myPressVector: -5,
     oppPressVector: 15,
     myDefVector: 1,
-    oppDefVector: 13
+    oppDefVector: 13,
+    gameMode: 'compact_counter_control'
   }, 'Simeone_LowBlock_def5'],
   ['controlled push', { minute: 55, scoreState: 'losing', scoreDiff: -1, attackNeed: 58, signals: ['generator_attack_underperforming', 'generator_defense_working'], gameMode: 'controlled_chase' }, 'Pep_ControlledPush_att3'],
   ['positional squeeze', { minute: 49, strengthGap: 55, strengthAdvantage: 32, pressureRisk: 28, pressingOpportunity: 64, attackingMomentum: true, signals: ['generator_attack_working'], gameMode: 'front_foot_squeeze' }, 'Pep_TwoThreeFive_att3'],
