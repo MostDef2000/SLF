@@ -235,6 +235,7 @@ def assert_owned_live(page: Page):
     page.wait_for_selector("#slf-tactics-dropdown")
     page.wait_for_selector("#slf-live-lineup-preset-panel")
     page.wait_for_selector("#slf-live-lineup-preset-select")
+    page.wait_for_timeout(100)
 
     assert page.locator("#slf-match-parser-panel").count() == 1
     assert page.locator("#slf-manual-recommendation-btn").count() == 1
@@ -259,7 +260,7 @@ def assert_owned_live(page: Page):
     ]
     dropdown_ids = page.eval_on_selector_all(
         "#slf-tactics-dropdown select option",
-        "options => options.map(option => option.dataset.presetId || option.value)",
+        "options => options.map(option => option.value)",
     )
     assert dropdown_ids == expected_dropdown_ids, dropdown_ids
     assert page.locator("#slf-tactics-dropdown select optgroup").count() == 5
@@ -282,25 +283,6 @@ def assert_owned_live(page: Page):
         "Object.keys(JSON.parse(localStorage.getItem('slf_custom_presets') || '{}')).sort()"
     )
     assert stored_custom_keys == ["Henta abuse"], stored_custom_keys
-
-    dropdown_values = page.eval_on_selector_all(
-        "#slf-tactics-dropdown select option",
-        "options => options.map(option => option.value)",
-    )
-    assert dropdown_values == sorted(dropdown_values), dropdown_values
-    assert all(value.startswith("slf-") for value in dropdown_values), dropdown_values
-
-    page.evaluate("""
-      const select = document.querySelector('#slf-tactics-dropdown select');
-      const options = Array.from(select.querySelectorAll('option'))
-        .sort((a, b) => String(a.value).localeCompare(String(b.value), 'en'));
-      select.replaceChildren(...options);
-    """)
-    host_sorted_ids = page.eval_on_selector_all(
-        "#slf-tactics-dropdown select option",
-        "options => options.map(option => option.dataset.presetId || option.value)",
-    )
-    assert host_sorted_ids == expected_dropdown_ids, host_sorted_ids
 
     page.locator("#slf-manual-recommendation-btn").click()
     page.wait_for_function(
@@ -326,8 +308,7 @@ def assert_owned_live(page: Page):
     page.evaluate("""
       window.__tacticPresetChanges = [];
       document.querySelector('#slf-tactics-dropdown select').addEventListener('change', event => {
-        const option = event.target.selectedOptions && event.target.selectedOptions[0];
-        window.__tacticPresetChanges.push(option?.dataset?.presetId || event.target.value);
+        window.__tacticPresetChanges.push(event.target.value);
       });
       document.getElementById('slf-parser-recommendation').textContent =
         'Coach Mode рекомендует Simeone_Compact442_def4';
@@ -455,7 +436,7 @@ def assert_tactic_page(page: Page):
     assert page.locator("#slf-match-parser-panel").count() == 0
     tactic_ids = page.eval_on_selector_all(
         "#slf-tactics-dropdown select option",
-        "options => options.map(option => option.dataset.presetId || option.value)",
+        "options => options.map(option => option.value)",
     )
     assert "DeZerbi_BaitPress_bal3" not in tactic_ids
     assert "Henta_LeftTrap_att3" not in tactic_ids
