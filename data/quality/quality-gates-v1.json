@@ -2,9 +2,10 @@
   "schema": "slf_quality_gate_rollout_v1",
   "repository": "MostDef2000/SLF",
   "defaultBranch": "main",
-  "state": "aggregate_verified_settings_not_enforced",
-  "reason": "Prerequisite quality pull requests are integrated and the always-running aggregate context completed successfully on PR #175. GitHub branch-protection settings are not applied or verified.",
+  "state": "consolidated_ci_pending_verification",
+  "reason": "The repository workflow architecture is consolidated to one canonical PR CI, one release workflow and one maintenance workflow. The new SLF CI context must pass on the consolidation pull request before merge; branch protection is not yet applied.",
   "roadmapIssue": 160,
+  "currentIssue": 233,
   "reviewModel": "single_maintainer_owner_acceptance_with_compensating_controls",
   "deliberateExecutionContract": {
     "schema": "slf_deliberate_execution_contract_v1",
@@ -21,88 +22,60 @@
     "contractBootstrapRequired": true
   },
   "prerequisitesIntegrated": true,
-  "prerequisitePullRequests": [159, 163, 164, 165, 166, 167, 168],
-  "aggregatePullRequest": 175,
+  "prerequisitePullRequests": [159, 163, 164, 165, 166, 167, 168, 175],
+  "workflowLifecyclePolicy": "contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md",
+  "workflowInventory": "data/quality/workflow-inventory-v1.json",
   "componentWorkflows": [
     {
-      "workflow": "SLF Validate and Release",
-      "purpose": "canonical build, manifest, provenance, and release validation",
-      "existing": true
-    },
-    {
-      "workflow": "Manual match workflow regression",
-      "purpose": "manual runtime, state, and legacy-boundary regression",
-      "existing": true
-    },
-    {
-      "workflow": "Runtime reachability audit",
-      "purpose": "runtime symbol and capability reachability",
-      "existing": true
-    },
-    {
-      "workflow": "Tactic runtime, analytics and API smoke",
-      "purpose": "tactic telemetry and VPS API smoke validation",
-      "existing": true
-    },
-    {
-      "workflow": "Userscript exact artifact boundary",
-      "purpose": "exact generated userscript structure and startup boundary",
-      "sourcePullRequest": 163
-    },
-    {
-      "workflow": "Versioned data and API contracts",
-      "purpose": "versioned schemas, fixtures, and API compatibility",
-      "sourcePullRequest": 164
-    },
-    {
-      "workflow": "Security boundaries and adversarial API",
-      "purpose": "repository security boundaries and adversarial API tests",
-      "sourcePullRequest": 165
-    },
-    {
-      "workflow": "Exact userscript browser E2E",
-      "purpose": "exact artifact execution in sanitised Chromium fixtures",
-      "sourcePullRequest": 166
-    },
-    {
-      "workflow": "Property fuzz mutation and reliability",
-      "purpose": "generated properties, fuzzing, mutation sentinels, and reliability budgets",
-      "sourcePullRequest": 167
-    },
-    {
-      "workflow": "Release and deployment evidence",
-      "purpose": "deterministic rebuild, provenance bundle, SPDX SBOM, and deployment verifier contract",
-      "sourcePullRequest": 168
-    },
-    {
-      "workflow": "Quality integration gate",
-      "purpose": "always-running aggregate status context that requires every quality domain to pass",
-      "sourcePullRequest": 175,
+      "workflow": "SLF CI",
+      "path": ".github/workflows/quality-integration.yml",
+      "role": "CI",
+      "purpose": "single pull-request quality context covering every normal merge gate",
       "aggregate": true,
+      "existing": true
+    },
+    {
+      "workflow": "SLF Release",
+      "path": ".github/workflows/build-latest-release.yml",
+      "role": "RELEASE",
+      "purpose": "validate current main and publish deterministic latest-only userscript artifacts",
+      "existing": true
+    },
+    {
+      "workflow": "SLF Maintenance",
+      "path": ".github/workflows/quality-governance.yml",
+      "role": "MAINTENANCE",
+      "purpose": "weekly/manual governance, risk and workflow lifecycle validation",
       "existing": true
     }
   ],
   "enforcementPlan": {
-    "strategy": "always_run_aggregate_check",
+    "strategy": "single_required_ci_context",
     "aggregateWorkflow": ".github/workflows/quality-integration.yml",
-    "aggregateContext": "Quality integration gate / quality-integration",
-    "why": "Path-filtered component workflows must not be configured directly as required checks because skipped workflows can leave required contexts pending.",
+    "aggregateContext": "SLF CI / ci",
+    "ciStatePolicy": {
+      "allowedToMerge": ["SUCCESS"],
+      "blockedFromMerge": ["PENDING", "FAILED", "UNKNOWN"]
+    },
+    "why": "One unfiltered pull-request context avoids path-filter deadlocks and prevents green status in one specialist workflow from masking a failure elsewhere.",
     "remainingActions": [
-      "merge PR #175 so the verified aggregate workflow exists on main",
+      "verify SLF CI / ci succeeds on the consolidation pull request",
       "apply the single-maintainer branch-protection target in GitHub settings",
-      "verify enforcement with a disposable pull request"
+      "verify the protection requires SLF CI / ci before source merge"
     ]
   },
   "aggregateVerification": {
-    "result": "success",
-    "workflow": "Quality integration gate",
-    "context": "Quality integration gate / quality-integration",
-    "sourcePullRequest": 175,
-    "runId": 30884950897,
-    "jobId": 91914145283,
-    "verifiedAt": "2026-08-04",
+    "result": "pending",
+    "workflow": "SLF CI",
+    "context": "SLF CI / ci",
+    "sourceIssue": 233,
+    "sourcePullRequest": null,
+    "runId": null,
+    "jobId": null,
+    "verifiedAt": null,
     "domains": [
       "static-contract-security",
+      "runtime-tactics",
       "property-fuzz-reliability",
       "browser-e2e",
       "release-deployment-evidence"
@@ -114,14 +87,15 @@
     "requireCodeOwnerReview": false,
     "dismissStaleApprovals": false,
     "requireConversationResolution": true,
+    "requiredStatusContext": "SLF CI / ci",
     "requireAggregateStatusCheck": true,
     "blockForcePushes": true,
     "blockBranchDeletion": true,
     "allowAdminBypass": false,
-    "singleMaintainerException": "No independent reviewer is currently available. Owner acceptance is recorded explicitly and mandatory automated quality gates are the primary compensating control."
+    "singleMaintainerException": "No independent reviewer is currently available. Owner acceptance is explicit and the single mandatory automated CI context is the primary compensating control."
   },
   "branchProtectionApplied": false,
   "branchProtectionVerified": false,
-  "connectorLimitation": "The connected GitHub tool set in this session does not expose branch-protection or ruleset mutation actions.",
+  "connectorLimitation": "The connected GitHub tool set does not expose branch-protection or ruleset mutation actions; this platform setting is the only expected manual step after the new context is observed green.",
   "productionDeploymentImplied": false
 }
