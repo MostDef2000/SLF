@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.293
+// @version      4.4.294
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -27,6 +27,6 @@
 // @connect      www.slf.fm
 // @connect      soccerlife.ru
 // @connect      www.soccerlife.ru
-// @updateURL    https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.meta.js
-// @downloadURL  https://raw.githubusercontent.com/MostDef2000/SLF/main/releases/latest.user.js
+// @updateURL    https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js
+// @downloadURL  https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js
 // ==/UserScript==

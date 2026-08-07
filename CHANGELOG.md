@@ -1,5 +1,29 @@
 # Changelog
 
+## 4.4.294
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- src/app/userscript-header.js
+- tools/build-latest-userscript.mjs
+- tools/validate-release-provenance.mjs
+
+Approved base commit:
+- 7f7cb7c7a376a1e30a39b910017fa9ec6c186a23
+
+Approved commit:
+- 2f18a83b255e306dcfd2ef1dbe6e01a05635d369
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.293
 
 ### Automatic latest-only build
