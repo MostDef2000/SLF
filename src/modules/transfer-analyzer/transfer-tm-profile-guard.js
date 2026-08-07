@@ -100,10 +100,20 @@ if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer && !TMEnrichme
     };
 }
 
-// FM2026 market rows may expose transfer-detail navigation without a direct player.php link.
-// Resolve that identity before delegating to the existing live Analyzer implementation.
+// Real FM2026 transfer-market compatibility.
+// The redesigned market is a 12-column CSS grid of div.fmx-row elements, while the
+// legacy runtime expects table/tr/td. Adapt the DOM boundary and keep all enrichment,
+// scoring, cache and ranking logic in the existing Analyzer implementation.
 if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !TransferMarketAnalyzer.fm2026VisibleRowIdentityBridgeApplied) {
     TransferMarketAnalyzer.fm2026VisibleRowIdentityBridgeApplied = true;
+
+    const findTransferTableBeforeRealFm2026Grid = TransferMarketAnalyzer.findTransferTable;
+    const ensureAnalysisHeaderBeforeRealFm2026Grid = TransferMarketAnalyzer.ensureAnalysisHeader;
+    const parseVisibleRowsBeforeRealFm2026Grid = TransferMarketAnalyzer.parseVisibleRows;
+    const getOrCreateBadgeCellBeforeRealFm2026Grid = TransferMarketAnalyzer.getOrCreateBadgeCell;
+    const sortRowsInTableByDatasetBeforeRealFm2026Grid = TransferMarketAnalyzer.sortRowsInTableByDataset;
+    const resetOrderBeforeRealFm2026Grid = TransferMarketAnalyzer.resetOrder;
+    const clearAllTransferAnalysisStateBeforeRealFm2026Grid = TransferMarketAnalyzer.clearAllTransferAnalysisState;
 
     TransferMarketAnalyzer.playerIdFromMarketHref = function playerIdFromMarketHref(value) {
         if (!value) return '';
@@ -137,15 +147,20 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         }
     };
 
-    TransferMarketAnalyzer.findMarketRowIdentity = function findMarketRowIdentity(tr) {
-        const anchors = [...tr.querySelectorAll('a[href]')];
+    TransferMarketAnalyzer.findMarketRowIdentity = function findMarketRowIdentity(rowElement) {
+        const anchors = [...(rowElement?.querySelectorAll?.('a[href]') || [])];
         const player = anchors
             .map(anchor => ({ anchor, playerId: this.playerIdFromMarketHref(anchor.getAttribute('href') || '') }))
-            .find(entry => entry.playerId) || null;
+            .filter(entry => entry.playerId)
+            .sort((a, b) => {
+                const aText = this.normalizeText(a.anchor.querySelector?.('.wide_format')?.textContent || a.anchor.getAttribute('title') || a.anchor.textContent || '');
+                const bText = this.normalizeText(b.anchor.querySelector?.('.wide_format')?.textContent || b.anchor.getAttribute('title') || b.anchor.textContent || '');
+                return Number(/[A-Za-zА-Яа-яЁё]/.test(bText)) - Number(/[A-Za-zА-Яа-яЁё]/.test(aText));
+            })[0] || null;
         const detail = anchors
             .map(anchor => ({ anchor, transferId: this.transferIdFromMarketHref(anchor.getAttribute('href') || '') }))
             .find(entry => entry.transferId) || null;
-        const rowTransferId = (tr.id || '').match(/(?:tl|transfer)[-_]?(\d+)/i)?.[1] || '';
+        const rowTransferId = (rowElement?.id || '').match(/(?:tl|transfer)[-_]?(\d+)/i)?.[1] || '';
         const transferId = detail?.transferId || rowTransferId || '';
         return {
             playerId: player?.playerId || '',
@@ -159,8 +174,207 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         };
     };
 
+    TransferMarketAnalyzer.findFm2026MarketSurface = function findFm2026MarketSurface(doc = document) {
+        const header = doc?.querySelector?.('.fmx-rows__head.fmx-tmarket');
+        if (!header) return null;
+        const card = header.closest?.('.fmx-card') || header.parentElement;
+        if (!card?.querySelector?.('.fmx-row.fmx-tmarket')) return null;
+        return card;
+    };
+
+    TransferMarketAnalyzer.isFm2026MarketSurface = function isFm2026MarketSurface(surface) {
+        return !!(
+            surface?.querySelector?.('.fmx-rows__head.fmx-tmarket') &&
+            surface?.querySelector?.('.fmx-row.fmx-tmarket')
+        );
+    };
+
+    TransferMarketAnalyzer.findTransferTable = function findTransferSurfaceWithRealFm2026Grid() {
+        return this.findFm2026MarketSurface(document) || findTransferTableBeforeRealFm2026Grid.apply(this, arguments);
+    };
+
+    TransferMarketAnalyzer.ensureAnalysisHeader = function ensureAnalysisHeaderWithRealFm2026Grid(surface) {
+        if (this.isFm2026MarketSurface(surface)) return;
+        return ensureAnalysisHeaderBeforeRealFm2026Grid.apply(this, arguments);
+    };
+
+    TransferMarketAnalyzer.getFm2026GridCells = function getFm2026GridCells(rowElement) {
+        return [...(rowElement?.children || [])].filter(node => String(node.tagName || '').toLowerCase() === 'span');
+    };
+
+    TransferMarketAnalyzer.getFm2026GridCellText = function getFm2026GridCellText(cells, index) {
+        return this.normalizeText(cells?.[index]?.textContent || '');
+    };
+
+    TransferMarketAnalyzer.parseFm2026GridRow = function parseFm2026GridRow(rowElement, index) {
+        const cells = this.getFm2026GridCells(rowElement);
+        if (cells.length < 11) return null;
+
+        const identity = this.findMarketRowIdentity(rowElement);
+        if (!identity.playerId && !identity.transferId) return null;
+
+        const directAnchor = identity.playerAnchor;
+        const wideName = this.normalizeText(directAnchor?.querySelector?.('.wide_format')?.textContent || '');
+        const directName = this.normalizeText(directAnchor?.getAttribute?.('title') || directAnchor?.textContent || '');
+        const fallbackName = this.getFm2026GridCellText(cells, 1);
+        const name = this.cleanPlayerName(wideName || directName || fallbackName || identity.playerId || (identity.transferId ? `Трансфер #${identity.transferId}` : 'Игрок'));
+
+        const positionText = this.getFm2026GridCellText(cells, 0);
+        const ageText = this.getFm2026GridCellText(cells, 3);
+        const talentText = this.getFm2026GridCellText(cells, 4);
+        const potentialCell = cells[5];
+        const potentialText = this.normalizeText(
+            potentialCell?.querySelector?.('[title]')?.getAttribute('title') ||
+            potentialCell?.querySelector?.('img[title]')?.getAttribute('title') ||
+            potentialCell?.textContent || ''
+        );
+        const skillText = this.normalizeText(cells[6]?.querySelector?.('.fmx-rating')?.textContent || this.getFm2026GridCellText(cells, 6));
+        const nominalText = this.getFm2026GridCellText(cells, 7);
+        const nominalRatio = this.parseNominalRatio(nominalText);
+        const priceText = this.getFm2026GridCellText(cells, 8);
+        const price = this.parseMoney(priceText);
+        const endDateText = this.normalizeText(cells[9]?.querySelector?.('.wide_format')?.textContent || this.getFm2026GridCellText(cells, 9));
+        const bidsText = this.normalizeText(cells[10]?.querySelector?.('.fmx-bets__count')?.textContent || this.getFm2026GridCellText(cells, 10));
+        const tm = rowElement.querySelector('.tm_field a[href*="transfermarkt"], a[href*="transfermarkt."]');
+
+        const row = {
+            rowEl: rowElement,
+            originalIndex: index,
+            playerId: String(identity.playerId || ''),
+            playerUrl: identity.playerId
+                ? new URL(`/player.php?action=view&id=${encodeURIComponent(identity.playerId)}`, location.origin).toString()
+                : '',
+            transferId: identity.transferId,
+            transferDetailUrl: identity.transferDetailUrl,
+            name,
+            positions: this.parsePositions(positionText),
+            age: this.parseNumber(ageText),
+            talent: this.parseNumber(talentText),
+            potentialText,
+            scoutSkill: this.parseNumber(skillText),
+            slfPriceText: priceText,
+            slfPriceCellText: `${nominalText} ${priceText}`.trim(),
+            slfPrice: price,
+            slfSecondaryPriceText: '',
+            slfSecondaryPrice: null,
+            nominalRatio,
+            nominalBase: price && nominalRatio ? Math.round(price / nominalRatio) : null,
+            slfPriceSource: 'fm2026_grid_value_cell',
+            slfPriceCellIndex: 8,
+            slfBids: this.parseNumber(bidsText),
+            endDateText,
+            tmUrl: tm?.href || '',
+            tmProfile: null,
+            tmValueEur: 0
+        };
+
+        rowElement.dataset.slfOriginalIndex = String(index);
+        rowElement.dataset.slfPlayerId = row.playerId;
+        if (row.transferId) rowElement.dataset.slfTransferId = String(row.transferId);
+        return row;
+    };
+
+    TransferMarketAnalyzer.parseFm2026GridRows = function parseFm2026GridRows(surface = this.findFm2026MarketSurface(document)) {
+        if (!surface) return [];
+        return [...surface.querySelectorAll('.fmx-row.fmx-tmarket')]
+            .map((rowElement, index) => this.parseFm2026GridRow(rowElement, index))
+            .filter(Boolean);
+    };
+
+    TransferMarketAnalyzer.parseVisibleRows = function parseVisibleRowsWithRealFm2026Grid() {
+        const surface = this.findFm2026MarketSurface(document);
+        if (surface) {
+            const parsed = this.parseFm2026GridRows(surface);
+            console.log('[SLF Transfer Analyzer] parseVisibleRows FM2026 grid', parsed);
+            return parsed;
+        }
+        return parseVisibleRowsBeforeRealFm2026Grid.apply(this, arguments);
+    };
+
+    TransferMarketAnalyzer.getOrCreateBadgeCell = function getOrCreateBadgeCellWithRealFm2026Grid(row) {
+        const rowElement = row?.rowEl;
+        if (!rowElement?.matches?.('.fmx-row.fmx-tmarket')) {
+            return getOrCreateBadgeCellBeforeRealFm2026Grid.apply(this, arguments);
+        }
+
+        let box = rowElement.querySelector(':scope > .slf-transfer-analysis-badge');
+        if (!box) {
+            box = document.createElement('div');
+            box.className = 'slf-transfer-analysis-badge slf-transfer-analysis-badge--fmx';
+            box.style.cssText = `
+                grid-column:1 / -1;
+                box-sizing:border-box;
+                min-width:0;
+                width:100%;
+                margin:2px 0 0;
+                padding:4px 6px;
+                border-top:1px solid rgba(139,147,171,.18);
+                font-size:11px;
+                line-height:1.15;
+                white-space:normal;
+                position:relative;
+                overflow:visible;
+                display:flex;
+                flex-wrap:wrap;
+                align-items:flex-start;
+                gap:3px 4px;
+            `;
+            rowElement.appendChild(box);
+        }
+        return box;
+    };
+
+    TransferMarketAnalyzer.sortRowsInTableByDataset = function sortRowsWithRealFm2026Grid(surface, datasetKey, direction = 'desc') {
+        if (!this.isFm2026MarketSurface(surface)) {
+            return sortRowsInTableByDatasetBeforeRealFm2026Grid.apply(this, arguments);
+        }
+
+        const rows = [...surface.querySelectorAll('.fmx-row.fmx-tmarket')];
+        if (!rows.length) return;
+        const sorted = rows.slice().sort((a, b) => {
+            const av = Number(a.dataset?.[datasetKey]);
+            const bv = Number(b.dataset?.[datasetKey]);
+            const aValid = Number.isFinite(av);
+            const bValid = Number.isFinite(bv);
+            if (aValid && bValid && av !== bv) return direction === 'asc' ? av - bv : bv - av;
+            if (aValid !== bValid) return aValid ? -1 : 1;
+            return Number(a.dataset.slfOriginalIndex || 0) - Number(b.dataset.slfOriginalIndex || 0);
+        });
+        const parent = rows[0].parentElement;
+        if (!parent) return;
+        const pagination = [...parent.children].find(node => node.classList?.contains('transfers-ui__pages')) || null;
+        sorted.forEach(rowElement => parent.insertBefore(rowElement, pagination));
+    };
+
+    TransferMarketAnalyzer.resetOrder = function resetOrderWithRealFm2026Grid() {
+        const surface = this.findFm2026MarketSurface(document);
+        if (!surface) return resetOrderBeforeRealFm2026Grid.apply(this, arguments);
+
+        const rows = [...surface.querySelectorAll('.fmx-row.fmx-tmarket')]
+            .sort((a, b) => Number(a.dataset.slfOriginalIndex || 0) - Number(b.dataset.slfOriginalIndex || 0));
+        if (!rows.length) return;
+        const parent = rows[0].parentElement;
+        const pagination = parent ? [...parent.children].find(node => node.classList?.contains('transfers-ui__pages')) || null : null;
+        rows.forEach(rowElement => parent?.insertBefore(rowElement, pagination));
+        this.setStatus?.('Исходный порядок восстановлен.');
+    };
+
+    if (typeof clearAllTransferAnalysisStateBeforeRealFm2026Grid === 'function') {
+        TransferMarketAnalyzer.clearAllTransferAnalysisState = function clearAllTransferAnalysisStateWithRealFm2026Grid() {
+            const result = clearAllTransferAnalysisStateBeforeRealFm2026Grid.apply(this, arguments);
+            document.querySelectorAll('.fmx-row.fmx-tmarket').forEach(rowElement => {
+                ['slfAnalyzerScore', 'slfSkillDelta', 'slfMinutesPct', 'slfTalentUp', 'slfTmValue', 'slfMktBargain', 'slfMktOverpriced']
+                    .forEach(key => { delete rowElement.dataset[key]; });
+            });
+            return result;
+        };
+    }
+
     TransferMarketAnalyzer.parseVisibleRowsCompat = function parseVisibleRowsCompat() {
-        const table = document.querySelector('table.trans_market_offers, table[data-slf-transfer-table]') || this.findTransferTable();
+        const surface = this.findFm2026MarketSurface(document);
+        if (surface) return this.parseFm2026GridRows(surface);
+
+        const table = document.querySelector('table.trans_market_offers, table[data-slf-transfer-table]') || findTransferTableBeforeRealFm2026Grid.call(this);
         if (!table) return [];
         this.ensureAnalysisHeader(table);
         const map = this.getHeaderMap(table);
@@ -256,8 +470,9 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         }
         if (!playerId) throw new Error(`player_identity_not_found_${row.transferId || 'unknown'}`);
         row.playerId = String(playerId);
-        row.playerUrl = `/player.php?action=view&id=${encodeURIComponent(playerId)}`;
+        row.playerUrl = new URL(`/player.php?action=view&id=${encodeURIComponent(playerId)}`, location.origin).toString();
         if (candidates[0]?.label && /[A-Za-zА-Яа-яЁё]/.test(candidates[0].label)) row.name = candidates[0].label;
+        row.rowEl?.setAttribute?.('data-slf-player-id', row.playerId);
         return row;
     };
 

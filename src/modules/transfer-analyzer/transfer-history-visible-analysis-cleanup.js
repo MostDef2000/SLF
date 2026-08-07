@@ -37,7 +37,7 @@ html[data-slf-design="fm2026"] #slf-candidate-results{grid-column:1/-1;margin-to
 html[data-slf-design="fm2026"] #slf-candidate-results.slf-transfer-results-idle{display:none!important}
 html[data-slf-design="fm2026"] .slf-transfer-workspace-mode{display:inline-flex;align-items:center;min-height:19px;padding:2px 6px;color:var(--slf-muted,#8b93ab)!important;background:rgba(139,147,171,.08);border:1px solid rgba(139,147,171,.16);border-radius:999px;font-size:9px!important;white-space:nowrap}
 html[data-slf-design="fm2026"] .slf-transfer-sort-button{background:rgba(79,124,255,.09)!important;border-color:rgba(79,124,255,.24)!important}html[data-slf-design="fm2026"] .slf-transfer-utility-button{color:var(--slf-muted,#8b93ab)!important;background:transparent!important;border-color:rgba(139,147,171,.2)!important}
-html[data-slf-design="fm2026"] #${STATUS_ID}{grid-area:status;display:flex;align-items:center;gap:6px 13px;flex-wrap:wrap;min-width:0;padding:5px 12px 6px;border-top:1px solid rgba(139,147,171,.16);color:var(--slf-muted,#8b93ab);font-size:9.5px;line-height:1.25}
+html[data-slf-design="fm2026"] #${STATUS_ID}{grid-area:status;display:flex;align-items:center;gap:6px 13px;flex-wrap:wrap;min-width:0;padding:5px 12px 6px;border-top:1px solid rgba(139,147,171,.16);color:var(--tw-muted,#8b93ab);font-size:9.5px;line-height:1.25}
 html[data-slf-design="fm2026"] #${STATUS_ID}>*{min-width:0;margin:0!important;color:inherit!important;font-size:inherit!important;text-align:left!important;white-space:normal}
 html[data-slf-design="fm2026"] #${STATUS_ID}>*+*{padding-left:12px;border-left:1px solid rgba(139,147,171,.16)}
 html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar.slf-transfer-workspace-solo{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:6px!important;width:100%!important;margin:0 0 14px!important;padding:10px 14px!important;background:linear-gradient(180deg,rgba(28,33,50,.98),rgba(23,27,41,.98))!important;border:1px solid var(--slf-border,#38415f)!important;border-radius:14px!important}
@@ -141,6 +141,25 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design
     function scheduleAdapt() {
         clearTimeout(adaptTimer);
         adaptTimer = setTimeout(adapt, 0);
+    }
+
+    // The history VPS layer is evaluated after the FM2026 grid bridge and replaces
+    // findTransferTable()/parseVisibleRows() with legacy table-only implementations.
+    // Reapply the grid boundary here, in the final transfer module, before App.start().
+    const finalLegacyFindTransferTable = TransferMarketAnalyzer.findTransferTable;
+    const finalLegacyParseVisibleRows = TransferMarketAnalyzer.parseVisibleRows;
+    if (
+        typeof TransferMarketAnalyzer.findFm2026MarketSurface === 'function' &&
+        typeof TransferMarketAnalyzer.parseFm2026GridRows === 'function'
+    ) {
+        TransferMarketAnalyzer.findTransferTable = function findTransferSurfaceFinal() {
+            return this.findFm2026MarketSurface(document) || finalLegacyFindTransferTable.apply(this, arguments);
+        };
+        TransferMarketAnalyzer.parseVisibleRows = function parseVisibleRowsFinal() {
+            const surface = this.findFm2026MarketSurface(document);
+            if (surface) return this.parseFm2026GridRows(surface);
+            return finalLegacyParseVisibleRows.apply(this, arguments);
+        };
     }
 
     const addToolbarOriginal = TransferMarketAnalyzer.addToolbar;

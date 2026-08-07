@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-slf-design="fm2026">
 <head>
   <meta charset="utf-8">
   <title>SLF FM 2026 transfer market</title>
@@ -23,7 +23,11 @@
     .fmx-kv{display:flex;justify-content:space-between;gap:8px;padding:4px 0;color:var(--fm-muted)}
     .fmx-tabs{display:flex;align-items:center;gap:5px;margin-bottom:0}.fmx-tab{padding:8px 14px;background:#181d2b;border:1px solid #343d58;border-radius:9px 9px 0 0}.fmx-tab--active{color:#fff}
     .fmx-pill--accent{margin-left:auto}.fmx-table-card{border-radius:0 12px 12px 12px}
-    table{width:100%;border-collapse:collapse;background:#151a28}th,td{padding:7px;border-bottom:1px solid #303850;text-align:left}a{color:#8dc0ff}
+    .fmx-tmarket{display:grid;grid-template-columns:56px minmax(0,2.2fr) minmax(0,1.4fr) 36px 36px 40px 64px 44px 104px 122px 46px 118px;gap:8px;align-items:center}
+    .fmx-rows__head{padding:7px 4px;color:#aab2c9;border-bottom:1px solid #303850}
+    .fmx-row{padding:7px 4px;border-bottom:1px solid #303850}.fmx-name{min-width:0}.fmx-actions{display:flex;gap:5px;align-items:center}.fmx-value{text-align:right}.fmx-nominal{text-align:right}
+    .fmx-rating{font-weight:800}.fmx-goto{color:#8dc0ff}.transfers-ui__pages{display:flex;gap:8px;padding-top:10px}a{color:#8dc0ff}
+    .mobile_format{display:none}
   </style>
 </head>
 <body>
@@ -35,43 +39,72 @@
       <div class="fmx">
         <div class="fmx-tnav"><div class="fmx-tnav__title">Трансферный рынок</div></div>
         <div class="fmx-info-grid wide_format">
-          <div class="fmx-card">
-            <div class="fmx-info__label">Трансферное окно</div>
-            <div class="fmx-info__hero"><span>окно открыто</span></div>
-            <div class="fmx-kv"><span>с 05.08.2026 по 12.08.2026</span><b>7 дней</b></div>
-          </div>
-          <div class="fmx-card">
-            <div class="fmx-info__label">Активность рынка</div>
-            <div class="fmx-info__hero">111 <span class="fmx-info__hero-sub">предложений на рынке</span></div>
-            <div class="fmx-kv"><span>Ваших сделок в это ТО</span><b>0/40</b></div>
-          </div>
-          <div class="fmx-card">
-            <div class="fmx-info__label">Финансы клуба</div>
-            <div class="fmx-info__hero">450M <span class="fmx-info__hero-sub">бюджет клуба</span></div>
-            <div class="fmx-kv"><span>Сумма всех ваших ставок</span><b>0M</b></div>
-          </div>
+          <div class="fmx-card"><div class="fmx-info__label">Трансферное окно</div><div class="fmx-info__hero"><span>окно открыто</span></div><div class="fmx-kv"><span>с 05.08.2026 по 12.08.2026</span><b>7 дней</b></div></div>
+          <div class="fmx-card"><div class="fmx-info__label">Активность рынка</div><div class="fmx-info__hero">5 <span class="fmx-info__hero-sub">предложений на рынке</span></div><div class="fmx-kv"><span>Ваших сделок в это ТО</span><b>0/40</b></div></div>
+          <div class="fmx-card"><div class="fmx-info__label">Финансы клуба</div><div class="fmx-info__hero">450M <span class="fmx-info__hero-sub">бюджет клуба</span></div><div class="fmx-kv"><span>Сумма всех ваших ставок</span><b>0M</b></div></div>
         </div>
         <div class="fmx-tabs">
-          <span class="fmx-tab fmx-tab--active">Все игроки (111)</span>
-          <a class="fmx-tab" href="/transfers.php?lister=1">Ваши игроки (0)</a>
-          <a class="fmx-tab" href="/transfers.php?ucs=1">Ваши ставки (0 из 0)</a>
-          <a class="fmx-tab" href="/transfers.php?ucs=2">На карандаше (0)</a>
+          <span class="fmx-tab fmx-tab--active">Все игроки <span class="wide_format">(5)</span></span>
+          <a class="fmx-tab" href="/transfers.php?lister=1">Ваши игроки <span class="wide_format">(0)</span></a>
+          <a class="fmx-tab" href="/transfers.php?ucs=1">Ваши ставки <span class="wide_format">(0 из 0)</span></a>
+          <a class="fmx-tab" href="/transfers.php?ucs=2">На карандаше <span>(0)</span></a>
           <button class="fmx-pill--accent">Выставить игрока</button>
         </div>
         <div class="fmx-card fmx-table-card">
-          <table class="trans_market_offers" data-slf-transfer-table="fixture">
-            <thead>
-              <tr><th>Амплуа</th><th>Фамилия</th><th>Команда</th><th>Воз</th><th>Тал</th><th>Пот</th><th>Скилл</th><th>Цена</th><th>Дата окончания</th><th>Предл.</th></tr>
-            </thead>
-            <tbody>
-              <tr id="tl-7001"><td>ST</td><td><a href="/player.php?action=view&id=1001">Игрок Один</a></td><td>Клуб A</td><td>22</td><td>5</td><td>4</td><td>151</td><td>1.20 H 120M</td><td>06.08.2026 12:00</td><td>2</td></tr>
-              <tr id="tl-7002"><td>CM</td><td><a href="/player.php?action=view&id=1002">Игрок Два</a></td><td>Клуб B</td><td>24</td><td>4</td><td>3</td><td>146</td><td>0.95 H 82M</td><td>06.08.2026 13:00</td><td>1</td></tr>
-              <tr id="tl-7003"><td>CD</td><td>Игрок Три <a href="/transfers.php?action=view&transfer_id=7003">перейти</a></td><td>Клуб C</td><td>21</td><td>6</td><td>5</td><td>158</td><td>1.40 H 165M</td><td>06.08.2026 14:00</td><td>4</td></tr>
-              <tr id="tl-7004"><td>GK</td><td>Игрок Четыре <a href="/transfers.php?action=view&transfer_id=7004">перейти</a></td><td>Клуб D</td><td>23</td><td>5</td><td>4</td><td>155</td><td>1.05 H 95M</td><td>06.08.2026 15:00</td><td>0</td></tr>
-              <tr id="tl-7005"><td>AM</td><td>Игрок Пять <a href="/transfers.php?action=view&transfer_id=7005">перейти</a></td><td>Клуб E</td><td>25</td><td>4</td><td>3</td><td>149</td><td>0.88 H 74M</td><td>06.08.2026 16:00</td><td>1</td></tr>
-            </tbody>
-          </table>
-          <div class="transfers-ui__pages">Страницы: <span>1</span> <a href="/transfers.php?page=1">2</a> <a href="/transfers.php?page=2">3</a></div>
+          <div class="fmx-rows__head fmx-tmarket">
+            <span>Амплуа</span><span>Фамилия <span class="wide_format">Имя</span></span><span>Команда</span><span>Воз</span><span>Талант</span><span title="Потенциал"></span><span>Скилл</span><span title="Кол-во номиналов">Ном</span><span>Цена</span><span>Дата окончания</span><span>Ставки</span><span></span>
+          </div>
+
+          <div class="fmx-row fmx-tmarket transfers-ui__color_0" id="tl-7001" data-status="0">
+            <span><b>st</b><span class="extra_position"></span></span>
+            <span class="fmx-name"><span class="tm_field wide_format"><a href="https://www.transfermarkt.com/player-one/profil/spieler/9001">1.20M</a></span><a href="/player.php?action=view&id=1001"><span class="wide_format">Игрок Один</span><span class="mobile_format">Игрок</span></a></span>
+            <span class="fmx-name wide_format"><a href="/roster.php?id=501">Клуб A</a></span>
+            <span class="fmx-num" title="01.01.2004">22</span><span class="fmx-num">5</span><span><img src="/images/potencial/4.png" title="Потенциал"></span>
+            <span class="ihelpm"><span class="fmx-rating">151</span></span><span class="fmx-nominal wide_format" title="Кол-во номиналов">1.2Н</span><span class="fmx-value">120M</span>
+            <span><span class="wide_format">08-08-2026, 12:00</span><span class="mobile_format">1 дн.</span></span><span class="wide_format fmx-bets"><span class="fmx-bets__count">2</span></span>
+            <span class="fmx-actions"><a href="/transfers.php?action=view&transfer_id=7001" class="fmx-goto">перейти</a></span>
+          </div>
+
+          <div class="fmx-row fmx-tmarket transfers-ui__color_0" id="tl-7002" data-status="0">
+            <span><b>cm</b><span class="extra_position">am</span></span>
+            <span class="fmx-name"><span class="tm_field wide_format"><a href="https://www.transfermarkt.com/player-two/profil/spieler/9002">0.82M</a></span><a href="/player.php?action=view&id=1002"><span class="wide_format">Игрок Два</span><span class="mobile_format">Игрок</span></a></span>
+            <span class="fmx-name wide_format"><a href="/roster.php?id=502">Клуб B</a></span>
+            <span class="fmx-num">24</span><span class="fmx-num">4</span><span><img src="/images/potencial/3.png" title="Потенциал"></span>
+            <span class="ihelpm"><span class="fmx-rating">146</span></span><span class="fmx-nominal wide_format" title="Кол-во номиналов">0.95Н</span><span class="fmx-value">82M</span>
+            <span><span class="wide_format">08-08-2026, 13:00</span></span><span class="wide_format fmx-bets"><span class="fmx-bets__count">1</span></span>
+            <span class="fmx-actions"><a href="/transfers.php?action=view&transfer_id=7002" class="fmx-goto">перейти</a></span>
+          </div>
+
+          <div class="fmx-row fmx-tmarket transfers-ui__color_0" id="tl-7003" data-status="0">
+            <span><b>cd</b><span class="extra_position">dm</span></span>
+            <span class="fmx-name">Игрок Три</span><span class="fmx-name wide_format"><a href="/roster.php?id=503">Клуб C</a></span>
+            <span class="fmx-num">21</span><span class="fmx-num">6</span><span><img src="/images/potencial/5.png" title="Потенциал"></span>
+            <span class="ihelpm"><span class="fmx-rating">158</span></span><span class="fmx-nominal wide_format" title="Кол-во номиналов">1.4Н</span><span class="fmx-value">165M</span>
+            <span><span class="wide_format">08-08-2026, 14:00</span></span><span class="wide_format fmx-bets"><span class="fmx-bets__count">4</span></span>
+            <span class="fmx-actions"><a href="/transfers.php?action=view&transfer_id=7003" class="fmx-goto">перейти</a></span>
+          </div>
+
+          <div class="fmx-row fmx-tmarket transfers-ui__color_0" id="tl-7004" data-status="0">
+            <span><b>gk</b><span class="extra_position"></span></span>
+            <span class="fmx-name"><span class="tm_field wide_format"><a href="https://www.transfermarkt.com/player-four/profil/spieler/9004">0.95M</a></span><a href="/player.php?action=view&id=1004"><span class="wide_format">Игрок Четыре</span><span class="mobile_format">Игрок</span></a></span>
+            <span class="fmx-name wide_format"><a href="/roster.php?id=504">Клуб D</a></span>
+            <span class="fmx-num">23</span><span class="fmx-num">5</span><span><img src="/images/potencial/4.png" title="Потенциал"></span>
+            <span class="ihelpm"><span class="fmx-rating">155</span></span><span class="fmx-nominal wide_format" title="Кол-во номиналов">1.05Н</span><span class="fmx-value">95M</span>
+            <span><span class="wide_format">08-08-2026, 15:00</span></span><span class="wide_format fmx-bets"><span class="fmx-bets__count">0</span></span>
+            <span class="fmx-actions"><a href="/transfers.php?action=view&transfer_id=7004" class="fmx-goto">перейти</a></span>
+          </div>
+
+          <div class="fmx-row fmx-tmarket transfers-ui__color_0" id="tl-7005" data-status="0">
+            <span><b>am</b><span class="extra_position">rm</span></span>
+            <span class="fmx-name"><span class="tm_field wide_format"><a href="https://www.transfermarkt.com/player-five/profil/spieler/9005">0.74M</a></span><a href="/player.php?action=view&id=1005"><span class="wide_format">Игрок Пять</span><span class="mobile_format">Игрок</span></a></span>
+            <span class="fmx-name wide_format"><a href="/roster.php?id=505">Клуб E</a></span>
+            <span class="fmx-num">25</span><span class="fmx-num">4</span><span><img src="/images/potencial/3.png" title="Потенциал"></span>
+            <span class="ihelpm"><span class="fmx-rating">149</span></span><span class="fmx-nominal wide_format" title="Кол-во номиналов">0.88Н</span><span class="fmx-value">74M</span>
+            <span><span class="wide_format">08-08-2026, 16:00</span></span><span class="wide_format fmx-bets"><span class="fmx-bets__count">1</span></span>
+            <span class="fmx-actions"><a href="/transfers.php?action=view&transfer_id=7005" class="fmx-goto">перейти</a></span>
+          </div>
+
+          <div class="transfers-ui__pages"><div>Страницы:</div><div class="transfers-ui__page-item transfers-ui__page-current">1</div><div class="transfers-ui__page-item"><a href="/transfers.php?page=1">2</a></div><div class="transfers-ui__page-item"><a href="/transfers.php?page=2">3</a></div></div>
         </div>
       </div>
     </section>
@@ -87,19 +120,33 @@
         try {
           if (typeof TransferCandidateScanner === 'undefined' || typeof TransferMarketAnalyzer === 'undefined') return;
           if (typeof TransferMarketAnalyzer.parseVisibleRowsCompat !== 'function') return;
-          if (typeof TransferCandidateScanner.pageUrlCandidates !== 'function') return;
+          if (typeof TransferCandidateScanner.paginationEntries !== 'function') return;
+          if (!document.getElementById('slf-transfer-analyzer-toolbar')) return;
+          if (!document.getElementById('slf-transfer-candidate-panel')) return;
 
           const scannerRows = TransferCandidateScanner.parsePage(document, 0, location.href);
           const analyzerRows = TransferMarketAnalyzer.parseVisibleRowsCompat();
-          if (scannerRows.length !== 5) throw new Error(`scanner-row-compat:${scannerRows.length}`);
-          if (analyzerRows.length !== 5) throw new Error(`analyzer-row-compat:${analyzerRows.length}`);
-          if (scannerRows.filter(row => row.transferId && !row.playerId).length !== 3) {
-            throw new Error('scanner-transfer-detail-row-compat');
-          }
-          const candidates = TransferCandidateScanner.pageUrlCandidates(1);
-          if (!candidates.some(value => new URL(value).searchParams.get('page') === '2')) {
-            throw new Error('scanner-pagination-probe-missing');
-          }
+          if (scannerRows.length !== 5) throw new Error(`scanner-fmx-grid-rows:${scannerRows.length}`);
+          if (analyzerRows.length !== 5) throw new Error(`analyzer-fmx-grid-rows:${analyzerRows.length}`);
+          if (scannerRows.filter(row => row.transferId && !row.playerId).length !== 1) throw new Error('scanner-transfer-detail-fallback-regression');
+          if (scannerRows[0].playerId !== '1001' || scannerRows[0].transferId !== '7001') throw new Error('scanner-fmx-identity-regression');
+          if (scannerRows[0].age !== 22 || scannerRows[0].talent !== 5 || scannerRows[0].scoutSkill !== 151 || scannerRows[0].price !== 120000000 || scannerRows[0].bids !== 2) throw new Error('scanner-fmx-fields-regression');
+          if (analyzerRows[0].playerId !== '1001' || analyzerRows[0].transferId !== '7001') throw new Error('analyzer-fmx-identity-regression');
+          if (analyzerRows[0].age !== 22 || analyzerRows[0].talent !== 5 || analyzerRows[0].scoutSkill !== 151 || analyzerRows[0].slfPrice !== 120000000 || analyzerRows[0].slfBids !== 2) throw new Error('analyzer-fmx-fields-regression');
+
+          const badge = TransferMarketAnalyzer.getOrCreateBadgeCell(analyzerRows[0]);
+          if (!badge || badge.tagName !== 'DIV' || !badge.classList.contains('slf-transfer-analysis-badge--fmx')) throw new Error('analyzer-fmx-badge-regression');
+
+          analyzerRows[0].rowEl.dataset.slfAnalyzerScore = '1';
+          analyzerRows[1].rowEl.dataset.slfAnalyzerScore = '9';
+          TransferMarketAnalyzer.sortRowsInTableByDataset(TransferMarketAnalyzer.findFm2026MarketSurface(document), 'slfAnalyzerScore', 'desc');
+          if (document.querySelector('.fmx-row.fmx-tmarket')?.id !== 'tl-7002') throw new Error('analyzer-fmx-sort-regression');
+          TransferMarketAnalyzer.resetOrder();
+          if (document.querySelector('.fmx-row.fmx-tmarket')?.id !== 'tl-7001') throw new Error('analyzer-fmx-reset-regression');
+
+          const pageTwo = TransferCandidateScanner.paginationEntries(document).find(entry => entry.displayPage === 2);
+          if (!pageTwo || new URL(pageTwo.url).searchParams.get('page') !== '1') throw new Error('scanner-native-zero-based-pagination-regression');
+
           clearInterval(timer);
           window.__slfTransferRuntimeCompatChecked = true;
         } catch (error) {
