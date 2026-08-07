@@ -23,6 +23,20 @@
                 .replaceAll("'", '&#039;');
         },
 
+        getPresetDisplayRegistry() {
+            if (typeof window === 'undefined') return null;
+            return window['SLFActivePresetRegistry'] || null;
+        },
+
+        getVisiblePresetLabels() {
+            const labels = PresetStorage.getAllLabels();
+            const registry = this.getPresetDisplayRegistry();
+            const retired = new Set(Array.isArray(registry?.removed) ? registry.removed : []);
+            return Object.fromEntries(
+                Object.entries(labels).filter(([key]) => !retired.has(key))
+            );
+        },
+
         addMatchParserPanel() {
             if (!location.pathname.includes('/game.php')) return;
             if (document.getElementById('slf-match-parser-panel')) return;
@@ -114,7 +128,7 @@ recBox.style.cssText = `
             const old = document.getElementById('slf-save-dialog');
             if (old) old.remove();
 
-            const labels = PresetStorage.getAllLabels();
+            const labels = this.getVisiblePresetLabels();
 
             const overlay = document.createElement('div');
             overlay.id = 'slf-save-dialog';
@@ -275,80 +289,83 @@ if (!isTacticPage) return;
             select.style.cssText =
                 'flex:1;min-width:120px;padding:5px;background:#333;color:#fff;border:1px solid #555;border-radius:3px;font-size:14px;';
 
-            function getCoachGroup(key, label = '') {
-                const l = String(label).toLowerCase();
+            const displayRegistry = this.getPresetDisplayRegistry();
+            const styleGroups = Array.isArray(displayRegistry?.styleGroups) && displayRegistry.styleGroups.length
+                ? displayRegistry.styleGroups
+                : [
+                    { style: '5', label: 'Атака+ · _att2' },
+                    { style: '4', label: 'Атака · _att1' },
+                    { style: '3', label: 'Обычный · _neutr' },
+                    { style: '2', label: 'Защита · _def1' },
+                    { style: '1', label: 'Защ+ · _def2' }
+                ];
+            const displayMeta = displayRegistry?.displayMeta || {};
+            const systemOrder = Array.isArray(displayRegistry?.displayOrder) ? displayRegistry.displayOrder : [];
+            const systemOrderIndex = new Map(systemOrder.map((name, index) => [name, index]));
 
-                if (l.includes('bielsa')) return 'Bielsa';
-                if (l.includes('conte')) return 'Conte';
-                if (l.includes('de zerbi')) return 'De Zerbi';
-                if (l.includes('klopp')) return 'Klopp';
-                if (l.includes('mourinho')) return 'Mourinho';
-                if (l.includes('pep')) return 'Pep';
-                if (l.includes('simeone')) return 'Simeone';
-                if (l.includes('xabi')) return 'Xabi Alonso';
-
-                if (BASE_PRESETS.hasOwnProperty(key)) return 'Other';
-
-                return 'Custom';
-            }
-
-            function buildGroupedOptions(labels) {
-                const groups = {};
+            function buildStyleGroupedOptions(labels) {
+                const presets = PresetStorage.getAllPresets();
+                const groups = Object.fromEntries(styleGroups.map(group => [String(group.style), []]));
 
                 Object.entries(labels).forEach(([key, value]) => {
-                    const group = getCoachGroup(key, value);
-
-                    if (!groups[group]) groups[group] = [];
-                    groups[group].push({ key, value });
+                    const preset = presets[key] || {};
+                    const meta = displayMeta[key] || {};
+                    const requestedStyle = String(preset.style || meta.style || '3');
+                    const style = Object.prototype.hasOwnProperty.call(groups, requestedStyle) ? requestedStyle : '3';
+                    const isSystem = Object.prototype.hasOwnProperty.call(BASE_PRESETS, key);
+                    const trainer = String(meta.trainer || '').trim();
+                    groups[style].push({ key, value, isSystem, trainer });
                 });
 
-                Object.keys(groups).forEach(groupName => {
-                    groups[groupName].sort((a, b) =>
-                        String(a.value).localeCompare(String(b.value), 'ru', { sensitivity: 'base' })
-                    );
+                Object.values(groups).forEach(items => {
+                    items.sort((a, b) => {
+                        if (a.key === 'standard') return -1;
+                        if (b.key === 'standard') return 1;
+
+                        if (a.isSystem && b.isSystem) {
+                            const ai = systemOrderIndex.has(a.key) ? systemOrderIndex.get(a.key) : Number.MAX_SAFE_INTEGER;
+                            const bi = systemOrderIndex.has(b.key) ? systemOrderIndex.get(b.key) : Number.MAX_SAFE_INTEGER;
+                            if (ai !== bi) return ai - bi;
+                        }
+
+                        if (a.isSystem !== b.isSystem) return a.isSystem ? -1 : 1;
+
+                        const trainerDiff = a.trainer.localeCompare(b.trainer, 'en', { sensitivity: 'base' });
+                        if (trainerDiff) return trainerDiff;
+                        return String(a.value).localeCompare(String(b.value), 'ru', { sensitivity: 'base' });
+                    });
                 });
 
                 return groups;
             }
 
             function refreshSelect(keepValue) {
-                const labels = PresetStorage.getAllLabels();
+                const labels = UI.getVisiblePresetLabels();
                 const cur = keepValue || select.value;
-                const groups = buildGroupedOptions(labels);
+                const groups = buildStyleGroupedOptions(labels);
 
                 select.innerHTML = '';
 
-                const groupOrder = [
-                    'Bielsa',
-                    'Conte',
-                    'De Zerbi',
-                    'Klopp',
-                    'Mourinho',
-                    'Pep',
-                    'Simeone',
-                    'Xabi Alonso',
-                    'Other',
-                    'Custom'
-                ];
-
-                groupOrder.forEach(groupName => {
-                    const items = groups[groupName];
+                styleGroups.forEach(group => {
+                    const items = groups[String(group.style)];
                     if (!items || items.length === 0) return;
 
                     const optgroup = document.createElement('optgroup');
-                    optgroup.label = groupName;
+                    optgroup.label = group.label;
+                    optgroup.dataset.style = String(group.style);
 
                     items.forEach(item => {
                         const opt = document.createElement('option');
                         opt.value = item.key;
                         opt.textContent = item.value;
+                        opt.dataset.systemPreset = item.isSystem ? '1' : '0';
                         optgroup.appendChild(opt);
                     });
 
                     select.appendChild(optgroup);
                 });
 
-                if (labels.hasOwnProperty(cur)) {
+                if (Object.prototype.hasOwnProperty.call(labels, cur)) {
                     select.value = cur;
                 } else if (select.options.length > 0) {
                     select.value = select.options[0].value;
@@ -413,7 +430,7 @@ if (!isTacticPage) return;
             deleteBtn.addEventListener('click', () => {
                 const name = select.value;
 
-                if (BASE_PRESETS.hasOwnProperty(name)) {
+                if (Object.prototype.hasOwnProperty.call(BASE_PRESETS, name)) {
                     alert('Встроенный пресет удалить нельзя.');
                     return;
                 }
