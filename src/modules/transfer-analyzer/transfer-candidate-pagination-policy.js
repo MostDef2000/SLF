@@ -1,5 +1,5 @@
-// Transfer Candidate Scanner pagination, URL and session policy
-// ============================================================
+// Transfer Candidate Scanner pagination, URL, session and FM2026 row-identity policy
+// ==============================================================================
 
 if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner && !TransferCandidateScanner.paginationPolicyApplied) {
     TransferCandidateScanner.paginationPolicyApplied = true;
@@ -38,7 +38,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         }
     };
 
-    ['readCollection', 'appendCollection', 'clearCollection', 'fetchPage'].forEach(methodName => {
+    ['readCollection', 'appendCollection', 'clearCollection'].forEach(methodName => {
         const original = TransferCandidateScanner[methodName];
         if (typeof original !== 'function') return;
         TransferCandidateScanner[`${methodName}WithReadableErrorsOriginal`] = original;
@@ -50,6 +50,199 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
             }
         };
     });
+
+    TransferCandidateScanner.browserFetch = function browserFetch(url, options) {
+        const pageFetch = typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.fetch === 'function'
+            ? unsafeWindow.fetch.bind(unsafeWindow)
+            : fetch.bind(window);
+        return pageFetch(url, options);
+    };
+
+    TransferCandidateScanner.fetchDocumentUrl = async function fetchDocumentUrl(url) {
+        const response = await this.browserFetch(url, { credentials: 'include', cache: 'no-store' });
+        if (!response.ok) throw new Error(`transfer_page_http_${response.status}`);
+        return new DOMParser().parseFromString(await response.text(), 'text/html');
+    };
+
+    TransferCandidateScanner.playerIdFromHref = function playerIdFromHref(value) {
+        if (!value) return '';
+        try {
+            const url = new URL(value, location.origin);
+            const path = url.pathname.toLowerCase();
+            if (!/(?:player|alter)\.php$/.test(path) && !/\/player\/\d+/.test(path)) return '';
+            for (const key of ['id', 'player_id', 'playerId', 'player']) {
+                const candidate = url.searchParams.get(key);
+                if (/^\d+$/.test(candidate || '')) return candidate;
+            }
+            return (path.match(/\/player\/(\d+)/) || [])[1] || '';
+        } catch (error) {
+            return '';
+        }
+    };
+
+    TransferCandidateScanner.transferIdFromHref = function transferIdFromHref(value) {
+        if (!value) return '';
+        try {
+            const url = new URL(value, location.origin);
+            if (url.pathname !== '/transfers.php') return '';
+            const action = url.searchParams.get('action');
+            const id = url.searchParams.get('transfer_id') || url.searchParams.get('id') || '';
+            return action === 'view' && /^\d+$/.test(id) ? id : '';
+        } catch (error) {
+            return '';
+        }
+    };
+
+    TransferCandidateScanner.findDirectPlayerAnchor = function findDirectPlayerAnchor(root) {
+        return [...(root?.querySelectorAll?.('a[href]') || [])]
+            .map(anchor => ({ anchor, playerId: this.playerIdFromHref(anchor.getAttribute('href') || '') }))
+            .filter(entry => entry.playerId)
+            .sort((a, b) => {
+                const aText = this.text(a.anchor.getAttribute('title') || a.anchor.textContent || '');
+                const bText = this.text(b.anchor.getAttribute('title') || b.anchor.textContent || '');
+                return Number(/[A-Za-zА-Яа-яЁё]/.test(bText)) - Number(/[A-Za-zА-Яа-яЁё]/.test(aText));
+            })[0] || null;
+    };
+
+    TransferCandidateScanner.findTransferDetailAnchor = function findTransferDetailAnchor(root) {
+        return [...(root?.querySelectorAll?.('a[href]') || [])]
+            .map(anchor => ({ anchor, transferId: this.transferIdFromHref(anchor.getAttribute('href') || '') }))
+            .find(entry => entry.transferId) || null;
+    };
+
+    TransferCandidateScanner.resolvePlayerIdentityFromDocument = function resolvePlayerIdentityFromDocument(doc, preferredName) {
+        const expectedName = this.text(preferredName).toLowerCase();
+        const candidates = [...doc.querySelectorAll('a[href]')]
+            .map(anchor => {
+                const href = anchor.getAttribute('href') || '';
+                const playerId = this.playerIdFromHref(href);
+                if (!playerId) return null;
+                const label = this.text(anchor.getAttribute('title') || anchor.textContent || '');
+                let score = 10;
+                if (label && /[A-Za-zА-Яа-яЁё]/.test(label)) score += 5;
+                if (expectedName && label.toLowerCase().includes(expectedName)) score += 30;
+                if (/player\.php/i.test(href)) score += 5;
+                return { playerId, playerUrl: new URL(href, location.origin).toString(), score };
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.score - a.score);
+        if (candidates[0]) return candidates[0];
+
+        const html = doc.documentElement?.innerHTML || '';
+        const match = html.match(/(?:player|alter)\.php[^"'<>]{0,180}?(?:[?&](?:id|player_id|playerId|player)=)(\d+)/i);
+        if (match) {
+            const playerId = match[1];
+            return {
+                playerId,
+                playerUrl: new URL(`/player.php?action=view&id=${encodeURIComponent(playerId)}`, location.origin).toString(),
+                score: 1
+            };
+        }
+        return null;
+    };
+
+    TransferCandidateScanner.resolvePlayerIdentity = async function resolvePlayerIdentity(row) {
+        if (row?.playerId) return row;
+        if (!row) throw new Error('candidate_row_missing');
+
+        let detailUrl = row.transferDetailUrl || '';
+        if (!detailUrl && row.transferId) {
+            detailUrl = new URL(`/transfers.php?action=view&transfer_id=${encodeURIComponent(row.transferId)}`, location.origin).toString();
+        }
+        if (!detailUrl) throw new Error(`player_identity_missing_${row.key || 'unknown'}`);
+
+        const doc = await this.fetchDocumentUrl(detailUrl);
+        const identity = this.resolvePlayerIdentityFromDocument(doc, row.name);
+        if (!identity?.playerId) {
+            throw new Error(`player_identity_not_found_${row.transferId || row.key || 'unknown'}`);
+        }
+
+        row.playerId = String(identity.playerId);
+        row.playerUrl = identity.playerUrl || new URL(`/player.php?action=view&id=${encodeURIComponent(identity.playerId)}`, location.origin).toString();
+        return row;
+    };
+
+    const headerMapOriginal = TransferCandidateScanner.headerMap;
+    TransferCandidateScanner.headerMap = function headerMapWithName(table) {
+        const map = headerMapOriginal.apply(this, arguments) || {};
+        if (map.name != null) return map;
+        const header = [...table.querySelectorAll('tr')].find(row => {
+            const text = this.text(row.textContent).toLowerCase();
+            return text.includes('амплуа') && (text.includes('фамилия') || text.includes('имя'));
+        });
+        const cells = header ? [...header.querySelectorAll('td,th')].map(cell => this.text(cell.textContent).toLowerCase()) : [];
+        const index = cells.findIndex(text => text.includes('фамилия') || text.includes('имя'));
+        return { ...map, name: index >= 0 ? index : null };
+    };
+
+    TransferCandidateScanner.parsePage = function parsePageWithFm2026RowIdentity(doc, page, pageUrl) {
+        const table = this.findTable(doc);
+        if (!table) return [];
+        const map = this.headerMap(table);
+
+        return [...table.querySelectorAll('tr')].map((rowElement, index) => {
+            const text = this.text(rowElement.textContent);
+            if (!text) return null;
+            const lower = text.toLowerCase();
+            if (lower.includes('амплуа') && (lower.includes('фамилия') || lower.includes('имя'))) return null;
+
+            const cells = [...rowElement.querySelectorAll('td')];
+            if (cells.length < 4) return null;
+            const cell = cellIndex => cellIndex == null ? null : cells[cellIndex] || null;
+            const value = cellIndex => this.text(cell(cellIndex)?.textContent || '');
+
+            const direct = this.findDirectPlayerAnchor(rowElement);
+            const detail = this.findTransferDetailAnchor(rowElement);
+            const rowIdTransfer = (rowElement.id || '').match(/(?:tl|transfer)[-_]?(\d+)/i)?.[1] || '';
+            const transferId = detail?.transferId || rowIdTransfer || '';
+            const playerId = direct?.playerId || '';
+            if (!playerId && !transferId) return null;
+
+            const potentialCell = cell(map.potential);
+            const potentialLevel = Number((potentialCell?.querySelector('img[src*="/potencial/"]')?.getAttribute('src') || '').match(/potencial\/(\d+)/)?.[1]) || null;
+            const priceCell = cell(map.price)?.cloneNode(true);
+            priceCell?.querySelectorAll('[title*="номинал"], img').forEach(node => node.remove());
+            const tm = rowElement.querySelector('.tm_field a[href*="transfermarkt"], a[href*="transfermarkt."]');
+            const positions = value(map.pos).toUpperCase().match(/\b(GK|LD|CD|RD|DM|CM|AM|LM|RM|LW|RW|ST)\b/g) || [];
+            const directLabel = this.text(direct?.anchor?.getAttribute('title') || direct?.anchor?.textContent || '');
+            const cellName = value(map.name);
+            const name = /[A-Za-zА-Яа-яЁё]/.test(cellName) ? cellName : directLabel;
+            const transferDetailUrl = detail?.anchor
+                ? new URL(detail.anchor.getAttribute('href') || '', location.origin).toString()
+                : transferId
+                    ? new URL(`/transfers.php?action=view&transfer_id=${encodeURIComponent(transferId)}`, location.origin).toString()
+                    : '';
+            const playerUrl = playerId
+                ? new URL(`/player.php?action=view&id=${encodeURIComponent(playerId)}`, location.origin).toString()
+                : '';
+
+            const row = {
+                key: transferId ? `transfer:${transferId}` : `player:${playerId}`,
+                transferId,
+                transferDetailUrl,
+                playerId,
+                page,
+                pageUrl,
+                originalIndex: index,
+                name: name || playerId || (transferId ? `Трансфер #${transferId}` : 'Игрок'),
+                playerUrl,
+                positions: [...new Set(positions)],
+                club: value(map.club),
+                age: this.number(value(map.age)),
+                talent: this.number(value(map.talent)),
+                potentialLevel,
+                potentialText: this.text(potentialCell?.querySelector('[title]')?.getAttribute('title') || ''),
+                scoutSkill: this.number(value(map.skill)),
+                price: this.money(priceCell?.textContent || value(map.price)),
+                bids: this.number(value(map.bids)),
+                endDateText: value(map.end),
+                tmUrl: tm?.href || '',
+                tmDisplayedValueEur: this.money(tm?.textContent || '')
+            };
+            row.preScore = this.preScore(row);
+            return row;
+        }).filter(Boolean);
+    };
 
     TransferCandidateScanner.hasNumericPagination = function hasNumericPagination(element) {
         if (!element) return false;
@@ -158,6 +351,84 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         return url.toString();
     };
 
+    TransferCandidateScanner.pageUrlCandidates = function pageUrlCandidates(pageIndex) {
+        const index = Math.max(0, Number(pageIndex || 0));
+        const result = [];
+        const add = value => {
+            if (!value) return;
+            let normalized;
+            try {
+                normalized = new URL(value, location.origin).toString();
+            } catch (error) {
+                return;
+            }
+            if (!result.includes(normalized)) result.push(normalized);
+        };
+
+        const nativeUrl = this.nativePageUrls instanceof Map ? this.nativePageUrls.get(index) : null;
+        if (nativeUrl) {
+            const native = new URL(nativeUrl, location.origin);
+            const raw = Number(native.searchParams.get('page'));
+            if (Number.isInteger(raw) && Number.isInteger(this.pageParamCorrection) && this.pageParamCorrection !== 0) {
+                const corrected = new URL(native.toString());
+                corrected.searchParams.set('page', String(Math.max(0, raw + this.pageParamCorrection)));
+                add(corrected.toString());
+            }
+            add(native.toString());
+            if (Number.isInteger(raw)) {
+                const plusOne = new URL(native.toString());
+                plusOne.searchParams.set('page', String(raw + 1));
+                add(plusOne.toString());
+                if (raw > 0) {
+                    const minusOne = new URL(native.toString());
+                    minusOne.searchParams.set('page', String(raw - 1));
+                    add(minusOne.toString());
+                }
+            }
+        }
+
+        const base = new URL(this.state?.baseUrl || this.canonicalMarketUrl(), location.origin);
+        base.searchParams.delete('page');
+        if (index > 0) {
+            const byDisplay = new URL(base.toString());
+            byDisplay.searchParams.set('page', String(index + 1));
+            add(byDisplay.toString());
+
+            const byIndex = new URL(base.toString());
+            byIndex.searchParams.set('page', String(index));
+            add(byIndex.toString());
+        }
+        return result;
+    };
+
+    TransferCandidateScanner.fetchLogicalPage = async function fetchLogicalPage(pageIndex, seenSignatures) {
+        const attempts = [];
+        const nativeUrl = this.nativePageUrls instanceof Map ? this.nativePageUrls.get(pageIndex) : null;
+        const nativeRaw = nativeUrl ? Number(new URL(nativeUrl, location.origin).searchParams.get('page')) : null;
+
+        for (const pageUrl of this.pageUrlCandidates(pageIndex)) {
+            try {
+                const doc = await this.fetchDocumentUrl(pageUrl);
+                this.rememberPaginationLinks(doc);
+                const rows = this.parsePage(doc, pageIndex, pageUrl);
+                const signature = this.pageSignature(rows);
+                const duplicate = !!(signature && seenSignatures?.has(signature));
+                attempts.push(`${this.pageRequestLabel(pageUrl)}:${rows.length}${duplicate ? ':duplicate' : ''}`);
+                if (!rows.length || duplicate) continue;
+
+                const acceptedRaw = Number(new URL(pageUrl, location.origin).searchParams.get('page'));
+                if (Number.isInteger(nativeRaw) && Number.isInteger(acceptedRaw) && acceptedRaw !== nativeRaw) {
+                    this.pageParamCorrection = acceptedRaw - nativeRaw;
+                }
+                return { doc, pageUrl, pageRows: rows, signature };
+            } catch (error) {
+                attempts.push(`${this.pageRequestLabel(pageUrl)}:${this.errorText(error)}`);
+            }
+        }
+
+        throw new Error(`Не удалось получить уникальную страницу рынка ${pageIndex + 1}/${this.state.totalPages || '?'}. Попытки: ${attempts.join(' | ')}`);
+    };
+
     TransferCandidateScanner.detectInitialTotalPages = function detectInitialTotalPages(doc, pageRows) {
         const lastPageIndex = this.extractLastPaginationPage(doc);
         if (lastPageIndex >= 0) return lastPageIndex + 1;
@@ -191,6 +462,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
     TransferCandidateScanner.run = async function runWithStablePagination(resume) {
         const uiRows = this.parsePage(document, 0, location.href);
         this.nativePageUrls = new Map();
+        this.pageParamCorrection = null;
         this.rememberPaginationLinks(document);
         this.pageParamOffset = this.detectPageParamOffset(document);
         if (!Number.isInteger(this.pageParamOffset)) this.pageParamOffset = 1;
@@ -244,12 +516,20 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         }
 
         for (; !this.stopRequested && page < totalPages; page++) {
-            const result = page === 0
-                ? { doc: document, pageUrl: this.canonicalMarketUrl() }
-                : await this.fetchPage(page);
-            this.rememberPaginationLinks(result.doc);
-            const pageRows = this.parsePage(result.doc, page, result.pageUrl);
-            const signature = this.pageSignature(pageRows);
+            let result;
+            let pageRows;
+            let signature;
+
+            if (page === 0) {
+                result = { doc: document, pageUrl: this.canonicalMarketUrl() };
+                pageRows = this.parsePage(document, page, result.pageUrl);
+                signature = this.pageSignature(pageRows);
+            } else {
+                const fetched = await this.fetchLogicalPage(page, seenSignatures);
+                result = { doc: fetched.doc, pageUrl: fetched.pageUrl };
+                pageRows = fetched.pageRows;
+                signature = fetched.signature;
+            }
 
             if (!pageRows.length) {
                 throw new Error(`Пустая страница рынка ${page + 1}/${totalPages}. Запрос: ${this.pageRequestLabel(result.pageUrl)}. Нажми «Сбросить».`);
@@ -258,7 +538,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
                 throw new Error(`Повторная страница рынка ${page + 1}/${totalPages}. Запрос: ${this.pageRequestLabel(result.pageUrl)}. Нажми «Сбросить».`);
             }
 
-            this.status(`Сканирование страницы ${page + 1}/${totalPages}...`);
+            this.status(`Сканирование страницы ${page + 1}/${totalPages}: найдено ${pageRows.length}...`);
             await this.appendCollection(this.indexCollection, pageRows, `candidate page ${page + 1}`);
             this.state.scannedPages = Math.max(this.state.scannedPages, page + 1);
             this.state.nextPage = page + 1;
@@ -283,5 +563,273 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         this.status('Все страницы собраны. Загружаю временный индекс с VPS...');
         this.saveMeta();
         this.renderProgress();
+    };
+}
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !TransferMarketAnalyzer.fm2026RowIdentityPolicyApplied) {
+    TransferMarketAnalyzer.fm2026RowIdentityPolicyApplied = true;
+
+    TransferMarketAnalyzer.playerIdFromTransferHref = function playerIdFromTransferHref(value) {
+        if (!value) return '';
+        try {
+            const url = new URL(value, location.origin);
+            const path = url.pathname.toLowerCase();
+            if (!/(?:player|alter)\.php$/.test(path) && !/\/player\/\d+/.test(path)) return '';
+            for (const key of ['id', 'player_id', 'playerId', 'player']) {
+                const candidate = url.searchParams.get(key);
+                if (/^\d+$/.test(candidate || '')) return candidate;
+            }
+            return (path.match(/\/player\/(\d+)/) || [])[1] || '';
+        } catch (error) {
+            return '';
+        }
+    };
+
+    TransferMarketAnalyzer.transferIdFromTransferHref = function transferIdFromTransferHref(value) {
+        if (!value) return '';
+        try {
+            const url = new URL(value, location.origin);
+            if (url.pathname !== '/transfers.php') return '';
+            const id = url.searchParams.get('transfer_id') || url.searchParams.get('id') || '';
+            return url.searchParams.get('action') === 'view' && /^\d+$/.test(id) ? id : '';
+        } catch (error) {
+            return '';
+        }
+    };
+
+    TransferMarketAnalyzer.findTransferRowIdentity = function findTransferRowIdentity(tr) {
+        const anchors = [...tr.querySelectorAll('a[href]')];
+        const player = anchors
+            .map(anchor => ({ anchor, playerId: this.playerIdFromTransferHref(anchor.getAttribute('href') || '') }))
+            .find(entry => entry.playerId) || null;
+        const detail = anchors
+            .map(anchor => ({ anchor, transferId: this.transferIdFromTransferHref(anchor.getAttribute('href') || '') }))
+            .find(entry => entry.transferId) || null;
+        const rowTransferId = (tr.id || '').match(/(?:tl|transfer)[-_]?(\d+)/i)?.[1] || '';
+        const transferId = detail?.transferId || rowTransferId || '';
+        return {
+            playerId: player?.playerId || '',
+            playerAnchor: player?.anchor || null,
+            transferId,
+            transferDetailUrl: detail?.anchor
+                ? new URL(detail.anchor.getAttribute('href') || '', location.origin).toString()
+                : transferId
+                    ? new URL(`/transfers.php?action=view&transfer_id=${encodeURIComponent(transferId)}`, location.origin).toString()
+                    : ''
+        };
+    };
+
+    TransferMarketAnalyzer.parseVisibleRowsCompat = function parseVisibleRowsCompat() {
+        const table = this.findTransferTable();
+        if (!table) return [];
+        this.ensureAnalysisHeader(table);
+        const map = this.getHeaderMap(table);
+
+        return [...table.querySelectorAll('tr')].map((tr, index) => {
+            const original = this.parseRow(tr, index, map);
+            if (original) {
+                const identity = this.findTransferRowIdentity(tr);
+                if (!original.transferId) original.transferId = identity.transferId;
+                if (!original.transferDetailUrl) original.transferDetailUrl = identity.transferDetailUrl;
+                return original;
+            }
+
+            const text = this.normalizeText(tr.innerText || tr.textContent || '');
+            const lower = text.toLowerCase();
+            if (!text || (lower.includes('амплуа') && (lower.includes('фамилия') || lower.includes('имя')))) return null;
+            const cells = [...tr.querySelectorAll('td')];
+            if (cells.length < 4) return null;
+            const getCell = idx => idx == null ? null : cells[idx] || null;
+            const getText = idx => this.normalizeText(getCell(idx)?.innerText || getCell(idx)?.textContent || '');
+            const identity = this.findTransferRowIdentity(tr);
+            if (!identity.playerId && !identity.transferId) return null;
+
+            const priceInfo = this.parseTransferPriceCellInfo(tr, map);
+            const directLabel = this.normalizeText(identity.playerAnchor?.getAttribute('title') || identity.playerAnchor?.textContent || '');
+            const nameCell = getText(map.name);
+            const name = this.cleanPlayerName(/[A-Za-zА-Яа-яЁё]/.test(nameCell) ? nameCell : directLabel);
+            const playerUrl = identity.playerId
+                ? new URL(`/player.php?action=view&id=${encodeURIComponent(identity.playerId)}`, location.origin).toString()
+                : '';
+            const row = {
+                rowEl: tr,
+                originalIndex: index,
+                playerId: String(identity.playerId || ''),
+                playerUrl,
+                transferId: identity.transferId,
+                transferDetailUrl: identity.transferDetailUrl,
+                name: name || identity.playerId || (identity.transferId ? `Трансфер #${identity.transferId}` : 'Игрок'),
+                positions: this.parsePositions(getText(map.pos) || text),
+                age: this.parseNumber(getText(map.age)),
+                talent: this.parseNumber(getText(map.talent)),
+                potentialText: getText(map.potential),
+                scoutSkill: this.parseNumber(getText(map.scoutSkill)),
+                slfPriceText: priceInfo.priceText,
+                slfPriceCellText: priceInfo.rawText,
+                slfPrice: priceInfo.currentPrice,
+                slfSecondaryPriceText: priceInfo.secondaryPriceText,
+                slfSecondaryPrice: priceInfo.secondaryPrice,
+                nominalRatio: priceInfo.nominalRatio,
+                nominalBase: priceInfo.nominalBase,
+                slfPriceSource: priceInfo.source,
+                slfPriceCellIndex: priceInfo.cellIndex,
+                slfBids: this.parseNumber(getText(map.bids)),
+                endDateText: getText(map.endDate),
+                tmUrl: '',
+                tmProfile: null,
+                tmValueEur: 0
+            };
+            tr.dataset.slfOriginalIndex = String(index);
+            if (row.playerId) tr.dataset.slfPlayerId = row.playerId;
+            return row;
+        }).filter(Boolean);
+    };
+
+    TransferMarketAnalyzer.resolveTransferRowPlayerIdentity = async function resolveTransferRowPlayerIdentity(row) {
+        if (row?.playerId) return row;
+        if (!row) throw new Error('transfer_row_missing');
+        let detailUrl = row.transferDetailUrl || '';
+        if (!detailUrl && row.transferId) {
+            detailUrl = new URL(`/transfers.php?action=view&transfer_id=${encodeURIComponent(row.transferId)}`, location.origin).toString();
+        }
+        if (!detailUrl) throw new Error(`player_identity_missing_${row.transferId || 'unknown'}`);
+
+        const pageFetch = typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.fetch === 'function'
+            ? unsafeWindow.fetch.bind(unsafeWindow)
+            : fetch.bind(window);
+        const response = await pageFetch(detailUrl, { credentials: 'include', cache: 'no-store' });
+        if (!response.ok) throw new Error(`transfer_detail_http_${response.status}`);
+        const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const preferred = this.normalizeText(row.name).toLowerCase();
+        const candidates = [...doc.querySelectorAll('a[href]')]
+            .map(anchor => {
+                const href = anchor.getAttribute('href') || '';
+                const playerId = this.playerIdFromTransferHref(href);
+                if (!playerId) return null;
+                const label = this.normalizeText(anchor.getAttribute('title') || anchor.textContent || '');
+                let score = 10;
+                if (label && /[A-Za-zА-Яа-яЁё]/.test(label)) score += 5;
+                if (preferred && label.toLowerCase().includes(preferred)) score += 30;
+                if (/player\.php/i.test(href)) score += 5;
+                return { playerId, score };
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.score - a.score);
+
+        let playerId = candidates[0]?.playerId || '';
+        if (!playerId) {
+            const html = doc.documentElement?.innerHTML || '';
+            playerId = (html.match(/(?:player|alter)\.php[^"'<>]{0,180}?(?:[?&](?:id|player_id|playerId|player)=)(\d+)/i) || [])[1] || '';
+        }
+        if (!playerId) throw new Error(`player_identity_not_found_${row.transferId || 'unknown'}`);
+
+        row.playerId = String(playerId);
+        row.playerUrl = new URL(`/player.php?action=view&id=${encodeURIComponent(playerId)}`, location.origin).toString();
+        if (row.rowEl) row.rowEl.dataset.slfPlayerId = row.playerId;
+        return row;
+    };
+
+    const analyzeVisibleRowsBeforeFm2026Identity = TransferMarketAnalyzer.analyzeVisibleRows;
+    TransferMarketAnalyzer.analyzeVisibleRows = async function analyzeVisibleRowsWithFm2026Identity() {
+        if (this.isHistoryPage?.()) return analyzeVisibleRowsBeforeFm2026Identity.apply(this, arguments);
+        if (this.slfLiveAnalysisRunning) return this.setStatus?.('Live анализ уже выполняется. Дождись завершения текущего прохода.');
+
+        const runId = Number(this.slfLiveAnalysisRunId || 0) + 1;
+        this.slfLiveAnalysisRunId = runId;
+        this.slfLiveAnalysisRunning = true;
+        const button = document.getElementById('slf-transfer-analyze-visible');
+        const originalText = button ? button.textContent : '';
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Анализ идет...';
+        }
+
+        const isCurrentRun = () => this.slfLiveAnalysisRunId === runId;
+        const rows = this.parseVisibleRowsCompat();
+        if (!rows.length) {
+            this.setStatus?.('Игроки не найдены: структура строк рынка не распознана.');
+            this.slfLiveAnalysisRunning = false;
+            if (button) {
+                button.disabled = false;
+                button.textContent = originalText || 'Анализировать видимых';
+            }
+            return;
+        }
+
+        const concurrency = 3;
+        const runMemory = new Map();
+        let done = 0;
+        let analyzed = 0;
+        let errors = 0;
+        const total = rows.length;
+
+        const loadPlayerData = async sourceRow => {
+            const row = await this.resolveTransferRowPlayerIdentity(sourceRow);
+            const playerId = String(row.playerId || '').trim();
+            if (!playerId) throw new Error('player_identity_empty');
+            if (!runMemory.has(playerId)) {
+                runMemory.set(playerId, Promise.allSettled([
+                    TMEnrichmentLayer.getBySlfPlayerId(playerId),
+                    SLFAlterLayer.getByPlayerId(playerId)
+                ]).then(([tmSettled, slfSettled]) => ({
+                    row,
+                    tmResult: tmSettled.status === 'fulfilled' ? tmSettled.value : null,
+                    slfAlter: slfSettled.status === 'fulfilled' ? slfSettled.value : null,
+                    tmError: tmSettled.status === 'rejected' ? tmSettled.reason : null,
+                    slfError: slfSettled.status === 'rejected' ? slfSettled.reason : null
+                })));
+            }
+            return runMemory.get(playerId);
+        };
+
+        const analyzeOne = async sourceRow => {
+            if (!isCurrentRun()) return;
+            this.renderLoadingBadge?.(sourceRow);
+            try {
+                const result = await loadPlayerData(sourceRow);
+                if (!isCurrentRun()) return;
+                const row = result.row;
+                const tmResult = result.tmResult || {
+                    playerId: row.playerId,
+                    slfUrl: row.playerUrl,
+                    tmUrl: '',
+                    tmProfile: null,
+                    error: result.tmError ? 'tm_failed' : 'empty_enrichment'
+                };
+                const slfAlter = result.slfAlter || null;
+                row.tmUrl = tmResult.tmUrl || '';
+                row.tmProfile = tmResult.tmProfile || null;
+                row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
+                row.slfAlter = slfAlter;
+                this.renderRowBadge?.(row, tmResult, slfAlter);
+                analyzed++;
+            } catch (error) {
+                errors++;
+                console.error('[SLF Transfer Analyzer] FM2026 identity/analyze failed', sourceRow, error);
+                this.renderErrorBadge?.(sourceRow, error);
+            } finally {
+                done++;
+                if (isCurrentRun() && (done === total || done % 3 === 0)) {
+                    this.setStatus?.(`Live ${done}/${total}: analyzed ${analyzed}, errors ${errors}`);
+                }
+            }
+        };
+
+        let cursor = 0;
+        const workers = Array.from({ length: Math.max(1, Math.min(concurrency, rows.length)) }, async () => {
+            while (cursor < rows.length && isCurrentRun()) await analyzeOne(rows[cursor++]);
+        });
+
+        this.setStatus?.(`Live анализ: распознано ${total} строк, parallel ${concurrency}...`);
+        try {
+            await Promise.all(workers);
+        } finally {
+            this.slfLiveAnalysisRunning = false;
+            if (button) {
+                button.disabled = false;
+                button.textContent = originalText || 'Анализировать видимых';
+            }
+        }
+        if (isCurrentRun()) this.setStatus?.(`Готово live: ${total} игроков · analyzed ${analyzed} · errors ${errors}`);
     };
 }
