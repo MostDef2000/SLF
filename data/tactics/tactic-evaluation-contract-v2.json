@@ -1,0 +1,52 @@
+{
+  "schema": "slf_tactic_evaluation_contract_v2",
+  "version": 2,
+  "unitOfAnalysis": ["match", "tactical_phase", "preset_switch"],
+  "identity": {
+    "required": ["gameId", "sessionId", "phaseId", "presetId", "tacticFingerprint", "scriptVersion", "generatorVersion", "libraryVersion", "recommendationSchema", "riskAppetite"],
+    "phaseIdPolicy": "deterministic per game, phase sequence and tactic fingerprint",
+    "legacyRecordsMayOmit": ["sessionId", "phaseId", "generatorVersion"]
+  },
+  "capture": {
+    "ownMatchesOnly": true,
+    "foreignMatchWrites": false,
+    "automaticSnapshotTriggers": ["initial", "generation_window", "tactic_change", "score_state_change", "finished"],
+    "automaticSnapshotsIncludePlayerObservations": false,
+    "finalResultIsIdempotent": true,
+    "boundedOutbox": 12
+  },
+  "phaseLifecycle": {
+    "start": ["initial_observation", "preset_apply", "manual_change", "observed_tactic_change"],
+    "close": ["tactic_change", "match_finished"],
+    "shortPhasesAreStored": true,
+    "shortPhasesAreRanked": false
+  },
+  "contextDimensions": ["homeAway", "strengthGapBucket", "scoreStateAtStart", "minuteBucket", "riskAppetite", "explorationApplied", "scriptVersion", "generatorVersion"],
+  "eligibility": {
+    "minimumPhaseMinutes": 5,
+    "minimumCompleteness": 0.55,
+    "missingMetricsMustNotDefaultToObservedZero": true
+  },
+  "quality": {
+    "requiredCoverageMetrics": ["resultCoverage", "snapshotCoverage", "knownPresetRate", "phaseClosureRate", "knownScoreStateRate", "scriptVersionCoverage", "generatorVersionCoverage", "orphanRecordRate", "outboxRetryCount", "eligiblePhaseRate"],
+    "legacyAndCurrentSchemasReportedSeparately": true
+  },
+  "outcomes": {
+    "match": ["points", "goalDifference", "resultVsExpected"],
+    "phase": ["xGDifference", "shotDifference", "badActionsDelta", "strengthGapDelta", "powerDropPct"],
+    "deferredUntilCanonicalSourceExists": ["shotsOnTargetDifference", "transitionThreatConceded", "cardsAfterSwitch", "injuriesAfterSwitch"]
+  },
+  "storage": {
+    "collectionsUnchanged": ["match_snapshots_v2", "match_results_v2", "preset_events_v2", "preset_effects_v2"],
+    "browserStateSchema": "slf_manual_match_state_v2",
+    "legacyBrowserState": ["slf_manual_match_state_v1", "slf_live_parser_state_v2"],
+    "destructiveVpsMigration": false
+  },
+  "safety": {
+    "clientDoesNotAutoTrain": true,
+    "clientDoesNotAutoApply": true,
+    "tacticApplicationRemainsManual": true,
+    "vpsAggregationRequired": true,
+    "promotionRequiresHumanApproval": true
+  }
+}

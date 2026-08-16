@@ -23,12 +23,19 @@ function createStorage(initial = {}) {
 function createHarness(initialStorage = {}) {
   const localStorage = createStorage(initialStorage);
   const context = {
-    console, Object, Array, Set, Symbol, Date, Error, Promise, String, Number, JSON,
+    console, Object, Array, Set, Symbol, Date, Error, Promise, String, Number, JSON, Math,
     setTimeout, clearTimeout, setInterval, clearInterval, localStorage,
     document: { readyState: 'complete', body: { addEventListener() {} }, addEventListener() {} },
     location: { pathname: '/other.php', href: 'https://sublime.example/game.php?id=game-1' },
     SLF_VERSION_INFO: { scriptVersion: 'test' },
-    CONFIG: { COLLECTIONS: { PRESET_EFFECTS: 'preset_effects_v2', PRESET_EVENTS: 'preset_events_v2' } },
+    CONFIG: {
+      COLLECTIONS: {
+        MATCH_SNAPSHOTS: 'match_snapshots_v2',
+        MATCH_RESULTS: 'match_results_v2',
+        PRESET_EFFECTS: 'preset_effects_v2',
+        PRESET_EVENTS: 'preset_events_v2'
+      }
+    },
     STATE: {
       pendingPresetEvent: null,
       pendingEffectRetry: false,
@@ -40,7 +47,8 @@ function createHarness(initialStorage = {}) {
       tacticWatcherStarted: false,
       suppressManualWatcherUntil: 0,
       lastManualTactic: null,
-      manualChangeTimer: null
+      manualChangeTimer: null,
+      telemetryV2PollTimer: null
     },
     MatchStateParser: {
       getGameId() { return 'game-1'; },
@@ -49,6 +57,7 @@ function createHarness(initialStorage = {}) {
     MatchTimingModel: { getTargetWindowAfterChange() { return { index: 2, label: '16-30' }; } },
     SnapshotEngine: {
       __runtimeTelemetryIntegrityInstalled: false,
+      __tacticalTelemetryV2Installed: false,
       build() { return { gameId: 'game-1', status: 'live', minute: 10, bucket: '01-15', myTeam: 1, tacticTelemetry: { transitions: [] } }; },
       sendMatchResult(snapshot) { return Promise.resolve(snapshot); }
     },
@@ -71,8 +80,9 @@ function createHarness(initialStorage = {}) {
   return { context, localStorage };
 }
 
-const legacyKey = 'slf_live_parser_state_v2:game-1';
-const manualKey = 'slf_manual_match_state_v1:game-1';
+const liveLegacyKey = 'slf_live_parser_state_v2:game-1';
+const v1Key = 'slf_manual_match_state_v1:game-1';
+const v2Key = 'slf_manual_match_state_v2:game-1';
 const legacyPending = { gameId: 'game-1', eventKey: 'legacy-event' };
 const legacyRecord = {
   schema: 'slf_live_parser_state_v2',
@@ -83,7 +93,7 @@ const legacyRecord = {
   lastRecommendationHtml: '<div>legacy</div>',
   lastRecommendationMeta: { source: 'manual_hint_button' }
 };
-const harness = createHarness({ [legacyKey]: JSON.stringify(legacyRecord) });
+const harness = createHarness({ [liveLegacyKey]: JSON.stringify(legacyRecord) });
 
 assert.equal(typeof harness.context.SnapshotEngine.persistManualState, 'function');
 assert.equal(typeof harness.context.SnapshotEngine.loadManualState, 'function');
@@ -93,27 +103,38 @@ assert.equal(harness.context.SnapshotEngine.loadLiveState, undefined);
 assert.equal(harness.context.SnapshotEngine.clearLiveState, undefined);
 
 const migrated = harness.context.SnapshotEngine.loadManualState('game-1');
-assert.equal(migrated.schema, 'slf_manual_match_state_v1');
+assert.equal(migrated.schema, 'slf_manual_match_state_v2');
 assert.equal(migrated.pendingPresetEvent.eventKey, 'legacy-event');
-assert.ok(harness.localStorage.has(manualKey), 'legacy state was not migrated');
-assert.ok(harness.localStorage.has(legacyKey), 'read-only fallback must not delete the old key during load');
+assert.equal(migrated.sessionId, 'match-session|game-1');
+assert.ok(harness.localStorage.has(v2Key), 'legacy state was not migrated to v2');
+assert.ok(harness.localStorage.has(v1Key), 'v1 bridge should be created while reading the old live state');
+assert.ok(harness.localStorage.has(liveLegacyKey), 'migration load must not destructively delete legacy state');
 
-const writesBeforePersist = harness.localStorage.writes.filter(key => key === legacyKey).length;
+const v1WritesBeforePersist = harness.localStorage.writes.filter(key => key === v1Key).length;
+const liveWritesBeforePersist = harness.localStorage.writes.filter(key => key === liveLegacyKey).length;
 harness.context.STATE.pendingPresetEvent = { gameId: 'game-1', eventKey: 'next-event' };
 harness.context.STATE.recommendationFreeze = { gameId: 'game-1', targetBucket: '31-45' };
 const persisted = harness.context.SnapshotEngine.persistManualState({ pendingEffectRetry: false });
+assert.equal(persisted.schema, 'slf_manual_match_state_v2');
 assert.equal(persisted.pendingPresetEvent.eventKey, 'next-event');
-assert.equal(harness.localStorage.read(manualKey).pendingPresetEvent.eventKey, 'next-event');
-assert.equal(harness.localStorage.read(legacyKey).pendingPresetEvent.eventKey, 'legacy-event');
+assert.equal(harness.localStorage.read(v2Key).pendingPresetEvent.eventKey, 'next-event');
+assert.equal(harness.localStorage.read(v1Key).pendingPresetEvent.eventKey, 'legacy-event');
+assert.equal(harness.localStorage.read(liveLegacyKey).pendingPresetEvent.eventKey, 'legacy-event');
 assert.equal(
-  harness.localStorage.writes.filter(key => key === legacyKey).length,
-  writesBeforePersist,
-  'manual persistence must never write the legacy key'
+  harness.localStorage.writes.filter(key => key === v1Key).length,
+  v1WritesBeforePersist,
+  'v2 persistence must not keep writing the superseded v1 key'
+);
+assert.equal(
+  harness.localStorage.writes.filter(key => key === liveLegacyKey).length,
+  liveWritesBeforePersist,
+  'v2 persistence must never write the old live key'
 );
 
 assert.equal(harness.context.SnapshotEngine.loadManualState('game-1').pendingPresetEvent.eventKey, 'next-event');
 harness.context.SnapshotEngine.clearManualState('game-1');
-assert.equal(harness.localStorage.has(manualKey), false);
-assert.equal(harness.localStorage.has(legacyKey), false);
+assert.equal(harness.localStorage.has(v2Key), false);
+assert.equal(harness.localStorage.has(v1Key), false);
+assert.equal(harness.localStorage.has(liveLegacyKey), false);
 
-console.log('[manual-match-state-sunset-test] passed');
+console.log('[manual-match-state-v2-bridge-test] passed');

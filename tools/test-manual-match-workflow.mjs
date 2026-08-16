@@ -44,7 +44,7 @@ function makeSnapshot({
     teamNames: { home: 'Mine', away: 'Opponent' },
     myTeam: 1,
     matchOwnership: 'owned',
-    currentTactic: { def_line: '1', press_line: '2' },
+    currentTactic: { def_line: '1', press_line: '2', priority: [] },
     developerHints: [],
     generatorQualitySignal: { schema: 'test_quality', detected: false },
     stats: [
@@ -92,6 +92,7 @@ function createHarness({ effectPostFails = false, persistedPending = null } = {}
       pendingPresetEvent: clone(persistedPending)
     }));
   }
+
   const context = {
     console,
     Object,
@@ -113,9 +114,7 @@ function createHarness({ effectPostFails = false, persistedPending = null } = {}
     location: { pathname: '/other.php', href: 'https://example.test/game.php?id=game-1' },
     document: {
       readyState: 'complete',
-      body: {
-        addEventListener() {}
-      },
+      body: { addEventListener() {} },
       addEventListener() {}
     },
     window: {},
@@ -125,7 +124,7 @@ function createHarness({ effectPostFails = false, persistedPending = null } = {}
       },
       setItem(key, value) {
         localStorageData.set(key, String(value));
-        if (key.startsWith('slf_manual_match_state_v1:')) {
+        if (key.startsWith('slf_manual_match_state_v2:')) {
           const parsed = JSON.parse(String(value));
           persisted.push(clone(parsed));
           storedPending = clone(parsed.pendingPresetEvent || null);
@@ -138,6 +137,8 @@ function createHarness({ effectPostFails = false, persistedPending = null } = {}
     SLF_VERSION_INFO: { scriptVersion: 'test' },
     CONFIG: {
       COLLECTIONS: {
+        MATCH_SNAPSHOTS: 'match_snapshots_v2',
+        MATCH_RESULTS: 'match_results_v2',
         PRESET_EVENTS: 'preset_events_v2',
         PRESET_EFFECTS: 'preset_effects_v2'
       }
@@ -151,21 +152,22 @@ function createHarness({ effectPostFails = false, persistedPending = null } = {}
       tacticWatcherStarted: false,
       lastManualTactic: null,
       manualChangeTimer: null,
-      tacticTransitionSourceHint: null
+      tacticTransitionSourceHint: null,
+      telemetryV2PollTimer: null
     },
     MatchStateParser: {
       getGameId() {
         return currentSnapshot.gameId;
       },
-      getGenerationWindow(minute) {
-        return minute >= 16
-          ? { index: 2, label: '16-30', effectiveMinute: minute }
-          : { index: 1, label: '01-15', effectiveMinute: minute };
+      getGenerationWindow(value) {
+        return value >= 16
+          ? { index: 2, label: '16-30', effectiveMinute: value }
+          : { index: 1, label: '01-15', effectiveMinute: value };
       }
     },
     MatchTimingModel: {
-      getWindow(minute) {
-        return context.MatchStateParser.getGenerationWindow(minute);
+      getWindow(value) {
+        return context.MatchStateParser.getGenerationWindow(value);
       },
       getTargetWindowAfterChange() {
         return { index: 2, label: '16-30' };
@@ -200,6 +202,7 @@ function createHarness({ effectPostFails = false, persistedPending = null } = {}
     SnapshotEngine: {
       __tacticTelemetryEnvelopeInstalled: false,
       __runtimeTelemetryIntegrityInstalled: false,
+      __tacticalTelemetryV2Installed: false,
       build() {
         return clone(currentSnapshot);
       },
@@ -340,6 +343,7 @@ async function flush() {
   );
   assert.equal(effectPost.payload.source.trigger, 'manual_hint_button');
   assert.equal(harness.context.STATE.pendingPresetEvent, null);
+  assert.equal(harness.persisted.at(-1).schema, 'slf_manual_match_state_v2');
   assert.equal(harness.persisted.at(-1).pendingPresetEvent, null);
   assert.equal(harness.persisted.at(-1).consumedPresetEventKey, pending.eventKey);
   assert.equal(harness.snapshotPosts.length, 1, 'manual hint should also submit the after snapshot');
@@ -371,7 +375,12 @@ async function flush() {
 
   assert.equal(harness.context.STATE.pendingPresetEvent.eventKey, pending.eventKey);
   assert.equal(harness.getStoredPending().eventKey, pending.eventKey);
+  assert.equal(harness.persisted.at(-1).schema, 'slf_manual_match_state_v2');
   assert.equal(harness.persisted.at(-1).pendingEffectRetry, true);
+  assert.ok(
+    harness.persisted.at(-1).outbox.some(item => item.collection === 'preset_effects_v2'),
+    'failed effect should be retained in the v2 outbox'
+  );
 }
 
 {
