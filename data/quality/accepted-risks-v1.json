@@ -98,7 +98,7 @@
     {
       "id": "QR-006",
       "title": "Component workflows are path-filtered and cannot safely be required individually",
-      "status": "open",
+      "status": "closed",
       "severity": "medium",
       "owner": "MostDef2000",
       "boundary": "GitHub merge enforcement",
@@ -109,6 +109,8 @@
         "Branch protection remains explicitly not enforced until the aggregate context is observed"
       ],
       "target": "Create and observe the exact aggregate status context, then configure and verify branch protection with a disposable pull request.",
+      "closureEvidence": "protect-main ruleset (id 20537936) is active on refs/heads/main with the always-running aggregate SLF CI / ci status check, conversation resolution, and deletion/force-push protection; verified with a disposable pull request (aggregateVerification runId 31135537375) before enabling protection.",
+      "sourcePullRequest": 163,
       "reviewBy": "2026-09-01"
     },
     {
@@ -128,6 +130,25 @@
       ],
       "target": "Use an independent qualified reviewer when one becomes available and reassess whether approval requirements can be increased.",
       "acceptance": "Repository owner explicitly accepted this single-maintainer risk on 2026-08-04.",
+      "reviewBy": "2026-10-01"
+    },
+    {
+      "id": "QR-008",
+      "title": "Pull requests can modify CI workflow definitions without a required approving review",
+      "status": "accepted",
+      "severity": "high",
+      "owner": "MostDef2000",
+      "boundary": "GitHub merge enforcement",
+      "consequence": "A pull request can change quality-integration.yml or other workflow definitions and merge without an approving review, allowing CI logic to be altered by the same single maintainer who authors the change.",
+      "compensatingControls": [
+        "protect-main ruleset requires the always-running aggregate SLF CI / ci status check on every pull request",
+        "The release gate re-validates the exact merged main source with independent provenance checks before publication",
+        "Deterministic rebuild and artifact digest verification detect non-source changes in release outputs",
+        "CODEOWNERS requires owner review for /.github/ changes",
+        "QR-007 records the single-maintainer acceptance model"
+      ],
+      "target": "Increase required approving reviews when an independent reviewer becomes available; until then keep the aggregate status check and release-gate revalidation as compensating controls.",
+      "acceptance": "Repository owner explicitly accepted this single-maintainer CI self-modification risk on 2026-08-17.",
       "reviewBy": "2026-10-01"
     }
   ]

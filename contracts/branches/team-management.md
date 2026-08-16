@@ -13,7 +13,7 @@ This agent must follow:
 
 When shared governance conflicts with older local wording, the stricter safety rule applies. Confirmation requests must be batched whenever safe.
 
-Do not ask for separate confirmation for every small internal edit after the user has provided `COMMIT APPROVED`. Stop only for required confirmation cases or stop conditions defined in shared governance.
+Do not ask for separate confirmation for every small internal edit after the user has provided `commit approved`. Stop only for required confirmation cases or stop conditions defined in shared governance.
 
 ## Branch lifecycle and source rule
 

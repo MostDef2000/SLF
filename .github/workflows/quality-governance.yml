@@ -30,3 +30,32 @@ jobs:
         run: |
           node tools/validate-quality-governance.mjs
           node tools/validate-workflow-inventory.mjs
+
+      - name: Check release branch drift
+        run: |
+          set -euo pipefail
+          git fetch origin '+refs/heads/release:refs/remotes/origin/release'
+          RELEASE_TIP=$(git rev-parse refs/remotes/origin/release)
+          RELEASE_SUBJECT=$(git log -1 --format=%s refs/remotes/origin/release)
+          if ! [[ "$RELEASE_SUBJECT" =~ ^release:\ publish\ SLF\ [0-9]+\.[0-9]+\.[0-9]+\ latest-only$ ]]; then
+            echo "release tip is not a generated release commit: $RELEASE_SUBJECT" >&2
+            exit 1
+          fi
+          RELEASE_MANIFEST=$(git show refs/remotes/origin/release:data/version.json)
+          APPROVED_COMMIT=$(printf '%s' "$RELEASE_MANIFEST" | node -e "let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log(JSON.parse(s).build.approvedCommit));")
+          SCRIPT_VERSION=$(printf '%s' "$RELEASE_MANIFEST" | node -e "let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log(JSON.parse(s).scriptVersion));")
+          if ! [[ "$APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "release manifest approvedCommit is invalid: $APPROVED_COMMIT" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$APPROVED_COMMIT" origin/main; then
+            echo "release approvedCommit $APPROVED_COMMIT is not an ancestor of main" >&2
+            exit 1
+          fi
+          USER_VERSION=$(git show refs/remotes/origin/release:releases/latest.user.js | node -e "let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const m=s.match(/\/\/ @version\s+(\S+)/);if(!m)throw new Error('no version');console.log(m[1]);});")
+          META_VERSION=$(git show refs/remotes/origin/release:releases/latest.meta.js | node -e "let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const m=s.match(/\/\/ @version\s+(\S+)/);if(!m)throw new Error('no version');console.log(m[1]);});")
+          if [ "$SCRIPT_VERSION" != "$USER_VERSION" ] || [ "$SCRIPT_VERSION" != "$META_VERSION" ]; then
+            echo "version drift: manifest=$SCRIPT_VERSION user.js=$USER_VERSION meta.js=$META_VERSION" >&2
+            exit 1
+          fi
+          echo "release branch OK: $RELEASE_TIP ($RELEASE_SUBJECT) approvedCommit=$APPROVED_COMMIT version=$SCRIPT_VERSION"

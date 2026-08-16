@@ -1,6 +1,6 @@
 # SLF Control Plane Architecture
 
-Version: 2.1.0
+Version: 2.2.0
 Status: Active
 Applies to: all SLF agents, runtime, integration, release, and Tampermonkey handoff workflows
 Source of truth: GitHub repository contracts
@@ -20,7 +20,7 @@ Defines global invariants:
 - `main` is source of truth;
 - generated release files are artifacts;
 - module branches are disposable;
-- `COMMIT APPROVED` is required before repository writes;
+- `commit approved` is required before repository writes;
 - automatic release is the default after approved runtime changes reach `main`;
 - manual Actions execution is fallback-only.
 
@@ -41,14 +41,17 @@ DISCUSSION
 → IMPLEMENTING
 → MODULE_COMMITTED
 → HANDOFF_VALIDATED
+→ PR_CI_PENDING
+→ PR_CI_SUCCESS
+→ MERGE_ALLOWED
 → CORE_RELEASE_INTEGRATING
 → SOURCE_INTEGRATED
-→ ACTIONS_RUNNING
-→ ACTIONS_COMPLETED
+→ RELEASE_PENDING
+→ RELEASE_SUCCESS
 → BROWSER_ACCEPTANCE or COMPLETE
 ```
 
-`ACTIONS_REQUIRED` exists only for manual fallback.
+`MANUAL_STEP_REQUIRED` is reserved for a genuinely unavailable platform capability after all safe automated fallbacks are exhausted.
 
 Contract:
 
@@ -138,22 +141,19 @@ Contract:
 Canonical workflow:
 
 ```text
-SLF Validate and Release
+SLF Release
 ```
-
-Pull request mode:
-
-- validate source and bundle manifest;
-- publish nothing.
 
 Eligible `main` push mode:
 
-- validate;
-- build latest-only userscript;
-- validate artifacts;
-- commit release outputs to `main`.
+- validate the exact current `main` source commit;
+- build the deterministic latest-only userscript;
+- validate artifacts and release provenance;
+- publish one generated release commit to the generated `release` branch only.
 
-Manual dispatch remains available only for fallback/recovery.
+Manual `workflow_dispatch` remains fallback-only and must execute the same publication path, pinned to the exact current `main` source commit.
+
+Generated publication never pushes to `main` and never requires a `main` ruleset bypass.
 
 ### 2.9 User Boundary Layer
 
@@ -161,7 +161,7 @@ The user normally performs only:
 
 - task definition in any convenient free-form wording;
 - review of the short normalized understanding when needed;
-- one repository-write approval (`COMMIT APPROVED` or equivalent);
+- one repository-write approval (`commit approved` or equivalent);
 - browser acceptance when requested;
 - Tampermonkey update when explicitly instructed.
 
@@ -180,13 +180,13 @@ User request
 → Task Intake normalization
 → canonical Task Brief
 → PM scope and readiness
-→ COMMIT APPROVED
+→ commit approved
 → Domain implementation
 → Branch commit
 → Pull Request
 → CI validation
 → Merge into main
-→ Automatic SLF Validate and Release
+→ Automatic SLF Release
 → Release commit/version verification
 → Tampermonkey update instruction
 → Browser acceptance when required
@@ -195,7 +195,7 @@ User request
 
 ## 4. Approval semantics
 
-`COMMIT APPROVED` authorizes all deterministic safe steps inside the approved scope:
+`commit approved` authorizes all deterministic safe steps inside the approved scope:
 
 - implementation;
 - branch commits;
@@ -214,6 +214,7 @@ Automatic release is triggered only by runtime/build-affecting changes:
 - `src/**`;
 - `tools/check-bundle-order.mjs`;
 - `tools/build-latest-userscript.mjs`;
+- `tools/validate-release-provenance.mjs`;
 - `.github/workflows/build-latest-release.yml`.
 
 Contracts, architecture documents, decision records, and other documentation-only changes do not publish userscript versions.

@@ -1,6 +1,6 @@
 # SLF Release Readiness Gate
 
-Version: 1.3.0
+Version: 1.4.0
 Status: Active
 Applies to: all SLF release workflows
 Source of truth: GitHub repository contracts
@@ -115,6 +115,7 @@ A successful release requires verification of:
 - coherent cumulative `build.approvedFiles` excluding generated outputs;
 - matching version in `release/releases/latest.user.js` and `release/releases/latest.meta.js`;
 - generated release commit exists on `release`;
+- `release/data/release-evidence.json` records the published artifact digests;
 - canonical update/download URLs point to the `release` branch;
 - no archive userscript.
 

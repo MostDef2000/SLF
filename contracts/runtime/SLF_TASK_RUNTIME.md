@@ -1,6 +1,6 @@
 # SLF Task Runtime Contract
 
-Version: 1.5.0
+Version: 1.6.0
 Status: Active
 Applies to: all SLF implementation, release, governance, fallback, and acceptance workflows
 Source of truth: protected GitHub `main` for source, repository contracts, and generated `release` branch for published latest-only artifacts
@@ -186,7 +186,8 @@ Canonical release verification prioritizes repository evidence on `release` whil
 6. `build.approvedFiles` is the coherent unpublished source range excluding generated outputs;
 7. `release/releases/latest.user.js` has the same version;
 8. `release/releases/latest.meta.js` has the same version and canonical release-branch URLs;
-9. matching generated release commit exists on `release`.
+9. matching generated release commit exists on `release`;
+10. `release/data/release-evidence.json` records the published artifact digests for the version.
 
 Historical generated snapshots on `main` are not publication evidence after the release-branch handoff.
 
