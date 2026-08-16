@@ -1,6 +1,6 @@
 {
   "schema": "slf_manual_match_symbol_review_v1",
-  "reviewedAt": "2026-08-03",
+  "reviewedAt": "2026-08-16",
   "scope": "Symbol-level boundary between the active manual match workflow and the historical automatic live-parser loop. This file does not authorize deletion.",
   "classifications": {
     "LEGACY_AUTOMATIC_LOOP": "Historical 15-second background parser code not invoked by the current bootstrap or UI.",
@@ -48,10 +48,12 @@
         "src/modules/manual-match-telemetry/snapshot-engine.js",
         "src/modules/manual-match-telemetry/event-tracker.js",
         "src/modules/manual-match-telemetry/manual-match-runtime.js",
-        "src/modules/strategy-data-recommendations/recommendation-engine.js"
+        "src/modules/strategy-data-recommendations/recommendation-engine.js",
+        "src/modules/tactics-presets/tactic-control-engine.js"
       ],
       "evidence": [
-        "All active recommendation, freeze, effect and manual watcher persistence uses the manual-state API."
+        "All active recommendation, freeze, effect and manual watcher persistence uses the manual-state API.",
+        "Tactical Lab v1 wraps the same reviewed persistence boundary only to preserve its additive per-match lab field when the canonical manual envelope is rewritten."
       ],
       "deletionStatus": "KEEP"
     },
