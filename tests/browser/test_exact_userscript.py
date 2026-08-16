@@ -229,12 +229,43 @@ def run_case(browser: Browser, base_url: str, name: str, path: str, api_mode: st
         context.close()
 
 
+def add_tactical_lab_control_fixture_values(page: Page):
+    page.evaluate("""
+      (() => {
+        const ranges = {
+          def_line:['1','2','3','4','5'], press_line:['1','2','3','4','5'],
+          def_width:['1','2','3','4','5'], press_intense:['1','2','3','4','5'],
+          build_type:['1','2','3'], build_temp:['1','2','3'], build_long:['1','2','3','4','5'],
+          build_fast:['1','2','3','4','5'], style:['1','2','3','4','5'],
+          pass_risk:['1','2','3','4','5'], dribble:['1','2','3','4','5'],
+          cross:['1','2','3','4','5'], corner:['1'], shot:['1','2','3','4','5']
+        };
+        for (const [name, values] of Object.entries(ranges)) {
+          for (const value of values) {
+            if (document.querySelector(`input[name="${name}"][value="${value}"]`)) continue;
+            const input = document.createElement('input');
+            input.type = 'radio'; input.name = name; input.value = value; input.hidden = true;
+            document.body.appendChild(input);
+          }
+        }
+        for (const suffix of ['l','c','r']) {
+          const name = `priority_${suffix}`;
+          if (document.querySelector(`input[name="${name}"]`)) continue;
+          const input = document.createElement('input');
+          input.type = 'checkbox'; input.name = name; input.value = '1'; input.hidden = true;
+          document.body.appendChild(input);
+        }
+      })();
+    """)
+
+
 def assert_owned_live(page: Page):
     page.wait_for_selector("#slf-match-parser-panel")
     page.wait_for_selector("#slf-manual-recommendation-btn")
     page.wait_for_selector("#slf-tactics-dropdown")
     page.wait_for_selector("#slf-live-lineup-preset-panel")
     page.wait_for_selector("#slf-live-lineup-preset-select")
+    page.wait_for_selector("#slf-tactical-lab-panel")
     page.wait_for_timeout(100)
 
     assert page.locator("#slf-match-parser-panel").count() == 1
@@ -242,6 +273,10 @@ def assert_owned_live(page: Page):
     assert page.locator("#slf-tactics-dropdown").count() == 1
     assert page.locator("#slf-live-lineup-preset-panel").count() == 1
     assert page.locator("#slf-live-lineup-preset-select option").count() == 11
+    assert page.locator("#slf-tactical-lab-panel").count() == 1
+    experiment_id = page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id")
+    assert experiment_id and experiment_id.startswith("EXP-561-P01-"), experiment_id
+    assert "blind challenger" in page.locator("#slf-tactical-lab-status").text_content()
 
     expected_dropdown_ids = [
         "Bielsa_ChaosPress_att5",
@@ -263,6 +298,7 @@ def assert_owned_live(page: Page):
         "options => options.map(option => option.value)",
     )
     assert dropdown_ids == expected_dropdown_ids, dropdown_ids
+    assert all(not value.startswith("EXP-") for value in dropdown_ids), dropdown_ids
     assert page.locator("#slf-tactics-dropdown select optgroup").count() == 5
     assert page.eval_on_selector_all(
         "#slf-tactics-dropdown select optgroup",
@@ -304,6 +340,7 @@ def assert_owned_live(page: Page):
     assert record["recordType"] == "match_snapshot"
     assert record["snapshotKey"].startswith("match_snapshot|e2e-owned|")
     assert record["source"]["scriptVersion"] == EXPECTED_VERSION
+    assert record["tacticalLab"]["assignment"]["experimentId"] == experiment_id
 
     page.evaluate("""
       window.__tacticPresetChanges = [];
@@ -369,6 +406,49 @@ def assert_owned_live(page: Page):
     assert save_payload["am1"] == "p-lw", save_payload
     assert save_payload["sub1"] == "p-sub1", save_payload
 
+    add_tactical_lab_control_fixture_values(page)
+    page.locator("#slf-tactical-lab-apply").click()
+    page.wait_for_function(
+        "() => document.getElementById('slf-tactical-lab-status')?.textContent.includes('ACTIVE')"
+    )
+    assert page.evaluate("window.__lineupSaveClicks") == 2
+    lab_state = page.evaluate(
+        "JSON.parse(localStorage.getItem('slf_manual_match_state_v1:e2e-owned') || '{}').tacticalLab"
+    )
+    assert lab_state["assignment"]["experimentId"] == experiment_id
+    assert lab_state["activation"]["status"] == "active"
+    assert lab_state["activation"]["startedAtMinute"] is not None
+    assert lab_state["activation"]["entryContext"]["productionRecommendation"] is not None
+    page.wait_for_function(
+        "() => window.__slfRequests.some(item => item.url.includes('/api/match_snapshots_v2?mode=append') && String(item.data || '').includes('tactical_lab_activation'))"
+    )
+    lab_snapshot_records = []
+    for row in request_rows(page):
+        if "/api/match_snapshots_v2?mode=append" not in row["url"]:
+            continue
+        decoded = json.loads(row["data"])
+        for item in decoded if isinstance(decoded, list) else [decoded]:
+            if item.get("tacticalLabEvent", {}).get("kind") == "activation":
+                lab_snapshot_records.append(item)
+    assert len(lab_snapshot_records) == 1, lab_snapshot_records
+    assert lab_snapshot_records[0]["tacticalLabEvent"]["experimentId"] == experiment_id
+    assert "tactical_lab_activation" in lab_snapshot_records[0]["snapshotKey"]
+
+    page.locator("#slf-tactics-dropdown select").select_option("Arteta_Control433_bal3")
+    page.wait_for_function(
+        "() => document.getElementById('slf-tactical-lab-status')?.textContent.includes('протестирован')"
+    )
+    page.wait_for_function(
+        "() => window.__slfRequests.some(item => item.url.includes('/api/match_snapshots_v2?mode=append') && String(item.data || '').includes('tactical_lab_exit'))"
+    )
+    lab_state = page.evaluate(
+        "JSON.parse(localStorage.getItem('slf_manual_match_state_v1:e2e-owned') || '{}').tacticalLab"
+    )
+    assert lab_state["activation"] is None
+    assert lab_state["completed"]["experimentId"] == experiment_id
+    assert lab_state["completed"]["exitReason"] == "user_selected_production"
+    assert page.locator("#slf-tactical-lab-apply").is_disabled()
+
     page.evaluate("""
       for (let index = 0; index < 40; index += 1) {
         const node = document.createElement('span');
@@ -382,6 +462,7 @@ def assert_owned_live(page: Page):
     assert page.locator("#slf-manual-recommendation-btn").count() == 1
     assert page.locator("#slf-tactics-dropdown").count() == 1
     assert page.locator("#slf-live-lineup-preset-panel").count() == 1
+    assert page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id") == experiment_id
 
 
 def assert_offline_bootstrap(page: Page):
@@ -398,6 +479,7 @@ def assert_foreign_live(page: Page):
     page.wait_for_selector("#slf-manual-recommendation-btn")
     page.wait_for_selector("#slf-foreign-match-target")
     assert page.locator("#slf-tactics-dropdown").count() == 0
+    assert page.locator("#slf-tactical-lab-panel").count() == 0
 
     page.locator("#slf-manual-recommendation-btn").click()
     page.wait_for_function(
@@ -441,6 +523,7 @@ def assert_tactic_page(page: Page):
     assert "DeZerbi_BaitPress_bal3" not in tactic_ids
     assert "Henta_LeftTrap_att3" not in tactic_ids
     assert "Henta abuse" in tactic_ids
+    assert all(not value.startswith("EXP-") for value in tactic_ids), tactic_ids
 
 
 def assert_transfer_page(page: Page):
