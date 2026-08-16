@@ -16,202 +16,115 @@ const activePresets = [
   'Bielsa_ChaosPress_att5'
 ];
 
-const recommendationEngine = {
-  compactPlan() {
-    return '<div><div><b>Действие:</b> Pep</div><div><b>Кандидаты:</b> A · B · C</div></div>';
-  },
-  selectRawPreset() {
-    return { name: 'Arteta_Control433_bal3' };
-  }
-};
-
+const retired = ['Mourinho_WeakSide_def3', 'Xabi_BoxMidfield_bal3', 'DeZerbi_BaitPress_bal3'];
 const context = {
   console,
-  window: {
-    SLFActivePresetRegistry: { active: activePresets.slice(), removed: [], ladders: {} }
-  },
+  window: {},
   location: { pathname: '/noop.php', search: '' },
-  localStorage: {
-    getItem(key) {
-      return key === 'slf:tactics:risk-appetite' ? 'bold' : null;
-    },
-    setItem() {}
-  },
-  setInterval(callback) {
-    callback();
-    return 1;
-  },
+  localStorage: { getItem() { return null; }, setItem() {} },
+  setInterval(callback) { callback(); return 1; },
   clearInterval() {},
-  setTimeout(callback) {
-    callback();
-    return 1;
-  },
+  setTimeout(callback) { callback(); return 1; },
   clearTimeout() {},
   BASE_PRESETS: Object.assign(
-    { standard: { priority: [], style: '4' } },
-    Object.fromEntries(activePresets.map(name => [name, { priority: [] }]))
+    { standard: { style: '4', priority: [] } },
+    Object.fromEntries(activePresets.map(name => [name, { style: '3', priority: [] }])),
+    Object.fromEntries(retired.map(name => [name, { style: '3', priority: [] }]))
   ),
-  BASE_LABELS: Object.fromEntries(['standard', ...activePresets].map(name => [name, name])),
+  BASE_LABELS: Object.assign(
+    { standard: 'standard' },
+    Object.fromEntries([...activePresets, ...retired].map(name => [name, name]))
+  ),
   TacticPresetLibrary: {
-    meta: Object.fromEntries(activePresets.map(name => [name, {}])),
-    traits: Object.fromEntries(activePresets.map(name => [name, {}])),
+    meta: {},
+    traits: {},
     schemeStates: {},
-    presetSchemeState: {}
+    presetSchemeState: {},
+    getSchemeForPreset(name) {
+      const state = this.presetSchemeState[name] || 'base_balance';
+      return this.schemeStates[state] || this.schemeStates.base_balance || '';
+    },
+    getTraits(name) { return this.traits[name] || null; },
+    getGroup(name) { return this.meta[name]?.group || 'custom'; },
+    getRank(name) { return Number(this.meta[name]?.rank || 0); }
   },
-  RecommendationEngine: recommendationEngine
+  STATE: { presetProgression: null },
+  TacticalUrgencyModel: {
+    classify() { return { allowPreset: true, overrideProgressionGuard: false, level: 'normal' }; }
+  },
+  RecommendationEngine: {
+    selectRawPreset() { return { name: 'Arteta_Control433_bal3', reason: 'stub' }; },
+    getPresetTitle(name) { return context.BASE_LABELS[name] || name; },
+    getPresetScheme(name) { return context.TacticPresetLibrary.getSchemeForPreset(name); },
+    getPresetGroup(name) { return context.TacticPresetLibrary.getGroup(name); },
+    getPresetRank(name) { return context.TacticPresetLibrary.getRank(name); },
+    getConcisePresetAction(name) { return `apply ${name}`; },
+    shouldRecommendSchemeChange() { return { show: false, reason: '' }; },
+    hasStrongPostApplyFailure() { return false; }
+  }
 };
 context.globalThis = context;
 vm.createContext(context);
 
 const root = new URL('../', import.meta.url);
 const source = relative => fs.readFileSync(new URL(relative, root), 'utf8');
-vm.runInContext(source('src/modules/strategy-data-recommendations/current-action-hint-engine.js'), context, {
-  filename: 'current-action-hint-engine.js'
-});
-vm.runInContext(source('src/modules/tactics-presets/tactic-preset-library-panel.js'), context, {
-  filename: 'tactic-preset-library-panel.js'
-});
-const panel = vm.runInContext('TacticPresetLibraryPanel', context);
-vm.runInContext(source('src/modules/tactics-presets/active-preset-registry.js'), context, {
-  filename: 'active-preset-registry.js'
-});
 
-const registry = context.window.SLFActivePresetRegistry;
-assert.ok(registry, 'active preset registry must be exposed');
-assert.equal(registry.active.length, 11);
-assert.equal(registry.fallbackPolicy, '5.61-pressure-response-v6-aligned');
-assert.equal(context.BASE_PRESETS.Pep_BoxControl_bal2.build_fast, '2');
-assert.equal(context.BASE_PRESETS.Pep_BoxControl_bal2.pass_risk, '2');
-assert.equal(context.BASE_PRESETS.Compact_Counter_def3.priority.length, 0);
-assert.equal(context.BASE_PRESETS.Simeone_LowBlock_def5.build_fast, '2');
-assert.match(context.TacticPresetLibrary.schemeStates.Pep_BoxControl_bal2, /4-1-2-2-1/);
-assert.match(context.TacticPresetLibrary.schemeStates.Compact_Counter_def3, /4-4-1-1/);
-assert.match(context.TacticPresetLibrary.schemeStates.Pep_TwoThreeFive_att3, /3-2-5/);
-assert.match(context.TacticPresetLibrary.schemeStates.Klopp_Gegenpress_att4, /4-2-4/);
-assert.match(context.TacticPresetLibrary.schemeStates.Simeone_LowBlock_def5, /emergency lock/);
-assert.equal(context.TacticPresetLibrary.traits.Pep_BoxControl_bal2.build, 'press_resistant_control');
-assert.deepEqual(Array.from(context.TacticPresetLibrary.traits.Compact_Counter_def3.requires), ['confirmed_counter_exit']);
-assert.deepEqual(Array.from(context.TacticPresetLibrary.traits.Simeone_LowBlock_def5.requires), ['mandatory_reassessment_next_window']);
-assert.deepEqual(Array.from(registry.ladders.attack), [
-  'Pep_ControlledPush_att3',
-  'Pep_TwoThreeFive_att3',
-  'Klopp_Gegenpress_att4',
-  'Bielsa_ChaosPress_att5'
-]);
-assert.deepEqual(Array.from(registry.ladders.defensive), [
-  'Arteta_Control433_bal3',
-  'Simeone_Compact442_def4',
-  'Simeone_LowBlock_def5',
-  'Pep_PressCooldown_bal2'
-]);
-
-const expectedDisplayLabels = {
-  standard: 'Стандартная 4-2-3-1_att1',
-  Arteta_Control433_bal3: 'Arteta Structural Control 4-3-3_neutr',
-  Pep_BoxControl_bal2: 'Guardiola Press-Resistant Control 4-1-2-2-1_neutr',
-  Pep_PressCooldown_bal2: 'Guardiola Press Cooldown 4-1-4-1_def1',
-  Compact_Counter_def3: 'Mourinho Compact Counter 4-4-1-1_neutr',
-  Pep_ControlledPush_att3: 'Guardiola Controlled Push 4-2-3-1_att1',
-  Pep_TwoThreeFive_att3: 'Guardiola Positional Attack 3-2-5_att2',
-  Conte_WingbackWidth_bal4: 'Conte Wingback Width 3-4-3_att1',
-  Klopp_Gegenpress_att4: 'Klopp Gegenpress 4-2-4_att2',
-  Simeone_Compact442_def4: 'Simeone Compact 4-4-2_def2',
-  Simeone_LowBlock_def5: 'Simeone Low Block 5-4-1_def2',
-  Bielsa_ChaosPress_att5: 'Bielsa Chaos Press 3-3-4_att2'
-};
-assert.deepEqual(
-  Object.fromEntries(Object.keys(expectedDisplayLabels).map(name => [name, context.BASE_LABELS[name]])),
-  expectedDisplayLabels
-);
-assert.deepEqual(Array.from(registry.styleGroups, group => String(group.style)), ['5', '4', '3', '2', '1']);
-assert.deepEqual(Array.from(registry.displayOrder), [
-  'Bielsa_ChaosPress_att5',
-  'Pep_TwoThreeFive_att3',
-  'Klopp_Gegenpress_att4',
-  'standard',
-  'Conte_WingbackWidth_bal4',
-  'Pep_ControlledPush_att3',
-  'Arteta_Control433_bal3',
-  'Pep_BoxControl_bal2',
-  'Compact_Counter_def3',
-  'Pep_PressCooldown_bal2',
-  'Simeone_Compact442_def4',
-  'Simeone_LowBlock_def5'
-]);
-for (const [name, meta] of Object.entries(registry.displayMeta)) {
-  const label = context.BASE_LABELS[name];
-  const actualStyle = String(context.BASE_PRESETS[name]?.style || meta.style || '');
-  assert.equal(actualStyle, String(meta.style), `${name}: display style must match actual tactic style`);
-  assert.ok(label.includes(meta.formation), `${name}: display label must include formation ${meta.formation}`);
-  assert.ok(label.endsWith(meta.suffix), `${name}: display label must end with ${meta.suffix}`);
-}
-for (const legacyName of [
-  'Mourinho_WeakSide_def3',
-  'Pep_StandardControl_bal3',
-  'Xabi_BoxMidfield_bal3',
-  'DeZerbi_BaitPress_bal3',
-  'DeZerbi_Release_att4',
-  'Klopp_WideTrap_att4',
-  'Henta_LeftTrap_att3'
-]) {
-  assert.ok(registry.removed.includes(legacyName), `${legacyName}: legacy built-in must be retired from UI`);
-}
-const uiSource = source('src/app/ui-layer.js');
-assert.equal(uiSource.includes('function getCoachGroup'), false, 'legacy coach-first dropdown grouping must be removed');
-assert.match(uiSource, /buildStyleGroupedOptions/);
-assert.match(uiSource, /getVisiblePresetLabels/);
-assert.match(uiSource, /styleGroups\.forEach/);
-
-assert.equal(registry.choosePreset({
-  minute: 52,
-  score: { state: 'draw' },
-  myXg: 0.3,
-  oppXg: 0.9,
-  myXT: 0.15,
-  oppXT: 0.6,
-  pressureRisk: 70,
-  tags: ['under_pressure', 'counter_exit_blocked']
-}).name, 'Pep_BoxControl_bal2');
-assert.equal(registry.choosePreset({
-  minute: 52,
-  score: { state: 'draw' },
-  myXg: 0.3,
-  oppXg: 0.9,
-  myXT: 0.15,
-  oppXT: 0.6,
-  pressureRisk: 70,
-  tags: ['under_pressure', 'counter_exit_available']
-}).name, 'Compact_Counter_def3');
-assert.equal(registry.choosePreset({
-  minute: 56,
-  score: { state: 'draw' },
-  myBad: 22,
-  myXg: 0.2,
-  oppXg: 1.2,
-  myXT: 0.1,
-  oppXT: 0.8,
-  pressureRisk: 90,
-  tags: ['under_pressure', 'sustained_siege', 'counter_exit_blocked']
-}).name, 'Simeone_LowBlock_def5');
-assert.equal(registry.choosePreset({
-  minute: 80,
-  score: { state: 'losing' },
-  attackNeed: 90,
-  tags: []
-}).name, 'Bielsa_ChaosPress_att5');
-
-vm.runInContext(source('src/modules/tactics-presets/tactic-preset-direction-policy.js'), context, {
-  filename: 'tactic-preset-direction-policy.js'
-});
+vm.runInContext(source('src/modules/strategy-data-recommendations/current-action-hint-engine.js'), context, { filename: 'current-action-hint-engine.js' });
+vm.runInContext(source('src/modules/tactics-presets/tactic-preset-library-panel.js'), context, { filename: 'tactic-preset-library-panel.js' });
+vm.runInContext(source('src/modules/tactics-presets/active-preset-registry.js'), context, { filename: 'active-preset-registry.js' });
+vm.runInContext(source('src/modules/tactics-presets/tactic-preset-direction-policy.js'), context, { filename: 'tactic-preset-direction-policy.js' });
 
 const engine = context.window.SLFCurrentActionHintEngine;
+const registry = context.window.SLFActivePresetRegistry;
 const policy = context.window.SLFTacticDirectionPolicy;
-assert.ok(engine, 'rule engine must be exposed');
-assert.equal(policy.version, '5.61-situation-v6');
+const panel = vm.runInContext('TacticPresetLibraryPanel', context);
+const recommendation = context.RecommendationEngine;
+
+assert.ok(registry, 'active tactical registry must exist');
+assert.equal(registry.suiteVersion, 'slf_tactic_suite_561_v7');
+assert.equal(registry.recommendationSchema, 'slf_rule_decision_v7_tactical_suite');
+assert.equal(registry.defaultRiskAppetite, 'standard');
+assert.equal(registry.fallbackPolicy, '5.61-tactical-suite-v7');
+assert.deepEqual(Array.from(registry.active), activePresets);
+assert.equal(new Set(registry.active).size, 11);
+assert.equal(Object.keys(registry.presets).length, 11);
+assert.equal(Object.keys(registry.formations).length, 11);
+assert.equal(Object.keys(registry.meta).length, 11);
+assert.equal(Object.keys(registry.traits).length, 11);
+
+for (const name of activePresets) {
+  assert.ok(context.BASE_PRESETS[name], `${name}: controls must be installed into BASE_PRESETS`);
+  assert.ok(context.BASE_LABELS[name], `${name}: UI label must exist`);
+  assert.ok(registry.meta[name]?.role, `${name}: tactical role must exist`);
+  assert.ok(registry.traits[name], `${name}: traits must exist`);
+  assert.equal(registry.formations[name].length, 11, `${name}: formation must have 11 slots`);
+  assert.equal(new Set(registry.formations[name]).size, 11, `${name}: formation slots must be unique`);
+  assert.ok(registry.displayOrder.includes(name), `${name}: must be visible in display order`);
+}
+for (const name of retired) {
+  assert.equal(context.BASE_PRESETS[name], undefined, `${name}: retired preset must be removed from built-ins`);
+  assert.equal(context.BASE_LABELS[name], undefined, `${name}: retired label must be removed from UI`);
+  assert.ok(registry.removed.includes(name), `${name}: retired identity must remain explicit`);
+}
+
+assert.equal(context.BASE_PRESETS.Compact_Counter_def3.build_long, '4');
+assert.equal(context.BASE_PRESETS.Compact_Counter_def3.build_fast, '4');
+assert.equal(context.BASE_PRESETS.Compact_Counter_def3.pass_risk, '2');
+assert.deepEqual(Array.from(registry.traits.Compact_Counter_def3.requires), ['confirmed_counter_exit']);
+assert.match(context.TacticPresetLibrary.getSchemeForPreset('Pep_TwoThreeFive_att3'), /3-2-5/);
+assert.match(context.TacticPresetLibrary.getSchemeForPreset('Simeone_LowBlock_def5'), /emergency lock/);
+assert.deepEqual(Array.from(panel.livePresetOrder), activePresets, 'live UI order must derive from registry');
+assert.deepEqual(Array.from(panel.liveFormationPositions.Klopp_Gegenpress_att4), Array.from(registry.formations.Klopp_Gegenpress_att4));
+
+assert.ok(policy, 'direction policy must exist');
+assert.equal(policy.version, '5.61-tactical-suite-v7');
+assert.equal(policy.suiteVersion, registry.suiteVersion);
+assert.equal(policy.recommendationSchema, registry.recommendationSchema);
+assert.equal(policy.defaultRiskAppetite, 'standard');
 assert.equal(policy.autoApply, false);
-assert.equal(engine.ACTIVE_PRESETS.length, 11);
-assert.equal(engine.schema, 'slf_rule_decision_v6_pressure_response');
-assert.equal(source('src/modules/tactics-presets/tactic-preset-direction-policy.js').includes('eval('), false, 'direction policy must not bypass dependency/security audit with eval');
+assert.equal(engine.schema, 'slf_rule_decision_v7_tactical_suite');
+assert.equal(engine.__tacticSuiteV7Installed, true);
+assert.equal(source('src/modules/tactics-presets/tactic-preset-direction-policy.js').includes('eval('), false);
 
 function baseSignals(overrides = {}) {
   return {
@@ -228,218 +141,159 @@ function baseSignals(overrides = {}) {
     widthOpportunity: 10,
     pressingOpportunity: 45,
     pressingCost: 25,
-    pressingResponse: 50,
     defensiveStability: 60,
-    strengthAdvantage: 10,
-    strengthDisadvantage: 0,
     strengthGap: 10,
     myPowerDropPct: 0,
     ownRedCard: false,
-    opponentRedCard: false,
     highBadActions: false,
     lowBadActions: true,
     pressFatigueRisk: false,
     transitionThreat: false,
     underPressure: false,
     attackingMomentum: false,
+    centerClosed: false,
+    wideQuality: false,
     ownCrossesBad: false,
     opponentCrossesDangerous: false,
-    gameMode: 'active_control',
-    completeness: 1,
-    riskAppetite: 'bold',
-    myXg: 0.4,
-    oppXg: 0.35,
-    myXT: 0.35,
-    oppXT: 0.3,
-    myShots: 5,
-    oppShots: 4,
-    myPossession: 51,
-    oppPossession: 49,
-    myPressVector: 2,
-    oppPressVector: 2,
-    myDefVector: 2,
-    oppDefVector: 2,
-    myXgDelta: 0,
-    oppXgDelta: 0,
-    myShotsDelta: 0,
-    oppShotsDelta: 0,
+    myBad: 10,
+    riskAppetite: 'standard',
     ...overrides
   };
 }
 
-function enrich(signals) {
-  return Object.assign(signals, policy.derivePressureResponseContext(signals));
-}
-
-function select(overrides) {
-  const signals = enrich(baseSignals(overrides));
+function directDecision(overrides = {}) {
+  const signals = baseSignals(overrides);
+  Object.assign(signals, policy.deriveSuiteContext(signals));
   signals.situationKey = policy.classifySituation(signals);
-  if (signals.situationKey === 'siege_lock') signals.mandatoryReassessmentWindow = signals.generationWindowIndex + 1;
-  const runtime = { lastDecision: null, detectedPreset: '', detectedPresetSinceWindow: null };
-  return engine.PresetRuleScorer.run(engine, signals, runtime, '').action.preset;
+  return engine.PresetRuleScorer.run(engine, signals, { lastDecision: null, detectedPreset: '' }, '');
 }
 
 const scenarios = [
-  ['balanced structure', { minute: 22 }, 'Arteta_Control433_bal3'],
-  ['control reset', { minute: 42, controlNeed: 72, highBadActions: true, lowBadActions: false }, 'Pep_BoxControl_bal2'],
-  ['press cooldown', { minute: 58, pressingCost: 70, pressFatigueRisk: true, myPowerDropPct: 4.5 }, 'Pep_PressCooldown_bal2'],
-  ['compact counter with confirmed exit', {
-    minute: 50,
-    strengthGap: -30,
-    strengthAdvantage: 20,
-    strengthDisadvantage: 80,
-    pressureRisk: 58,
-    underPressure: true,
-    transitionThreat: true,
-    myXg: 0.45,
-    oppXg: 0.62,
-    myXT: 0.28,
-    oppXT: 0.4,
-    myShots: 4,
-    oppShots: 6,
-    myPossession: 45,
-    oppPossession: 55,
-    myPressVector: 2,
-    oppPressVector: 5,
-    myDefVector: 2,
-    oppDefVector: 4,
-    signals: ['counter_exit_available'],
-    gameMode: 'compact_counter_control'
-  }, 'Compact_Counter_def3'],
-  ['control escape under sustained siege', {
-    minute: 52,
-    strengthGap: -35,
-    strengthAdvantage: 20,
-    strengthDisadvantage: 80,
-    pressureRisk: 72,
-    controlNeed: 74,
-    preservationNeed: 18,
-    pressingOpportunity: 28,
-    pressingCost: 40,
-    underPressure: true,
-    transitionThreat: true,
-    myXg: 0.35,
-    oppXg: 1.2,
-    myXT: 0.2,
-    oppXT: 0.8,
-    myShots: 3,
-    oppShots: 10,
-    myPossession: 36,
-    oppPossession: 64,
-    myPressVector: -4,
-    oppPressVector: 14,
-    myDefVector: 2,
-    oppDefVector: 12,
-    gameMode: 'compact_counter_control'
-  }, 'Pep_BoxControl_bal2'],
-  ['temporary siege lock', {
-    minute: 56,
-    strengthGap: -45,
-    strengthAdvantage: 15,
-    strengthDisadvantage: 85,
-    pressureRisk: 90,
-    controlNeed: 85,
-    underPressure: true,
-    transitionThreat: true,
-    highBadActions: true,
-    lowBadActions: false,
-    myPowerDropPct: 5.5,
-    myXg: 0.25,
-    oppXg: 1.4,
-    myXT: 0.12,
-    oppXT: 0.9,
-    myShots: 2,
-    oppShots: 12,
-    myPossession: 32,
-    oppPossession: 68,
-    myPressVector: -5,
-    oppPressVector: 15,
-    myDefVector: 1,
-    oppDefVector: 13,
-    gameMode: 'compact_counter_control'
-  }, 'Simeone_LowBlock_def5'],
-  ['controlled push', { minute: 55, scoreState: 'losing', scoreDiff: -1, attackNeed: 58, signals: ['generator_attack_underperforming', 'generator_defense_working'], gameMode: 'controlled_chase' }, 'Pep_ControlledPush_att3'],
-  ['positional squeeze', { minute: 49, strengthGap: 55, strengthAdvantage: 32, pressureRisk: 28, pressingOpportunity: 64, attackingMomentum: true, signals: ['generator_attack_working'], gameMode: 'front_foot_squeeze' }, 'Pep_TwoThreeFive_att3'],
-  ['safe width', { minute: 54, attackNeed: 42, widthOpportunity: 78, signals: ['wide_opportunity'], gameMode: 'active_control' }, 'Conte_WingbackWidth_bal4'],
-  ['late chase', { minute: 68, scoreState: 'losing', scoreDiff: -1, attackNeed: 76, pressureRisk: 38, pressingOpportunity: 70, pressingCost: 35, transitionThreat: false, underPressure: false, gameMode: 'controlled_chase' }, 'Klopp_Gegenpress_att4'],
-  ['protect lead', { minute: 72, scoreState: 'winning', scoreDiff: 1, pressureRisk: 52, preservationNeed: 72, gameMode: 'emergency_lock' }, 'Simeone_Compact442_def4'],
-  ['final desperation', { minute: 80, scoreState: 'losing', scoreDiff: -1, attackNeed: 94, pressureRisk: 32, pressingOpportunity: 82, pressingCost: 30, transitionThreat: false, underPressure: false, gameMode: 'controlled_chase' }, 'Bielsa_ChaosPress_att5']
+  ['stable control', {}, 'Arteta_Control433_bal3', 'stable_control'],
+  ['pressure escape', { underPressure: true, pressureRisk: 65, signals: ['under_pressure','counter_exit_blocked'], counterExitAvailable: false }, 'Pep_BoxControl_bal2', 'pressure_escape'],
+  ['confirmed counter outlet', { underPressure: true, pressureRisk: 62, signals: ['under_pressure','counter_exit_available'], counterExitAvailable: true }, 'Compact_Counter_def3', 'pressure_counter'],
+  ['press cooldown', { pressFatigueRisk: true, myPowerDropPct: 4.5 }, 'Pep_PressCooldown_bal2', 'press_cooldown'],
+  ['width attack', { centerClosed: true, wideQuality: true, signals: ['center_closed','wide_quality'] }, 'Conte_WingbackWidth_bal4', 'width_attack'],
+  ['protect lead', { minute: 72, scoreState: 'winning', pressureRisk: 30 }, 'Simeone_Compact442_def4', 'protect_lead'],
+  ['emergency lock', { minute: 58, underPressure: true, pressureRisk: 90, highBadActions: true, lowBadActions: false, counterExitAvailable: false, signals: ['under_pressure','sustained_siege','counter_exit_blocked'] }, 'Simeone_LowBlock_def5', 'emergency_lock'],
+  ['controlled chase', { minute: 55, scoreState: 'losing', attackNeed: 48 }, 'Pep_ControlledPush_att3', 'controlled_chase'],
+  ['positional siege', { minute: 62, scoreState: 'draw', attackNeed: 60, attackingMomentum: true }, 'Pep_TwoThreeFive_att3', 'positional_siege'],
+  ['late high pressure', { minute: 76, scoreState: 'losing', attackNeed: 80, myBad: 10, lowBadActions: true }, 'Klopp_Gegenpress_att4', 'late_high_pressure'],
+  ['final all in', { minute: 86, scoreState: 'losing', attackNeed: 92, myBad: 10, lowBadActions: true }, 'Bielsa_ChaosPress_att5', 'final_all_in']
 ];
 
-for (const [label, signals, expected] of scenarios) {
-  const selected = select(signals);
-  assert.equal(selected, expected, `${label}: expected ${expected}, received ${selected}`);
-  for (let repeat = 0; repeat < 3; repeat += 1) {
-    assert.equal(select(signals), expected, `${label}: identical state must remain deterministic`);
-  }
+for (const [label, input, expectedPreset, expectedSituation] of scenarios) {
+  const decision = directDecision(input);
+  assert.equal(decision.situationKey, expectedSituation, `${label}: situation`);
+  assert.equal(decision.action.preset, expectedPreset, `${label}: preset`);
+  assert.ok(activePresets.includes(decision.action.preset), `${label}: recommendation must be visible in UI`);
 }
 
-const controlEscapeSignals = enrich(baseSignals(scenarios.find(([label]) => label === 'control escape under sustained siege')[1]));
-controlEscapeSignals.situationKey = policy.classifySituation(controlEscapeSignals);
-assert.equal(controlEscapeSignals.sustainedSiege, true);
-assert.equal(controlEscapeSignals.counterExitAvailable, false);
-assert.equal(controlEscapeSignals.emergencyLockRequired, false);
-assert.equal(controlEscapeSignals.situationKey, 'pressure_escape');
-assert.equal(engine.PresetRuleScorer.hardVeto('Compact_Counter_def3', controlEscapeSignals).vetoed, true);
+const noOutlet = baseSignals({
+  underPressure: true,
+  strengthGap: -80,
+  strengthDisadvantage: 95,
+  counterExitAvailable: false,
+  signals: ['under_pressure','counter_exit_blocked']
+});
+Object.assign(noOutlet, policy.deriveSuiteContext(noOutlet));
+noOutlet.situationKey = policy.classifySituation(noOutlet);
+assert.equal(policy.hardVeto('Compact_Counter_def3', noOutlet).vetoed, true, 'team weakness must never unlock Compact Counter without outlet');
+assert.equal(directDecision(noOutlet).action.preset, 'Pep_BoxControl_bal2');
 
-const exitSignals = enrich(baseSignals(scenarios.find(([label]) => label === 'compact counter with confirmed exit')[1]));
-exitSignals.situationKey = policy.classifySituation(exitSignals);
-assert.equal(exitSignals.sustainedSiege, false);
-assert.equal(exitSignals.counterExitAvailable, true);
-assert.equal(exitSignals.situationKey, 'compact_counter');
-assert.equal(engine.PresetRuleScorer.hardVeto('Compact_Counter_def3', exitSignals).vetoed, false);
+const winningLate = baseSignals({ minute: 78, scoreState: 'winning', attackNeed: 0 });
+Object.assign(winningLate, policy.deriveSuiteContext(winningLate));
+winningLate.situationKey = policy.classifySituation(winningLate);
+assert.equal(policy.hardVeto('Klopp_Gegenpress_att4', winningLate).vetoed, true);
+assert.equal(policy.hardVeto('Bielsa_ChaosPress_att5', winningLate).vetoed, true);
 
-const siegeSignals = enrich(baseSignals(scenarios.find(([label]) => label === 'temporary siege lock')[1]));
-siegeSignals.situationKey = policy.classifySituation(siegeSignals);
-siegeSignals.mandatoryReassessmentWindow = siegeSignals.generationWindowIndex + 1;
-assert.equal(siegeSignals.emergencyLockRequired, true);
-assert.equal(siegeSignals.situationKey, 'siege_lock');
-assert.equal(engine.PresetRuleScorer.hardVeto('Simeone_LowBlock_def5', siegeSignals).vetoed, false);
-const lockDecision = engine.PresetRuleScorer.run(engine, siegeSignals, { lastDecision: null }, '');
-assert.equal(lockDecision.action.preset, 'Simeone_LowBlock_def5');
-assert.equal(lockDecision.action.mandatoryReassessment, true);
-assert.equal(lockDecision.action.reassessAtWindow, siegeSignals.generationWindowIndex + 1);
+const lateLosingFatigue = directDecision({ minute: 78, scoreState: 'losing', attackNeed: 80, pressFatigueRisk: true, myPowerDropPct: 5.5, myBad: 12, lowBadActions: true });
+assert.notEqual(lateLosingFatigue.action.preset, 'Pep_PressCooldown_bal2', 'late loss must not recommend defensive cooldown');
+assert.notEqual(lateLosingFatigue.action.preset, 'Klopp_Gegenpress_att4', 'fatigue must block Klopp');
+assert.notEqual(lateLosingFatigue.action.preset, 'Bielsa_ChaosPress_att5', 'fatigue must block Bielsa');
 
-const lateLossUnderSiege = { ...siegeSignals, scoreState: 'losing', minute: 80, attackNeed: 92, transitionThreat: false };
-assert.equal(policy.classifySituation(lateLossUnderSiege), 'final_desperation', 'late deficit must outrank passive lock');
-
-const inactionSignals = enrich(baseSignals({
-  scoreState: 'losing', scoreDiff: -1, minute: 56, generationWindowIndex: 6,
-  attackNeed: 68, pressureRisk: 61, underPressure: false, transitionThreat: false,
-  oppXgDelta: 0.12, myXgDelta: 0, oppShotsDelta: 1, myShotsDelta: 0
-}));
-inactionSignals.situationKey = 'active_control';
-inactionSignals.pressureResponse = 'none';
-const inactionRuntime = {
-  lastDecision: {
-    action: { preset: 'Pep_BoxControl_bal2' },
-    telemetry: { observation: { generationWindowIndex: 5 } }
-  },
-  detectedPreset: '',
-  detectedPresetSinceWindow: null
+context.STATE.presetProgression = {
+  gameId: 'route-game',
+  lastAppliedPreset: 'Arteta_Control433_bal3',
+  previousPreset: '',
+  lastScoreState: 'losing'
 };
-const inactionDecision = engine.PresetRuleScorer.run(engine, inactionSignals, inactionRuntime, '');
-assert.equal(inactionDecision.action.guardType, 'inaction_penalty');
-assert.equal(inactionDecision.inactionPenalty.applied, true);
-assert.ok(['Pep_ControlledPush_att3', 'Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4'].includes(inactionDecision.action.preset));
+let guarded = recommendation.applyProgressionGuard(
+  { name: 'Klopp_Gegenpress_att4', reason: 'late pressure' },
+  { gameId: 'route-game', status: 'live' },
+  { score: { state: 'losing' }, urgency: { overrideProgressionGuard: false } }
+);
+assert.equal(guarded.name, 'Pep_ControlledPush_att3', 'normal escalation must move only one graph step');
+assert.equal(guarded.progressionAction, 'route_step');
 
-for (const [name, positions] of Object.entries(policy.formations)) {
-  assert.equal(positions.length, 11, `${name}: formation must contain eleven positions`);
-  assert.equal(new Set(positions).size, 11, `${name}: formation positions must be unique`);
-  assert.deepEqual(Array.from(panel.liveFormationPositions[name]), Array.from(positions));
-}
-assert.notDeepEqual(Array.from(policy.formations.Pep_TwoThreeFive_att3), Array.from(policy.formations.Pep_ControlledPush_att3));
-assert.notDeepEqual(Array.from(policy.formations.Klopp_Gegenpress_att4), Array.from(policy.formations.Arteta_Control433_bal3));
-assert.match(context.TacticPresetLibrary.schemeStates.Pep_TwoThreeFive_att3, /3-2-5/);
-assert.match(context.TacticPresetLibrary.schemeStates.Klopp_Gegenpress_att4, /4-2-4/);
-assert.equal(context.BASE_PRESETS.Pep_BoxControl_bal2.build_fast, '2');
-assert.equal(context.BASE_PRESETS.Compact_Counter_def3.priority.length, 0);
+context.STATE.presetProgression = {
+  gameId: 'route-game',
+  lastAppliedPreset: 'Pep_ControlledPush_att3',
+  previousPreset: 'Arteta_Control433_bal3',
+  lastScoreState: 'losing'
+};
+guarded = recommendation.applyProgressionGuard(
+  { name: 'Arteta_Control433_bal3', reason: 'rollback' },
+  { gameId: 'route-game', status: 'live' },
+  { score: { state: 'losing' }, urgency: { overrideProgressionGuard: false } }
+);
+assert.equal(guarded.name, 'Pep_ControlledPush_att3', 'anti-ping-pong must block immediate rollback');
 
-const rendered = context.RecommendationEngine.compactPlan({}, {}, '');
-assert.match(rendered, /Действие:/);
-assert.doesNotMatch(rendered, /Кандидаты:/);
+context.STATE.presetProgression = {
+  gameId: 'route-game',
+  lastAppliedPreset: 'Arteta_Control433_bal3',
+  previousPreset: '',
+  lastScoreState: 'winning'
+};
+guarded = recommendation.applyProgressionGuard(
+  { name: 'Simeone_LowBlock_def5', reason: 'emergency' },
+  { gameId: 'route-game', status: 'live' },
+  { score: { state: 'winning' }, urgency: { overrideProgressionGuard: false } }
+);
+assert.equal(guarded.name, 'Simeone_LowBlock_def5', 'emergency lock may bypass one-step route');
+assert.equal(guarded.progressionAction, 'emergency_override');
 
-const distinct = new Set(scenarios.map(([, signals]) => select(signals)));
-assert.equal(distinct.size, 11, 'the scenario matrix must exercise all 11 active tactics');
+context.STATE.presetProgression = {
+  gameId: 'render-game',
+  lastAppliedPreset: 'Arteta_Control433_bal3',
+  previousPreset: '',
+  lastScoreState: 'losing'
+};
+const snapshot = {
+  gameId: 'render-game',
+  status: 'live',
+  minute: 76,
+  generationWindow: { index: 7 },
+  currentTactic: context.BASE_PRESETS.Arteta_Control433_bal3,
+  tacticTelemetry: {}
+};
+const state = {
+  minute: 76,
+  score: { state: 'losing', diff: -1 },
+  myXg: 0.7,
+  oppXg: 0.9,
+  myXT: 0.4,
+  oppXT: 0.45,
+  myBad: 10,
+  myPower: 100,
+  oppPower: 100,
+  strengthGap: 0,
+  pressFatigue: { active: false },
+  tags: ['low_bad_actions'],
+  urgency: { allowPreset: true, overrideProgressionGuard: false, level: 'normal' }
+};
+const plan = { preset: [], primaryPresetName: '' };
+const finalName = recommendation.selectPreset(snapshot, {}, {}, {}, plan, state);
+assert.equal(finalName, 'Pep_ControlledPush_att3', 'UI recommendation must show the guarded one-step result');
+assert.equal(plan.primaryPresetName, finalName);
+assert.equal(snapshot.ruleDecision.action.preset, finalName, 'ruleDecision must be rewritten to final guarded UI preset');
+assert.equal(snapshot.ruleDecision.telemetry.recommendedPreset, finalName, 'telemetry must match final UI preset');
+assert.equal(snapshot.tacticTelemetry.libraryVersion, 'slf_tactic_suite_561_v7');
+assert.equal(snapshot.tacticTelemetry.recommendationSchema, 'slf_rule_decision_v7_tactical_suite');
+assert.equal(snapshot.tacticTelemetry.riskAppetite, 'standard');
 
-console.log(`[tactical-situation-diversity] passed scenarios=${scenarios.length} distinct=${distinct.size} policy=${policy.version} registry=${registry.fallbackPolicy}`);
+assert.equal(source('src/modules/strategy-data-recommendations/coach-mode-policy.js').includes('nextPreset = allowedFallback'), false, 'late coach layer must not replace v7 selection');
+assert.equal(source('src/modules/strategy-data-recommendations/adaptive-opponent-style-layer.js').includes('candidateFromStyle'), false, 'adaptive layer must not replace v7 selection');
+assert.equal(source('src/modules/strategy-data-recommendations/moment-drift-stabilizer.js').includes('stableState.action'), false, 'drift layer must not replace v7 selection');
+
+console.log('tactical suite v7 registry, UI identity, eligibility, progression and recommendation scenarios: OK');
