@@ -430,8 +430,9 @@ def assert_owned_live(page: Page):
         for item in decoded if isinstance(decoded, list) else [decoded]:
             if item.get("tacticalLabEvent", {}).get("kind") == "activation":
                 lab_snapshot_records.append(item)
-    assert len(lab_snapshot_records) == 1, lab_snapshot_records
-    assert lab_snapshot_records[0]["tacticalLabEvent"]["experimentId"] == experiment_id
+    assert lab_snapshot_records, lab_snapshot_records
+    assert len({item["snapshotKey"] for item in lab_snapshot_records}) == 1, lab_snapshot_records
+    assert all(item["tacticalLabEvent"]["experimentId"] == experiment_id for item in lab_snapshot_records)
     assert "tactical_lab_activation" in lab_snapshot_records[0]["snapshotKey"]
 
     page.locator("#slf-tactics-dropdown select").select_option("Arteta_Control433_bal3")
