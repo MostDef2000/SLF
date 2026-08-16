@@ -156,7 +156,7 @@ assert.equal(/Math\.random/.test(tacticalLabRuntime),false,'Tactical Lab populat
 assert.match(tacticalLabRuntime,/EXP-561-P01-/);
 assert.match(tacticalLabRuntime,/tactical_lab_assignment/);
 assert.match(tacticalLabRuntime,/tactical_lab_activation/);
-assert.match(tacticalLabRuntime,/tactical_lab_exit/);
+assert.match(tacticalLabRuntime,/queueLifecycle\(state,'exit'/);
 assert.match(tacticalLabRuntime,/STATE\.tacticalLabRuntime/);
 assert.match(tacticalLabRuntime,/\.tacticalLab\s*=/,'durable manual state envelope must retain Tactical Lab state');
 assert.match(tacticalLabRuntime,/startedAtMinute/,'entry minute must be retained');
