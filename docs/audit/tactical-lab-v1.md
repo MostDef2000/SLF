@@ -36,7 +36,7 @@ P01 is a data-collection population, not a claim that any experiment is good.
 
 ## Assignment
 
-Each owned match receives one deterministic assignment derived from the match identity and population version. The assignment is stored inside the existing durable manual-match state so page reloads recover the same experiment.
+Each owned match receives one deterministic assignment derived from the match identity and population version. The assignment is stored as an additive `tacticalLab` field inside the existing durable manual-match envelope so page reloads recover the same experiment.
 
 Assignment, activation and exit have separate telemetry semantics. A match where the challenger is offered but never activated remains a valid offer observation, but it is not counted as a tactical result for that genome.
 
@@ -62,15 +62,17 @@ The same experiment may therefore later be evaluated separately as an opener, as
 
 ## Transport and durability
 
-Tactical Lab v1 does not introduce a new raw VPS collection. It uses the existing tactical collections:
+Tactical Lab v1 does not introduce a new raw VPS collection or a hidden API dependency. Assignment, activation and exit are transported as tagged records through the existing `match_snapshots_v2` path. Their snapshot key is extended with the deterministic Tactical Lab lifecycle event key, so two lab events in the same match minute remain distinct and retries stay idempotent.
 
-- `preset_events_v2` for assignment and activation records;
-- `preset_effects_v2` for the experimental phase outcome;
-- existing snapshots and finished results for surrounding match evidence.
+Lab lifecycle snapshots explicitly bypass the player-observation fanout. Ordinary match snapshots keep their existing behavior.
 
-New Tactical Lab records use deterministic keys and additive schema-v4 fields. Failed Tactical Lab writes are retained in a small bounded per-match outbox inside the existing manual-match state and retried through the normal API transport.
+The finished `match_results_v2` payload also carries the durable Tactical Lab match state. This is the terminal fallback that records whether the challenger was merely offered, activated, or completed even if an earlier lifecycle snapshot had to remain queued while the API was unavailable.
 
-The existing manual-match storage schema name is not migrated by Tactical Lab v1. `tacticalLab` is an additive field in that existing state.
+Production `preset_events_v2` / `preset_effects_v2` remain unchanged and can still be correlated with the Tactical Lab entry/exit context. Tactical Lab does not overload production preset identity with `EXP-*` records.
+
+Failed Tactical Lab lifecycle writes are retained in a small bounded per-match outbox inside the existing manual-match envelope and retried through `SnapshotEngine.sendSnapshot()` rather than calling the API transport directly.
+
+The existing manual-match storage schema name is not migrated by Tactical Lab v1. `tacticalLab` is an additive field in that existing state, and the runtime preserves that field when normal manual-match persistence runs.
 
 ## Safety boundary
 
