@@ -135,8 +135,8 @@ for(const file of ['coach-mode-policy.js','adaptive-opponent-style-layer.js','mo
 }
 
 const tacticalLabContract=JSON.parse(source('data/tactics/tactical-lab-contract-v1.json'));
-const tacticalLabRuntime=source('src/modules/manual-match-telemetry/manual-match-runtime.js');
 const tacticControlEngine=source('src/modules/tactics-presets/tactic-control-engine.js');
+const tacticalLabRuntime=tacticControlEngine;
 assert.equal(tacticalLabContract.schema,'slf_tactical_lab_contract_v1');
 assert.equal(tacticalLabContract.population.populationVersion,'slf_tactical_lab_561_p01');
 assert.equal(tacticalLabContract.population.size,64);
@@ -156,15 +156,18 @@ assert.equal(/Math\.random/.test(tacticalLabRuntime),false,'Tactical Lab populat
 assert.match(tacticalLabRuntime,/EXP-561-P01-/);
 assert.match(tacticalLabRuntime,/tactical_lab_assignment/);
 assert.match(tacticalLabRuntime,/tactical_lab_activation/);
-assert.match(tacticalLabRuntime,/tactical_lab_effect/);
+assert.match(tacticalLabRuntime,/tactical_lab_exit/);
 assert.match(tacticalLabRuntime,/STATE\.tacticalLabRuntime/);
-assert.match(tacticalLabRuntime,/tacticalLab:/,'durable manual state must retain Tactical Lab state');
+assert.match(tacticalLabRuntime,/\.tacticalLab\s*=/,'durable manual state envelope must retain Tactical Lab state');
 assert.match(tacticalLabRuntime,/startedAtMinute/,'entry minute must be retained');
 assert.match(tacticalLabRuntime,/productionRecommendation/,'production recommendation context must be retained');
 assert.match(tacticControlEngine,/STATE\.tacticControlBridge/);
 assert.match(tacticControlEngine,/applyTacticObject/);
 assert.match(tacticControlEngine,/applyFormation/);
 assert.match(tacticControlEngine,/saveLiveLineup/);
+assert.match(tacticControlEngine,/tacticalLabEvent/,'lab lifecycle events must travel in tagged tactical snapshots');
+assert.match(tacticControlEngine,/sendPlayerObservationsWithoutLabEventFanout/,'lab lifecycle snapshots must not fan out player observations');
+assert.equal(/\bApi\b/.test(tacticalLabRuntime),false,'Tactical Lab must reuse declared telemetry boundaries instead of adding a hidden API dependency');
 assert.equal(/EXP-561-P01-/.test(source('src/modules/tactics-presets/active-preset-registry.js')),false,'experimental identities must not enter production registry');
 
 console.log('tactical suite v7 + Tactical Lab v1 isolation, assignment and one-click apply contracts: OK');
