@@ -133,4 +133,41 @@ for(const file of ['coach-mode-policy.js','adaptive-opponent-style-layer.js','mo
   const text=source(`src/modules/strategy-data-recommendations/${file}`);
   assert.equal(/candidateFromStyle|nextPreset\s*=\s*allowedFallback|stableState\.action/.test(text),false,`${file}: must be advisory only`);
 }
-console.log('tactical suite v7 registry, eligibility, ranking diagnostics, progression and telemetry: OK');
+
+const tacticalLabContract=JSON.parse(source('data/tactics/tactical-lab-contract-v1.json'));
+const tacticControlEngine=source('src/modules/tactics-presets/tactic-control-engine.js');
+const tacticalLabRuntime=tacticControlEngine;
+assert.equal(tacticalLabContract.schema,'slf_tactical_lab_contract_v1');
+assert.equal(tacticalLabContract.population.populationVersion,'slf_tactical_lab_561_p01');
+assert.equal(tacticalLabContract.population.size,64);
+assert.deepEqual(tacticalLabContract.population.groups,{production_mutation:16,orthogonal:16,deterministic_random:16,extreme:16});
+assert.equal(tacticalLabContract.assignment.activationMinuteRestricted,false);
+assert.equal(tacticalLabContract.assignment.onePerMatch,true);
+assert.equal(tacticalLabContract.assignment.rerollAllowed,false);
+assert.equal(tacticalLabContract.assignment.oneSuccessfulActivationPerMatch,true);
+assert.equal(tacticalLabContract.productionBoundary.productionRegistryOwnsExperiments,false);
+assert.equal(tacticalLabContract.productionBoundary.productionRecommenderMayReturnExperiment,false);
+assert.equal(tacticalLabContract.application.requiresExplicitUserClick,true);
+assert.equal(tacticalLabContract.application.backgroundAutoApply,false);
+assert.equal(tacticalLabContract.deferredIssue,252);
+assert.match(tacticalLabRuntime,/POPULATION_SIZE\s*=\s*64/);
+for(const origin of ['production_mutation','orthogonal','deterministic_random','extreme']) assert.match(tacticalLabRuntime,new RegExp(`'${origin}'`));
+assert.equal(/Math\.random/.test(tacticalLabRuntime),false,'Tactical Lab population/assignment must be deterministic');
+assert.match(tacticalLabRuntime,/EXP-561-P01-/);
+assert.match(tacticalLabRuntime,/tactical_lab_assignment/);
+assert.match(tacticalLabRuntime,/tactical_lab_activation/);
+assert.match(tacticalLabRuntime,/queueLifecycle\(state,'exit'/);
+assert.match(tacticalLabRuntime,/STATE\.tacticalLabRuntime/);
+assert.match(tacticalLabRuntime,/\.tacticalLab\s*=/,'durable manual state envelope must retain Tactical Lab state');
+assert.match(tacticalLabRuntime,/startedAtMinute/,'entry minute must be retained');
+assert.match(tacticalLabRuntime,/productionRecommendation/,'production recommendation context must be retained');
+assert.match(tacticControlEngine,/STATE\.tacticControlBridge/);
+assert.match(tacticControlEngine,/applyTacticObject/);
+assert.match(tacticControlEngine,/applyFormation/);
+assert.match(tacticControlEngine,/saveLiveLineup/);
+assert.match(tacticControlEngine,/tacticalLabEvent/,'lab lifecycle events must travel in tagged tactical snapshots');
+assert.match(tacticControlEngine,/sendPlayerObservationsWithoutLabEventFanout/,'lab lifecycle snapshots must not fan out player observations');
+assert.equal(/\bApi\b/.test(tacticalLabRuntime),false,'Tactical Lab must reuse declared telemetry boundaries instead of adding a hidden API dependency');
+assert.equal(/EXP-561-P01-/.test(source('src/modules/tactics-presets/active-preset-registry.js')),false,'experimental identities must not enter production registry');
+
+console.log('tactical suite v7 + Tactical Lab v1 isolation, assignment and one-click apply contracts: OK');
