@@ -100,4 +100,7 @@ run('validate-tactic-data-quality.mjs', ['--input', duplicateDir, '--output', pa
 const duplicateQuality = JSON.parse(fs.readFileSync(path.join(temp, 'duplicate-quality.json'), 'utf8'));
 assert.equal(duplicateQuality.checks.duplicateKeys.presetEffects, 1);
 
-console.log('[tactic-pipeline-test] passed canonical, empty, missing, corrupt and duplicate scenarios');
+const python = process.env.PYTHON || 'python3';
+execFileSync(python, [path.join(root, 'vps', 'exporter-rag', 'test_slf_preset_evidence_561.py')], { stdio: 'inherit' });
+
+console.log('[tactic-pipeline-test] passed canonical, empty, missing, corrupt, duplicate and exporter telemetry scenarios');
