@@ -9,12 +9,14 @@ ROOT = Path(__file__).resolve().parents[2]
 SERVICE_FILE = ROOT / "vps" / "ops" / "slf-server.service"
 REQUIREMENTS_FILE = ROOT / "vps" / "api" / "requirements.txt"
 DEPLOY_SCRIPT = ROOT / "vps" / "ops" / "deploy-code.sh"
+ROLLBACK_SCRIPT = ROOT / "vps" / "ops" / "rollback-code.sh"
 
 
 class ApiServiceContractTest(unittest.TestCase):
     def setUp(self):
         self.service = SERVICE_FILE.read_text(encoding="utf-8")
         self.deploy_script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+        self.rollback_script = ROLLBACK_SCRIPT.read_text(encoding="utf-8")
         self.requirements = {
             line.strip()
             for line in REQUIREMENTS_FILE.read_text(encoding="utf-8").splitlines()
@@ -71,6 +73,36 @@ class ApiServiceContractTest(unittest.TestCase):
         self.assertIn("--max-time 5", self.deploy_script)
         self.assertIn("sleep 1", self.deploy_script)
         self.assertIn("API readiness verification failed after 30 attempts", self.deploy_script)
+
+    def test_exporter_deploy_packages_tactical_lab_before_daily_export(self):
+        compile_lab = self.deploy_script.index('"$STAGE_DIR/slf_tactical_lab_v1.py"')
+        install_lab = self.deploy_script.index('install -m 0644 "$STAGE_DIR/slf_tactical_lab_v1.py"')
+        run_export = self.deploy_script.index('(cd "$EXPORT_DIR" && ./run_daily_export.sh)')
+        summary_gate = self.deploy_script.index('[ -s /var/www/html/slf_ai/data/tactical_lab_summary.json ]')
+        quality_gate = self.deploy_script.index('[ -s /var/www/html/slf_ai/data/tactical_lab_quality.json ]')
+        marker = self.deploy_script.index('> "$EXPORT_DIR/DEPLOYED_GIT_COMMIT"')
+
+        self.assertIn("slf_tactical_lab_v1.py", self.deploy_script)
+        self.assertLess(compile_lab, run_export)
+        self.assertLess(install_lab, run_export)
+        self.assertLess(run_export, summary_gate)
+        self.assertLess(run_export, quality_gate)
+        self.assertLess(summary_gate, marker)
+        self.assertLess(quality_gate, marker)
+        self.assertIn('"tactical_lab_summary" in ids', self.deploy_script)
+        self.assertIn('"tactical_lab_quality" in ids', self.deploy_script)
+        self.assertIn('f.get("tacticalLabSummary", {}).get("exists") is True', self.deploy_script)
+        self.assertIn('f.get("tacticalLabQuality", {}).get("exists") is True', self.deploy_script)
+
+    def test_exporter_rollback_handles_tactical_lab_symmetrically(self):
+        self.assertIn("slf_tactical_lab_v1.py", self.rollback_script)
+        self.assertIn("[ -f \"$EXPORT_DIR/slf_tactical_lab_v1.py\" ] && PY_FILES=\"$PY_FILES $EXPORT_DIR/slf_tactical_lab_v1.py\"", self.rollback_script)
+        optional_cleanup = self.rollback_script.index("[ \"$file\" = 'slf_tactical_lab_v1.py' ]")
+        remove_optional = self.rollback_script.index('rm -f "$EXPORT_DIR/$file"', optional_cleanup)
+        run_export = self.rollback_script.index('(cd "$EXPORT_DIR" && ./run_daily_export.sh)')
+
+        self.assertLess(optional_cleanup, remove_optional)
+        self.assertLess(remove_optional, run_export)
 
 
 if __name__ == "__main__":
