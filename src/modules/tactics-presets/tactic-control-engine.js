@@ -584,7 +584,6 @@
                 state.activation = null;
                 state.completed = null;
                 state.lastError = null;
-                queueLifecycle(state, 'assignment', buildContext(snapshot), null);
             }
             persistState(state);
             return state;
@@ -705,15 +704,8 @@
             };
         }
         function queueLifecycle(state, kind, context, extra) {
-            if (!state?.assignment && kind !== 'assignment') return;
+            if (!state?.assignment) return;
             const event = lifecycleEvent(state, kind, context, extra);
-            if (kind === 'assignment' && !event.experimentId) {
-                const selected = selectExperiment(state.gameId);
-                event.assignmentId = `tactical_lab_assignment|${state.gameId}|${selected.experimentId}`;
-                event.experimentId = selected.experimentId;
-                event.genomeFingerprint = selected.genomeFingerprint;
-                event.eventKey = `tactical_lab_assignment|${state.gameId}|${event.assignmentId}`;
-            }
             state.outbox = (Array.isArray(state.outbox) ? state.outbox : []).filter(item => item?.eventKey !== event.eventKey);
             state.outbox.push({eventKey:event.eventKey,event});
             state.outbox = state.outbox.slice(-MAX_OUTBOX);
