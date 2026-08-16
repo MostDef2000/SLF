@@ -34,6 +34,10 @@ SLF_AI_OUT="$OUT_DIR" \
 SLF_GENERATOR_UPDATES_FILE="$GENERATOR_UPDATES_FILE" \
 python slf_generator_update_rag.py
 
+python slf_tactical_lab_v1.py \
+  --out "$OUT_DIR" \
+  --cache-dir "$BASE_DIR/cache"
+
 if command -v rclone >/dev/null 2>&1; then
   echo "Starting Google Drive sync"
   if ! rclone sync "$OUT_DIR" gdrive:"SLF AI RAG/current" \
@@ -48,4 +52,4 @@ else
   echo "WARN: rclone not found; Google Drive sync skipped"
 fi
 
-echo "SLF daily export + RAG build + generator context + Drive current sync completed"
+echo "SLF daily export + RAG build + generator context + Tactical Lab summary + Drive current sync completed"

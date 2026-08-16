@@ -102,5 +102,6 @@ assert.equal(duplicateQuality.checks.duplicateKeys.presetEffects, 1);
 
 const python = process.env.PYTHON || 'python3';
 execFileSync(python, [path.join(root, 'vps', 'exporter-rag', 'test_slf_preset_evidence_561.py')], { stdio: 'inherit' });
+execFileSync(python, [path.join(root, 'vps', 'exporter-rag', 'test_slf_tactical_lab_v1.py')], { stdio: 'inherit' });
 
-console.log('[tactic-pipeline-test] passed canonical, empty, missing, corrupt, duplicate and exporter telemetry scenarios');
+console.log('[tactic-pipeline-test] passed canonical, empty, missing, corrupt, duplicate, exporter telemetry and Tactical Lab scenarios');
