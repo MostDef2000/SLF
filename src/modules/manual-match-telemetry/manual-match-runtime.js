@@ -342,8 +342,13 @@
 
     const legacyStateApi = SnapshotEngine.manualMatchState;
     const buildBeforeV2 = SnapshotEngine.build.bind(SnapshotEngine);
+    const sendSnapshotBeforeV2 = typeof SnapshotEngine.sendSnapshot === 'function'
+        ? SnapshotEngine.sendSnapshot.bind(SnapshotEngine)
+        : null;
     const postAppendBeforeV2 = Api.postAppend.bind(Api);
     const applyPresetBeforeV2 = applyPresetAsync;
+    const snapshotReservations = new Set();
+    const resultReservations = new Set();
 
     function clone(value) {
         if (value == null) return value;
@@ -715,6 +720,23 @@
         return { durationMinutes: duration, completeness: Number(completeness.toFixed(3)), eligibleForRanking: reasons.length === 0, reasons };
     }
 
+    function snapshotKeyFor(snapshot) {
+        if (!snapshot) return '';
+        if (typeof SnapshotEngine.buildSnapshotKey === 'function') {
+            try { return String(SnapshotEngine.buildSnapshotKey(snapshot) || ''); } catch (_) {}
+        }
+        const score = snapshot.score || {};
+        return [
+            'match_snapshot',
+            snapshot.gameId || '',
+            snapshot.status || '',
+            snapshot.minute ?? '',
+            snapshot.bucket || '',
+            `${score.home ?? '?'}:${score.away ?? '?'}`,
+            (snapshot.teams || []).join('-')
+        ].join('|');
+    }
+
     function outboxKey(collection, payload) {
         return String(payload?.effectKey || payload?.eventKey || payload?.resultKey || payload?.snapshotKey || `${collection}|${payload?.gameId || ''}|${payload?.ts || ''}`);
     }
@@ -859,6 +881,43 @@
             throw error;
         });
     };
+
+    if (sendSnapshotBeforeV2) {
+        SnapshotEngine.sendSnapshot = function sendSnapshotWithTelemetryDedup(snapshot) {
+            if (!snapshot?.gameId || !snapshot?.myTeam || snapshot.matchOwnership === 'foreign') {
+                return sendSnapshotBeforeV2(snapshot);
+            }
+            const gameId = String(snapshot.gameId);
+            const key = snapshotKeyFor(snapshot);
+            const state = getState(gameId);
+            if (key && (state?.lastSnapshotKey === key || snapshotReservations.has(key))) {
+                return Promise.resolve({ status: 208, deduplicated: true, snapshotKey: key });
+            }
+            if (snapshot.generatorVersion && snapshot.telemetryContext?.generatorVersion === 'unknown') {
+                snapshot.telemetryContext = telemetryContext(snapshot, state?.openPhase?.presetId || null);
+            }
+            if (key) snapshotReservations.add(key);
+            return Promise.resolve(sendSnapshotBeforeV2(snapshot)).then(result => {
+                if (key) {
+                    persistState({
+                        lastSnapshotKey: key,
+                        lastAutoSnapshotWindow: String(snapshot?.generationWindow?.index ?? snapshot?.bucket ?? 'unknown'),
+                        lastObservedScoreState: scoreState(snapshot),
+                        lastObservedTacticFingerprint: tacticFingerprint(snapshot.currentTactic)
+                    }, { gameId, existing: getState(gameId) });
+                }
+                return result;
+            }).catch(error => {
+                const updated = getState(gameId);
+                if (key && updated?.outbox?.some(item => item.collection === CONFIG.COLLECTIONS.MATCH_SNAPSHOTS && item.key === key)) {
+                    persistState({ lastSnapshotKey: key }, { gameId, existing: updated });
+                }
+                throw error;
+            }).finally(() => {
+                if (key) snapshotReservations.delete(key);
+            });
+        };
+    }
 
     async function flushOutbox(gameId = null) {
         gameId = resolveGameId(gameId);
@@ -1042,21 +1101,25 @@
         const windowKey = String(snapshot?.generationWindow?.index ?? snapshot?.bucket ?? 'unknown');
         const stateNow = scoreState(snapshot);
         const fingerprint = tacticFingerprint(snapshot.currentTactic);
+        const key = snapshotKeyFor(snapshot);
         let trigger = null;
-        if (!state.lastSnapshotKey) trigger = 'initial';
+        if (snapshot.status === 'finished') trigger = 'finished';
+        else if (!state.lastSnapshotKey) trigger = 'initial';
         else if (phaseChanged || (fingerprint && fingerprint !== state.lastObservedTacticFingerprint)) trigger = 'tactic_change';
         else if (state.lastObservedScoreState && stateNow !== 'unknown' && stateNow !== state.lastObservedScoreState) trigger = 'score_state_change';
         else if (state.lastAutoSnapshotWindow && windowKey !== state.lastAutoSnapshotWindow) trigger = 'generation_window';
-        else if (snapshot.status === 'finished') trigger = 'finished';
 
         persistState({
             lastObservedScoreState: stateNow,
             lastObservedTacticFingerprint: fingerprint || state.lastObservedTacticFingerprint
         }, { gameId: snapshot.gameId, existing: getState(snapshot.gameId) });
 
-        if (!trigger) return;
+        if (!trigger || (key && snapshotReservations.has(key))) return;
+        if (key) snapshotReservations.add(key);
         setTimeout(() => {
-            void captureSnapshot(snapshot, trigger).catch(() => {});
+            void captureSnapshot(snapshot, trigger).catch(() => {}).finally(() => {
+                if (key) snapshotReservations.delete(key);
+            });
         }, 0);
     }
 
@@ -1095,14 +1158,28 @@
             playerObservationsIncluded: false
         });
         const windowKey = String(snapshot?.generationWindow?.index ?? snapshot?.bucket ?? 'unknown');
-        await Api.postAppend(CONFIG.COLLECTIONS.MATCH_SNAPSHOTS, record, 'automatic tactical snapshot');
-        persistState({
-            lastSnapshotKey: record.snapshotKey || `${snapshot.gameId}|${snapshot.minute}|${snapshot.bucket}`,
-            lastAutoSnapshotWindow: windowKey,
-            lastObservedScoreState: scoreState(snapshot),
-            lastObservedTacticFingerprint: tacticFingerprint(snapshot.currentTactic)
-        }, { gameId: snapshot.gameId, existing: getState(snapshot.gameId) });
-        return record;
+        const key = record.snapshotKey || snapshotKeyFor(snapshot) || `${snapshot.gameId}|${snapshot.minute}|${snapshot.bucket}`;
+        try {
+            await Api.postAppend(CONFIG.COLLECTIONS.MATCH_SNAPSHOTS, record, 'automatic tactical snapshot');
+            persistState({
+                lastSnapshotKey: key,
+                lastAutoSnapshotWindow: windowKey,
+                lastObservedScoreState: scoreState(snapshot),
+                lastObservedTacticFingerprint: tacticFingerprint(snapshot.currentTactic)
+            }, { gameId: snapshot.gameId, existing: getState(snapshot.gameId) });
+            return record;
+        } catch (error) {
+            const updated = getState(snapshot.gameId);
+            if (updated?.outbox?.some(item => item.collection === CONFIG.COLLECTIONS.MATCH_SNAPSHOTS && item.key === key)) {
+                persistState({
+                    lastSnapshotKey: key,
+                    lastAutoSnapshotWindow: windowKey,
+                    lastObservedScoreState: scoreState(snapshot),
+                    lastObservedTacticFingerprint: tacticFingerprint(snapshot.currentTactic)
+                }, { gameId: snapshot.gameId, existing: updated });
+            }
+            throw error;
+        }
     }
 
     async function captureFinishedResult(snapshot, trigger = 'finished') {
@@ -1110,7 +1187,8 @@
         const state = getState(snapshot.gameId);
         if (!state) return null;
         const resultKey = SnapshotEngine.buildResultKey ? SnapshotEngine.buildResultKey(snapshot) : `match_result|${snapshot.gameId}|finished`;
-        if (state.lastResultKey === resultKey) return null;
+        if (state.lastResultKey === resultKey || resultReservations.has(resultKey)) return null;
+        resultReservations.add(resultKey);
         try {
             const result = await SnapshotEngine.sendMatchResult(snapshot);
             persistState({ lastResultKey: resultKey }, { gameId: snapshot.gameId, existing: getState(snapshot.gameId) });
@@ -1121,6 +1199,8 @@
                 persistState({ lastResultKey: resultKey }, { gameId: snapshot.gameId, existing: updated });
             }
             throw error;
+        } finally {
+            resultReservations.delete(resultKey);
         }
     }
 
