@@ -26,7 +26,7 @@
         };
         result.action = Object.assign({}, result.action, {
             stabilized:false,
-            driftOwner:CurrentActionHintEngine.__tacticSuiteV7Installed ? 'tactical_suite_v7_progression' : 'legacy',
+            driftOwner:CurrentActionHintEngine.__tacticSuiteV7Installed ? 'tactical_suite_v7_progression' : 'compat',
             rawPreset:result.action.rawPreset || result.action.preset
         });
         return result;
