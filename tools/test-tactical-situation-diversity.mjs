@@ -32,7 +32,7 @@ const context = {
 };
 context.window.SLFCurrentActionHintEngine = {
   schema:'old', ACTIVE_PRESETS:active.slice(),
-  run(_snapshot,ctx={}){return {schema:'old',moment:{context:Object.assign({},ctx),gameId:'g',minute:Number(ctx.minute||0)},action:{preset:'Arteta_Control433_bal3',reason:'old'},candidates:[]};}
+  run(_snapshot,ctx={}){return {schema:'old',moment:{context:Object.assign({},ctx),gameId:'g',minute:Number(ctx.minute||0)},action:{preset:'Arteta_Control433_bal3',reason:'old'},candidates:[],confidence:{level:'low',gap:0},margin:0,telemetry:{}};}
 };
 context.globalThis=context;
 vm.createContext(context);
@@ -66,7 +66,7 @@ for(const name of retired){assert.equal(context.BASE_PRESETS[name],undefined);as
 assert.equal(context.BASE_PRESETS.Compact_Counter_def3.build_long,'4');
 assert.equal(context.BASE_PRESETS.Compact_Counter_def3.build_fast,'4');
 assert.equal(context.BASE_PRESETS.Compact_Counter_def3.pass_risk,'2');
-assert.equal(policy.version,'5.61-tactical-suite-v7');
+assert.equal(policy.version,'5.61-tactical-suite-v7.1');
 assert.equal(policy.defaultRiskAppetite,'standard');
 assert.equal(policy.autoApply,false);
 assert.equal(engine.schema,'slf_rule_decision_v7_tactical_suite');
@@ -78,6 +78,13 @@ function decide(input={}){
   assert.ok(active.includes(decision.action.preset),'recommendation must exist in active UI set');
   assert.equal(snapshot.tacticTelemetry.libraryVersion,'slf_tactic_suite_561_v7');
   assert.equal(snapshot.tacticTelemetry.recommendationSchema,'slf_rule_decision_v7_tactical_suite');
+  assert.equal(decision.telemetry.recommendedPreset,decision.action.preset);
+  const eligible=decision.candidates.filter(item=>!item.vetoed);
+  assert.ok(eligible.length>=2,'diagnostics must keep ranked eligible alternatives');
+  assert.ok(new Set(eligible.map(item=>item.score)).size>=2,'candidate scores must be meaningful, not selected=100/rest=0 placeholders');
+  assert.ok(decision.runnerUp?.preset,'runner-up must be explicit');
+  assert.equal(decision.margin,decision.action.score-decision.runnerUp.score,'margin must match final raw ranking');
+  assert.equal(decision.confidence.gap,decision.margin,'confidence gap must match v7 margin');
   return decision;
 }
 
@@ -108,13 +115,17 @@ assert.notEqual(tired.action.preset,'Klopp_Gegenpress_att4');
 assert.notEqual(tired.action.preset,'Bielsa_ChaosPress_att5');
 
 context.progression={gameId:'route',lastAppliedPreset:'Arteta_Control433_bal3',previousPreset:'',lastScoreState:'losing'};
-let guarded=context.RecommendationEngine.applyProgressionGuard({name:'Klopp_Gegenpress_att4',reason:'late'}, {gameId:'route',status:'live',ruleDecision:{action:{preset:'Klopp_Gegenpress_att4'}}},{score:{state:'losing'},urgency:{overrideProgressionGuard:false}});
+let snap={gameId:'route',status:'live',ruleDecision:{action:{preset:'Klopp_Gegenpress_att4'},telemetry:{}}};
+let guarded=context.RecommendationEngine.applyProgressionGuard({name:'Klopp_Gegenpress_att4',reason:'late'},snap,{score:{state:'losing'},urgency:{overrideProgressionGuard:false}});
 assert.equal(guarded.name,'Pep_ControlledPush_att3');
+assert.equal(snap.ruleDecision.action.rawPreset,'Klopp_Gegenpress_att4');
+assert.equal(snap.ruleDecision.action.preset,'Pep_ControlledPush_att3');
+assert.equal(snap.ruleDecision.telemetry.recommendedPreset,'Pep_ControlledPush_att3');
 context.progression={gameId:'route',lastAppliedPreset:'Pep_ControlledPush_att3',previousPreset:'Arteta_Control433_bal3'};
-guarded=context.RecommendationEngine.applyProgressionGuard({name:'Arteta_Control433_bal3',reason:'rollback'}, {gameId:'route',status:'live',ruleDecision:{action:{preset:'Arteta_Control433_bal3'}}},{urgency:{overrideProgressionGuard:false}});
+guarded=context.RecommendationEngine.applyProgressionGuard({name:'Arteta_Control433_bal3',reason:'rollback'},{gameId:'route',status:'live',ruleDecision:{action:{preset:'Arteta_Control433_bal3'},telemetry:{}}},{urgency:{overrideProgressionGuard:false}});
 assert.equal(guarded.name,'Pep_ControlledPush_att3');
 context.progression={gameId:'route',lastAppliedPreset:'Arteta_Control433_bal3',previousPreset:''};
-guarded=context.RecommendationEngine.applyProgressionGuard({name:'Simeone_LowBlock_def5',reason:'emergency'}, {gameId:'route',status:'live',ruleDecision:{action:{preset:'Simeone_LowBlock_def5'}}},{urgency:{overrideProgressionGuard:false}});
+guarded=context.RecommendationEngine.applyProgressionGuard({name:'Simeone_LowBlock_def5',reason:'emergency'},{gameId:'route',status:'live',ruleDecision:{action:{preset:'Simeone_LowBlock_def5'},telemetry:{}}},{urgency:{overrideProgressionGuard:false}});
 assert.equal(guarded.name,'Simeone_LowBlock_def5');
 assert.equal(guarded.progressionAction,'emergency_override');
 
@@ -122,4 +133,4 @@ for(const file of ['coach-mode-policy.js','adaptive-opponent-style-layer.js','mo
   const text=source(`src/modules/strategy-data-recommendations/${file}`);
   assert.equal(/candidateFromStyle|nextPreset\s*=\s*allowedFallback|stableState\.action/.test(text),false,`${file}: must be advisory only`);
 }
-console.log('tactical suite v7 registry, eligibility, recommendation, progression and telemetry: OK');
+console.log('tactical suite v7 registry, eligibility, ranking diagnostics, progression and telemetry: OK');
