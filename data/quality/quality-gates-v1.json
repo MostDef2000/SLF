@@ -136,7 +136,7 @@
     "target": "refs/heads/release",
     "observedAt": "2026-08-17",
     "active": true,
-    "rules": ["deletion", "non_fast_forward", "pull_request"],
+    "rules": ["deletion"],
     "bypassActors": [
       {
         "actor": "github-actions[bot]",
@@ -146,7 +146,8 @@
         "purpose": "SLF Release workflow publishes generated release commits to the release branch"
       }
     ],
-    "verificationMethod": "Repository owner created the ruleset through the GitHub API with a classic PAT (repo, workflow scopes); verified via GET /repos/MostDef2000/SLF/branches/release returning protected: true."
+    "platformLimitation": "GitHub does not allow the GitHub Actions application as a ruleset bypass actor in user-owned repositories (422 on Integration actor 15368). Pull-request and non-fast-forward rules would block the automated release push, so the ruleset keeps deletion protection only; direct-push integrity is monitored by the SLF Maintenance drift check and registered as QR-009.",
+    "verificationMethod": "Repository owner created the ruleset through the GitHub API with a classic PAT (repo, workflow scopes); verified via GET /repos/MostDef2000/SLF/branches/release returning protected: true and via the SLF Release run for 4.4.308."
   },
   "connectorLimitation": "The connected GitHub tool set does not expose branch-protection or ruleset mutation actions. The required manual platform step was completed by the repository owner and is now recorded as applied and verified.",
   "productionDeploymentImplied": false

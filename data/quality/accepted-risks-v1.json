@@ -150,6 +150,25 @@
       "target": "Increase required approving reviews when an independent reviewer becomes available; until then keep the aggregate status check and release-gate revalidation as compensating controls.",
       "acceptance": "Repository owner explicitly accepted this single-maintainer CI self-modification risk on 2026-08-17.",
       "reviewBy": "2026-10-01"
+    },
+    {
+      "id": "QR-009",
+      "title": "Release branch direct pushes cannot be gated by pull-request or force-push rules in a user-owned repository",
+      "status": "accepted",
+      "severity": "high",
+      "owner": "MostDef2000",
+      "boundary": "GitHub release branch enforcement",
+      "consequence": "The automated SLF Release workflow must push generated release commits directly to the release branch. GitHub does not allow the GitHub Actions application as a ruleset bypass actor in user-owned repositories, so pull-request and non-fast-forward rules would block legitimate publication. The release branch therefore allows direct pushes by repository write access.",
+      "compensatingControls": [
+        "protect-release ruleset blocks release branch deletion",
+        "SLF Maintenance drift check verifies the release tip is a generated release commit whose approvedCommit is an ancestor of main and that manifest, user.js and meta.js versions match",
+        "The release workflow uses force-with-lease pinned to the observed release ref and refuses stale publication",
+        "The release gate re-validates the exact merged main source before publication",
+        "Only the repository owner has write access (single maintainer, QR-007)"
+      ],
+      "target": "Re-evaluate when GitHub supports the Actions application as a bypass actor for user-owned repositories, or when an independent reviewer and stricter approval model become available.",
+      "acceptance": "Repository owner explicitly accepted this platform limitation on 2026-08-17.",
+      "reviewBy": "2026-10-01"
     }
   ]
 }
