@@ -2,6 +2,9 @@
 // ============================================================
 
 const SnapshotEngine = {
+    _pendingMatchResultRequests: new Map(),
+    _sentMatchResultKeys: new Set(),
+
     build() {
         const ids = MatchStatsParser.getAllTeamIds();
         const teamNames = MatchStatsParser.readTeamNames();
@@ -29,7 +32,7 @@ const SnapshotEngine = {
             });
         }
         const generatorExpectedPerformance = typeof GeneratorExpectedPerformanceParser !== 'undefined'
-            ? GeneratorExpectedPerformanceParser.parse(developerHints)
+            ? GeneratorExpectedPerformanceParser.parse(developerHints || [])
             : null;
         const eventsText = MatchStatsParser.readEventsText();
         const rawStatus = MatchStateParser.getStatus();
@@ -389,12 +392,25 @@ const SnapshotEngine = {
             }
         });
 
-        const request = Api.postAppend(
+        const key = result.resultKey;
+        const pending = this._pendingMatchResultRequests.get(key);
+        if (pending) return pending;
+        if (this._sentMatchResultKeys.has(key)) {
+            return Promise.resolve({ status: 208, deduplicated: true, resultKey: key });
+        }
+
+        const request = Promise.resolve(Api.postAppend(
             CONFIG.COLLECTIONS.MATCH_RESULTS,
             result,
             'match result history'
-        );
+        )).then(response => {
+            this._sentMatchResultKeys.add(key);
+            return response;
+        }).finally(() => {
+            this._pendingMatchResultRequests.delete(key);
+        });
 
+        this._pendingMatchResultRequests.set(key, request);
         void this.sendPlayerObservations(snapshot).catch(() => {});
         return request;
     },
