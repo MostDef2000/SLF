@@ -1,6 +1,6 @@
 # SLF Automatic Release Policy
 
-Version: 1.4.0
+Version: 1.5.0
 Status: Active
 Applies to: Project Manager, domain agents, Core Release, runtime state, release gate, GitHub Actions, Tampermonkey handoff, and protected-main governance
 Source of truth: GitHub repository contracts and `.github/workflows/build-latest-release.yml`
@@ -104,6 +104,7 @@ The `release` branch is generated state, not editable source. Its canonical gene
 - `releases/latest.user.js`;
 - `releases/latest.meta.js`;
 - `data/version.json`;
+- `data/release-evidence.json`;
 - `CHANGELOG.md`.
 
 After the protected-main handoff, `SLF Release` must never push generated release commits to `main`.
@@ -176,7 +177,8 @@ A release is complete only after verifying, in order:
 7. `releases/latest.meta.js` on `release` has the same version;
 8. a generated release commit for that version exists on `release`;
 9. generated update/download URLs point to the canonical `release` branch;
-10. no archive userscript was created.
+10. no archive userscript was created;
+11. `data/release-evidence.json` on `release` records the published artifact digests for that version.
 
 Workflow-run lookup is supplemental. An empty lookup never proves the push workflow did not run.
 

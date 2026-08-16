@@ -214,6 +214,36 @@ assert.equal(policy.manualState.activeSchema, 'slf_manual_match_state_v1');
 assert.equal(policy.manualState.legacyReadOnlySchema, 'slf_live_parser_state_v2');
 assert.equal(policy.manualState.writesLegacy, false);
 
+// Governance regression guard: obsolete workflow names and runtime phases must
+// never reappear in active contracts after the compatibility-contract cleanup.
+const obsoleteWorkflowNames = ['SLF Validate and Release'];
+const obsoletePhases = ['ACTIONS_REQUIRED', 'ACTIONS_RUNNING', 'ACTIONS_COMPLETED'];
+const contractFiles = [];
+(function walk(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(full);
+    else if (entry.name.endsWith('.md')) contractFiles.push(full);
+  }
+})(path.join(root, 'contracts'));
+for (const file of contractFiles) {
+  const content = fs.readFileSync(file, 'utf8');
+  for (const name of obsoleteWorkflowNames) {
+    assert.equal(
+      content.includes(name),
+      false,
+      `${path.relative(root, file)} references obsolete workflow name: ${name}`
+    );
+  }
+  for (const phase of obsoletePhases) {
+    assert.equal(
+      content.includes(phase),
+      false,
+      `${path.relative(root, file)} references obsolete runtime phase: ${phase}`
+    );
+  }
+}
+
 console.log(
-  `[versioned-contracts] passed: contracts=${requiredContracts.length} positive=${fixtures.positive.length} negative=${fixtures.negative.length}`
+  `[versioned-contracts] passed: contracts=${requiredContracts.length} positive=${fixtures.positive.length} negative=${fixtures.negative.length} contractFiles=${contractFiles.length}`
 );

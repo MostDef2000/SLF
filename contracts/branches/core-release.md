@@ -1,6 +1,6 @@
 # Branch Contract: core-release
 
-Version: 3.4.0
+Version: 3.5.0
 Status: Active
 Role: Core Release Orchestrator
 
@@ -38,6 +38,7 @@ New approval is required only for scope expansion, destructive action, new secre
   - `releases/latest.user.js`;
   - `releases/latest.meta.js`;
   - `data/version.json`;
+  - `data/release-evidence.json`;
   - `CHANGELOG.md`.
 - After the protected-main handoff, canonical generated outputs are verified on `release`; historical copies on `main` are compatibility snapshots only.
 - Module agents do not bump versions or create archive userscripts.
@@ -147,6 +148,7 @@ Runtime publication is complete only after verifying:
 - `releases/latest.user.js` version on `release` matches;
 - `releases/latest.meta.js` version on `release` matches;
 - generated release commit exists on `release`;
+- `data/release-evidence.json` on `release` records the published artifact digests;
 - update/download URLs point to the canonical `release` branch;
 - no forbidden archive file exists.
 

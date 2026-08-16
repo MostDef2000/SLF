@@ -88,7 +88,7 @@ jobs:
 
           mapfile -t APPROVED_FILES < <(
             git diff --name-only "$BASE_COMMIT" "$SOURCE_COMMIT" |
-              awk 'NF && $0 != "CHANGELOG.md" && $0 != "data/version.json" && $0 != "releases/latest.user.js" && $0 != "releases/latest.meta.js"'
+              awk 'NF && $0 != "CHANGELOG.md" && $0 != "data/version.json" && $0 != "data/release-evidence.json" && $0 != "releases/latest.user.js" && $0 != "releases/latest.meta.js"'
           )
           if [ "${#APPROVED_FILES[@]}" -eq 0 ]; then
             echo 'No unpublished source files found after excluding generated release outputs.'
@@ -143,6 +143,18 @@ jobs:
           node tools/build-latest-userscript.mjs
           sha256sum --check "$RUNNER_TEMP/slf-release.sha256"
 
+      - name: Generate and validate release evidence for published bytes
+        if: steps.provenance.outputs.release_required == 'true'
+        shell: bash
+        env:
+          SLF_DETERMINISTIC_REBUILD_VERIFIED: 'true'
+        run: |
+          set -euo pipefail
+          node tools/generate-release-evidence.mjs
+          node tools/validate-release-evidence.mjs
+          cp artifacts/release-evidence/release-evidence.json data/release-evidence.json
+          node -e "const e=JSON.parse(require('node:fs').readFileSync('data/release-evidence.json','utf8')); if(e.schema!=='slf_release_evidence_v1') throw new Error('bad schema'); console.log('release evidence staged for ' + e.scriptVersion + ' @ ' + e.validationRevision);"
+
       - name: Validate latest-only release
         if: steps.provenance.outputs.release_required == 'true'
         shell: bash
@@ -180,7 +192,7 @@ jobs:
           VERSION=$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync('data/version.json','utf8')).scriptVersion)")
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add releases/latest.user.js releases/latest.meta.js data/version.json CHANGELOG.md
+          git add releases/latest.user.js releases/latest.meta.js data/version.json data/release-evidence.json CHANGELOG.md
           if git diff --cached --quiet; then
             echo 'Expected generated release output changes, but the release tree is unchanged.' >&2
             exit 1

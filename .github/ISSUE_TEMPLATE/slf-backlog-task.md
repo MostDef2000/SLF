@@ -112,7 +112,7 @@ body:
       label: Suggested implementation mode
       options:
         - DISCUSSION ONLY first
-        - Ready for COMMIT APPROVED after plan
+        - Ready for commit approved after plan
         - Governance-only
         - Manual fallback
     validations:
