@@ -62,7 +62,6 @@
             presetProgression: cloneForStorage(legacy.presetProgression || null),
             lastRecommendationHtml: legacy.lastRecommendationHtml || null,
             lastRecommendationMeta: cloneForStorage(legacy.lastRecommendationMeta || null),
-            tacticalLab: cloneForStorage(legacy.tacticalLab || null),
             migratedFrom: legacy.schema || 'slf_live_parser_state_v2'
         };
     }
@@ -116,9 +115,6 @@
                 presetProgression: stateValue('presetProgression'),
                 lastRecommendationHtml: stateValue('lastRecommendationHtml'),
                 lastRecommendationMeta: stateValue('lastRecommendationMeta'),
-                tacticalLab: hasOwn(extra, 'tacticalLab')
-                    ? cloneForStorage(extra.tacticalLab)
-                    : cloneForStorage(existing.tacticalLab || null),
                 migratedFrom: existing.migratedFrom || null
             };
             try {
@@ -261,7 +257,7 @@
             if (!isTacticalInput(element)) return;
             if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
             clearTimeout(STATE.manualChangeTimer);
-            STATE.manualChangeTimer = setTimeout(async () => {
+            STATE.manualChangeTimer = setTimeout(() => {
                 if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
                 const current = getCurrentTactic();
                 const changed = EventTracker.diffTactic(STATE.lastManualTactic, current);
@@ -271,14 +267,6 @@
                 if (!snapshot?.myTeam || snapshot.matchOwnership === 'foreign' || snapshot.status === 'finished') {
                     STATE.lastManualTactic = current;
                     return;
-                }
-                if (STATE.tacticalLabRuntime?.isActive?.()) {
-                    try {
-                        await STATE.tacticalLabRuntime.closeActive('user_selected_manual', snapshot, {
-                            nextTacticSource: 'manual',
-                            nextTacticFingerprint: snapshot?.tacticTelemetry?.currentTacticFingerprint || null
-                        });
-                    } catch (_) {}
                 }
                 snapshot.ruleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
                 const ts = Date.now();
@@ -330,790 +318,953 @@
     else scheduleManualWatcher();
 })();
 
-// Tactical Lab v1: blind black-box challenger assignment and telemetry.
-// Experiments are intentionally separate from the production preset registry.
-(function installTacticalLabV1() {
+// Tactical telemetry v2: durable match session, canonical phases and bounded automatic capture.
+// ============================================================
+
+(function installTacticalTelemetryV2() {
     'use strict';
 
-    if (STATE.tacticalLabRuntime?.schema === 'slf_tactical_lab_runtime_v1') return;
+    if (SnapshotEngine.__tacticalTelemetryV2Installed) return;
+    SnapshotEngine.__tacticalTelemetryV2Installed = true;
 
-    const POPULATION_VERSION = 'slf_tactical_lab_561_p01';
-    const POPULATION_CODE = 'P01';
-    const GENOME_VERSION = 'slf_tactical_genome_v1';
-    const POPULATION_SIZE = 64;
-    const PANEL_ID = 'slf-tactical-lab-panel';
-    const BUTTON_ID = 'slf-tactical-lab-apply';
-    const STATUS_ID = 'slf-tactical-lab-status';
-    const DETAIL_ID = 'slf-tactical-lab-detail';
-    const MAX_OUTBOX = 8;
-    const productionIds = [
-        'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2','Compact_Counter_def3',
-        'Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4',
-        'Simeone_Compact442_def4','Simeone_LowBlock_def5','Bielsa_ChaosPress_att5'
+    const STATE_SCHEMA = 'slf_manual_match_state_v2';
+    const STATE_PREFIX = 'slf_manual_match_state_v2';
+    const LEGACY_STATE_PREFIX = 'slf_manual_match_state_v1';
+    const OUTBOX_LIMIT = 12;
+    const MIN_PHASE_MINUTES = 5;
+    const MIN_PHASE_COMPLETENESS = 0.55;
+    const AUTO_POLL_MS = 15000;
+    const TACTIC_KEYS = [
+        'def_line', 'press_line', 'def_width', 'press_intense',
+        'build_type', 'build_temp', 'build_long', 'build_fast',
+        'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot', 'priority'
     ];
-    const seedPresets = {
-        Arteta_Control433_bal3:{def_line:'2',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'2',build_long:'1',build_fast:'2',style:'3',pass_risk:'3',dribble:'2',cross:'2',corner:'1',shot:'2',priority:[]},
-        Pep_BoxControl_bal2:{def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'1',build_long:'1',build_fast:'2',style:'3',pass_risk:'2',dribble:'2',cross:'1',corner:'1',shot:'2',priority:[]},
-        Pep_PressCooldown_bal2:{def_line:'1',press_line:'2',def_width:'3',press_intense:'1',build_type:'1',build_temp:'2',build_long:'4',build_fast:'2',style:'2',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[]},
-        Compact_Counter_def3:{def_line:'1',press_line:'1',def_width:'2',press_intense:'2',build_type:'1',build_temp:'3',build_long:'4',build_fast:'4',style:'3',pass_risk:'2',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[]},
-        Pep_ControlledPush_att3:{def_line:'3',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'3',build_long:'1',build_fast:'4',style:'4',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[]},
-        Pep_TwoThreeFive_att3:{def_line:'4',press_line:'4',def_width:'4',press_intense:'4',build_type:'2',build_temp:'2',build_long:'1',build_fast:'3',style:'5',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'4',priority:[]},
-        Conte_WingbackWidth_bal4:{def_line:'2',press_line:'2',def_width:'5',press_intense:'3',build_type:'3',build_temp:'2',build_long:'3',build_fast:'3',style:'4',pass_risk:'3',dribble:'4',cross:'5',corner:'1',shot:'2',priority:['left','right']},
-        Klopp_Gegenpress_att4:{def_line:'4',press_line:'5',def_width:'3',press_intense:'5',build_type:'3',build_temp:'3',build_long:'2',build_fast:'5',style:'5',pass_risk:'4',dribble:'4',cross:'3',corner:'1',shot:'4',priority:[]},
-        Simeone_Compact442_def4:{def_line:'1',press_line:'2',def_width:'1',press_intense:'4',build_type:'1',build_temp:'1',build_long:'3',build_fast:'2',style:'1',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[]},
-        Simeone_LowBlock_def5:{def_line:'1',press_line:'1',def_width:'1',press_intense:'1',build_type:'1',build_temp:'1',build_long:'5',build_fast:'2',style:'1',pass_risk:'1',dribble:'1',cross:'1',corner:'1',shot:'1',priority:[]},
-        Bielsa_ChaosPress_att5:{def_line:'5',press_line:'5',def_width:'5',press_intense:'5',build_type:'3',build_temp:'3',build_long:'4',build_fast:'5',style:'5',pass_risk:'5',dribble:'5',cross:'5',corner:'1',shot:'5',priority:[]}
-    };
-    const seedFormations = {
-        Arteta_Control433_bal3:['gk','ld','cd1','cd3','rd','cm1','dm2','cm3','lw','st2','rw'],
-        Pep_BoxControl_bal2:['gk','ld','cd1','cd3','rd','dm2','cm1','cm3','am1','am2','st2'],
-        Pep_PressCooldown_bal2:['gk','ld','cd1','cd3','rd','dm2','lm','cm2','cm3','rm','st2'],
-        Compact_Counter_def3:['gk','ld','cd1','cd3','rd','lm','dm2','cm2','rm','am2','st2'],
-        Pep_ControlledPush_att3:['gk','ld','cd1','cd3','rd','dm2','cm2','lw','am2','rw','st2'],
-        Pep_TwoThreeFive_att3:['gk','cd1','cd2','cd3','dm2','cm2','lw','am1','st1','am2','rw'],
-        Conte_WingbackWidth_bal4:['gk','cd1','cd2','cd3','lb','dm2','cm2','rb','lw','st2','rw'],
-        Klopp_Gegenpress_att4:['gk','ld','cd1','cd3','rd','dm2','cm2','lw','st1','st2','rw'],
-        Simeone_Compact442_def4:['gk','ld','cd1','cd3','rd','lm','cm2','dm2','rm','st1','st2'],
-        Simeone_LowBlock_def5:['gk','lb','cd1','cd2','cd3','rb','lm','dm2','cm2','rm','st2'],
-        Bielsa_ChaosPress_att5:['gk','cd1','cd2','cd3','lm','dm2','rm','lw','st1','st2','rw']
-    };
-    const ranges = {
-        def_line:['1','2','3','4','5'], press_line:['1','2','3','4','5'], def_width:['1','2','3','4','5'], press_intense:['1','2','3','4','5'],
-        build_type:['1','2','3'], build_temp:['1','2','3'], build_long:['1','2','3','4','5'], build_fast:['1','2','3','4','5'],
-        style:['1','2','3','4','5'], pass_risk:['1','2','3','4','5'], dribble:['1','2','3','4','5'], cross:['1','2','3','4','5'],
-        corner:['1'], shot:['1','2','3','4','5']
-    };
-    const controlKeys = Object.keys(ranges);
-    let cachedState = null;
-    let cachedGameId = '';
-    let flushPromise = null;
-    let uiTimer = null;
 
-    const clone = value => {
+    const legacyStateApi = SnapshotEngine.manualMatchState;
+    const buildBeforeV2 = SnapshotEngine.build.bind(SnapshotEngine);
+    const sendSnapshotBeforeV2 = typeof SnapshotEngine.sendSnapshot === 'function'
+        ? SnapshotEngine.sendSnapshot.bind(SnapshotEngine)
+        : null;
+    const postAppendBeforeV2 = Api.postAppend.bind(Api);
+    const applyPresetBeforeV2 = applyPresetAsync;
+    const snapshotReservations = new Set();
+    const resultReservations = new Set();
+
+    function clone(value) {
         if (value == null) return value;
         try { return JSON.parse(JSON.stringify(value)); } catch (_) { return null; }
-    };
-    const hash32 = text => {
-        let value = 2166136261;
-        const input = String(text || '');
-        for (let index = 0; index < input.length; index += 1) {
-            value ^= input.charCodeAt(index);
-            value = Math.imul(value, 16777619);
-        }
-        return value >>> 0;
-    };
-    const hashHex = text => hash32(text).toString(16).padStart(8, '0');
-    const makeRng = seed => {
-        let state = hash32(seed) || 0x9e3779b9;
-        return () => {
-            state ^= state << 13;
-            state ^= state >>> 17;
-            state ^= state << 5;
-            return (state >>> 0) / 4294967296;
-        };
-    };
-    const normalizePriority = value => (Array.isArray(value) ? value : value ? [value] : []).map(String).sort();
-    const tacticFingerprint = tactic => controlKeys.concat(['priority'])
-        .map(key => `${key}:${JSON.stringify(key === 'priority' ? normalizePriority(tactic?.[key]) : String(tactic?.[key] ?? ''))}`)
-        .join('|');
-    const genomeFingerprint = (controls, formation) => `tlab1-${hashHex(`${tacticFingerprint(controls)}|formation:${(formation || []).join(',')}`)}`;
-    const mutationDistance = (before, after) => {
-        const keys = controlKeys.concat(['priority']);
-        const changed = keys.filter(key => JSON.stringify(key === 'priority' ? normalizePriority(before?.[key]) : before?.[key]) !== JSON.stringify(key === 'priority' ? normalizePriority(after?.[key]) : after?.[key])).length;
-        return Number((changed / keys.length).toFixed(3));
-    };
-    const priorityFor = index => {
-        const options = [[],['left'],['center'],['right'],['left','right'],['left','center'],['center','right']];
-        return options[index % options.length].slice();
-    };
-    const makeExperiment = (index, origin, controls, formation, parentExperimentId = null, distance = null) => ({
-        experimentId: `EXP-561-P01-${String(index + 1).padStart(4, '0')}`,
-        populationVersion: POPULATION_VERSION,
-        generation: 1,
-        genomeVersion: GENOME_VERSION,
-        origin,
-        parentExperimentId,
-        mutationDistance: distance,
-        controls: clone(controls),
-        formation: clone(formation),
-        tacticFingerprint: tacticFingerprint(controls),
-        genomeFingerprint: genomeFingerprint(controls, formation)
-    });
+    }
 
-    function buildPopulation() {
-        const result = [];
-        const mutableKeys = controlKeys.filter(key => key !== 'corner');
-
-        for (let index = 0; index < 16; index += 1) {
-            const seedId = productionIds[index % productionIds.length];
-            const controls = clone(seedPresets[seedId]);
-            for (let step = 0; step < 3; step += 1) {
-                const key = mutableKeys[(index * 3 + step * 5) % mutableKeys.length];
-                const values = ranges[key];
-                const currentIndex = Math.max(0, values.indexOf(String(controls[key])));
-                const shift = ((index + step) % 2 === 0 ? 1 : -1);
-                controls[key] = values[(currentIndex + shift + values.length) % values.length];
-            }
-            if (index % 4 === 3) controls.priority = priorityFor(index);
-            result.push(makeExperiment(index, 'production_mutation', controls, seedFormations[seedId], seedId, mutationDistance(seedPresets[seedId], controls)));
-        }
-
-        for (let local = 0; local < 16; local += 1) {
-            const index = 16 + local;
-            const controls = {};
-            controlKeys.forEach((key, keyIndex) => {
-                const values = ranges[key];
-                controls[key] = values[(local * 2 + keyIndex * 3) % values.length];
-            });
-            controls.priority = priorityFor(local + 2);
-            const seedId = productionIds[(local * 5 + 2) % productionIds.length];
-            result.push(makeExperiment(index, 'orthogonal', controls, seedFormations[seedId], null, 1));
-        }
-
-        for (let local = 0; local < 16; local += 1) {
-            const index = 32 + local;
-            const rng = makeRng(`${POPULATION_VERSION}|random|${local}`);
-            const controls = {};
-            controlKeys.forEach(key => {
-                const values = ranges[key];
-                controls[key] = values[Math.floor(rng() * values.length) % values.length];
-            });
-            controls.priority = priorityFor(Math.floor(rng() * 100));
-            const seedId = productionIds[Math.floor(rng() * productionIds.length) % productionIds.length];
-            result.push(makeExperiment(index, 'deterministic_random', controls, seedFormations[seedId], null, 1));
-        }
-
-        for (let local = 0; local < 16; local += 1) {
-            const index = 48 + local;
-            const controls = {};
-            controlKeys.forEach((key, keyIndex) => {
-                const values = ranges[key];
-                if (values.length === 1) controls[key] = values[0];
-                else controls[key] = ((local + keyIndex) % 2 === 0) ? values[0] : values[values.length - 1];
-            });
-            controls.priority = priorityFor(local + 4);
-            const seedId = productionIds[(local * 7 + 1) % productionIds.length];
-            result.push(makeExperiment(index, 'extreme', controls, seedFormations[seedId], null, 1));
-        }
-
+    function cloneWithSymbols(value) {
+        const result = clone(value) || {};
+        if (!value || typeof value !== 'object') return result;
+        Object.getOwnPropertySymbols(value).forEach(symbol => {
+            const descriptor = Object.getOwnPropertyDescriptor(value, symbol);
+            if (descriptor) Object.defineProperty(result, symbol, descriptor);
+        });
         return result;
     }
 
-    const population = buildPopulation();
-    const populationById = new Map(population.map(item => [item.experimentId, item]));
-
-    function getGameId(snapshot = null) {
-        return String(snapshot?.gameId || MatchStateParser.getGameId() || '');
+    function hasOwn(object, key) {
+        return !!object && Object.prototype.hasOwnProperty.call(object, key);
     }
 
-    function isOwned(snapshot) {
-        return !!snapshot?.gameId && !!snapshot?.myTeam && snapshot.matchOwnership !== 'foreign';
+    function storageKey(gameId) {
+        return `${STATE_PREFIX}:${gameId || 'unknown'}`;
     }
 
-    function emptyState(gameId) {
-        return {
-            schema: 'slf_tactical_lab_state_v1',
-            gameId,
-            populationVersion: POPULATION_VERSION,
-            assignment: null,
-            assignmentRecorded: false,
-            activation: null,
-            completed: null,
-            outbox: [],
-            lastError: null
-        };
+    function legacyStorageKey(gameId) {
+        return `${LEGACY_STATE_PREFIX}:${gameId || 'unknown'}`;
     }
 
-    function loadState(gameId) {
-        gameId = String(gameId || '');
+    function resolveGameId(gameId = null) {
+        if (gameId) return String(gameId);
+        return String(typeof MatchStateParser?.getGameId === 'function' ? MatchStateParser.getGameId() || '' : '');
+    }
+
+    function readState(gameId) {
+        if (!gameId || typeof localStorage === 'undefined') return null;
+        try {
+            const raw = localStorage.getItem(storageKey(gameId));
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return parsed?.schema === STATE_SCHEMA && String(parsed.gameId || '') === String(gameId) ? parsed : null;
+        } catch (_) { return null; }
+    }
+
+    function migrateState(gameId) {
         if (!gameId) return null;
-        if (cachedState && cachedGameId === gameId) return cachedState;
-        const stored = SnapshotEngine.loadManualState?.(gameId)?.tacticalLab || null;
-        const state = stored && stored.schema === 'slf_tactical_lab_state_v1' && String(stored.gameId || '') === gameId
-            ? stored
-            : emptyState(gameId);
-        state.outbox = Array.isArray(state.outbox) ? state.outbox.slice(-MAX_OUTBOX) : [];
-        cachedGameId = gameId;
-        cachedState = state;
-        return state;
-    }
-
-    function persistState(state) {
-        if (!state?.gameId) return null;
-        cachedGameId = String(state.gameId);
-        cachedState = state;
-        return SnapshotEngine.persistManualState?.({ tacticalLab: state }) || null;
-    }
-
-    function recordKey(record) {
-        return String(record?.eventKey || record?.effectKey || '');
-    }
-
-    function queueRecord(state, collection, record, label) {
-        const key = recordKey(record);
-        if (!state || !key) return;
-        const current = Array.isArray(state.outbox) ? state.outbox : [];
-        state.outbox = current.filter(item => item?.key !== key);
-        state.outbox.push({ key, collection, label, record: clone(record), queuedAt: Date.now() });
-        state.outbox = state.outbox.slice(-MAX_OUTBOX);
-        persistState(state);
-        void flushOutbox(state);
-    }
-
-    async function flushOutbox(state) {
-        if (flushPromise || !state?.outbox?.length) return flushPromise;
-        flushPromise = (async () => {
-            const pending = state.outbox.slice();
-            for (const item of pending) {
-                try {
-                    await Api.postAppend(item.collection, item.record, item.label || 'tactical lab telemetry');
-                    state.outbox = state.outbox.filter(row => row?.key !== item.key);
-                    persistState(state);
-                } catch (_) {
-                    break;
-                }
-            }
-        })().finally(() => { flushPromise = null; });
-        return flushPromise;
-    }
-
-    function selectExperiment(gameId) {
-        const index = hash32(`${POPULATION_VERSION}|${gameId}`) % population.length;
-        return population[index];
-    }
-
-    function buildAssignment(gameId) {
-        const experiment = selectExperiment(gameId);
+        const legacy = legacyStateApi?.load?.(gameId) || null;
+        if (!legacy) return null;
         return {
-            assignmentId: `tactical_lab_assignment|${gameId}|${experiment.experimentId}`,
-            experimentId: experiment.experimentId,
-            populationVersion: POPULATION_VERSION,
-            genomeFingerprint: experiment.genomeFingerprint,
-            assignedAt: Date.now()
+            schema: STATE_SCHEMA,
+            gameId: String(gameId),
+            sessionId: `match-session|${gameId}`,
+            ts: Number(legacy.ts || Date.now()),
+            url: legacy.url || '',
+            phaseSequence: 0,
+            openPhase: null,
+            lastClosedPhaseId: null,
+            pendingPhaseStart: null,
+            lastSnapshotKey: null,
+            lastAutoSnapshotWindow: null,
+            lastObservedScoreState: null,
+            lastObservedTacticFingerprint: null,
+            lastResultKey: null,
+            outbox: [],
+            pendingPresetEvent: clone(legacy.pendingPresetEvent || null),
+            pendingEffectRetry: !!legacy.pendingEffectRetry,
+            consumedPresetEventKey: legacy.consumedPresetEventKey || null,
+            manualTacticEventPending: !!legacy.manualTacticEventPending,
+            recommendationFreeze: clone(legacy.recommendationFreeze || null),
+            presetProgression: clone(legacy.presetProgression || null),
+            lastRecommendationHtml: legacy.lastRecommendationHtml || null,
+            lastRecommendationMeta: clone(legacy.lastRecommendationMeta || null),
+            migratedFrom: legacy.schema || LEGACY_STATE_PREFIX
         };
     }
 
-    function scoreContext(snapshot) {
-        const score = snapshot?.score || {};
-        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
-        const isHome = Number(teams[0]) === Number(snapshot?.myTeam);
-        const home = Number(score.home);
-        const away = Number(score.away);
-        if (!Number.isFinite(home) || !Number.isFinite(away) || !snapshot?.myTeam) {
-            return { scoreState:'unknown', scoreDiff:null, homeAway: snapshot?.myTeam ? (isHome ? 'home' : 'away') : 'unknown' };
+    function writeState(payload) {
+        if (!payload?.gameId || typeof localStorage === 'undefined') return null;
+        try {
+            localStorage.setItem(storageKey(payload.gameId), JSON.stringify(payload));
+            return payload;
+        } catch (_) { return null; }
+    }
+
+    function getState(gameId = null) {
+        gameId = resolveGameId(gameId);
+        if (!gameId) return null;
+        const stored = readState(gameId);
+        if (stored) return stored;
+        const migrated = migrateState(gameId) || {
+            schema: STATE_SCHEMA,
+            gameId,
+            sessionId: `match-session|${gameId}`,
+            ts: Date.now(),
+            url: typeof location !== 'undefined' ? location.href || '' : '',
+            phaseSequence: 0,
+            openPhase: null,
+            lastClosedPhaseId: null,
+            pendingPhaseStart: null,
+            lastSnapshotKey: null,
+            lastAutoSnapshotWindow: null,
+            lastObservedScoreState: null,
+            lastObservedTacticFingerprint: null,
+            lastResultKey: null,
+            outbox: [],
+            pendingPresetEvent: null,
+            pendingEffectRetry: false,
+            consumedPresetEventKey: null,
+            manualTacticEventPending: false,
+            recommendationFreeze: null,
+            presetProgression: null,
+            lastRecommendationHtml: null,
+            lastRecommendationMeta: null,
+            migratedFrom: null
+        };
+        return writeState(migrated) || migrated;
+    }
+
+    function persistState(extra = {}, options = {}) {
+        const gameId = resolveGameId(options.gameId || extra.gameId || null);
+        if (!gameId) return null;
+        const existing = options.existing || getState(gameId) || {};
+        const payload = Object.assign({}, existing, clone(extra) || {}, {
+            schema: STATE_SCHEMA,
+            gameId,
+            sessionId: existing.sessionId || `match-session|${gameId}`,
+            ts: Date.now(),
+            url: typeof location !== 'undefined' ? location.href || existing.url || '' : existing.url || ''
+        });
+        const carryFromRuntime = ['pendingPresetEvent', 'recommendationFreeze', 'presetProgression', 'lastRecommendationHtml', 'lastRecommendationMeta'];
+        carryFromRuntime.forEach(key => {
+            if (!hasOwn(extra, key) && hasOwn(STATE, key)) payload[key] = clone(STATE[key]);
+        });
+        if (!Array.isArray(payload.outbox)) payload.outbox = [];
+        payload.outbox = payload.outbox.slice(-OUTBOX_LIMIT);
+        return writeState(payload);
+    }
+
+    const TelemetryState = {
+        getStorageKey(gameId = null) { return storageKey(resolveGameId(gameId)); },
+        load(gameId = null) { return getState(gameId); },
+        persist(extra = {}, options = {}) { return persistState(extra, options); },
+        clear(gameId = null) {
+            gameId = resolveGameId(gameId);
+            if (!gameId || typeof localStorage === 'undefined') return;
+            try {
+                localStorage.removeItem(storageKey(gameId));
+                localStorage.removeItem(legacyStorageKey(gameId));
+            } catch (_) {}
+            legacyStateApi?.clear?.(gameId);
         }
-        const myGoals = isHome ? home : away;
-        const oppGoals = isHome ? away : home;
-        return {
-            scoreState: myGoals > oppGoals ? 'winning' : myGoals < oppGoals ? 'losing' : 'draw',
-            scoreDiff: myGoals - oppGoals,
-            homeAway: isHome ? 'home' : 'away'
-        };
+    };
+
+    SnapshotEngine.manualMatchState = TelemetryState;
+    SnapshotEngine.persistManualState = function persistManualStateV2(extra = {}) { return TelemetryState.persist(extra); };
+    SnapshotEngine.loadManualState = function loadManualStateV2(gameId = null) { return TelemetryState.load(gameId); };
+    SnapshotEngine.clearManualState = function clearManualStateV2(gameId = null) { TelemetryState.clear(gameId); };
+
+    function finite(value) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
     }
 
-    function teamStats(snapshot, own = true) {
-        if (!snapshot?.myTeam || !Array.isArray(snapshot?.stats)) return null;
-        const row = snapshot.stats.find(item => own
-            ? Number(item?.teamId) === Number(snapshot.myTeam)
-            : Number(item?.teamId) !== Number(snapshot.myTeam));
+    function normalizedPriority(value) {
+        const list = Array.isArray(value) ? value : value == null ? [] : [value];
+        return list.map(item => String(item)).sort();
+    }
+
+    function tacticFingerprint(tactic) {
+        if (!tactic || typeof tactic !== 'object') return '';
+        return TACTIC_KEYS.map(key => {
+            const value = key === 'priority' ? normalizedPriority(tactic[key]) : tactic[key] ?? null;
+            return `${key}:${JSON.stringify(value)}`;
+        }).join('|');
+    }
+
+    function canonicalPresetId(snapshot, fallback = null) {
+        const observed = snapshot?.tacticTelemetry?.currentPreset;
+        if (observed) return String(observed);
+        if (fallback) return String(fallback);
+        return 'unknown';
+    }
+
+    function scoreState(snapshot) {
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+        const myTeam = finite(snapshot?.myTeam);
+        const home = finite(snapshot?.score?.home);
+        const away = finite(snapshot?.score?.away);
+        if (teams.length < 2 || myTeam == null || home == null || away == null) return 'unknown';
+        const isHome = finite(teams[0]) === myTeam;
+        const mine = isHome ? home : away;
+        const opponent = isHome ? away : home;
+        return mine > opponent ? 'winning' : mine < opponent ? 'losing' : 'draw';
+    }
+
+    function homeAway(snapshot) {
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+        const myTeam = finite(snapshot?.myTeam);
+        if (teams.length < 2 || myTeam == null) return 'unknown';
+        if (finite(teams[0]) === myTeam) return 'home';
+        if (finite(teams[1]) === myTeam) return 'away';
+        return 'unknown';
+    }
+
+    function teamStats(snapshot, mine = true) {
+        const rows = Array.isArray(snapshot?.stats) ? snapshot.stats : [];
+        const myTeam = finite(snapshot?.myTeam);
+        if (myTeam == null) return null;
+        const row = rows.find(item => mine ? finite(item?.teamId) === myTeam : finite(item?.teamId) !== myTeam);
         return row?.stats || null;
     }
 
-    function buildMetrics(snapshot) {
-        const my = teamStats(snapshot, true) || {};
-        const opp = teamStats(snapshot, false) || {};
-        const xt = typeof RecommendationEngine !== 'undefined' && RecommendationEngine?.getXTForMyTeam
-            ? RecommendationEngine.getXTForMyTeam(snapshot)
-            : { myXT:0, oppXT:0 };
-        return {
-            myXG:Number(my.xG || 0), oppXG:Number(opp.xG || 0),
-            myShots:Number(my.shots || 0), oppShots:Number(opp.shots || 0),
-            myBadActionsPct:Number(my.badActionsPct || 0), oppBadActionsPct:Number(opp.badActionsPct || 0),
-            myPower:Number(my.power || 0), oppPower:Number(opp.power || 0),
-            myDefVector:Number(my.defVector || 0), oppDefVector:Number(opp.defVector || 0),
-            myPressVector:Number(my.pressVector || 0), oppPressVector:Number(opp.pressVector || 0),
-            myXT:Number(xt?.myXT || 0), oppXT:Number(xt?.oppXT || 0)
-        };
+    function strengthGap(snapshot) {
+        const mine = finite(teamStats(snapshot, true)?.power);
+        const opponent = finite(teamStats(snapshot, false)?.power);
+        return mine == null || opponent == null ? null : mine - opponent;
     }
 
-    function metricDelta(before, after) {
-        const delta = {};
-        Object.keys(before || {}).forEach(key => { delta[key] = Number((Number(after?.[key] || 0) - Number(before?.[key] || 0)).toFixed(4)); });
-        return delta;
-    }
-
-    function compactRecommendation(snapshot) {
-        const raw = snapshot?.ruleDecision || STATE.lastRuleDecision || null;
-        const compact = EventTracker.compactRuleDecision(raw);
-        const candidates = Array.isArray(raw?.candidates) ? raw.candidates.filter(item => !item?.vetoed) : [];
-        const runnerUp = raw?.runnerUp || candidates.find(item => item?.preset && item.preset !== raw?.action?.preset) || null;
-        return compact ? {
-            presetId: compact.action?.preset || null,
-            situationKey: raw?.situationKey || compact.action?.decision || null,
-            confidence: clone(raw?.confidence || compact.confidence || null),
-            runnerUp: runnerUp ? { preset:runnerUp.preset || null, score:Number(runnerUp.score || 0) } : null,
-            margin: Number(raw?.margin ?? compact.margin ?? 0),
-            riskAppetite: compact.riskAppetite || compact.action?.riskAppetite || null
-        } : null;
-    }
-
-    function strengthBucket(gap) {
-        if (!Number.isFinite(gap)) return 'unknown';
-        if (gap <= -10) return 'much_weaker';
-        if (gap < -3) return 'weaker';
-        if (gap <= 3) return 'even';
-        if (gap < 10) return 'stronger';
+    function strengthGapBucket(value) {
+        if (value == null) return 'unknown';
+        if (value <= -151) return 'much_weaker';
+        if (value <= -51) return 'weaker';
+        if (value <= 50) return 'even';
+        if (value <= 150) return 'stronger';
         return 'much_stronger';
     }
 
-    function buildContext(snapshot) {
-        const my = teamStats(snapshot, true) || {};
-        const opp = teamStats(snapshot, false) || {};
-        const score = scoreContext(snapshot);
-        const gap = Number(my.power || 0) - Number(opp.power || 0);
+    function generatorVersion(snapshot) {
+        const candidates = [
+            snapshot?.generatorVersion,
+            snapshot?.generatorDetailMetrics?.generatorVersion,
+            snapshot?.generatorDetailMetrics?.version,
+            snapshot?.generatorExpectedPerformance?.generatorVersion,
+            snapshot?.generatorExpectedPerformance?.version
+        ];
+        const value = candidates.find(item => item != null && String(item).trim());
+        return value == null ? 'unknown' : String(value);
+    }
+
+    function contextCompleteness(snapshot, presetId) {
+        const required = {
+            gameId: snapshot?.gameId,
+            myTeam: snapshot?.myTeam,
+            minute: snapshot?.minute,
+            score: snapshot?.score && finite(snapshot.score.home) != null && finite(snapshot.score.away) != null,
+            currentTactic: snapshot?.currentTactic && tacticFingerprint(snapshot.currentTactic),
+            teamStats: !!teamStats(snapshot, true) && !!teamStats(snapshot, false),
+            presetId: presetId && presetId !== 'unknown',
+            scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : null,
+            generatorVersion: generatorVersion(snapshot) !== 'unknown'
+        };
+        const missingFields = Object.entries(required).filter(([, value]) => !value).map(([key]) => key);
+        return { value: (Object.keys(required).length - missingFields.length) / Object.keys(required).length, missingFields };
+    }
+
+    function telemetryContext(snapshot, fallbackPreset = null) {
+        const presetId = canonicalPresetId(snapshot, fallbackPreset);
+        const gap = strengthGap(snapshot);
+        const completeness = contextCompleteness(snapshot, presetId);
         const decision = snapshot?.ruleDecision || STATE.lastRuleDecision || null;
-        const decisionContext = decision?.moment?.context || {};
-        const transitions = Array.isArray(snapshot?.tacticTelemetry?.transitions) ? snapshot.tacticTelemetry.transitions : [];
-        const latestTransition = transitions.length ? transitions[transitions.length - 1] : null;
-        const currentFingerprint = snapshot?.tacticTelemetry?.currentTacticFingerprint || tacticFingerprint(snapshot?.currentTactic || {});
-        const currentPreset = snapshot?.tacticTelemetry?.currentPreset || null;
-        const minute = Number.isFinite(Number(snapshot?.minute)) ? Number(snapshot.minute) : null;
-        const transitionMinute = Number.isFinite(Number(latestTransition?.minute)) ? Number(latestTransition.minute) : null;
-        const pressureRisk = Number(decisionContext.pressureRisk || 0);
-        const underPressure = decisionContext.underPressure === true || pressureRisk >= 70;
+        const riskAppetite = snapshot?.tacticTelemetry?.riskAppetite || decision?.riskAppetite || decision?.action?.riskAppetite || null;
         return {
-            minute,
-            bucket: snapshot?.bucket || null,
+            schema: 'slf_telemetry_context_v2',
+            gameId: String(snapshot?.gameId || ''),
+            sessionId: `match-session|${snapshot?.gameId || ''}`,
+            scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown',
+            generatorVersion: generatorVersion(snapshot),
+            libraryVersion: snapshot?.tacticTelemetry?.libraryVersion || null,
+            recommendationSchema: snapshot?.tacticTelemetry?.recommendationSchema || decision?.schema || null,
+            riskAppetite: riskAppetite || 'unknown',
+            myTeam: snapshot?.myTeam ?? null,
+            homeAway: homeAway(snapshot),
+            minute: snapshot?.minute ?? null,
+            generationWindow: clone(snapshot?.generationWindow || null),
             score: clone(snapshot?.score || null),
-            scoreState: score.scoreState,
-            scoreDiff: score.scoreDiff,
-            homeAway: score.homeAway,
-            strengthGap: Number.isFinite(gap) ? Number(gap.toFixed(2)) : null,
-            strengthBucket: strengthBucket(gap),
-            previous: {
-                phaseId: `observed_phase|${snapshot?.gameId || ''}|${latestTransition?.ts || 0}|${hashHex(currentFingerprint)}`,
-                phaseSequence: Number(snapshot?.tacticTelemetry?.transitionCount || transitions.length || 0),
-                phaseDuration: minute != null && transitionMinute != null ? Math.max(0, minute - transitionMinute) : null,
-                presetId: currentPreset,
-                tacticSource: currentPreset ? 'production' : 'manual',
-                tacticFingerprint: currentFingerprint
-            },
-            state: {
-                pressureState: underPressure ? 'high' : pressureRisk >= 40 ? 'medium' : 'normal',
-                pressureRisk,
-                attackNeed: Number(decisionContext.attackNeed || 0),
-                powerDropPct: Number(decisionContext.myPowerDropPct || 0),
-                badActionsPct: Number(my.badActionsPct || 0),
-                possession: Number(my.possession ?? my.pos ?? 0)
-            },
-            productionRecommendation: compactRecommendation(snapshot)
+            scoreState: scoreState(snapshot),
+            strengthGap: gap,
+            strengthGapBucket: strengthGapBucket(gap),
+            presetId,
+            tacticFingerprint: tacticFingerprint(snapshot?.currentTactic),
+            recommendationPreset: decision?.action?.preset || null,
+            explorationApplied: !!decision?.action?.exploration,
+            completeness: Number(completeness.value.toFixed(3)),
+            missingFields: completeness.missingFields,
+            capturedAt: Date.now()
         };
     }
 
-    function assignmentRecord(snapshot, state, experiment) {
-        const ts = Date.now();
+    function compactStats(snapshot) {
+        const mine = teamStats(snapshot, true) || {};
+        const opponent = teamStats(snapshot, false) || {};
+        const pick = source => ({
+            xG: finite(source.xG),
+            shots: finite(source.shots),
+            badActionsPct: finite(source.badActionsPct),
+            power: finite(source.power),
+            defVector: finite(source.defVector),
+            pressVector: finite(source.pressVector)
+        });
+        return { my: pick(mine), opponent: pick(opponent) };
+    }
+
+    function compactSnapshot(snapshot, fallbackPreset = null) {
+        const context = telemetryContext(snapshot, fallbackPreset);
         return {
-            ts,
-            recordType: 'preset_event',
-            schemaVersion: 4,
-            parserVersion: 'tactical_lab_v1_assignment',
-            eventKey: `tactical_lab_assignment|${state.gameId}|${state.assignment.assignmentId}`,
-            type: 'tactical_lab_assignment',
-            gameId: state.gameId,
+            ts: snapshot?.ts || Date.now(),
             minute: snapshot?.minute ?? null,
             bucket: snapshot?.bucket || null,
-            presetName: experiment.experimentId,
-            tacticTelemetry: snapshot?.tacticTelemetry || null,
-            tacticalLab: {
-                schema: 'slf_tactical_lab_assignment_v1',
-                assignmentId: state.assignment.assignmentId,
-                experimentId: experiment.experimentId,
-                populationVersion: POPULATION_VERSION,
-                genomeVersion: GENOME_VERSION,
-                genomeFingerprint: experiment.genomeFingerprint,
-                blind: true,
-                offered: true,
-                activated: false,
-                offerContext: buildContext(snapshot)
-            },
-            source: { page:'game', trigger:'tactical_lab_offer', collectedAt:ts, scriptVersion:SLF_VERSION_INFO.scriptVersion }
+            generationWindow: clone(snapshot?.generationWindow || null),
+            score: clone(snapshot?.score || null),
+            scoreState: context.scoreState,
+            homeAway: context.homeAway,
+            strengthGap: context.strengthGap,
+            strengthGapBucket: context.strengthGapBucket,
+            presetId: context.presetId,
+            tacticFingerprint: context.tacticFingerprint,
+            tactic: clone(snapshot?.currentTactic || null),
+            stats: compactStats(snapshot),
+            generatorExpectedPerformance: clone(snapshot?.generatorExpectedPerformance || null),
+            completeness: context.completeness,
+            missingFields: context.missingFields.slice()
         };
     }
 
-    function activationRecord(snapshot, state, experiment, activation) {
-        const ts = Date.now();
+    function makePhaseId(gameId, sequence, fingerprint) {
+        let hash = 2166136261;
+        const text = `${gameId}|${sequence}|${fingerprint}`;
+        for (let index = 0; index < text.length; index += 1) {
+            hash ^= text.charCodeAt(index);
+            hash = Math.imul(hash, 16777619);
+        }
+        return `phase|${gameId}|${sequence}|${(hash >>> 0).toString(16)}`;
+    }
+
+    function phaseDelta(start, end) {
+        const diff = (a, b) => a == null || b == null ? null : Number((b - a).toFixed(4));
+        const startStats = start?.stats || {};
+        const endStats = end?.stats || {};
+        const myXG = diff(startStats.my?.xG, endStats.my?.xG);
+        const oppXG = diff(startStats.opponent?.xG, endStats.opponent?.xG);
+        const myShots = diff(startStats.my?.shots, endStats.my?.shots);
+        const oppShots = diff(startStats.opponent?.shots, endStats.opponent?.shots);
         return {
-            ts,
+            myXG,
+            oppXG,
+            xGDifference: myXG == null || oppXG == null ? null : Number((myXG - oppXG).toFixed(4)),
+            myShots,
+            oppShots,
+            shotDifference: myShots == null || oppShots == null ? null : Number((myShots - oppShots).toFixed(4)),
+            myBadActionsPct: diff(startStats.my?.badActionsPct, endStats.my?.badActionsPct),
+            oppBadActionsPct: diff(startStats.opponent?.badActionsPct, endStats.opponent?.badActionsPct),
+            myPower: diff(startStats.my?.power, endStats.my?.power),
+            oppPower: diff(startStats.opponent?.power, endStats.opponent?.power),
+            strengthGap: diff(start?.strengthGap, end?.strengthGap),
+            myDefVector: diff(startStats.my?.defVector, endStats.my?.defVector),
+            oppDefVector: diff(startStats.opponent?.defVector, endStats.opponent?.defVector),
+            myPressVector: diff(startStats.my?.pressVector, endStats.my?.pressVector),
+            oppPressVector: diff(startStats.opponent?.pressVector, endStats.opponent?.pressVector)
+        };
+    }
+
+    function phaseEligibility(phase, endSnapshot) {
+        const startMinute = finite(phase?.start?.minute);
+        const endMinute = finite(endSnapshot?.minute);
+        const duration = startMinute == null || endMinute == null ? null : Math.max(0, endMinute - startMinute);
+        const completeness = Math.min(finite(phase?.start?.completeness) ?? 0, finite(endSnapshot?.completeness) ?? 0);
+        const reasons = [];
+        if (duration == null || duration < MIN_PHASE_MINUTES) reasons.push('phase_too_short');
+        if (completeness < MIN_PHASE_COMPLETENESS) reasons.push('insufficient_completeness');
+        return { durationMinutes: duration, completeness: Number(completeness.toFixed(3)), eligibleForRanking: reasons.length === 0, reasons };
+    }
+
+    function snapshotKeyFor(snapshot) {
+        if (!snapshot) return '';
+        if (typeof SnapshotEngine.buildSnapshotKey === 'function') {
+            try { return String(SnapshotEngine.buildSnapshotKey(snapshot) || ''); } catch (_) {}
+        }
+        const score = snapshot.score || {};
+        return [
+            'match_snapshot',
+            snapshot.gameId || '',
+            snapshot.status || '',
+            snapshot.minute ?? '',
+            snapshot.bucket || '',
+            `${score.home ?? '?'}:${score.away ?? '?'}`,
+            (snapshot.teams || []).join('-')
+        ].join('|');
+    }
+
+    function outboxKey(collection, payload) {
+        return String(payload?.effectKey || payload?.eventKey || payload?.resultKey || payload?.snapshotKey || `${collection}|${payload?.gameId || ''}|${payload?.ts || ''}`);
+    }
+
+    function compactOutboxPayload(collection, payload) {
+        const copy = cloneWithSymbols(payload);
+        if (collection === CONFIG.COLLECTIONS.MATCH_SNAPSHOTS) {
+            delete copy.lineupRows;
+            delete copy.shotsTable;
+            delete copy.eventsText;
+            delete copy.developerHints;
+            if (!copy.source) copy.source = {};
+            copy.source.outboxCompacted = true;
+        }
+        return copy;
+    }
+
+    function queueOutbox(collection, payload, label, error = null) {
+        const gameId = String(payload?.gameId || payload?.telemetryContext?.gameId || resolveGameId());
+        if (!gameId) return;
+        const state = getState(gameId);
+        if (!state) return;
+        const key = outboxKey(collection, payload);
+        const outbox = Array.isArray(state.outbox) ? state.outbox.slice() : [];
+        const existingIndex = outbox.findIndex(item => item?.key === key && item?.collection === collection);
+        const item = {
+            key,
+            collection,
+            label: label || 'telemetry retry',
+            payload: compactOutboxPayload(collection, payload),
+            attempts: existingIndex >= 0 ? Number(outbox[existingIndex].attempts || 0) + 1 : 1,
+            firstQueuedAt: existingIndex >= 0 ? outbox[existingIndex].firstQueuedAt : Date.now(),
+            lastQueuedAt: Date.now(),
+            lastErrorKind: error?.kind || error?.name || 'unknown'
+        };
+        if (existingIndex >= 0) outbox.splice(existingIndex, 1, item);
+        else outbox.push(item);
+        persistState({ outbox: outbox.slice(-OUTBOX_LIMIT) }, { gameId, existing: state });
+    }
+
+    function removeOutboxItem(gameId, collection, key) {
+        const state = getState(gameId);
+        if (!state) return;
+        const outbox = (state.outbox || []).filter(item => !(item?.collection === collection && item?.key === key));
+        if (outbox.length !== (state.outbox || []).length) persistState({ outbox }, { gameId, existing: state });
+    }
+
+    function attachCorrelation(collection, payload) {
+        if (!payload || typeof payload !== 'object') return payload;
+        const gameId = String(payload.gameId || payload.telemetryContext?.gameId || resolveGameId());
+        if (!gameId) return payload;
+        const state = getState(gameId);
+        if (!state) return payload;
+        const snapshot = payload.beforeSnapshot || payload.snapshot || payload.before || payload.after || null;
+        const fallbackPreset = payload.presetName || payload.tacticTelemetry?.currentPreset || null;
+        if (!payload.telemetryContext && snapshot) payload.telemetryContext = telemetryContext(snapshot, fallbackPreset);
+        payload.sessionId = payload.sessionId || state.sessionId || `match-session|${gameId}`;
+
+        if (collection === CONFIG.COLLECTIONS.PRESET_EVENTS) {
+            const eventFingerprint = tacticFingerprint(payload.tactic || snapshot?.currentTactic);
+            let phaseId = state.openPhase?.phaseId || null;
+            if (eventFingerprint && eventFingerprint !== state.openPhase?.tacticFingerprint) {
+                const sequence = Number(state.phaseSequence || 0) + 1;
+                phaseId = makePhaseId(gameId, sequence, eventFingerprint);
+                persistState({
+                    pendingPhaseStart: {
+                        phaseId,
+                        sequence,
+                        tacticFingerprint: eventFingerprint,
+                        presetId: payload.presetName || 'unknown',
+                        source: payload.type === 'manual_change' ? 'manual_change' : 'preset_apply'
+                    }
+                }, { gameId, existing: state });
+            }
+            payload.phaseId = payload.phaseId || phaseId;
+        }
+        if (collection === CONFIG.COLLECTIONS.PRESET_EFFECTS) {
+            payload.phaseId = payload.phaseId || state.openPhase?.phaseId || state.lastClosedPhaseId || null;
+        }
+        return payload;
+    }
+
+    function compactTelemetryEnvelope(value) {
+        if (!value || typeof value !== 'object') return null;
+        return {
+            schema: value.schema || null,
+            libraryVersion: value.libraryVersion || null,
+            recommendationSchema: value.recommendationSchema || null,
+            riskAppetite: value.riskAppetite || null,
+            currentPreset: value.currentPreset || null,
+            currentTacticFingerprint: value.currentTacticFingerprint || null,
+            initialPreset: value.initialPreset || null,
+            transitionCount: Number(value.transitionCount || 0),
+            latestDecision: clone(value.latestDecision || null)
+        };
+    }
+
+    function compactTransportRecord(collection, payload) {
+        if (!payload || typeof payload !== 'object') return payload;
+        attachCorrelation(collection, payload);
+        if (collection === CONFIG.COLLECTIONS.PRESET_EVENTS) {
+            const copy = cloneWithSymbols(payload);
+            const snapshot = payload.beforeSnapshot || payload.snapshot || null;
+            copy.schemaVersion = Math.max(4, Number(copy.schemaVersion || 0));
+            copy.parserVersion = copy.type === 'tactical_phase_start' ? 'tactical_phase_start_v4' : 'preset_event_phase_link_v4';
+            copy.phaseStart = snapshot ? compactSnapshot(snapshot, copy.presetName || null) : copy.phaseStart || null;
+            copy.tacticTelemetry = compactTelemetryEnvelope(payload.tacticTelemetry);
+            delete copy.beforeSnapshot;
+            delete copy.snapshot;
+            return copy;
+        }
+        if (collection === CONFIG.COLLECTIONS.PRESET_EFFECTS) {
+            const copy = cloneWithSymbols(payload);
+            copy.schemaVersion = Math.max(4, Number(copy.schemaVersion || 0));
+            copy.parserVersion = copy.eventType === 'tactical_phase' ? 'tactical_phase_effect_v4' : 'preset_effect_phase_link_v4';
+            copy.phaseStart = copy.phaseStart || (payload.before ? compactSnapshot(payload.before, copy.presetName || null) : null);
+            copy.phaseEnd = copy.phaseEnd || (payload.after ? compactSnapshot(payload.after, copy.presetName || null) : null);
+            copy.tacticTelemetry = compactTelemetryEnvelope(payload.tacticTelemetry);
+            delete copy.before;
+            delete copy.after;
+            return copy;
+        }
+        return payload;
+    }
+
+    Api.postAppend = function postAppendWithTelemetryOutbox(collection, payload, label) {
+        const tracked = [
+            CONFIG.COLLECTIONS.MATCH_SNAPSHOTS,
+            CONFIG.COLLECTIONS.MATCH_RESULTS,
+            CONFIG.COLLECTIONS.PRESET_EVENTS,
+            CONFIG.COLLECTIONS.PRESET_EFFECTS
+        ].filter(Boolean);
+        if (!tracked.includes(collection)) return postAppendBeforeV2(collection, payload, label);
+        const transportPayload = compactTransportRecord(collection, payload);
+        const gameId = String(transportPayload?.gameId || transportPayload?.telemetryContext?.gameId || resolveGameId());
+        const key = outboxKey(collection, transportPayload);
+        return postAppendBeforeV2(collection, transportPayload, label).then(result => {
+            if (gameId) removeOutboxItem(gameId, collection, key);
+            return result;
+        }).catch(error => {
+            queueOutbox(collection, transportPayload, label, error);
+            throw error;
+        });
+    };
+
+    if (sendSnapshotBeforeV2) {
+        SnapshotEngine.sendSnapshot = function sendSnapshotWithTelemetryDedup(snapshot) {
+            if (!snapshot?.gameId || !snapshot?.myTeam || snapshot.matchOwnership === 'foreign') {
+                return sendSnapshotBeforeV2(snapshot);
+            }
+            const gameId = String(snapshot.gameId);
+            const key = snapshotKeyFor(snapshot);
+            const state = getState(gameId);
+            if (key && (state?.lastSnapshotKey === key || snapshotReservations.has(key))) {
+                return Promise.resolve({ status: 208, deduplicated: true, snapshotKey: key });
+            }
+            if (snapshot.generatorVersion && snapshot.telemetryContext?.generatorVersion === 'unknown') {
+                snapshot.telemetryContext = telemetryContext(snapshot, state?.openPhase?.presetId || null);
+            }
+            if (key) snapshotReservations.add(key);
+            return Promise.resolve(sendSnapshotBeforeV2(snapshot)).then(result => {
+                if (key) {
+                    persistState({
+                        lastSnapshotKey: key,
+                        lastAutoSnapshotWindow: String(snapshot?.generationWindow?.index ?? snapshot?.bucket ?? 'unknown'),
+                        lastObservedScoreState: scoreState(snapshot),
+                        lastObservedTacticFingerprint: tacticFingerprint(snapshot.currentTactic)
+                    }, { gameId, existing: getState(gameId) });
+                }
+                return result;
+            }).catch(error => {
+                const updated = getState(gameId);
+                if (key && updated?.outbox?.some(item => item.collection === CONFIG.COLLECTIONS.MATCH_SNAPSHOTS && item.key === key)) {
+                    persistState({ lastSnapshotKey: key }, { gameId, existing: updated });
+                }
+                throw error;
+            }).finally(() => {
+                if (key) snapshotReservations.delete(key);
+            });
+        };
+    }
+
+    async function flushOutbox(gameId = null) {
+        gameId = resolveGameId(gameId);
+        const state = getState(gameId);
+        if (!state?.outbox?.length) return { attempted: 0, delivered: 0 };
+        let delivered = 0;
+        const pending = state.outbox.slice();
+        for (const item of pending) {
+            try {
+                await postAppendBeforeV2(item.collection, item.payload, item.label || 'telemetry retry');
+                removeOutboxItem(gameId, item.collection, item.key);
+                delivered += 1;
+            } catch (error) {
+                queueOutbox(item.collection, item.payload, item.label, error);
+                break;
+            }
+        }
+        return { attempted: pending.length, delivered };
+    }
+
+    function phaseStartEvent(phase, snapshot) {
+        return {
+            ts: Date.now(),
             recordType: 'preset_event',
             schemaVersion: 4,
-            parserVersion: 'tactical_lab_v1_activation',
-            eventKey: activation.eventKey,
-            type: 'tactical_lab_activation',
-            gameId: state.gameId,
-            minute: activation.startedAtMinute,
-            bucket: snapshot?.bucket || null,
-            presetName: experiment.experimentId,
-            tactic: clone(experiment.controls),
-            ruleDecision: EventTracker.compactRuleDecision(snapshot?.ruleDecision || STATE.lastRuleDecision || null),
-            tacticTelemetry: snapshot?.tacticTelemetry || null,
-            tacticalLab: {
-                schema: 'slf_tactical_lab_activation_v1',
-                assignmentId: state.assignment.assignmentId,
-                activationId: activation.activationId,
-                experimentId: experiment.experimentId,
-                populationVersion: POPULATION_VERSION,
-                generation: experiment.generation,
-                genomeVersion: GENOME_VERSION,
-                genomeFingerprint: experiment.genomeFingerprint,
-                tacticFingerprint: experiment.tacticFingerprint,
-                origin: experiment.origin,
-                parentExperimentId: experiment.parentExperimentId,
-                mutationDistance: experiment.mutationDistance,
-                formation: clone(experiment.formation),
-                blind: true,
-                entryContext: clone(activation.entryContext)
-            },
-            source: { page:'game', trigger:'tactical_lab_apply', collectedAt:ts, scriptVersion:SLF_VERSION_INFO.scriptVersion }
+            parserVersion: 'tactical_phase_start_v4',
+            eventKey: `tactical_phase_event|${phase.gameId}|${phase.phaseId}`,
+            type: 'tactical_phase_start',
+            eventType: 'tactical_phase_start',
+            gameId: phase.gameId,
+            sessionId: phase.sessionId,
+            phaseId: phase.phaseId,
+            phaseSequence: phase.sequence,
+            minute: phase.start.minute,
+            bucket: phase.start.bucket,
+            presetName: phase.presetId,
+            tactic: clone(phase.tactic),
+            tacticFingerprint: phase.tacticFingerprint,
+            transitionSource: phase.source,
+            telemetryContext: telemetryContext(snapshot, phase.presetId),
+            phaseStart: clone(phase.start),
+            source: {
+                page: 'game',
+                trigger: 'tactical_phase_start',
+                collectedAt: Date.now(),
+                scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown'
+            }
         };
     }
 
-    function effectRecord(snapshot, state, experiment, activation, reason, nextContext) {
-        const ts = Date.now();
-        const exitContext = buildContext(snapshot);
-        exitContext.next = {
-            presetId: nextContext?.nextPresetId || exitContext.previous?.presetId || null,
-            tacticSource: nextContext?.nextTacticSource || 'unknown',
-            tacticFingerprint: nextContext?.nextTacticFingerprint || exitContext.previous?.tacticFingerprint || null
+    function startPhase(snapshot, source = 'snapshot_observation') {
+        const gameId = String(snapshot?.gameId || resolveGameId());
+        if (!gameId || !snapshot?.currentTactic) return null;
+        const state = getState(gameId);
+        if (!state) return null;
+        const fingerprint = tacticFingerprint(snapshot.currentTactic);
+        if (!fingerprint) return null;
+        const pending = state.pendingPhaseStart;
+        const sequence = pending?.tacticFingerprint === fingerprint
+            ? Number(pending.sequence || Number(state.phaseSequence || 0) + 1)
+            : Number(state.phaseSequence || 0) + 1;
+        const presetId = canonicalPresetId(snapshot, pending?.tacticFingerprint === fingerprint ? pending.presetId : null);
+        const phaseId = pending?.tacticFingerprint === fingerprint && pending?.phaseId
+            ? pending.phaseId
+            : makePhaseId(gameId, sequence, fingerprint);
+        const phase = {
+            schema: 'slf_tactical_phase_v1',
+            gameId,
+            sessionId: state.sessionId || `match-session|${gameId}`,
+            phaseId,
+            sequence,
+            presetId,
+            tacticFingerprint: fingerprint,
+            tactic: clone(snapshot.currentTactic),
+            source: pending?.tacticFingerprint === fingerprint ? pending.source || source : source,
+            startedAt: Date.now(),
+            start: compactSnapshot(snapshot, presetId)
         };
-        const endMinute = Number.isFinite(Number(snapshot?.minute)) ? Number(snapshot.minute) : null;
-        const duration = activation.startedAtMinute != null && endMinute != null ? Math.max(0, endMinute - activation.startedAtMinute) : null;
+        persistState({
+            phaseSequence: sequence,
+            openPhase: phase,
+            pendingPhaseStart: null,
+            lastObservedTacticFingerprint: fingerprint,
+            lastObservedScoreState: scoreState(snapshot)
+        }, { gameId, existing: state });
+        void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, phaseStartEvent(phase, snapshot), 'tactical phase start').catch(() => {});
+        return phase;
+    }
+
+    function buildPhaseEffect(phase, snapshot, reason) {
+        const end = compactSnapshot(snapshot, phase.presetId);
+        const eligibility = phaseEligibility(phase, end);
         return {
-            ts,
+            ts: Date.now(),
             recordType: 'preset_effect',
             schemaVersion: 4,
-            parserVersion: 'tactical_lab_v1_effect',
-            effectKey: `tactical_lab_effect|${state.gameId}|${state.assignment.assignmentId}`,
-            gameId: state.gameId,
-            presetName: experiment.experimentId,
-            eventType: 'tactical_lab',
-            fromMinute: activation.startedAtMinute,
-            toMinute: endMinute,
-            fromBucket: activation.entryContext?.bucket || null,
-            toBucket: snapshot?.bucket || null,
+            parserVersion: 'tactical_phase_effect_v4',
+            effectKey: `tactical_phase_effect|${phase.gameId}|${phase.phaseId}`,
+            eventType: 'tactical_phase',
+            gameId: phase.gameId,
+            sessionId: phase.sessionId,
+            phaseId: phase.phaseId,
+            phaseSequence: phase.sequence,
+            presetName: phase.presetId,
             tacticContext: {
-                appliedPreset: experiment.experimentId,
-                appliedTactic: clone(experiment.controls),
-                currentTacticAfter: clone(snapshot?.currentTactic || null)
+                appliedPreset: phase.presetId,
+                appliedTactic: clone(phase.tactic),
+                tacticFingerprint: phase.tacticFingerprint,
+                transitionSource: phase.source,
+                closeReason: reason
             },
-            decisionContext: clone(activation.entryContext?.productionRecommendation || null),
-            tacticTelemetry: snapshot?.tacticTelemetry || null,
-            delta: metricDelta(activation.baselineMetrics || {}, buildMetrics(snapshot)),
-            tacticalLab: {
-                schema: 'slf_tactical_lab_effect_v1',
-                assignmentId: state.assignment.assignmentId,
-                activationId: activation.activationId,
-                experimentId: experiment.experimentId,
-                populationVersion: POPULATION_VERSION,
-                genomeVersion: GENOME_VERSION,
-                genomeFingerprint: experiment.genomeFingerprint,
-                tacticFingerprint: experiment.tacticFingerprint,
-                entryContext: clone(activation.entryContext),
-                exitContext,
-                exitReason: reason,
-                durationMinutes: duration,
-                completed: reason === 'match_finished'
-            },
-            source: { page:'game', trigger:'tactical_lab_exit', collectedAt:ts, scriptVersion:SLF_VERSION_INFO.scriptVersion }
+            telemetryContext: telemetryContext(snapshot, phase.presetId),
+            phaseStart: clone(phase.start),
+            phaseEnd: end,
+            fromMinute: phase.start.minute,
+            toMinute: end.minute,
+            fromBucket: phase.start.bucket,
+            toBucket: end.bucket,
+            delta: phaseDelta(phase.start, end),
+            eligibility,
+            source: {
+                page: 'game',
+                trigger: `tactical_phase_close:${reason}`,
+                collectedAt: Date.now(),
+                scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown'
+            }
         };
     }
 
-    async function ensureAssignment(snapshot = null) {
-        snapshot = snapshot || SnapshotEngine.build();
-        if (!isOwned(snapshot) || snapshot.status === 'finished') return null;
-        const gameId = getGameId(snapshot);
-        const state = loadState(gameId);
-        if (!state.assignment || state.assignment.populationVersion !== POPULATION_VERSION || !populationById.has(state.assignment.experimentId)) {
-            state.assignment = buildAssignment(gameId);
-            state.assignmentRecorded = false;
-            state.activation = null;
-            state.completed = null;
-            state.lastError = null;
-        }
-        if (!state.assignmentRecorded) {
-            state.assignmentRecorded = true;
-            persistState(state);
-            const experiment = populationById.get(state.assignment.experimentId);
-            queueRecord(state, CONFIG.COLLECTIONS.PRESET_EVENTS, assignmentRecord(snapshot, state, experiment), 'tactical lab assignment');
-        } else {
-            persistState(state);
-            void flushOutbox(state);
-        }
-        return state;
-    }
-
-    async function activate() {
-        const snapshot = SnapshotEngine.build();
-        if (!isOwned(snapshot) || snapshot.status === 'finished') return { ok:false, reason:'Матч недоступен для Tactical Lab.' };
-        const state = await ensureAssignment(snapshot);
-        if (!state?.assignment) return { ok:false, reason:'Эксперимент ещё не назначен.' };
-        if (state.activation || state.completed) return { ok:false, reason:'Эксперимент уже использован в этом матче.' };
-        const experiment = populationById.get(state.assignment.experimentId);
-        const bridge = STATE.tacticControlBridge;
-        if (!experiment || !bridge) return { ok:false, reason:'Механизм применения тактики ещё не готов.' };
-        const formationReady = bridge.validateFormation?.(experiment.formation);
-        if (!formationReady?.ok) return { ok:false, reason:formationReady?.reason || 'Расстановка недоступна.' };
-
-        state.lastError = null;
-        persistState(state);
-        const entryContext = buildContext(snapshot);
-        const baselineMetrics = buildMetrics(snapshot);
-        const controls = await bridge.applyTacticObject(experiment.controls, {
-            source: `tactical_lab:${experiment.experimentId}`,
-            strict: true
-        });
-        if (!controls?.ok) {
-            state.lastError = `Не удалось применить controls: ${(controls?.failures || []).concat(controls?.mismatches || []).join(', ') || 'unknown'}`;
-            persistState(state);
-            renderUI();
-            return { ok:false, reason:state.lastError };
-        }
-        const formation = bridge.applyFormation(experiment.formation);
-        if (!formation?.ok) {
-            state.lastError = formation?.reason || 'Не удалось применить экспериментальную расстановку.';
-            persistState(state);
-            renderUI();
-            return { ok:false, reason:state.lastError };
-        }
-        const save = bridge.saveLiveLineup();
-        if (!save?.ok) {
-            state.lastError = save?.reason || 'Не удалось сохранить экспериментальную расстановку.';
-            persistState(state);
-            renderUI();
-            return { ok:false, reason:state.lastError };
-        }
-        if (!bridge.formationMatches(experiment.formation)) {
-            state.lastError = 'После сохранения расстановка не совпала с experimental genome.';
-            persistState(state);
-            renderUI();
-            return { ok:false, reason:state.lastError };
-        }
-
-        STATE.tacticTransitionSourceHint = { source:'tactical_lab', expiresAt:Date.now() + 10 * 60 * 1000 };
-        const after = SnapshotEngine.build();
-        const activationId = `tactical_lab_activation|${state.gameId}|${state.assignment.assignmentId}`;
-        state.activation = {
-            status: 'active',
-            activationId,
-            eventKey: `tactical_lab_activation_event|${state.gameId}|${state.assignment.assignmentId}`,
-            experimentId: experiment.experimentId,
-            startedAtTs: Date.now(),
-            startedAtMinute: Number.isFinite(Number(snapshot.minute)) ? Number(snapshot.minute) : null,
-            entryContext,
-            baselineMetrics
-        };
-        persistState(state);
-        queueRecord(state, CONFIG.COLLECTIONS.PRESET_EVENTS, activationRecord(after, state, experiment, state.activation), 'tactical lab activation');
-        renderUI();
-        return { ok:true, experimentId:experiment.experimentId };
-    }
-
-    async function closeActive(reason, snapshot = null, nextContext = {}) {
-        snapshot = snapshot || SnapshotEngine.build();
-        const gameId = getGameId(snapshot);
-        const state = loadState(gameId);
-        const activation = state?.activation;
-        if (!activation || activation.status !== 'active') return null;
-        const experiment = populationById.get(activation.experimentId || state.assignment?.experimentId);
-        if (!experiment) return null;
-        activation.status = 'closing';
-        persistState(state);
-        const effect = effectRecord(snapshot, state, experiment, activation, reason || 'tactic_changed', nextContext || {});
-        queueRecord(state, CONFIG.COLLECTIONS.PRESET_EFFECTS, effect, 'tactical lab effect');
-        state.completed = {
-            experimentId: experiment.experimentId,
-            activationId: activation.activationId,
-            fromMinute: activation.startedAtMinute,
-            toMinute: effect.toMinute,
-            durationMinutes: effect.tacticalLab?.durationMinutes ?? null,
-            exitReason: effect.tacticalLab?.exitReason || reason || 'tactic_changed',
-            effectKey: effect.effectKey,
-            completedAt: Date.now()
-        };
-        state.activation = null;
-        persistState(state);
-        renderUI();
+    function closePhase(snapshot, reason = 'tactic_change') {
+        const gameId = String(snapshot?.gameId || resolveGameId());
+        const state = getState(gameId);
+        const phase = state?.openPhase || null;
+        if (!state || !phase) return null;
+        const effect = buildPhaseEffect(phase, snapshot, reason);
+        persistState({ openPhase: null, lastClosedPhaseId: phase.phaseId }, { gameId, existing: state });
+        void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EFFECTS, effect, 'tactical phase effect').catch(() => {});
         return effect;
     }
 
-    function isActive() {
-        const gameId = String(MatchStateParser.getGameId() || '');
-        return !!loadState(gameId)?.activation && loadState(gameId)?.activation?.status === 'active';
-    }
+    function reconcilePhase(snapshot) {
+        if (!snapshot?.gameId || !snapshot?.myTeam || snapshot.matchOwnership === 'foreign') return { changed: false, phase: null };
+        const gameId = String(snapshot.gameId);
+        let state = getState(gameId);
+        if (!state) return { changed: false, phase: null };
+        const fingerprint = tacticFingerprint(snapshot.currentTactic);
+        let changed = false;
+        let phase = state.openPhase || null;
 
-    function assignedExperiment(state) {
-        return populationById.get(state?.assignment?.experimentId || '') || null;
-    }
-
-    function productionRecommendationText() {
-        const node = document.getElementById('slf-parser-recommendation');
-        return String(node?.textContent || '').trim();
-    }
-
-    function renderUI() {
-        const panel = document.getElementById(PANEL_ID);
-        if (!panel) return;
-        const gameId = String(MatchStateParser.getGameId() || '');
-        const state = loadState(gameId);
-        const experiment = assignedExperiment(state);
-        const status = document.getElementById(STATUS_ID);
-        const detail = document.getElementById(DETAIL_ID);
-        const button = document.getElementById(BUTTON_ID);
-        if (!status || !detail || !button || !experiment) return;
-
-        panel.dataset.experimentId = experiment.experimentId;
-        panel.dataset.populationVersion = POPULATION_VERSION;
-        const shortId = experiment.experimentId.replace('EXP-561-P01-', 'EXP-');
-        if (state.activation?.status === 'active') {
-            const start = state.activation.startedAtMinute;
-            let exposure = null;
-            try {
-                const current = SnapshotEngine.build();
-                exposure = start != null && Number.isFinite(Number(current?.minute)) ? Math.max(0, Number(current.minute) - Number(start)) : null;
-            } catch (_) {}
-            status.textContent = `● ${shortId} ACTIVE${start != null ? ` · с ${start}'` : ''}${exposure != null ? ` · exposure ${exposure}m` : ''}`;
-            status.style.color = '#43f58c';
-            const recommendation = productionRecommendationText();
-            detail.textContent = recommendation ? `Production Advisor остаётся активным: ${recommendation}` : 'Production Advisor продолжает работать параллельно.';
-            button.disabled = true;
-            button.textContent = 'Эксперимент активен';
-            return;
+        if (snapshot.status === 'finished') {
+            if (phase) {
+                closePhase(snapshot, 'match_finished');
+                changed = true;
+            }
+            return { changed, phase: null };
         }
-        if (state.completed) {
-            status.textContent = `${shortId} протестирован`;
-            status.style.color = '#aeb6cf';
-            detail.textContent = `${state.completed.fromMinute ?? '?'}' → ${state.completed.toMinute ?? '?'}' · exposure ${state.completed.durationMinutes ?? '?'}m · ${state.completed.exitReason}`;
-            button.disabled = true;
-            button.textContent = 'Тест завершён';
-            return;
+
+        if (!fingerprint) return { changed: false, phase };
+        if (!phase) {
+            phase = startPhase(snapshot, 'initial_observation');
+            changed = !!phase;
+        } else if (phase.tacticFingerprint !== fingerprint) {
+            closePhase(snapshot, 'tactic_change');
+            phase = startPhase(snapshot, 'tactic_change');
+            changed = true;
+        } else {
+            const currentPreset = canonicalPresetId(snapshot, phase.presetId);
+            if (phase.presetId === 'unknown' && currentPreset !== 'unknown') {
+                phase.presetId = currentPreset;
+                persistState({ openPhase: phase }, { gameId, existing: getState(gameId) });
+            }
         }
-        status.textContent = `${shortId} · blind challenger · Population ${POPULATION_CODE}`;
-        status.style.color = '#ffd76a';
-        detail.textContent = state.lastError || 'Параметры и схема скрыты до окончания матча. Один клик применит controls + formation и сохранит расстановку.';
-        const ready = STATE.tacticControlBridge?.validateFormation?.(experiment.formation)?.ok;
-        button.disabled = !ready;
-        button.textContent = ready ? 'Применить эксперимент' : 'Поле загружается…';
+        state = getState(gameId);
+        return { changed, phase: state?.openPhase || phase };
     }
 
-    async function mountUI() {
+    function maybeScheduleAutoCapture(snapshot, phaseChanged) {
+        if (!snapshot?.gameId || !snapshot?.myTeam || snapshot.matchOwnership === 'foreign') return;
+        const state = getState(snapshot.gameId);
+        if (!state) return;
+        const windowKey = String(snapshot?.generationWindow?.index ?? snapshot?.bucket ?? 'unknown');
+        const stateNow = scoreState(snapshot);
+        const fingerprint = tacticFingerprint(snapshot.currentTactic);
+        const key = snapshotKeyFor(snapshot);
+        let trigger = null;
+        if (snapshot.status === 'finished') trigger = 'finished';
+        else if (!state.lastSnapshotKey) trigger = 'initial';
+        else if (phaseChanged || (fingerprint && fingerprint !== state.lastObservedTacticFingerprint)) trigger = 'tactic_change';
+        else if (state.lastObservedScoreState && stateNow !== 'unknown' && stateNow !== state.lastObservedScoreState) trigger = 'score_state_change';
+        else if (state.lastAutoSnapshotWindow && windowKey !== state.lastAutoSnapshotWindow) trigger = 'generation_window';
+
+        persistState({
+            lastObservedScoreState: stateNow,
+            lastObservedTacticFingerprint: fingerprint || state.lastObservedTacticFingerprint
+        }, { gameId: snapshot.gameId, existing: getState(snapshot.gameId) });
+
+        if (!trigger || (key && snapshotReservations.has(key))) return;
+        if (key) snapshotReservations.add(key);
+        setTimeout(() => {
+            void captureSnapshot(snapshot, trigger).catch(() => {}).finally(() => {
+                if (key) snapshotReservations.delete(key);
+            });
+        }, 0);
+    }
+
+    SnapshotEngine.build = function buildWithTacticalPhaseV2() {
+        const snapshot = buildBeforeV2();
+        if (!snapshot || !location.pathname.includes('/game.php')) return snapshot;
+        if (!snapshot.myTeam || snapshot.matchOwnership === 'foreign') return snapshot;
+        const phaseResult = reconcilePhase(snapshot);
+        const state = getState(snapshot.gameId);
+        const context = telemetryContext(snapshot, state?.openPhase?.presetId || null);
+        snapshot.telemetryContext = context;
+        snapshot.tacticalPhase = state?.openPhase ? {
+            schema: 'slf_tactical_phase_ref_v1',
+            sessionId: state.openPhase.sessionId,
+            phaseId: state.openPhase.phaseId,
+            sequence: state.openPhase.sequence,
+            presetId: state.openPhase.presetId,
+            tacticFingerprint: state.openPhase.tacticFingerprint,
+            startedAt: state.openPhase.startedAt
+        } : null;
+        maybeScheduleAutoCapture(snapshot, phaseResult.changed);
+        return snapshot;
+    };
+
+    async function captureSnapshot(snapshot, trigger) {
+        if (!snapshot?.gameId || !snapshot?.myTeam || snapshot.matchOwnership === 'foreign') return null;
+        const state = getState(snapshot.gameId);
+        if (!state) return null;
+        if (snapshot.status === 'finished') return captureFinishedResult(snapshot, trigger);
+        const record = SnapshotEngine.buildSnapshotRecord(snapshot);
+        record.telemetryContext = record.telemetryContext || telemetryContext(snapshot, state.openPhase?.presetId || null);
+        record.tacticalPhase = clone(snapshot.tacticalPhase || null);
+        record.source = Object.assign({}, record.source || {}, {
+            trigger: `auto_telemetry_v2:${trigger}`,
+            automatic: true,
+            playerObservationsIncluded: false
+        });
+        const windowKey = String(snapshot?.generationWindow?.index ?? snapshot?.bucket ?? 'unknown');
+        const key = record.snapshotKey || snapshotKeyFor(snapshot) || `${snapshot.gameId}|${snapshot.minute}|${snapshot.bucket}`;
+        try {
+            await Api.postAppend(CONFIG.COLLECTIONS.MATCH_SNAPSHOTS, record, 'automatic tactical snapshot');
+            persistState({
+                lastSnapshotKey: key,
+                lastAutoSnapshotWindow: windowKey,
+                lastObservedScoreState: scoreState(snapshot),
+                lastObservedTacticFingerprint: tacticFingerprint(snapshot.currentTactic)
+            }, { gameId: snapshot.gameId, existing: getState(snapshot.gameId) });
+            return record;
+        } catch (error) {
+            const updated = getState(snapshot.gameId);
+            if (updated?.outbox?.some(item => item.collection === CONFIG.COLLECTIONS.MATCH_SNAPSHOTS && item.key === key)) {
+                persistState({
+                    lastSnapshotKey: key,
+                    lastAutoSnapshotWindow: windowKey,
+                    lastObservedScoreState: scoreState(snapshot),
+                    lastObservedTacticFingerprint: tacticFingerprint(snapshot.currentTactic)
+                }, { gameId: snapshot.gameId, existing: updated });
+            }
+            throw error;
+        }
+    }
+
+    async function captureFinishedResult(snapshot, trigger = 'finished') {
+        if (!snapshot?.gameId || !snapshot?.myTeam || snapshot.matchOwnership === 'foreign' || snapshot.status !== 'finished') return null;
+        const state = getState(snapshot.gameId);
+        if (!state) return null;
+        const resultKey = SnapshotEngine.buildResultKey ? SnapshotEngine.buildResultKey(snapshot) : `match_result|${snapshot.gameId}|finished`;
+        if (state.lastResultKey === resultKey || resultReservations.has(resultKey)) return null;
+        resultReservations.add(resultKey);
+        try {
+            const result = await SnapshotEngine.sendMatchResult(snapshot);
+            persistState({ lastResultKey: resultKey }, { gameId: snapshot.gameId, existing: getState(snapshot.gameId) });
+            return result;
+        } catch (error) {
+            const updated = getState(snapshot.gameId);
+            if (updated?.outbox?.some(item => item.key === resultKey)) {
+                persistState({ lastResultKey: resultKey }, { gameId: snapshot.gameId, existing: updated });
+            }
+            throw error;
+        } finally {
+            resultReservations.delete(resultKey);
+        }
+    }
+
+    applyPresetAsync = async function applyPresetWithTacticalPhaseV2() {
+        const result = await applyPresetBeforeV2.apply(this, arguments);
+        if (result && location.pathname.includes('/game.php')) {
+            setTimeout(() => {
+                try { SnapshotEngine.build(); } catch (_) {}
+            }, 0);
+        }
+        return result;
+    };
+
+    async function pollAutomaticTelemetry() {
         if (!location.pathname.includes('/game.php')) return false;
         let snapshot;
         try { snapshot = SnapshotEngine.build(); } catch (_) { return false; }
-        if (!isOwned(snapshot)) return false;
-        let state = loadState(getGameId(snapshot));
-        if (snapshot.status !== 'finished') state = await ensureAssignment(snapshot);
-        if (!state?.assignment) return false;
-
-        let panel = document.getElementById(PANEL_ID);
-        if (!panel) {
-            const anchor = document.getElementById('slf-live-lineup-preset-panel')
-                || document.getElementById('slf-match-parser-panel')
-                || document.querySelector('.control_field_1');
-            if (!anchor?.parentNode) return false;
-            panel = document.createElement('section');
-            panel.id = PANEL_ID;
-            panel.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;margin:0 0 10px;padding:9px 10px;box-sizing:border-box;background:#171b29;border:1px solid #6f5c20;border-radius:10px;color:#eef1f8;font-family:Arial,sans-serif;font-size:12px;';
-            const title = document.createElement('strong');
-            title.textContent = 'Tactical Lab';
-            title.style.cssText = 'color:#ffd76a;white-space:nowrap;';
-            const status = document.createElement('span');
-            status.id = STATUS_ID;
-            status.style.cssText = 'font-weight:600;';
-            const button = document.createElement('button');
-            button.id = BUTTON_ID;
-            button.type = 'button';
-            button.textContent = 'Применить эксперимент';
-            button.style.cssText = 'padding:6px 10px;border:1px solid #8b7328;border-radius:8px;background:#2b2718;color:#ffe18a;cursor:pointer;font-weight:600;';
-            button.addEventListener('click', async () => {
-                if (button.disabled) return;
-                button.disabled = true;
-                button.textContent = 'Применяю…';
-                const result = await activate();
-                if (!result?.ok) {
-                    const currentState = loadState(String(MatchStateParser.getGameId() || ''));
-                    currentState.lastError = result?.reason || currentState.lastError || 'Не удалось применить эксперимент.';
-                    persistState(currentState);
-                }
-                renderUI();
-            });
-            const detail = document.createElement('span');
-            detail.id = DETAIL_ID;
-            detail.style.cssText = 'flex:1 1 100%;color:#aeb6cf;font-size:10px;line-height:1.3;';
-            panel.append(title, status, button, detail);
-            anchor.parentNode.insertBefore(panel, anchor.nextSibling);
+        if (!snapshot?.myTeam || snapshot.matchOwnership === 'foreign') return false;
+        if (snapshot.status === 'finished') {
+            try { await captureFinishedResult(snapshot, 'poll_finished'); } catch (_) {}
+            return true;
         }
-        renderUI();
+        try { await flushOutbox(snapshot.gameId); } catch (_) {}
         return true;
     }
 
-    async function monitor() {
+    function scheduleAutomaticTelemetry() {
         if (!location.pathname.includes('/game.php')) return;
-        await mountUI();
-        const gameId = String(MatchStateParser.getGameId() || '');
-        const state = loadState(gameId);
-        if (state?.outbox?.length) void flushOutbox(state);
-        if (!state?.activation || state.activation.status !== 'active') {
-            renderUI();
-            return;
-        }
-        let snapshot;
-        try { snapshot = SnapshotEngine.build(); } catch (_) { return; }
-        if (snapshot.status === 'finished') {
-            await closeActive('match_finished', snapshot, { nextTacticSource:'finished' });
-            return;
-        }
-        const experiment = assignedExperiment(state);
-        if (!experiment) return;
-        const actualFingerprint = tacticFingerprint(getCurrentTactic());
-        if (actualFingerprint !== experiment.tacticFingerprint && (!STATE.suppressManualWatcherUntil || Date.now() >= STATE.suppressManualWatcherUntil)) {
-            await closeActive('tactic_changed', snapshot, { nextTacticSource:'manual', nextTacticFingerprint:actualFingerprint });
-            return;
-        }
-        if (STATE.tacticControlBridge?.formationMatches && !STATE.tacticControlBridge.formationMatches(experiment.formation)) {
-            await closeActive('formation_changed', snapshot, { nextTacticSource:'manual_formation' });
-            return;
-        }
-        renderUI();
+        let attempts = 0;
+        const bootstrap = setInterval(() => {
+            attempts += 1;
+            void pollAutomaticTelemetry().then(started => {
+                if (!started && attempts < 120 && location.pathname.includes('/game.php')) return;
+                clearInterval(bootstrap);
+                if (!started || !location.pathname.includes('/game.php')) return;
+                if (STATE.telemetryV2PollTimer) clearInterval(STATE.telemetryV2PollTimer);
+                STATE.telemetryV2PollTimer = setInterval(() => { void pollAutomaticTelemetry(); }, AUTO_POLL_MS);
+            });
+        }, 1000);
+        void pollAutomaticTelemetry().then(started => {
+            if (!started) return;
+            clearInterval(bootstrap);
+            if (STATE.telemetryV2PollTimer) clearInterval(STATE.telemetryV2PollTimer);
+            STATE.telemetryV2PollTimer = setInterval(() => { void pollAutomaticTelemetry(); }, AUTO_POLL_MS);
+        });
     }
 
-    const guardedSendResult = SnapshotEngine.sendMatchResult.bind(SnapshotEngine);
-    SnapshotEngine.sendMatchResult = function sendMatchResultWithTacticalLab(snapshot) {
-        const close = isActive() ? closeActive('match_finished', snapshot, { nextTacticSource:'finished' }) : Promise.resolve(null);
-        return Promise.resolve(close).then(() => guardedSendResult(snapshot));
+    SnapshotEngine.telemetryV2 = {
+        schema: 'slf_tactical_telemetry_runtime_v2',
+        stateSchema: STATE_SCHEMA,
+        tacticFingerprint,
+        scoreState,
+        telemetryContext,
+        compactSnapshot,
+        reconcilePhase,
+        closePhase,
+        captureSnapshot,
+        captureFinishedResult,
+        flushOutbox,
+        getState
     };
 
-    const TacticalLabRuntime = {
-        schema: 'slf_tactical_lab_runtime_v1',
-        populationVersion: POPULATION_VERSION,
-        populationSize: POPULATION_SIZE,
-        getPopulation() { return clone(population); },
-        getAssignment(gameId) { return clone(loadState(String(gameId || MatchStateParser.getGameId() || ''))?.assignment || null); },
-        assignForGame(gameId) { return clone(buildAssignment(String(gameId || ''))); },
-        ensureAssignment,
-        activate,
-        closeActive,
-        isActive,
-        mountUI,
-        flushOutbox() {
-            const state = loadState(String(MatchStateParser.getGameId() || ''));
-            return flushOutbox(state);
-        }
-    };
-    STATE.tacticalLabRuntime = TacticalLabRuntime;
-
-    const start = () => {
-        void monitor();
-        if (!uiTimer) uiTimer = setInterval(() => { void monitor(); }, 1000);
-    };
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once:true });
-    else setTimeout(start, 0);
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scheduleAutomaticTelemetry, { once: true });
+    else scheduleAutomaticTelemetry();
 })();
+
+// ============================================================
