@@ -1,0 +1,95 @@
+{
+  "schema": "slf_tactical_lab_contract_v1",
+  "status": "active",
+  "purpose": "Black-box tactical experimentation beside, never inside, the Production Advisor.",
+  "evidenceModel": {
+    "groundTruth": "real_match_telemetry",
+    "ragRole": "seed_and_prior_only",
+    "generatorKnowledgeRole": "seed_and_prior_only",
+    "engineAssumption": "unknown_and_may_change"
+  },
+  "productionBoundary": {
+    "productionRegistryOwnsExperiments": false,
+    "productionRecommenderMayReturnExperiment": false,
+    "productionDropdownMayContainExperiment": false,
+    "productionAdvisorContinuesDuringExperiment": true,
+    "automaticProductionPromotion": false
+  },
+  "population": {
+    "populationVersion": "slf_tactical_lab_561_p01",
+    "genomeVersion": "slf_tactical_genome_v1",
+    "size": 64,
+    "deterministic": true,
+    "immutableIds": true,
+    "groups": {
+      "production_mutation": 16,
+      "orthogonal": 16,
+      "deterministic_random": 16,
+      "extreme": 16
+    }
+  },
+  "assignment": {
+    "onePerMatch": true,
+    "persistsAcrossReload": true,
+    "rerollAllowed": false,
+    "blindBeforeAndDuringUse": true,
+    "activationMinuteRestricted": false,
+    "oneSuccessfulActivationPerMatch": true
+  },
+  "application": {
+    "requiresExplicitUserClick": true,
+    "backgroundAutoApply": false,
+    "singleClickAppliesControls": true,
+    "singleClickAppliesFormation": true,
+    "singleClickUsesNativeLineupSave": true,
+    "userMayExitAtAnyTime": true
+  },
+  "telemetry": {
+    "existingCollectionsOnly": true,
+    "collections": [
+      "match_snapshots_v2",
+      "preset_events_v2",
+      "preset_effects_v2",
+      "match_results_v2"
+    ],
+    "assignmentRecorded": true,
+    "activationRecorded": true,
+    "entryContext": [
+      "minute",
+      "scoreState",
+      "scoreDiff",
+      "homeAway",
+      "strengthGap",
+      "strengthBucket",
+      "previousPresetId",
+      "previousTacticFingerprint",
+      "previousPhaseSequence",
+      "previousPhaseDuration",
+      "productionRecommendationAtEntry"
+    ],
+    "exitContext": [
+      "minute",
+      "scoreState",
+      "scoreDiff",
+      "nextPresetId",
+      "nextTacticFingerprint",
+      "nextTacticSource",
+      "productionRecommendationAtExit",
+      "durationMinutes",
+      "phaseMetricDelta"
+    ],
+    "failedWritesUseDurableBoundedOutbox": true,
+    "idempotentKeysRequired": true
+  },
+  "v1NonGoals": [
+    "evolutionary_mutation_engine",
+    "automatic_next_generation",
+    "lab_challenger_champion_promotion",
+    "bayesian_ranking",
+    "engine_drift_detector",
+    "automatic_production_retune",
+    "large_experiment_match_ui",
+    "new_raw_vps_collection"
+  ],
+  "deferredIssue": 252
+}
