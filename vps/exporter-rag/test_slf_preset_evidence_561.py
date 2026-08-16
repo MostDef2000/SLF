@@ -3,9 +3,20 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
+
+# The canonical tactic CI installs VPS API dependencies, not exporter-rag dependencies.
+# These regressions exercise pure exporter transformations only, so keep network access
+# unavailable and provide the smallest import-time stub instead of installing requests.
+requests_stub = types.ModuleType("requests")
+def _network_forbidden(*_args, **_kwargs):
+    raise AssertionError("network access is forbidden in exporter regression tests")
+requests_stub.get = _network_forbidden
+sys.modules.setdefault("requests", requests_stub)
 
 MODULE_PATH = Path(__file__).with_name("slf_preset_evidence_561.py")
 spec = importlib.util.spec_from_file_location("slf_preset_evidence_561_under_test", MODULE_PATH)
@@ -166,7 +177,7 @@ class TelemetryAnalyticsTest(unittest.TestCase):
             result("g-draw", score=(1, 1), ts=200),
             result("g-away-win", score=(0, 3), my_team=2, ts=300, preset="Preset_B"),
             result("g-loss", score=(0, 1), ts=400),
-            result("g-win", score=(3, 0), ts=500),  # latest duplicate wins the dedupe
+            result("g-win", score=(3, 0), ts=500),
         ]
         effects = [phase_effect("g-win", "p-win"), phase_effect("g-away-win", "p-away")]
         summary = module.build_match_outcomes_summary(results, effects)
