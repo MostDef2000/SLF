@@ -413,7 +413,7 @@ def assert_owned_live(page: Page):
     )
     assert page.evaluate("window.__lineupSaveClicks") == 2
     lab_state = page.evaluate(
-        "JSON.parse(localStorage.getItem('slf_manual_match_state_v1:e2e-owned') || '{}').tacticalLab"
+        "JSON.parse(localStorage.getItem('slf_manual_match_state_v2:e2e-owned') || '{}').tacticalLab"
     )
     assert lab_state["assignment"]["experimentId"] == experiment_id
     assert lab_state["activation"]["status"] == "active"
@@ -442,7 +442,7 @@ def assert_owned_live(page: Page):
         "() => window.__slfRequests.some(item => item.url.includes('/api/match_snapshots_v2?mode=append') && String(item.data || '').includes('tactical_lab_exit'))"
     )
     lab_state = page.evaluate(
-        "JSON.parse(localStorage.getItem('slf_manual_match_state_v1:e2e-owned') || '{}').tacticalLab"
+        "JSON.parse(localStorage.getItem('slf_manual_match_state_v2:e2e-owned') || '{}').tacticalLab"
     )
     assert lab_state["activation"] is None
     assert lab_state["completed"]["experimentId"] == experiment_id
