@@ -13,26 +13,45 @@ An experiment never enters the production preset registry, production dropdown o
 
 ## Match UI
 
-On an owned live `/game.php` match the Tactical Lab card is available beside the normal match controls. It shows only the experiment ID and population identity before activation. Controls, formation, origin, parent and prior results remain hidden while the match is live.
+On an owned live `/game.php` match Tactical Lab is rendered inside the existing SLF Parser recommendation surface, directly under the normal production hint. It is visually secondary to the Production Advisor and is not a separate card beside lineup or preset controls.
+
+Before activation it shows only the experiment ID and population identity. Experimental control values, origin, parent and prior results remain hidden while the match is live.
 
 The challenger has no activation minute window. The user may apply it at any point in the match and after any production or manual tactic. The exact minute and preceding tactic are evidence, not eligibility gates.
 
-One explicit click applies the experimental tactic controls, applies its formation and invokes the page's native lineup save action. There is no background experimental auto-apply. The Production Advisor remains live while the experiment is active.
+One explicit click applies only the experimental tactical controls. Tactical Lab v1 does not move players, change formation slots, invoke lineup preview logic or invoke the native lineup save action. Formation experimentation is a separate problem and is outside this runtime.
 
-Tactical Lab v1 permits one successful experimental activation per match. After exit, the card records the tested interval instead of offering a second activation. A new challenger is assigned in the next match.
+There is no background experimental auto-apply. The Production Advisor remains live while the experiment is active.
 
-## Population P01
+Tactical Lab v1 permits one successful experimental activation per match. A control application that cannot be verified against the native page controls is reported as a failure and does not count as activation. After a successful experiment exits, the embedded Lab row records the tested interval instead of offering a second activation. A new challenger is assigned in the next match.
 
-`slf_tactical_lab_561_p01` contains 64 deterministic immutable genomes:
+## Population P02
 
-- 16 mutations around current production tactics;
+`slf_tactical_lab_561_p02` contains 64 deterministic immutable controls-only genomes:
+
+- 16 mutations around normalized current production tactics;
 - 16 orthogonal combinations intended to cover distant parameter regions;
 - 16 deterministic pseudo-random combinations;
-- 16 extreme combinations intentionally unconstrained by football aesthetics.
+- 16 extreme combinations across the valid native control boundaries.
 
-The population is generated deterministically in the userscript. Experiment IDs and fingerprints are immutable for P01. Reloading a match cannot reroll its assignment.
+P02 supersedes `slf_tactical_lab_561_p01`. P01 could generate values outside the current FM2026 native control domains and coupled the experiment identity/application to formation changes. Existing P01 telemetry remains historical evidence; an in-progress P01 assignment may be replaced by the deterministic P02 assignment for that match.
 
-P01 is a data-collection population, not a claim that any experiment is good.
+P02 control domains are restricted to values that exist in the current FM2026 tactic UI:
+
+- `def_line`, `press_line`, `def_width`: `1..3`;
+- `press_intense`: `1..5`;
+- `build_type`, `build_temp`, `build_long`, `build_fast`: `1..3`;
+- `style`, `pass_risk`, `dribble`: `1..5`;
+- `cross`: `1..3`;
+- `corner`: `1..2`;
+- `shot`: `1..3`;
+- `priority`: any subset of `left`, `center`, `right`.
+
+Production seeds are normalized into these domains before mutation so a seed cannot silently carry an unsupported legacy value into P02.
+
+The population is generated deterministically in the userscript. Experiment IDs and fingerprints are immutable for P02. Reloading a match cannot reroll its assignment while the population version remains P02.
+
+P02 is a data-collection population, not a claim that any experiment is good.
 
 ## Assignment
 
@@ -56,7 +75,9 @@ This is intentionally context-first. Tactical Lab does not label a genome as an 
 
 ## Exit attribution
 
-The experimental phase closes when the user selects a production tactic, manually changes tactic controls/formation, or the match finishes. Telemetry stores the exit minute, duration, next tactic/source, production recommendation at exit and available phase metric deltas.
+The experimental phase closes when the user selects a production tactic, manually changes tactical controls, or the match finishes. Formation changes are not part of the Tactical Lab v1 genome and therefore do not themselves close a controls-only experiment.
+
+Telemetry stores the exit minute, duration, next tactic/source, production recommendation at exit and available phase metric deltas.
 
 The same experiment may therefore later be evaluated separately as an opener, as a transition after a named production tactic, or as a situational exploit.
 
@@ -80,6 +101,8 @@ Tactical Lab v1 does not:
 
 - automatically activate a challenger without a user click;
 - let the Production Advisor recommend an `EXP-*` identity;
+- move players, apply an experimental formation or save a lineup;
+- let unsupported control values count as a successful activation;
 - automatically promote an experiment into production;
 - mutate or generate a next population from live results;
 - infer that a football-plausible tactic is superior;
