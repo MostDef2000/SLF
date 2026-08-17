@@ -1,7 +1,7 @@
 {
   "schema": "slf_tactical_lab_contract_v1",
   "status": "active",
-  "purpose": "Black-box tactical experimentation beside, never inside, the Production Advisor.",
+  "purpose": "Black-box tactical experimentation beside, never inside, the Production Advisor decision logic.",
   "evidenceModel": {
     "groundTruth": "real_match_telemetry",
     "ragRole": "seed_and_prior_only",
@@ -15,9 +15,17 @@
     "productionAdvisorContinuesDuringExperiment": true,
     "automaticProductionPromotion": false
   },
+  "ui": {
+    "surface": "inside_parser_recommendation",
+    "visuallySecondaryToProductionAdvisor": true,
+    "separateLineupCard": false
+  },
   "population": {
-    "populationVersion": "slf_tactical_lab_561_p01",
+    "populationVersion": "slf_tactical_lab_561_p02",
+    "supersedesPopulationVersion": "slf_tactical_lab_561_p01",
+    "supersessionReason": "P01 could generate controls outside the current FM2026 native control domains and coupled experiments to lineup formation changes.",
     "genomeVersion": "slf_tactical_genome_v1",
+    "genomeScope": "tactical_controls_only",
     "size": 64,
     "deterministic": true,
     "immutableIds": true,
@@ -26,6 +34,23 @@
       "orthogonal": 16,
       "deterministic_random": 16,
       "extreme": 16
+    },
+    "nativeControlDomains": {
+      "def_line": ["1", "2", "3"],
+      "press_line": ["1", "2", "3"],
+      "def_width": ["1", "2", "3"],
+      "press_intense": ["1", "2", "3", "4", "5"],
+      "build_type": ["1", "2", "3"],
+      "build_temp": ["1", "2", "3"],
+      "build_long": ["1", "2", "3"],
+      "build_fast": ["1", "2", "3"],
+      "style": ["1", "2", "3", "4", "5"],
+      "pass_risk": ["1", "2", "3", "4", "5"],
+      "dribble": ["1", "2", "3", "4", "5"],
+      "cross": ["1", "2", "3"],
+      "corner": ["1", "2"],
+      "shot": ["1", "2", "3"],
+      "priority": ["left", "center", "right"]
     }
   },
   "assignment": {
@@ -34,14 +59,18 @@
     "rerollAllowed": false,
     "blindBeforeAndDuringUse": true,
     "activationMinuteRestricted": false,
-    "oneSuccessfulActivationPerMatch": true
+    "oneSuccessfulActivationPerMatch": true,
+    "populationSupersessionMayReplaceOlderAssignment": true
   },
   "application": {
     "requiresExplicitUserClick": true,
     "backgroundAutoApply": false,
     "singleClickAppliesControls": true,
-    "singleClickAppliesFormation": true,
-    "singleClickUsesNativeLineupSave": true,
+    "singleClickAppliesFormation": false,
+    "singleClickUsesNativeLineupSave": false,
+    "lineupMutationAllowed": false,
+    "strictNativeControlVerification": true,
+    "failedControlApplicationCountsAsActivation": false,
     "userMayExitAtAnyTime": true
   },
   "telemetry": {
@@ -82,6 +111,8 @@
     "idempotentKeysRequired": true
   },
   "v1NonGoals": [
+    "formation_experimentation",
+    "lineup_mutation",
     "evolutionary_mutation_engine",
     "automatic_next_generation",
     "lab_challenger_champion_promotion",

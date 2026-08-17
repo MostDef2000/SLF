@@ -327,8 +327,8 @@
     // Tactical Lab v1 is installed after the synchronous bundle has defined
     // match parsing, telemetry and the production recommendation stack.
     (function scheduleTacticalLabV1() {
-        const POPULATION_VERSION = 'slf_tactical_lab_561_p01';
-        const POPULATION_CODE = 'P01';
+        const POPULATION_VERSION = 'slf_tactical_lab_561_p02';
+        const POPULATION_CODE = 'P02';
         const GENOME_VERSION = 'slf_tactical_genome_v1';
         const POPULATION_SIZE = 64;
         const PANEL_ID = 'slf-tactical-lab-panel';
@@ -354,25 +354,13 @@
             Simeone_LowBlock_def5:{def_line:'1',press_line:'1',def_width:'1',press_intense:'1',build_type:'1',build_temp:'1',build_long:'5',build_fast:'2',style:'1',pass_risk:'1',dribble:'1',cross:'1',corner:'1',shot:'1',priority:[]},
             Bielsa_ChaosPress_att5:{def_line:'5',press_line:'5',def_width:'5',press_intense:'5',build_type:'3',build_temp:'3',build_long:'4',build_fast:'5',style:'5',pass_risk:'5',dribble:'5',cross:'5',corner:'1',shot:'5',priority:[]}
         };
-        const seedFormations = {
-            Arteta_Control433_bal3:['gk','ld','cd1','cd3','rd','cm1','dm2','cm3','lw','st2','rw'],
-            Pep_BoxControl_bal2:['gk','ld','cd1','cd3','rd','dm2','cm1','cm3','am1','am2','st2'],
-            Pep_PressCooldown_bal2:['gk','ld','cd1','cd3','rd','dm2','lm','cm2','cm3','rm','st2'],
-            Compact_Counter_def3:['gk','ld','cd1','cd3','rd','lm','dm2','cm2','rm','am2','st2'],
-            Pep_ControlledPush_att3:['gk','ld','cd1','cd3','rd','dm2','cm2','lw','am2','rw','st2'],
-            Pep_TwoThreeFive_att3:['gk','cd1','cd2','cd3','dm2','cm2','lw','am1','st1','am2','rw'],
-            Conte_WingbackWidth_bal4:['gk','cd1','cd2','cd3','lb','dm2','cm2','rb','lw','st2','rw'],
-            Klopp_Gegenpress_att4:['gk','ld','cd1','cd3','rd','dm2','cm2','lw','st1','st2','rw'],
-            Simeone_Compact442_def4:['gk','ld','cd1','cd3','rd','lm','cm2','dm2','rm','st1','st2'],
-            Simeone_LowBlock_def5:['gk','lb','cd1','cd2','cd3','rb','lm','dm2','cm2','rm','st2'],
-            Bielsa_ChaosPress_att5:['gk','cd1','cd2','cd3','lm','dm2','rm','lw','st1','st2','rw']
-        };
         const ranges = {
-            def_line:['1','2','3','4','5'], press_line:['1','2','3','4','5'], def_width:['1','2','3','4','5'], press_intense:['1','2','3','4','5'],
-            build_type:['1','2','3'], build_temp:['1','2','3'], build_long:['1','2','3','4','5'], build_fast:['1','2','3','4','5'],
-            style:['1','2','3','4','5'], pass_risk:['1','2','3','4','5'], dribble:['1','2','3','4','5'], cross:['1','2','3','4','5'],
-            corner:['1'], shot:['1','2','3','4','5']
+            def_line:['1','2','3'], press_line:['1','2','3'], def_width:['1','2','3'], press_intense:['1','2','3','4','5'],
+            build_type:['1','2','3'], build_temp:['1','2','3'], build_long:['1','2','3'], build_fast:['1','2','3'],
+            style:['1','2','3','4','5'], pass_risk:['1','2','3','4','5'], dribble:['1','2','3','4','5'], cross:['1','2','3'],
+            corner:['1','2'], shot:['1','2','3']
         };
+        const priorityValues = new Set(['left','center','right']);
         const labControlKeys = Object.keys(ranges);
         let population = null;
         let cachedState = null;
@@ -404,11 +392,31 @@
                 return (state >>> 0) / 4294967296;
             };
         };
-        const normalizePriority = value => (Array.isArray(value) ? value : value ? [value] : []).map(String).sort();
+        const normalizePriority = value => (Array.isArray(value) ? value : value ? [value] : [])
+            .map(String)
+            .filter(item => priorityValues.has(item))
+            .sort();
+        const nearestAllowedValue = (key, value) => {
+            const values = ranges[key] || [];
+            const requested = String(value ?? '');
+            if (values.includes(requested)) return requested;
+            if (!values.length) return requested;
+            const numeric = Number(requested);
+            if (!Number.isFinite(numeric)) return values[Math.floor((values.length - 1) / 2)];
+            return values.reduce((best, candidate) =>
+                Math.abs(Number(candidate) - numeric) < Math.abs(Number(best) - numeric) ? candidate : best
+            , values[0]);
+        };
+        const normalizeLabControls = controls => {
+            const normalized = {};
+            labControlKeys.forEach(key => { normalized[key] = nearestAllowedValue(key, controls?.[key]); });
+            normalized.priority = normalizePriority(controls?.priority);
+            return normalized;
+        };
         const tacticFingerprint = tactic => labControlKeys.concat(['priority'])
             .map(key => `${key}:${JSON.stringify(key === 'priority' ? normalizePriority(tactic?.[key]) : String(tactic?.[key] ?? ''))}`)
             .join('|');
-        const genomeFingerprint = (controls, formation) => `tlab1-${hashHex(`${tacticFingerprint(controls)}|formation:${(formation || []).join(',')}`)}`;
+        const genomeFingerprint = controls => `tlab1-${hashHex(tacticFingerprint(controls))}`;
         const mutationDistance = (before, after) => {
             const keys = labControlKeys.concat(['priority']);
             const changed = keys.filter(key => JSON.stringify(key === 'priority' ? normalizePriority(before?.[key]) : before?.[key]) !== JSON.stringify(key === 'priority' ? normalizePriority(after?.[key]) : after?.[key])).length;
@@ -418,26 +426,29 @@
             const options = [[],['left'],['center'],['right'],['left','right'],['left','center'],['center','right']];
             return options[index % options.length].slice();
         };
-        const makeExperiment = (index, origin, controls, formation, parentExperimentId = null, distance = null) => ({
-            experimentId: `EXP-561-P01-${String(index + 1).padStart(4, '0')}`,
-            populationVersion: POPULATION_VERSION,
-            generation: 1,
-            genomeVersion: GENOME_VERSION,
-            origin,
-            parentExperimentId,
-            mutationDistance: distance,
-            controls: clone(controls),
-            formation: clone(formation),
-            tacticFingerprint: tacticFingerprint(controls),
-            genomeFingerprint: genomeFingerprint(controls, formation)
-        });
+        const makeExperiment = (index, origin, controls, parentExperimentId = null, distance = null) => {
+            const normalizedControls = normalizeLabControls(controls);
+            return {
+                experimentId: `EXP-561-${POPULATION_CODE}-${String(index + 1).padStart(4, '0')}`,
+                populationVersion: POPULATION_VERSION,
+                generation: 1,
+                genomeVersion: GENOME_VERSION,
+                origin,
+                parentExperimentId,
+                mutationDistance: distance,
+                controls: normalizedControls,
+                tacticFingerprint: tacticFingerprint(normalizedControls),
+                genomeFingerprint: genomeFingerprint(normalizedControls)
+            };
+        };
 
         function buildPopulation() {
             const result = [];
             const mutableKeys = labControlKeys.filter(key => key !== 'corner');
             for (let index = 0; index < 16; index += 1) {
                 const seedId = productionIds[index % productionIds.length];
-                const controls = clone(seedPresets[seedId]);
+                const baseline = normalizeLabControls(seedPresets[seedId]);
+                const controls = clone(baseline);
                 for (let step = 0; step < 3; step += 1) {
                     const key = mutableKeys[(index * 3 + step * 5) % mutableKeys.length];
                     const values = ranges[key];
@@ -446,7 +457,7 @@
                     controls[key] = values[(currentIndex + shift + values.length) % values.length];
                 }
                 if (index % 4 === 3) controls.priority = priorityFor(index);
-                result.push(makeExperiment(index, 'production_mutation', controls, seedFormations[seedId], seedId, mutationDistance(seedPresets[seedId], controls)));
+                result.push(makeExperiment(index, 'production_mutation', controls, seedId, mutationDistance(baseline, controls)));
             }
             for (let local = 0; local < 16; local += 1) {
                 const index = 16 + local;
@@ -456,8 +467,7 @@
                     controls[key] = values[(local * 2 + keyIndex * 3) % values.length];
                 });
                 controls.priority = priorityFor(local + 2);
-                const seedId = productionIds[(local * 5 + 2) % productionIds.length];
-                result.push(makeExperiment(index, 'orthogonal', controls, seedFormations[seedId], null, 1));
+                result.push(makeExperiment(index, 'orthogonal', controls, null, 1));
             }
             for (let local = 0; local < 16; local += 1) {
                 const index = 32 + local;
@@ -468,8 +478,7 @@
                     controls[key] = values[Math.floor(rng() * values.length) % values.length];
                 });
                 controls.priority = priorityFor(Math.floor(rng() * 100));
-                const seedId = productionIds[Math.floor(rng() * productionIds.length) % productionIds.length];
-                result.push(makeExperiment(index, 'deterministic_random', controls, seedFormations[seedId], null, 1));
+                result.push(makeExperiment(index, 'deterministic_random', controls, null, 1));
             }
             for (let local = 0; local < 16; local += 1) {
                 const index = 48 + local;
@@ -479,8 +488,7 @@
                     controls[key] = values.length === 1 ? values[0] : ((local + keyIndex) % 2 === 0 ? values[0] : values[values.length - 1]);
                 });
                 controls.priority = priorityFor(local + 4);
-                const seedId = productionIds[(local * 7 + 1) % productionIds.length];
-                result.push(makeExperiment(index, 'extreme', controls, seedFormations[seedId], null, 1));
+                result.push(makeExperiment(index, 'extreme', controls, null, 1));
             }
             return result;
         }
@@ -574,6 +582,7 @@
             if (!state) return null;
             const selected = selectExperiment(gameId);
             if (!state.assignment || state.assignment.populationVersion !== POPULATION_VERSION) {
+                state.populationVersion = POPULATION_VERSION;
                 state.assignment = {
                     assignmentId:`tactical_lab_assignment|${gameId}|${selected.experimentId}`,
                     experimentId:selected.experimentId,
@@ -771,6 +780,20 @@
             }
         }
 
+        function controlsAvailable(controls) {
+            if (!controls || typeof controls !== 'object') return false;
+            for (const key of labControlKeys) {
+                const value = String(controls[key] ?? '');
+                if (!(ranges[key] || []).includes(value)) return false;
+                if (!document.querySelector(`input[name="${key}"][value="${value}"]`)) return false;
+            }
+            for (const value of normalizePriority(controls.priority)) {
+                const suffix = value === 'left' ? 'l' : value === 'center' ? 'c' : value === 'right' ? 'r' : '';
+                if (!suffix || !document.querySelector(`input[name="priority_${suffix}"]`)) return false;
+            }
+            return true;
+        }
+
         async function activate() {
             const snapshot = SnapshotEngine.build();
             if (!isOwnedLive(snapshot)) return {ok:false,reason:'Матч недоступен для Tactical Lab.'};
@@ -780,28 +803,16 @@
             const experiment = experimentFor(state);
             const bridge = STATE.tacticControlBridge;
             if (!experiment || !bridge) return {ok:false,reason:'Механизм применения тактики ещё не готов.'};
-            const validFormation = bridge.validateFormation?.(experiment.formation);
-            if (!validFormation?.ok) return {ok:false,reason:validFormation?.reason || 'Расстановка недоступна.'};
+            if (!controlsAvailable(experiment.controls)) return {ok:false,reason:'Точные native controls эксперимента ещё недоступны на странице.'};
 
             const entryContext = buildContext(snapshot);
             const baselineMetrics = metrics(snapshot);
+            const beforeTactic = getCurrentTactic();
             const applied = await bridge.applyTacticObject(experiment.controls,{source:`tactical_lab:${experiment.experimentId}`,strict:true});
             if (!applied?.ok) {
-                state.lastError = `Controls не применились: ${(applied?.failures || []).concat(applied?.mismatches || []).join(', ') || 'unknown'}`;
-                persistState(state);
-                renderUI();
-                return {ok:false,reason:state.lastError};
-            }
-            const formation = bridge.applyFormation(experiment.formation);
-            if (!formation?.ok) {
-                state.lastError = formation?.reason || 'Не удалось применить экспериментальную расстановку.';
-                persistState(state);
-                renderUI();
-                return {ok:false,reason:state.lastError};
-            }
-            const saved = bridge.saveLiveLineup();
-            if (!saved?.ok || !bridge.formationMatches(experiment.formation)) {
-                state.lastError = saved?.reason || 'Не удалось подтвердить experimental formation после сохранения.';
+                await bridge.applyTacticObject(beforeTactic,{source:`tactical_lab_rollback:${experiment.experimentId}`,strict:false});
+                const failedKeys = [...new Set([...(applied?.failures || []), ...(applied?.mismatches || [])])];
+                state.lastError = `Controls не применились: ${failedKeys.join(', ') || 'unknown'}`;
                 persistState(state);
                 renderUI();
                 return {ok:false,reason:state.lastError};
@@ -823,7 +834,8 @@
                 genomeFingerprint:experiment.genomeFingerprint,
                 origin:experiment.origin,
                 parentExperimentId:experiment.parentExperimentId,
-                mutationDistance:experiment.mutationDistance
+                mutationDistance:experiment.mutationDistance,
+                applicationScope:'tactical_controls_only'
             });
             renderUI();
             return {ok:true,experimentId:experiment.experimentId};
@@ -869,7 +881,11 @@
             return state?.activation?.status === 'active';
         }
         function recommendationText() {
-            return String(document.getElementById('slf-parser-recommendation')?.textContent || '').trim();
+            const box = document.getElementById('slf-parser-recommendation');
+            if (!box) return '';
+            const copy = box.cloneNode(true);
+            copy.querySelector?.(`#${PANEL_ID}`)?.remove();
+            return String(copy.textContent || '').trim();
         }
         function renderUI() {
             const panel = document.getElementById(PANEL_ID);
@@ -880,7 +896,7 @@
             const detail = document.getElementById(DETAIL_ID);
             const button = document.getElementById(BUTTON_ID);
             if (!state || !experiment || !status || !detail || !button) return;
-            const shortId = experiment.experimentId.replace('EXP-561-P01-','EXP-');
+            const shortId = experiment.experimentId.replace(`EXP-561-${POPULATION_CODE}-`,'EXP-');
             panel.dataset.experimentId = experiment.experimentId;
             panel.dataset.populationVersion = POPULATION_VERSION;
             if (state.activation?.status === 'active') {
@@ -891,7 +907,7 @@
                 } catch (_) {}
                 status.textContent = `● ${shortId} ACTIVE${state.activation.startedAtMinute!=null?` · с ${state.activation.startedAtMinute}'`:''}${exposure!=null?` · exposure ${exposure}m`:''}`;
                 status.style.color = '#43f58c';
-                detail.textContent = recommendationText() ? `Production Advisor: ${recommendationText()}` : 'Production Advisor продолжает работать параллельно.';
+                detail.textContent = recommendationText() ? `Production Advisor продолжает работать параллельно. Эксперимент меняет только tactical controls.` : 'Эксперимент активен; расстановка игроков не изменялась.';
                 button.disabled = true;
                 button.textContent = 'Эксперимент активен';
             } else if (state.completed) {
@@ -903,9 +919,10 @@
             } else {
                 status.textContent = `${shortId} · blind challenger · Population ${POPULATION_CODE}`;
                 status.style.color = '#ffd76a';
-                detail.textContent = state.lastError || 'Параметры и схема скрыты. Один клик применит controls + formation и штатно сохранит расстановку.';
-                button.disabled = !STATE.tacticControlBridge?.validateFormation?.(experiment.formation)?.ok;
-                button.textContent = button.disabled ? 'Поле загружается…' : 'Применить эксперимент';
+                detail.textContent = state.lastError || 'Параметры скрыты. Один клик применит только tactical controls; расстановка игроков не меняется.';
+                const ready = !!STATE.tacticControlBridge && controlsAvailable(experiment.controls);
+                button.disabled = !ready;
+                button.textContent = ready ? 'Применить эксперимент' : 'Тактика загружается…';
             }
         }
         async function mountUI() {
@@ -915,19 +932,20 @@
             if (!isOwnedLive(snapshot)) return false;
             const state = ensureAssignment(snapshot);
             if (!state?.assignment) return false;
+            const recommendation = document.getElementById('slf-parser-recommendation');
+            const fallback = document.getElementById('slf-match-parser-panel') || document.querySelector('.control_field_1');
+            if (!recommendation && !fallback) return false;
             let panel = document.getElementById(PANEL_ID);
             if (!panel) {
-                const anchor = document.getElementById('slf-live-lineup-preset-panel') || document.getElementById('slf-match-parser-panel') || document.querySelector('.control_field_1');
-                if (!anchor?.parentNode) return false;
                 panel = document.createElement('section');
                 panel.id = PANEL_ID;
-                panel.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;margin:0 0 10px;padding:9px 10px;box-sizing:border-box;background:#171b29;border:1px solid #6f5c20;border-radius:10px;color:#eef1f8;font-family:Arial,sans-serif;font-size:12px;';
+                panel.style.cssText = 'display:flex;align-items:center;gap:7px;flex-wrap:wrap;width:100%;margin:7px 0 0;padding:7px 9px;box-sizing:border-box;background:#141824;border-top:1px solid #6f5c20;border-radius:6px;color:#eef1f8;font-family:Arial,sans-serif;font-size:11px;';
                 const title = document.createElement('strong');
                 title.textContent = 'Tactical Lab';
                 title.style.cssText = 'color:#ffd76a;white-space:nowrap;';
                 const status = document.createElement('span'); status.id = STATUS_ID; status.style.cssText = 'font-weight:600;';
                 const button = document.createElement('button'); button.id = BUTTON_ID; button.type = 'button'; button.textContent = 'Применить эксперимент';
-                button.style.cssText = 'padding:6px 10px;border:1px solid #8b7328;border-radius:8px;background:#2b2718;color:#ffe18a;cursor:pointer;font-weight:600;';
+                button.style.cssText = 'padding:5px 9px;border:1px solid #8b7328;border-radius:7px;background:#2b2718;color:#ffe18a;cursor:pointer;font-weight:600;';
                 button.addEventListener('click',async()=>{
                     if (button.disabled) return;
                     button.disabled = true; button.textContent = 'Применяю…';
@@ -940,7 +958,10 @@
                 });
                 const detail = document.createElement('span'); detail.id = DETAIL_ID; detail.style.cssText = 'flex:1 1 100%;color:#aeb6cf;font-size:10px;line-height:1.3;';
                 panel.append(title,status,button,detail);
-                anchor.parentNode.insertBefore(panel,anchor.nextSibling);
+                if (recommendation) recommendation.appendChild(panel);
+                else if (fallback?.parentNode) fallback.parentNode.insertBefore(panel,fallback.nextSibling);
+            } else if (recommendation && panel.parentElement !== recommendation) {
+                recommendation.appendChild(panel);
             }
             renderUI();
             return true;
@@ -961,15 +982,11 @@
                 await closeActive('tactic_changed',snapshot,{nextTacticSource:'manual',nextTacticFingerprint:actual});
                 return;
             }
-            if (!STATE.tacticControlBridge.formationMatches(experiment.formation)) {
-                await closeActive('formation_changed',snapshot,{nextTacticSource:'manual_formation'});
-                return;
-            }
             renderUI();
         }
 
         function install() {
-            if (STATE.tacticalLabRuntime?.schema === 'slf_tactical_lab_runtime_v1') return true;
+            if (STATE.tacticalLabRuntime?.schema === 'slf_tactical_lab_runtime_v1' && STATE.tacticalLabRuntime?.populationVersion === POPULATION_VERSION) return true;
             if (typeof SnapshotEngine === 'undefined' || typeof EventTracker === 'undefined' || typeof MatchStateParser === 'undefined') return false;
             population = buildPopulation();
             installPersistBridge();
