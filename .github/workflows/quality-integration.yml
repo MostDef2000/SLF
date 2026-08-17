@@ -206,6 +206,7 @@ jobs:
           python3 -m py_compile tests/browser/test_header_matches_layout.py
           python3 -m py_compile tests/browser/test_team4_tactic_header_selector.py
           python3 -m py_compile tests/browser/test_team4_championship_external_layout.py
+          python3 -m py_compile tests/browser/test_save_dialog_xss_fixtures.py
 
       - name: Install pinned browser test dependencies
         run: python3 -m pip install --disable-pip-version-check -r tests/browser/requirements.txt
@@ -224,6 +225,7 @@ jobs:
           python3 tests/browser/test_header_matches_layout.py
           python3 tests/browser/test_team4_tactic_header_selector.py
           python3 tests/browser/test_team4_championship_external_layout.py
+          python3 tests/browser/test_save_dialog_xss_fixtures.py
 
       - name: Upload browser failure evidence
         if: failure() && hashFiles('tests/browser/artifacts/**') != ''

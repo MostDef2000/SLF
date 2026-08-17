@@ -9,7 +9,21 @@ import threading
 from contextlib import contextmanager
 
 app = Flask(__name__)
-CORS(app)
+
+# QR-003: explicit CORS allowlist. The userscript transport uses
+# GM_xmlhttpRequest, which is not subject to browser CORS, so restricting
+# origins cannot break Tampermonkey sync.
+ALLOWED_ORIGINS = [
+    "https://slf.fm",
+    "https://www.slf.fm",
+    "https://soccerlife.ru",
+    "https://www.soccerlife.ru"
+]
+CORS(app, origins=ALLOWED_ORIGINS)
+
+# QR-002: explicit operational request-body limit. Tactical payloads are
+# kilobyte-scale; 1 MiB is a reviewed ceiling with a JSON 413 response.
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
 
 API_TOKEN = os.environ.get("SLF_API_TOKEN", "").strip()
 if not API_TOKEN:
@@ -254,6 +268,15 @@ def collection_health(collection):
     return result
 
 
+@app.errorhandler(413)
+def handle_payload_too_large(error):
+    return jsonify({
+        "error": "Request body exceeds the configured limit",
+        "kind": "payload_too_large",
+        "limitBytes": app.config["MAX_CONTENT_LENGTH"]
+    }), 413
+
+
 @app.errorhandler(CollectionCorruptError)
 def handle_collection_corruption(error):
     app.logger.error("collection corruption detected: %s", error)
@@ -297,6 +320,19 @@ def api_post(collection):
                 return jsonify({"error": "Append requires list collection", "kind": "collection_type"}), 409
             received = len(data) if isinstance(data, list) else 1
             incoming = data if isinstance(data, list) else [data]
+            # QR-001: reject missing tactical identity before persistence.
+            # Fail closed: no partial writes when any incoming record lacks
+            # the configured unique key for a tactical collection.
+            if collection in TACTICAL_UNIQUE_KEYS:
+                missing_unique_key = sum(1 for item in incoming if not unique_keys_for_item(collection, item))
+                if missing_unique_key:
+                    return jsonify({
+                        "error": "Tactical append requires the configured unique key",
+                        "kind": "missing_unique_key",
+                        "collection": collection,
+                        "missingUniqueKey": missing_unique_key,
+                        "received": received
+                    }), 400
             accepted, skipped_duplicates, missing_unique_key = filter_append_duplicates(collection, existing, incoming)
             existing.extend(accepted)
             save_collection(collection, existing)

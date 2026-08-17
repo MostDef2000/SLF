@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -84,9 +85,22 @@ assert.equal(actualConnectHosts.has('*'), false, 'userscript must not use wildca
 const requireUrls = [...header.matchAll(/^\/\/\s*@require\s+(\S+)\s*$/gm)].map(match => match[1]);
 assert.deepEqual(
   requireUrls,
-  ['https://code.jquery.com/jquery-3.6.0.min.js'],
+  ['https://raw.githubusercontent.com/MostDef2000/SLF/release/vendor/jquery-3.6.0.min.js'],
   'external userscript dependencies changed; supply-chain review is required'
 );
+
+// QR-004: the vendored jQuery copy is content-addressed in the repository.
+// The pinned digest is the official jQuery 3.6.0 minified build fetched from
+// code.jquery.com on 2026-08-17; any byte change fails this check.
+const vendoredJquery = read('vendor/jquery-3.6.0.min.js');
+const vendoredDigest = crypto.createHash('sha256').update(vendoredJquery).digest('hex');
+assert.equal(
+  vendoredDigest,
+  'ff1523fb7389539c84c65aba19260648793bb4f5e29329d2ee8804bc37a3fe6e',
+  'vendored jQuery 3.6.0 digest changed; supply-chain review is required'
+);
+assert.ok(vendoredJquery.includes('jQuery v3.6.0'), 'vendored jQuery header is missing');
+assert.ok(fs.existsSync(path.join(root, 'vendor/jquery-3.6.0.LICENSE.txt')), 'vendored jQuery license is missing');
 
 assert.ok(apiSource.includes('"Authorization": buildApiAuthorizationHeader()'), 'API token must be sent through Authorization header');
 assert.ok(apiSource.includes("return \"Bearer \" + token"), 'API authorization must use Bearer token format');

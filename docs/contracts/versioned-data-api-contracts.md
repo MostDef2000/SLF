@@ -62,14 +62,13 @@ No active code may write or dual-write the legacy state.
 
 The client contracts require all tactical records to contain their collection identity field.
 
-The current VPS API retains a compatibility path: a tactical record without its unique key is accepted, persisted, and reported through `missingUniqueKey`. This behaviour is intentionally documented and regression-tested because it creates a deduplication risk.
+Since QR-001 (2026-08-17) the VPS API rejects a tactical append that contains any record without the configured unique key. The rejection is fail-closed: the whole request returns `400` with `kind: missing_unique_key` before any persistence, so no partial writes occur. This behaviour is regression-tested in `vps/api/test_server.py` and `tools/test-api-contract-compatibility.py`.
 
-The strict target is to reject such a record before persistence. That behaviour change belongs to the security and adversarial API stage, where deployment compatibility and existing producers can be validated together.
+The strict contract is:
 
-Until strict rejection is deployed:
-
-- `missingUniqueKey` must remain present in append responses;
-- analysis health must report `missingUniqueKeys`;
+- a tactical append missing the unique key is rejected with `400` and `kind: missing_unique_key`;
+- `missingUniqueKey` remains present in successful append responses (always `0` for accepted records);
+- analysis health must report `missingUniqueKeys` for any legacy or corrupt stored data;
 - all SLF-produced fixtures must fail contract validation when the required key is absent;
 - any non-zero production counter requires investigation.
 
