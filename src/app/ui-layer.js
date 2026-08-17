@@ -143,7 +143,7 @@ recBox.style.cssText = `
                 <h3>Сохранить тактику</h3>
                 <select id="slf-save-select" style="width:100%;padding:8px;margin-bottom:10px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;">
                     <option value="__new__">➕ Добавить новую тактику</option>
-                    ${Object.keys(labels).map(k => `<option value="${k}">${labels[k]}</option>`).join('')}
+                    ${Object.keys(labels).map(k => `<option value="${this.escapeHtml(k)}">${this.escapeHtml(labels[k])}</option>`).join('')}
                 </select>
                 <div id="slf-new-name-block" style="display:none;margin-bottom:10px;">
                     <input type="text" id="slf-new-name" placeholder="Название" style="width:100%;padding:8px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;">

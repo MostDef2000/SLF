@@ -59,10 +59,7 @@ Controls:
 Known gaps:
 
 - one shared bearer token has no per-client identity or rotation protocol;
-- no rate limiting;
-- no request-body size limit;
-- CORS is currently broad;
-- tactical records without unique keys are accepted in compatibility mode and cannot be deduplicated reliably.
+- no rate limiting.
 
 ### VPS API to filesystem
 
@@ -82,8 +79,7 @@ Known gaps:
 
 - no explicit symlink policy for the data directory;
 - no storage quota;
-- no transaction spanning multiple collections;
-- compatibility acceptance of missing tactical identity fields.
+- no transaction spanning multiple collections.
 
 ### Repository to GitHub Actions
 
@@ -106,15 +102,14 @@ Known gaps:
 
 ### External userscript dependency
 
-The userscript loads jQuery from an external CDN using a versioned URL.
+The userscript loads jQuery from the repository release branch using a content-pinned vendored copy.
 
-Risk:
+Controls:
 
-- the URL is version-pinned but not content-addressed and has no userscript integrity field.
-
-Target control:
-
-- remove the runtime dependency, vendor a reviewed copy where licensing permits, or generate and verify a content digest during release.
+- jQuery 3.6.0 is vendored at `vendor/jquery-3.6.0.min.js` with its MIT license;
+- the `@require` URL points to the repository release branch, not an external CDN;
+- the vendored digest is pinned in the merge-blocking security boundary test;
+- the `@require` allowlist is merge-blocking.
 
 ## Threat catalogue
 
@@ -127,13 +122,13 @@ Target control:
 | corrupt collection | typed exception and generic 500 response | adversarial API test |
 | concurrent lost update | collection lock and atomic save | multi-threaded append test |
 | duplicate tactical record | identity-key filtering | concurrent duplicate test |
-| missing tactical identity | client schema rejection; server report counter | contract fixtures and API compatibility test |
+| missing tactical identity | fail-closed 400 rejection before persistence | API unit tests and contract compatibility test |
 | workflow supply-chain substitution | full-SHA action pins | workflow scan |
 | privileged untrusted PR execution | prohibition of `pull_request_target` | workflow scan |
 | committed secret | repository pattern scan | security boundary test |
 | dynamic code execution | ban on eval/new Function/string timers | source scan |
-| DOM XSS | incomplete | Stage 4 browser fixtures and sink-specific tests |
-| oversized request DoS | not implemented | Stage 3 enforcement follow-up |
+| DOM XSS | all innerHTML sinks classified; untrusted paths escaped | sink inventory and malicious-string browser fixtures |
+| oversized request DoS | 1 MiB request-body limit with JSON 413 | API unit test |
 | API brute force | not implemented | deployment/rate-limit follow-up |
 
 ## Risk acceptance rules
@@ -151,10 +146,13 @@ High-severity findings block merge unless explicitly accepted by a human owner. 
 
 ## Stage 3 follow-up enforcement
 
-The next production-behaviour security change should combine:
+The production-behaviour security change (QR-001..QR-005, 2026-08-17) is implemented in source and covered by tests:
 
-1. rejection of tactical records missing the configured identity field before persistence;
-2. a bounded request-body limit;
-3. explicit CORS origins;
+1. rejection of tactical records missing the configured identity field before persistence (fail-closed 400);
+2. a bounded request-body limit (1 MiB, JSON 413);
+3. explicit CORS origins (SLF domains only);
 4. negative tests for each rejected path;
-5. deployment compatibility evidence showing all active clients emit identity keys.
+5. vendored content-pinned jQuery with a merge-blocking digest;
+6. sink-complete innerHTML classification with malicious-string browser fixtures.
+
+The VPS API deployment of items 1-3 remains a separate operational boundary: it requires an explicit owner action running `vps/ops/deploy-code.sh` and `vps/ops/verify_api_deployment.py` against the production host, with deployment compatibility evidence showing all active clients emit identity keys.

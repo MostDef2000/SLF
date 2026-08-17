@@ -12,7 +12,7 @@
     {
       "id": "QR-001",
       "title": "VPS accepts tactical records without the configured unique key",
-      "status": "open",
+      "status": "closed",
       "severity": "high",
       "owner": "MostDef2000",
       "boundary": "VPS API persistence",
@@ -24,13 +24,14 @@
         "contract and compatibility tests cover the current behaviour"
       ],
       "target": "Reject missing tactical identity before persistence after producer compatibility verification and a separately tested deployment change.",
+      "closureEvidence": "vps/api/server.py rejects any tactical append missing the configured unique key with HTTP 400 kind=missing_unique_key before persistence (fail-closed, no partial writes); regression tests vps/api/test_server.py (test_missing_unique_key_is_rejected_before_persistence, test_mixed_append_with_missing_key_is_rejected_without_partial_write) and tools/test-api-contract-compatibility.py; all SLF producers verified to always send snapshotKey/resultKey/eventKey/effectKey; docs/contracts/versioned-data-api-contracts.md updated. VPS deployment remains a separate operational boundary (deploy-code.sh + verify_api_deployment.py).",
       "sourcePullRequest": 164,
       "reviewBy": "2026-09-01"
     },
     {
       "id": "QR-002",
       "title": "VPS API has no explicit request-body size limit",
-      "status": "open",
+      "status": "closed",
       "severity": "medium",
       "owner": "MostDef2000",
       "boundary": "HTTP request parsing",
@@ -41,13 +42,14 @@
         "deployment remains private operational infrastructure"
       ],
       "target": "Introduce a reviewed MAX_CONTENT_LENGTH and negative tests with an explicit operational limit.",
+      "closureEvidence": "vps/api/server.py sets MAX_CONTENT_LENGTH = 1 MiB and returns JSON 413 kind=payload_too_large with limitBytes for oversized bodies; regression test test_oversized_request_body_is_rejected in vps/api/test_server.py. VPS deployment remains a separate operational boundary.",
       "sourcePullRequest": 165,
       "reviewBy": "2026-09-01"
     },
     {
       "id": "QR-003",
       "title": "VPS API CORS policy is broad",
-      "status": "open",
+      "status": "closed",
       "severity": "medium",
       "owner": "MostDef2000",
       "boundary": "Browser to VPS API",
@@ -58,13 +60,14 @@
         "userscript connection hosts are allowlisted"
       ],
       "target": "Define and test explicit allowed origins without breaking Tampermonkey transport.",
+      "closureEvidence": "vps/api/server.py restricts CORS to explicit SLF origins (https://slf.fm, https://www.slf.fm, https://soccerlife.ru, https://www.soccerlife.ru); regression test test_cors_allows_explicit_origins_only in vps/api/test_server.py. VPS deployment remains a separate operational boundary.",
       "sourcePullRequest": 165,
       "reviewBy": "2026-09-15"
     },
     {
       "id": "QR-004",
       "title": "External jQuery userscript dependency is URL-versioned but not content-addressed",
-      "status": "open",
+      "status": "closed",
       "severity": "medium",
       "owner": "MostDef2000",
       "boundary": "Userscript supply chain",
@@ -75,13 +78,14 @@
         "Release evidence records the declared external requirement"
       ],
       "target": "Remove the dependency, vendor a reviewed licensed copy, or add content-digest verification to release evidence.",
+      "closureEvidence": "jQuery 3.6.0 vendored at vendor/jquery-3.6.0.min.js (sha256 ff1523fb7389539c84c65aba19260648793bb4f5e29329d2ee8804bc37a3fe6e, fetched from code.jquery.com on 2026-08-17) with vendor/jquery-3.6.0.LICENSE.txt (MIT); @require now points to the repository release URL; tools/test-security-boundaries.mjs pins the vendored digest and license and keeps the @require allowlist merge-blocking.",
       "sourcePullRequest": 165,
       "reviewBy": "2026-10-01"
     },
     {
       "id": "QR-005",
       "title": "Browser DOM XSS coverage is not yet sink-complete",
-      "status": "open",
+      "status": "closed",
       "severity": "high",
       "owner": "MostDef2000",
       "boundary": "Untrusted page and API text to userscript UI",
@@ -92,6 +96,7 @@
         "Security scan inventories innerHTML assignments"
       ],
       "target": "Classify every innerHTML assignment and add malicious-string fixtures for all untrusted data paths.",
+      "closureEvidence": "All 39 innerHTML assignments classified (trusted / escaped / unescaped) in the QR-005 audit; the single unescaped sink src/app/ui-layer.js:142 (save dialog preset names from localStorage/VPS) now escapes both key and label via UI.escapeHtml; malicious-string browser fixture tests/browser/test_save_dialog_xss_fixtures.py (registered in quality-integration.yml browser-e2e) proves payloads are escaped and do not execute; tools/test-security-boundaries.mjs keeps the innerHTML inventory merge-blocking.",
       "sourcePullRequest": 165,
       "reviewBy": "2026-09-01"
     },

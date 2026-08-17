@@ -89,15 +89,49 @@ class ServerTestCase(unittest.TestCase):
         self.assertEqual(body["added"], 1)
         self.assertEqual(body["skippedDuplicates"], 1)
 
-    def test_missing_unique_key_remains_backward_compatible(self):
+    def test_missing_unique_key_is_rejected_before_persistence(self):
         response = self.client.post(
             "/api/preset_effects_v2?mode=append",
             json={"gameId": "legacy"},
             headers=self.auth
         )
         body = response.get_json()
-        self.assertEqual(body["added"], 1)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(body["kind"], "missing_unique_key")
         self.assertEqual(body["missingUniqueKey"], 1)
+        self.assertFalse(os.path.exists(os.path.join(self.temp_dir.name, "preset_effects_v2.json")))
+
+    def test_mixed_append_with_missing_key_is_rejected_without_partial_write(self):
+        payload = [
+            {"effectKey": "effect-1", "gameId": "g1"},
+            {"gameId": "g1"}
+        ]
+        response = self.client.post("/api/preset_effects_v2?mode=append", json=payload, headers=self.auth)
+        body = response.get_json()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(body["kind"], "missing_unique_key")
+        self.assertEqual(body["missingUniqueKey"], 1)
+        self.assertFalse(os.path.exists(os.path.join(self.temp_dir.name, "preset_effects_v2.json")))
+
+    def test_oversized_request_body_is_rejected(self):
+        oversized = {"gameId": "g1", "blob": "x" * (1024 * 1024 + 1)}
+        response = self.client.post("/api/tactics?mode=replace", json=oversized, headers=self.auth)
+        body = response.get_json()
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(body["kind"], "payload_too_large")
+        self.assertEqual(body["limitBytes"], 1024 * 1024)
+
+    def test_cors_allows_explicit_origins_only(self):
+        allowed = self.client.get(
+            "/api/analysis",
+            headers={**self.auth, "Origin": "https://slf.fm"}
+        )
+        self.assertEqual(allowed.headers.get("Access-Control-Allow-Origin"), "https://slf.fm")
+        denied = self.client.get(
+            "/api/analysis",
+            headers={**self.auth, "Origin": "https://evil.example"}
+        )
+        self.assertIsNone(denied.headers.get("Access-Control-Allow-Origin"))
 
     def test_corrupt_collection_returns_controlled_error(self):
         with open(os.path.join(self.temp_dir.name, "preset_effects_v2.json"), "w", encoding="utf-8") as file_handle:

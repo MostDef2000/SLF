@@ -97,37 +97,37 @@ def main():
             "status": "live",
             "ts": 1770000001000,
         }
+        # QR-001: a tactical append without the configured unique key is
+        # rejected fail-closed (400) before any persistence; no partial writes.
         compatibility = post_json(
             client,
             "/api/match_snapshots_v2?mode=append",
             [missing_key_snapshot],
         )
-        assert compatibility.status_code == 200
+        assert compatibility.status_code == 400
         compatibility_json = compatibility.get_json()
-        assert compatibility_json["received"] == 1
-        assert compatibility_json["added"] == 1
-        assert compatibility_json["skippedDuplicates"] == 0
+        assert compatibility_json["kind"] == "missing_unique_key"
         assert compatibility_json["missingUniqueKey"] == 1
-        assert compatibility_json["count"] == 2
+        assert compatibility_json["received"] == 1
+        assert compatibility_json["collection"] == "match_snapshots_v2"
 
         collection_path = Path(data_dir) / "match_snapshots_v2.json"
         stored = json.loads(collection_path.read_text(encoding="utf-8"))
-        assert len(stored) == 2
+        assert len(stored) == 1
         assert stored[0]["snapshotKey"] == valid_snapshot["snapshotKey"]
-        assert "snapshotKey" not in stored[1]
 
         analysis = client.get("/api/analysis", headers=auth_headers())
         assert analysis.status_code == 200
         analysis_json = analysis.get_json()
         assert analysis_json["status"] == "ok"
-        assert analysis_json["games"] == 2
+        assert analysis_json["games"] == 1
         assert isinstance(analysis_json["serverTime"], int)
         health = analysis_json["collections"]["match_snapshots_v2"]
-        assert health["count"] == 2
+        assert health["count"] == 1
         assert health["duplicateKeys"] == 0
-        assert health["missingUniqueKeys"] == 1
+        assert health["missingUniqueKeys"] == 0
 
-    print("[api-contract-compatibility] passed: auth, dedupe, missing-key reporting, analysis")
+    print("[api-contract-compatibility] passed: auth, dedupe, missing-key fail-closed rejection, analysis")
 
 
 if __name__ == "__main__":
