@@ -35,8 +35,9 @@ FM styling consumes the host `--fm-*` variables through SLF aliases. Existing co
 - training reference guide;
 - loan-limit helper;
 - saved-form notice;
-- championship table;
-- read-only leadership-upgrade badge.
+- championship table.
+
+The former read-only leadership-upgrade badge is retired because FM2026 now provides the native leadership control. SLF no longer scans player pages or renders a duplicate leadership indicator.
 
 ### Stage 4 — responsive and accessibility gates
 
