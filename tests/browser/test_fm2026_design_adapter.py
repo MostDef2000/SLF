@@ -142,10 +142,16 @@ def init_script(api_mode: str) -> str:
   const trainingCache = {training_cache_json};
   const store = new Map();
   window.__slfRequests = [];
+  window.__slfNativeFetches = [];
   window.__slfUnhandled = [];
   window.__slfAlerts = [];
   window.__slfPwned = 0;
   window.unsafeWindow = window;
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {{
+    window.__slfNativeFetches.push(String(input?.url || input || ''));
+    return nativeFetch(input, init);
+  }};
   window.addEventListener('error', event => window.__slfUnhandled.push(`error:${{event.message || 'unknown'}}`));
   window.addEventListener('unhandledrejection', event => window.__slfUnhandled.push(`rejection:${{String(event.reason?.message || event.reason || 'unknown')}}`));
   window.GM_getValue = (key, fallback = '') => key === 'slf_api_token' ? 'fm2026-e2e-token' : (store.has(key) ? store.get(key) : fallback);
@@ -352,13 +358,15 @@ def assert_transfer_history(page: Page):
 def wait_team_core(page: Page):
     page.wait_for_selector(".content-ui__wrapper #slf-team4-form-saved-choice-notice.slf-ui.slf-panel")
     page.wait_for_selector(".content-ui__wrapper #slf-loan-limit-inline.slf-ui.slf-panel")
-    page.wait_for_selector(".content-ui__wrapper .slf-team4-leadership-upgrade-badge.slf-ui")
 
 
 def assert_team_main(page: Page):
     wait_team_core(page)
     page.wait_for_selector(".content-ui__wrapper #slf-team4-championship-table.slf-ui.slf-panel")
-    assert page.locator(".slf-team4-leadership-upgrade-badge").count() == 2
+    page.wait_for_timeout(250)
+    assert page.locator(".slf-team4-leadership-upgrade-badge").count() == 0
+    assert page.evaluate("window.SLFTeam4LeadershipUpgradeIndicator === undefined")
+    assert not any("/player.php" in url for url in page.evaluate("window.__slfNativeFetches.slice()"))
     assert "15.08.2026" in page.locator("#slf-team4-form-saved-choice-notice").inner_text()
     assert "2/10" in page.locator("#slf-loan-limit-inline").inner_text()
     assert page.locator("#slf-team4-championship-table tr.slf-active-team").count() == 1
@@ -374,6 +382,7 @@ def assert_team_main(page: Page):
     assert page.locator("#slf-team4-form-saved-choice-notice").count() == 1
     assert page.locator("#slf-loan-limit-inline").count() == 1
     assert page.locator("#slf-team4-championship-table").count() == 1
+    assert page.locator(".slf-team4-leadership-upgrade-badge").count() == 0
 
 
 def wait_training(page: Page):
@@ -469,6 +478,8 @@ def assert_transfer_responsive_accessibility(page: Page):
 def assert_team_responsive(page: Page):
     wait_team_core(page)
     assert page.locator("#slf-team4-championship-table").count() == 0
+    assert page.locator(".slf-team4-leadership-upgrade-badge").count() == 0
+    assert page.evaluate("window.SLFTeam4LeadershipUpgradeIndicator === undefined")
     selectors = ["#slf-team4-form-saved-choice-notice", "#slf-loan-limit-inline"]
     assert_top_level_containment(page, selectors)
     assert contrast_ratio(page, "#slf-loan-limit-inline") >= 4.5
