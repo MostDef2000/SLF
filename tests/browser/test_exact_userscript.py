@@ -233,12 +233,12 @@ def add_tactical_lab_control_fixture_values(page: Page):
     page.evaluate("""
       (() => {
         const ranges = {
-          def_line:['1','2','3','4','5'], press_line:['1','2','3','4','5'],
-          def_width:['1','2','3','4','5'], press_intense:['1','2','3','4','5'],
-          build_type:['1','2','3'], build_temp:['1','2','3'], build_long:['1','2','3','4','5'],
-          build_fast:['1','2','3','4','5'], style:['1','2','3','4','5'],
+          def_line:['1','2','3'], press_line:['1','2','3'],
+          def_width:['1','2','3'], press_intense:['1','2','3','4','5'],
+          build_type:['1','2','3'], build_temp:['1','2','3'], build_long:['1','2','3'],
+          build_fast:['1','2','3'], style:['1','2','3','4','5'],
           pass_risk:['1','2','3','4','5'], dribble:['1','2','3','4','5'],
-          cross:['1','2','3','4','5'], corner:['1'], shot:['1','2','3','4','5']
+          cross:['1','2','3'], corner:['1','2'], shot:['1','2','3']
         };
         for (const [name, values] of Object.entries(ranges)) {
           for (const value of values) {
@@ -265,7 +265,7 @@ def assert_owned_live(page: Page):
     page.wait_for_selector("#slf-tactics-dropdown")
     page.wait_for_selector("#slf-live-lineup-preset-panel")
     page.wait_for_selector("#slf-live-lineup-preset-select")
-    page.wait_for_selector("#slf-tactical-lab-panel")
+    page.wait_for_selector("#slf-parser-recommendation #slf-tactical-lab-panel")
     page.wait_for_timeout(100)
 
     assert page.locator("#slf-match-parser-panel").count() == 1
@@ -274,9 +274,12 @@ def assert_owned_live(page: Page):
     assert page.locator("#slf-live-lineup-preset-panel").count() == 1
     assert page.locator("#slf-live-lineup-preset-select option").count() == 11
     assert page.locator("#slf-tactical-lab-panel").count() == 1
+    assert page.locator("#slf-parser-recommendation > #slf-tactical-lab-panel").count() == 1
     experiment_id = page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id")
-    assert experiment_id and experiment_id.startswith("EXP-561-P01-"), experiment_id
+    assert experiment_id and experiment_id.startswith("EXP-561-P02-"), experiment_id
+    assert page.locator("#slf-tactical-lab-panel").get_attribute("data-population-version") == "slf_tactical_lab_561_p02"
     assert "blind challenger" in page.locator("#slf-tactical-lab-status").text_content()
+    assert "расстановка игроков не меняется" in page.locator("#slf-tactical-lab-detail").text_content()
 
     expected_dropdown_ids = [
         "Bielsa_ChaosPress_att5",
@@ -341,6 +344,7 @@ def assert_owned_live(page: Page):
     assert record["snapshotKey"].startswith("match_snapshot|e2e-owned|")
     assert record["source"]["scriptVersion"] == EXPECTED_VERSION
     assert record["tacticalLab"]["assignment"]["experimentId"] == experiment_id
+    assert record["tacticalLab"]["populationVersion"] == "slf_tactical_lab_561_p02"
 
     page.evaluate("""
       window.__tacticPresetChanges = [];
@@ -407,15 +411,36 @@ def assert_owned_live(page: Page):
     assert save_payload["sub1"] == "p-sub1", save_payload
 
     add_tactical_lab_control_fixture_values(page)
+    page.wait_for_selector("#slf-parser-recommendation #slf-tactical-lab-panel")
+    page.wait_for_function(
+        "() => document.getElementById('slf-tactical-lab-apply') && !document.getElementById('slf-tactical-lab-apply').disabled"
+    )
+    lineup_before_lab = page.eval_on_selector_all(
+        ".cf1-pitch .control_line > .control_lineup",
+        "cards => cards.map(card => `${card.dataset.player}:${card.parentElement.dataset.position}`).sort()",
+    )
+    lineup_save_clicks_before_lab = page.evaluate("window.__lineupSaveClicks")
+    lineup_preview_calls_before_lab = page.evaluate("window.__lineupPreviewCalls")
+
     page.locator("#slf-tactical-lab-apply").click()
     page.wait_for_function(
         "() => document.getElementById('slf-tactical-lab-status')?.textContent.includes('ACTIVE')"
     )
-    assert page.evaluate("window.__lineupSaveClicks") == 2
+    assert page.evaluate("window.__lineupSaveClicks") == lineup_save_clicks_before_lab
+    assert page.evaluate("window.__lineupPreviewCalls") == lineup_preview_calls_before_lab
+    lineup_after_lab = page.eval_on_selector_all(
+        ".cf1-pitch .control_line > .control_lineup",
+        "cards => cards.map(card => `${card.dataset.player}:${card.parentElement.dataset.position}`).sort()",
+    )
+    assert lineup_after_lab == lineup_before_lab, (lineup_before_lab, lineup_after_lab)
+    assert page.locator("#slf-parser-recommendation > #slf-tactical-lab-panel").count() == 1
+
     lab_state = page.evaluate(
         "JSON.parse(localStorage.getItem('slf_manual_match_state_v2:e2e-owned') || '{}').tacticalLab"
     )
+    assert lab_state["populationVersion"] == "slf_tactical_lab_561_p02"
     assert lab_state["assignment"]["experimentId"] == experiment_id
+    assert lab_state["assignment"]["populationVersion"] == "slf_tactical_lab_561_p02"
     assert lab_state["activation"]["status"] == "active"
     assert lab_state["activation"]["startedAtMinute"] is not None
     assert lab_state["activation"]["entryContext"]["productionRecommendation"] is not None
@@ -433,6 +458,8 @@ def assert_owned_live(page: Page):
     assert lab_snapshot_records, lab_snapshot_records
     assert len({item["snapshotKey"] for item in lab_snapshot_records}) == 1, lab_snapshot_records
     assert all(item["tacticalLabEvent"]["experimentId"] == experiment_id for item in lab_snapshot_records)
+    assert all(item["tacticalLabEvent"]["populationVersion"] == "slf_tactical_lab_561_p02" for item in lab_snapshot_records)
+    assert all(item["tacticalLabEvent"]["extra"]["applicationScope"] == "tactical_controls_only" for item in lab_snapshot_records)
     assert "tactical_lab_activation" in lab_snapshot_records[0]["snapshotKey"]
 
     page.locator("#slf-tactics-dropdown select").select_option("Arteta_Control433_bal3")
@@ -463,6 +490,7 @@ def assert_owned_live(page: Page):
     assert page.locator("#slf-manual-recommendation-btn").count() == 1
     assert page.locator("#slf-tactics-dropdown").count() == 1
     assert page.locator("#slf-live-lineup-preset-panel").count() == 1
+    assert page.locator("#slf-parser-recommendation > #slf-tactical-lab-panel").count() == 1
     assert page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id") == experiment_id
 
 
