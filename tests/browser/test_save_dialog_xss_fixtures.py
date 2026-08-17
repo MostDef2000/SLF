@@ -31,10 +31,10 @@ FIXTURES = ROOT / "tests" / "browser" / "fixtures"
 ARTIFACTS = ROOT / "tests" / "browser" / "artifacts"
 
 MALICIOUS_PRESETS = {
-    "img_onerror": "<img src=x onerror=\"window.__slfXss=1\">",
-    "script_tag": "<script>window.__slfXss=2</script>",
-    "attr_breakout": "\"><svg onload=window.__slfXss=3>",
-    "amp_quote_angle": "A&B\"'<x>",
+    "<img src=x onerror=\"window.__slfXss=1\">": {"style": "3"},
+    "<script>window.__slfXss=2</script>": {"style": "3"},
+    "\"><svg onload=window.__slfXss=3>": {"style": "3"},
+    "A&B\"'<x>": {"style": "3"},
 }
 
 
@@ -210,10 +210,12 @@ def assert_save_dialog_escapes_malicious_presets(page: Page):
     assert "&lt;svg" in dialog_html, dialog_html
     assert "&quot;" in dialog_html, dialog_html
     assert "&amp;" in dialog_html, dialog_html
-    assert "&#39;" in dialog_html, dialog_html
 
     # The DOM option values/text must decode back to the literal names:
-    # escaping must not corrupt the user's data.
+    # escaping must not corrupt the user's data. The single quote is
+    # escaped at render time (&#039;) but the browser normalizes it back to
+    # a literal quote in the serialized innerHTML, so it is verified here
+    # through the decoded DOM text instead of the raw serialization.
     option_values = page.eval_on_selector_all(
         "#slf-save-select option",
         "options => options.map(option => option.value)",
