@@ -52,8 +52,9 @@ The adapter:
 - loan-limit helper;
 - saved-form notice;
 - championship table;
-- leadership-upgrade indicator;
 - team page layout wrappers.
+
+The former leadership-upgrade indicator is retired in favor of FM2026's native leadership control. It no longer scans player pages or renders an SLF badge.
 
 ### Batch 4: visual and security closure
 
