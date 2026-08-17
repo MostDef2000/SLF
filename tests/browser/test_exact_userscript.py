@@ -263,16 +263,14 @@ def assert_owned_live(page: Page):
     page.wait_for_selector("#slf-match-parser-panel")
     page.wait_for_selector("#slf-manual-recommendation-btn")
     page.wait_for_selector("#slf-tactics-dropdown")
-    page.wait_for_selector("#slf-live-lineup-preset-panel")
-    page.wait_for_selector("#slf-live-lineup-preset-select")
     page.wait_for_selector("#slf-parser-recommendation #slf-tactical-lab-panel")
     page.wait_for_timeout(100)
 
     assert page.locator("#slf-match-parser-panel").count() == 1
     assert page.locator("#slf-manual-recommendation-btn").count() == 1
     assert page.locator("#slf-tactics-dropdown").count() == 1
-    assert page.locator("#slf-live-lineup-preset-panel").count() == 1
-    assert page.locator("#slf-live-lineup-preset-select option").count() == 11
+    assert page.locator("#slf-live-lineup-preset-panel").count() == 0
+    assert page.locator("#slf-live-lineup-preset-select").count() == 0
     assert page.locator("#slf-tactical-lab-panel").count() == 1
     assert page.locator("#slf-parser-recommendation > #slf-tactical-lab-panel").count() == 1
     experiment_id = page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id")
@@ -345,50 +343,6 @@ def assert_owned_live(page: Page):
     assert record["source"]["scriptVersion"] == EXPECTED_VERSION
     assert record["tacticalLab"]["assignment"]["experimentId"] == experiment_id
     assert record["tacticalLab"]["populationVersion"] == "slf_tactical_lab_561_p02"
-
-    page.evaluate("""
-      window.__tacticPresetChanges = [];
-      document.querySelector('#slf-tactics-dropdown select').addEventListener('change', event => {
-        window.__tacticPresetChanges.push(event.target.value);
-      });
-      document.getElementById('slf-parser-recommendation').textContent =
-        'Coach Mode рекомендует Simeone_Compact442_def4';
-    """)
-    lineup_select = page.locator("#slf-live-lineup-preset-select")
-    lineup_select.focus()
-    recommended = page.locator('#slf-live-lineup-preset-select option[data-recommended="1"]')
-    assert recommended.count() == 1
-    assert recommended.get_attribute("value") == "Simeone_Compact442_def4"
-    assert "рекомендовано" in recommended.text_content()
-
-    expected_compact = {
-        "gk", "ld", "cd1", "cd3", "rd", "lm", "cm2", "dm2", "rm", "st1", "st2"
-    }
-    lineup_select.select_option("Simeone_Compact442_def4")
-    page.wait_for_function(
-        "() => document.getElementById('slf-live-lineup-preset-status')?.textContent.includes('Расстановка подготовлена')"
-    )
-    page.wait_for_function(
-        "() => window.__tacticPresetChanges.includes('Simeone_Compact442_def4')"
-    )
-
-    field_positions = set(page.eval_on_selector_all(
-        ".cf1-pitch .control_line > .control_lineup",
-        "cards => cards.map(card => card.parentElement.dataset.position)",
-    ))
-    assert field_positions == expected_compact, field_positions
-    assert page.locator(".cf1-pitch .control_line > .control_lineup").count() == 11
-    assert page.locator('#control_gk > .control_lineup[data-player="p-gk"]').count() == 1
-    assert page.locator('#control_sub1 > .control_lineup[data-player="p-sub1"]').count() == 1
-    assert page.locator(".cf1-pitch .control_lineup.position_modify").count() >= 1
-    assert page.evaluate("window.__lineupSaveClicks") == 0
-    assert page.evaluate("window.__lineupPreviewCalls") == 1
-
-    lineup_select.select_option("Arteta_Control433_bal3")
-    lineup_select.select_option("Simeone_Compact442_def4")
-    assert page.locator("#slf-live-lineup-preset-panel").count() == 1
-    assert page.locator('#control_sub1 > .control_lineup[data-player="p-sub1"]').count() == 1
-    assert page.evaluate("window.__lineupSaveClicks") == 0
 
     page.evaluate("""
       const card = document.querySelector('.control_lineup[data-player="p-lw"]');
@@ -489,7 +443,8 @@ def assert_owned_live(page: Page):
     assert page.locator("#slf-match-parser-panel").count() == 1
     assert page.locator("#slf-manual-recommendation-btn").count() == 1
     assert page.locator("#slf-tactics-dropdown").count() == 1
-    assert page.locator("#slf-live-lineup-preset-panel").count() == 1
+    assert page.locator("#slf-live-lineup-preset-panel").count() == 0
+    assert page.locator("#slf-live-lineup-preset-select").count() == 0
     assert page.locator("#slf-parser-recommendation > #slf-tactical-lab-panel").count() == 1
     assert page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id") == experiment_id
 
