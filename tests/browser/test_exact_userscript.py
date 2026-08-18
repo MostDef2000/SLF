@@ -416,6 +416,30 @@ def assert_owned_live(page: Page):
     assert all(item["tacticalLabEvent"]["extra"]["applicationScope"] == "tactical_controls_only" for item in lab_snapshot_records)
     assert "tactical_lab_activation" in lab_snapshot_records[0]["snapshotKey"]
 
+    snapshot_request_count_before_idle = len([
+        row for row in request_rows(page)
+        if "/api/match_snapshots_v2?mode=append" in row["url"]
+    ])
+    page.wait_for_timeout(1250)
+    snapshot_request_count_after_idle = len([
+        row for row in request_rows(page)
+        if "/api/match_snapshots_v2?mode=append" in row["url"]
+    ])
+    assert snapshot_request_count_after_idle == snapshot_request_count_before_idle, (
+        snapshot_request_count_before_idle,
+        snapshot_request_count_after_idle,
+        request_rows(page),
+    )
+    assert "Следующая проверка" in page.locator("#slf-tactical-lab-detail").text_content()
+
+    page.locator("#slf-manual-recommendation-btn").click()
+    page.wait_for_function(
+        "() => !document.getElementById('slf-manual-recommendation-btn')?.disabled && document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
+    )
+    page.wait_for_selector("#slf-parser-recommendation > #slf-tactical-lab-panel")
+    assert page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id") == experiment_id
+    assert "ACTIVE" in page.locator("#slf-tactical-lab-status").text_content()
+
     page.locator("#slf-tactics-dropdown select").select_option("Arteta_Control433_bal3")
     page.wait_for_function(
         "() => document.getElementById('slf-tactical-lab-status')?.textContent.includes('протестирован')"

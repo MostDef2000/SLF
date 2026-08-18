@@ -366,7 +366,6 @@
         let cachedState = null;
         let cachedGameId = '';
         let flushPromise = null;
-        let monitorTimer = null;
         let telemetryWrapped = false;
         let persistWrapped = false;
 
@@ -771,7 +770,7 @@
                     const gameId = getGameId(snapshot);
                     const state = gameId ? loadState(gameId) : null;
                     if (state?.activation?.status === 'active' && snapshot?.status === 'finished') {
-                        await closeActive('match_finished', snapshot, {nextTacticSource:'finished'});
+                        await checkpoint('finished_parse', snapshot);
                     }
                     const finalState = gameId ? loadState(gameId) : null;
                     if (finalState?.assignment) snapshot.tacticalLab = publicState(finalState);
@@ -880,12 +879,33 @@
             const state = loadState(String(MatchStateParser.getGameId() || ''));
             return state?.activation?.status === 'active';
         }
-        function recommendationText() {
-            const box = document.getElementById('slf-parser-recommendation');
-            if (!box) return '';
-            const copy = box.cloneNode(true);
-            copy.querySelector?.(`#${PANEL_ID}`)?.remove();
-            return String(copy.textContent || '').trim();
+        async function checkpoint(source = 'explicit_checkpoint', snapshot = null) {
+            snapshot = snapshot || SnapshotEngine.build();
+            const state = loadState(getGameId(snapshot));
+            if (!state?.assignment) return {active:false,completed:null};
+            if (state.outbox?.length) void flushOutbox(state);
+            if (!state?.activation || state.activation.status !== 'active') {
+                renderUI();
+                return {active:false,completed:clone(state.completed || null)};
+            }
+            const experiment = experimentFor(state);
+            if (!experiment) return {active:true,completed:null};
+
+            const actual = tacticFingerprint(getCurrentTactic());
+            if (actual !== experiment.tacticFingerprint) {
+                const completed = await closeActive('tactic_changed_checkpoint', snapshot, {
+                    nextTacticSource:String(source || 'explicit_checkpoint'),
+                    nextTacticFingerprint:actual
+                });
+                return {active:false,completed};
+            }
+            if (snapshot?.status === 'finished') {
+                const completed = await closeActive('match_finished', snapshot, {nextTacticSource:'finished'});
+                return {active:false,completed};
+            }
+
+            renderUI();
+            return {active:true,completed:null};
         }
         function renderUI() {
             const panel = document.getElementById(PANEL_ID);
@@ -900,14 +920,9 @@
             panel.dataset.experimentId = experiment.experimentId;
             panel.dataset.populationVersion = POPULATION_VERSION;
             if (state.activation?.status === 'active') {
-                let exposure = null;
-                try {
-                    const minute = SnapshotEngine.build()?.minute;
-                    exposure = state.activation.startedAtMinute != null && Number.isFinite(Number(minute)) ? Math.max(0,Number(minute)-Number(state.activation.startedAtMinute)) : null;
-                } catch (_) {}
-                status.textContent = `● ${shortId} ACTIVE${state.activation.startedAtMinute!=null?` · с ${state.activation.startedAtMinute}'`:''}${exposure!=null?` · exposure ${exposure}m`:''}`;
+                status.textContent = `● ${shortId} ACTIVE${state.activation.startedAtMinute!=null?` · применён на ${state.activation.startedAtMinute}'`:''}`;
                 status.style.color = '#43f58c';
-                detail.textContent = recommendationText() ? `Production Advisor продолжает работать параллельно. Эксперимент меняет только tactical controls.` : 'Эксперимент активен; расстановка игроков не изменялась.';
+                detail.textContent = 'Эксперимент применён. Следующая проверка — только по ↻ Подсказка, выбору production preset или финальному парсингу.';
                 button.disabled = true;
                 button.textContent = 'Эксперимент активен';
             } else if (state.completed) {
@@ -925,10 +940,11 @@
                 button.textContent = ready ? 'Применить эксперимент' : 'Тактика загружается…';
             }
         }
-        async function mountUI() {
+        async function mountUI(snapshot = null) {
             if (!location.pathname.includes('/game.php')) return false;
-            let snapshot;
-            try { snapshot = SnapshotEngine.build(); } catch (_) { return false; }
+            if (!snapshot) {
+                try { snapshot = SnapshotEngine.build(); } catch (_) { return false; }
+            }
             if (!isOwnedLive(snapshot)) return false;
             const state = ensureAssignment(snapshot);
             if (!state?.assignment) return false;
@@ -966,24 +982,6 @@
             renderUI();
             return true;
         }
-        async function monitor() {
-            if (!location.pathname.includes('/game.php')) return;
-            await mountUI();
-            const state = loadState(String(MatchStateParser.getGameId() || ''));
-            if (state?.outbox?.length) void flushOutbox(state);
-            if (!state?.activation || state.activation.status !== 'active') { renderUI(); return; }
-            let snapshot;
-            try { snapshot = SnapshotEngine.build(); } catch (_) { return; }
-            if (snapshot.status === 'finished') { await closeActive('match_finished',snapshot,{nextTacticSource:'finished'}); return; }
-            const experiment = experimentFor(state);
-            if (!experiment) return;
-            const actual = tacticFingerprint(getCurrentTactic());
-            if (actual !== experiment.tacticFingerprint && (!STATE.suppressManualWatcherUntil || Date.now() >= STATE.suppressManualWatcherUntil)) {
-                await closeActive('tactic_changed',snapshot,{nextTacticSource:'manual',nextTacticFingerprint:actual});
-                return;
-            }
-            renderUI();
-        }
 
         function install() {
             if (STATE.tacticalLabRuntime?.schema === 'slf_tactical_lab_runtime_v1' && STATE.tacticalLabRuntime?.populationVersion === POPULATION_VERSION) return true;
@@ -998,11 +996,12 @@
                 getPopulation(){return clone(population);},
                 getAssignment(gameId){return clone(loadState(String(gameId||MatchStateParser.getGameId()||''))?.assignment||null);},
                 assignForGame(gameId){const experiment=selectExperiment(String(gameId||''));return {experimentId:experiment.experimentId,genomeFingerprint:experiment.genomeFingerprint};},
-                activate,closeActive,isActive,mountUI,
+                activate,closeActive,checkpoint,isActive,mountUI,
                 flushOutbox(){return flushOutbox(loadState(String(MatchStateParser.getGameId()||'')));}
             };
-            void monitor();
-            if (!monitorTimer) monitorTimer = setInterval(()=>{void monitor();},1000);
+            void mountUI();
+            const state = loadState(String(MatchStateParser.getGameId() || ''));
+            if (state?.outbox?.length) void flushOutbox(state);
             return true;
         }
 

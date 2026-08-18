@@ -21,7 +21,7 @@ The challenger has no activation minute window. The user may apply it at any poi
 
 One explicit click applies only the experimental tactical controls. Tactical Lab v1 does not move players, change formation slots, invoke lineup preview logic or invoke the native lineup save action. Formation experimentation is a separate problem and is outside this runtime.
 
-There is no background experimental auto-apply. The Production Advisor remains live while the experiment is active.
+There is no background experimental auto-apply and no Tactical Lab polling or monitoring loop after activation. Once the controls are applied and activation telemetry is queued, the Lab remains idle until an explicit user checkpoint: `↻ Подсказка`, selection of a production preset, or `Спарсить завершённый`. The active UI therefore shows the application minute but does not continuously recompute exposure from background snapshots.
 
 Tactical Lab v1 permits one successful experimental activation per match. A control application that cannot be verified against the native page controls is reported as a failure and does not count as activation. After a successful experiment exits, the embedded Lab row records the tested interval instead of offering a second activation. A new challenger is assigned in the next match.
 
@@ -73,9 +73,17 @@ When the user activates the experiment, telemetry captures the actual entry cont
 
 This is intentionally context-first. Tactical Lab does not label a genome as an opener, chase tactic or protect-lead tactic in advance. Those roles may be discovered later from observed cohorts.
 
-## Exit attribution
+## Explicit checkpoints and exit attribution
 
-The experimental phase closes when the user selects a production tactic, manually changes tactical controls, or the match finishes. Formation changes are not part of the Tactical Lab v1 genome and therefore do not themselves close a controls-only experiment.
+Tactical Lab v1 is checkpoint-driven. It does not inspect the active experiment every second and it does not build background Lab snapshots merely to detect a change.
+
+The explicit checkpoints are:
+
+- `↻ Подсказка`: build the user-requested current snapshot, compare the current tactical controls with the active experimental genome, close the experiment if the controls no longer match, and then render the new Production Advisor recommendation. The Lab row is remounted inside the refreshed recommendation surface.
+- production preset selection: close the active experiment immediately using the pre-apply snapshot, then apply the chosen production preset.
+- `Спарсить завершённый`: use the user-requested finished snapshot as the terminal checkpoint. If the experimental controls still match, close with `match_finished`; if they no longer match, close as a control change observed at the finished checkpoint before sending the result.
+
+A manual tactical control change by itself does not start a Tactical Lab timer, polling loop or background snapshot. If the user changes controls and does nothing else, the Lab remains idle; that divergence is observed at the next explicit checkpoint. Consequently, for such a manual divergence the recorded exit minute is the checkpoint observation minute, not an inferred hidden change time. This is deliberate: v1 records only evidence it actually observes.
 
 Telemetry stores the exit minute, duration, next tactic/source, production recommendation at exit and available phase metric deltas.
 
@@ -91,7 +99,7 @@ The finished result carries the durable Tactical Lab match state. This is the te
 
 Production `preset_events_v2` / `preset_effects_v2` remain unchanged and can still be correlated with the Tactical Lab entry/exit context. Tactical Lab does not overload production preset identity with `EXP-*` records.
 
-Failed activation/exit lifecycle writes are retained in a small bounded per-match outbox inside the existing manual-match envelope and retried through `SnapshotEngine.sendSnapshot()` rather than calling the API transport directly.
+Failed activation/exit lifecycle writes are retained in a small bounded per-match outbox inside the existing manual-match envelope and retried through `SnapshotEngine.sendSnapshot()` from explicit Lab lifecycle/checkpoint work rather than from a recurring Tactical Lab monitor.
 
 The existing manual-match storage schema name is not migrated by Tactical Lab v1. `tacticalLab` is an additive field in that existing state, and the runtime preserves that field when normal manual-match persistence runs.
 
@@ -100,6 +108,7 @@ The existing manual-match storage schema name is not migrated by Tactical Lab v1
 Tactical Lab v1 does not:
 
 - automatically activate a challenger without a user click;
+- poll or monitor an active experiment in the background;
 - let the Production Advisor recommend an `EXP-*` identity;
 - move players, apply an experimental formation or save a lineup;
 - let unsupported control values count as a successful activation;

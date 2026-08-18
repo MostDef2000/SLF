@@ -274,7 +274,7 @@
         };
     }
 
-    function renderManualRecommendation() {
+    async function renderManualRecommendation() {
         resetManualRecommendationState();
 
         const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
@@ -283,6 +283,10 @@
         snapshot.recommendationSource = 'manual_hint_button';
         snapshot.manualRecommendationRefresh = true;
         snapshot.generatorVersion = GENERATOR_VERSION;
+
+        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.checkpoint && snapshot.matchOwnership !== 'foreign') {
+            await STATE.tacticalLabRuntime.checkpoint('manual_hint', snapshot);
+        }
 
         if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.rememberManualSnapshot) {
             SnapshotEngine.rememberManualSnapshot(snapshot);
@@ -295,6 +299,10 @@
         if (el) el.innerHTML = html;
         rememberManualRecommendation(html, snapshot);
         submitManualTelemetry(snapshot);
+
+        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.mountUI && snapshot.matchOwnership !== 'foreign') {
+            await STATE.tacticalLabRuntime.mountUI(snapshot);
+        }
 
         UI.addParserLog('Подсказка обновлена по текущему snapshot');
         UI.updateParserStatus('Подсказка обновлена вручную');
@@ -311,10 +319,10 @@
         btn.textContent = '↻ Подсказка';
         btn.title = 'Собрать текущий snapshot и показать rule-based подсказку по текущему состоянию';
         btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
-        btn.onclick = () => {
+        btn.onclick = async () => {
             btn.disabled = true;
             try {
-                renderManualRecommendation();
+                await renderManualRecommendation();
             } catch (error) {
                 console.error('[SLF] Manual recommendation refresh failed', error);
                 UI.addParserLog('Подсказка: ошибка, см. console');
@@ -340,7 +348,7 @@
         select.title = 'Тестовый режим чужого матча: выбрать сторону для подсказок';
         select.style.cssText = 'padding:4px 6px;background:#333;color:#fff;border:1px solid #777;border-radius:3px;';
         select.innerHTML = '<option value="home">Анализ: хозяева</option><option value="away">Анализ: гости</option>';
-        select.onchange = () => renderManualRecommendation();
+        select.onchange = () => { void renderManualRecommendation(); };
 
         const status = document.getElementById('slf-parser-status');
         panel.insertBefore(select, status || null);
@@ -359,6 +367,10 @@
     UI.addMatchParserPanel = function patchedTaskAAddMatchParserPanel() {
         const result = originalAddMatchParserPanel.apply(this, arguments);
         mount();
+        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.mountUI) {
+            const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+            if (snapshot?.matchOwnership !== 'foreign') void STATE.tacticalLabRuntime.mountUI(snapshot);
+        }
         return result;
     };
 

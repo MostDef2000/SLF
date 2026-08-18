@@ -137,6 +137,7 @@ for(const file of ['coach-mode-policy.js','adaptive-opponent-style-layer.js','mo
 const tacticalLabContract=JSON.parse(source('data/tactics/tactical-lab-contract-v1.json'));
 const tacticControlEngine=source('src/modules/tactics-presets/tactic-control-engine.js');
 const tacticalLabRuntime=tacticControlEngine;
+const strategyDataUi=source('src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js');
 assert.equal(tacticalLabContract.schema,'slf_tactical_lab_contract_v1');
 assert.equal(tacticalLabContract.population.populationVersion,'slf_tactical_lab_561_p02');
 assert.equal(tacticalLabContract.population.supersedesPopulationVersion,'slf_tactical_lab_561_p01');
@@ -157,11 +158,20 @@ assert.equal(tacticalLabContract.productionBoundary.productionRegistryOwnsExperi
 assert.equal(tacticalLabContract.productionBoundary.productionRecommenderMayReturnExperiment,false);
 assert.equal(tacticalLabContract.application.requiresExplicitUserClick,true);
 assert.equal(tacticalLabContract.application.backgroundAutoApply,false);
+assert.equal(tacticalLabContract.application.backgroundMonitoring,false);
+assert.equal(tacticalLabContract.application.checkpointModel,'explicit_user_actions_only');
 assert.equal(tacticalLabContract.application.singleClickAppliesControls,true);
 assert.equal(tacticalLabContract.application.singleClickAppliesFormation,false);
 assert.equal(tacticalLabContract.application.singleClickUsesNativeLineupSave,false);
 assert.equal(tacticalLabContract.application.lineupMutationAllowed,false);
 assert.equal(tacticalLabContract.application.failedControlApplicationCountsAsActivation,false);
+assert.deepEqual(tacticalLabContract.checkpointing,{
+  backgroundPolling:false,
+  manualHint:true,
+  finishedParse:true,
+  productionPresetSelection:true,
+  manualControlChangesObservedAtNextCheckpoint:true
+});
 assert.equal(tacticalLabContract.ui.surface,'inside_parser_recommendation');
 assert.equal(tacticalLabContract.ui.separateLineupCard,false);
 assert.equal(tacticalLabContract.deferredIssue,252);
@@ -180,6 +190,14 @@ assert.equal(/bridge\.applyFormation\(experiment\.formation\)/.test(tacticalLabR
 assert.equal(/bridge\.saveLiveLineup\(\)/.test(tacticalLabRuntime),false,'Lab activation must not save the lineup');
 assert.equal(/formationMatches\(experiment\.formation\)/.test(tacticalLabRuntime),false,'Lab monitoring must not depend on formation');
 assert.equal(/formation_changed/.test(tacticalLabRuntime),false,'formation changes must not terminate a controls-only Lab phase');
+assert.equal(/monitorTimer/.test(tacticalLabRuntime),false,'Tactical Lab must not retain a recurring monitor timer');
+assert.equal(/async function monitor\s*\(/.test(tacticalLabRuntime),false,'Tactical Lab must not poll active experiments');
+assert.equal(/SnapshotEngine\.build\(\)\?\.minute/.test(tacticalLabRuntime),false,'active Lab UI must not build snapshots to update exposure');
+assert.match(tacticalLabRuntime,/async function checkpoint\(source = 'explicit_checkpoint', snapshot = null\)/,'Lab must expose an explicit checkpoint path');
+assert.match(tacticalLabRuntime,/tactic_changed_checkpoint/,'manual divergence must be attributed at an explicit checkpoint');
+assert.match(tacticalLabRuntime,/await checkpoint\('finished_parse', snapshot\)/,'finished parse must be the terminal Lab checkpoint');
+assert.match(strategyDataUi,/await STATE\.tacticalLabRuntime\.checkpoint\('manual_hint', snapshot\)/,'manual hint must checkpoint the active experiment');
+assert.match(strategyDataUi,/await STATE\.tacticalLabRuntime\.mountUI\(snapshot\)/,'manual hint must remount the Lab row after replacing recommendation HTML');
 assert.match(tacticalLabRuntime,/tactical_lab_assignment/);
 assert.match(tacticalLabRuntime,/tactical_lab_activation/);
 assert.match(tacticalLabRuntime,/queueLifecycle\(state,'exit'/);
@@ -194,4 +212,4 @@ assert.match(tacticControlEngine,/sendPlayerObservationsWithoutLabEventFanout/,'
 assert.equal(/\bApi\b/.test(tacticalLabRuntime),false,'Tactical Lab must reuse declared telemetry boundaries instead of adding a hidden API dependency');
 assert.equal(/EXP-561-P02-/.test(source('src/modules/tactics-presets/active-preset-registry.js')),false,'experimental identities must not enter production registry');
 
-console.log('tactical suite v7 + Tactical Lab v1 P02 controls-only isolation, assignment and apply contracts: OK');
+console.log('tactical suite v7 + Tactical Lab v1 P02 explicit-checkpoint contracts: OK');
