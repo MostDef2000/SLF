@@ -416,6 +416,29 @@ def assert_owned_live(page: Page):
     assert all(item["tacticalLabEvent"]["extra"]["applicationScope"] == "tactical_controls_only" for item in lab_snapshot_records)
     assert "tactical_lab_activation" in lab_snapshot_records[0]["snapshotKey"]
 
+    page.evaluate("""
+      (() => {
+        window.__slfLabMonitorBuilds = 0;
+        const originalBuild = SnapshotEngine.build.bind(SnapshotEngine);
+        SnapshotEngine.build = function() {
+          const stack = String(new Error().stack || '');
+          if (stack.includes('monitor')) window.__slfLabMonitorBuilds += 1;
+          return originalBuild();
+        };
+      })();
+    """)
+    page.wait_for_timeout(1250)
+    assert page.evaluate("window.__slfLabMonitorBuilds") == 0
+    assert "Следующая проверка" in page.locator("#slf-tactical-lab-detail").text_content()
+
+    page.locator("#slf-manual-recommendation-btn").click()
+    page.wait_for_function(
+        "() => !document.getElementById('slf-manual-recommendation-btn')?.disabled && document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
+    )
+    page.wait_for_selector("#slf-parser-recommendation > #slf-tactical-lab-panel")
+    assert page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id") == experiment_id
+    assert "ACTIVE" in page.locator("#slf-tactical-lab-status").text_content()
+
     page.locator("#slf-tactics-dropdown select").select_option("Arteta_Control433_bal3")
     page.wait_for_function(
         "() => document.getElementById('slf-tactical-lab-status')?.textContent.includes('протестирован')"
