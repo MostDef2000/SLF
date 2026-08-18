@@ -367,6 +367,9 @@
     UI.addMatchParserPanel = function patchedTaskAAddMatchParserPanel() {
         const result = originalAddMatchParserPanel.apply(this, arguments);
         mount();
+        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.mountUI) {
+            void STATE.tacticalLabRuntime.mountUI();
+        }
         return result;
     };
 
