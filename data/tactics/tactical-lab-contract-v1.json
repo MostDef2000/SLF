@@ -65,6 +65,8 @@
   "application": {
     "requiresExplicitUserClick": true,
     "backgroundAutoApply": false,
+    "backgroundMonitoring": false,
+    "checkpointModel": "explicit_user_actions_only",
     "singleClickAppliesControls": true,
     "singleClickAppliesFormation": false,
     "singleClickUsesNativeLineupSave": false,
@@ -72,6 +74,13 @@
     "strictNativeControlVerification": true,
     "failedControlApplicationCountsAsActivation": false,
     "userMayExitAtAnyTime": true
+  },
+  "checkpointing": {
+    "backgroundPolling": false,
+    "manualHint": true,
+    "finishedParse": true,
+    "productionPresetSelection": true,
+    "manualControlChangesObservedAtNextCheckpoint": true
   },
   "telemetry": {
     "existingCollectionsOnly": true,
