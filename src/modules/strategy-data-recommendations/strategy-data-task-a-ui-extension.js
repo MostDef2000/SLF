@@ -368,7 +368,8 @@
         const result = originalAddMatchParserPanel.apply(this, arguments);
         mount();
         if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.mountUI) {
-            void STATE.tacticalLabRuntime.mountUI();
+            const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+            if (snapshot?.matchOwnership !== 'foreign') void STATE.tacticalLabRuntime.mountUI(snapshot);
         }
         return result;
     };
