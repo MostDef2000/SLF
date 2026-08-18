@@ -416,19 +416,20 @@ def assert_owned_live(page: Page):
     assert all(item["tacticalLabEvent"]["extra"]["applicationScope"] == "tactical_controls_only" for item in lab_snapshot_records)
     assert "tactical_lab_activation" in lab_snapshot_records[0]["snapshotKey"]
 
-    page.evaluate("""
-      (() => {
-        window.__slfLabMonitorBuilds = 0;
-        const originalBuild = SnapshotEngine.build.bind(SnapshotEngine);
-        SnapshotEngine.build = function() {
-          const stack = String(new Error().stack || '');
-          if (stack.includes('monitor')) window.__slfLabMonitorBuilds += 1;
-          return originalBuild();
-        };
-      })();
-    """)
+    snapshot_request_count_before_idle = len([
+        row for row in request_rows(page)
+        if "/api/match_snapshots_v2?mode=append" in row["url"]
+    ])
     page.wait_for_timeout(1250)
-    assert page.evaluate("window.__slfLabMonitorBuilds") == 0
+    snapshot_request_count_after_idle = len([
+        row for row in request_rows(page)
+        if "/api/match_snapshots_v2?mode=append" in row["url"]
+    ])
+    assert snapshot_request_count_after_idle == snapshot_request_count_before_idle, (
+        snapshot_request_count_before_idle,
+        snapshot_request_count_after_idle,
+        request_rows(page),
+    )
     assert "Следующая проверка" in page.locator("#slf-tactical-lab-detail").text_content()
 
     page.locator("#slf-manual-recommendation-btn").click()
