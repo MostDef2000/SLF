@@ -50,7 +50,7 @@ Issue + Implementation Scope Check
 -> spec / plan / tasks
 -> commit approved
 -> implementation + delivery-quality artifacts
--> canonical CI (quality-governance, quality-integration)
+-> canonical CI: exact SLF CI / ci = SUCCESS on current PR head
 -> exact-green-head merge into main
 -> automatic release evaluation (SLF_AUTOMATIC_RELEASE_POLICY)
 -> release verification on the protected release branch

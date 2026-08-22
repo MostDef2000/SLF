@@ -28,7 +28,7 @@ permission:
 - `contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md`
 - `contracts/runtime/SLF_TASK_RUNTIME.md`, `contracts/runtime/RELEASE_READINESS_GATE.md`
 - `.specify/memory/constitution.md` + `specs/README.md` + `specs/<feature>/{spec,plan,tasks}.md`
-- `.github/workflows/quality-governance.yml`, `quality-integration.yml`, `build-latest-release.yml`
+- `.github/workflows/quality-integration.yml` (`SLF CI`), `.github/workflows/quality-governance.yml` (`SLF Maintenance`), `.github/workflows/build-latest-release.yml` (`SLF Release`)
 - `.github/pull_request_template.md`
 
 `main` — единственный source of truth для кода; защищённая ветка `release` — опубликованные latest-only артефакты. Canonical Issue — durable delivery-control truth. Чат — transient interaction state.
@@ -48,11 +48,13 @@ Issue / Resume Probe
 -> specs/<NNN-slug>/spec.md (NFR) + plan.md (риск-профиль, test design, correct-course) + tasks.md (traceability, DoD)
 -> реализация + тесты (tools/test-*.mjs, tools/test-*.py, tests/browser)
 -> PR с точным diff/риск/release impact
--> canonical CI (quality-governance, quality-integration)
--> exact-green-head merge (fresh base/head/scope, required checks на exact head)
+-> canonical merge gate: exact `SLF CI / ci = SUCCESS` на текущем PR head
+-> exact-green-head merge (fresh base/head/scope, required check на exact head)
 -> авторелиз по SLF_AUTOMATIC_RELEASE_POLICY (manual dispatch — fallback only)
 -> release verification -> DONE / BLOCKED / HUMAN DECISION REQUIRED
 ```
+
+`SLF Maintenance` и отдельные constituent jobs `SLF CI` могут давать дополнительное evidence, но не создают отдельный merge gate. Отсутствие/успех неканоничного статуса не заменяет exact `SLF CI / ci`.
 
 ## Source Authorization Gate (fail closed)
 Перед первым write требуй:

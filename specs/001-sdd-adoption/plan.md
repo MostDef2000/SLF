@@ -24,7 +24,7 @@ Port the sea-speed delivery-orchestrator model onto SLF's existing contract set,
 ## Test design
 
 - unit: NOT REQUIRED (no executable source changed)
-- integration: canonical CI runs unchanged quality-governance / quality-integration suites
+- integration: canonical `SLF CI / ci` is the only merge gate and must succeed on the exact final PR head
 - end-to-end: PR → CI → merge lifecycle itself exercises the new pipeline
 - runtime-manual: agent selection in opencode loads the new orchestrator definition
 
