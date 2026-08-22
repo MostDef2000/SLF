@@ -2,16 +2,16 @@
 
 ## HOW
 
-Port the sea-speed delivery-orchestrator model onto SLF's existing contract set, adapting terminology instead of replacing contracts:
+Port the delivery-orchestrator model onto SLF's existing contract set, adapting terminology instead of replacing contracts:
 
-| sea-speed concept | SLF adaptation |
+| concept | SLF adaptation |
 |---|---|
-| `OUTCOME APPROVED` | exact lowercase `commit approved` (per `contracts/SLF_SCOPE_APPROVAL_POLICY.md`) |
-| Outcome Contract / 6-field Scope | visible Implementation Scope Check (behavior, files, exclusions, risks, verification, release impact) |
-| Sea Speed Delivery Checkpoint v2 | `SLF Delivery Checkpoint v2` |
-| VPS + Ubuntu Worker contours | Userscript (`src/**` → Tampermonkey release channel) + VPS (`vps/**`) |
-| Standing production delegation | not adopted — SLF releases run via automatic policy on push to `main` |
-| GitHub Connector primary route | kept; token sourced at runtime from `gh auth store`, never in files |
+| approval phrase | exact lowercase `commit approved` per `contracts/SLF_SCOPE_APPROVAL_POLICY.md` |
+| scope admission | visible Implementation Scope Check (behavior, files, exclusions, risks, verification, release impact) |
+| checkpoint | `SLF Delivery Checkpoint v2` |
+| runtime contours | Userscript (`src/**` → Tampermonkey release channel) + VPS (`vps/**`) |
+| release authority | automatic release policy on eligible changes; no manual bypass |
+| GitHub route | GitHub Connector primary; credentials never stored in repository files |
 
 ## Affected contours
 
@@ -19,21 +19,22 @@ Port the sea-speed delivery-orchestrator model onto SLF's existing contract set,
 
 ## Risk profile
 
-`Risk profile: NOT REQUIRED` — docs/control-plane change; no runtime code, no workflow YAML, no generated artifacts, no secrets.
+`Risk profile: NOT REQUIRED` — docs/control-plane change; no runtime code, workflow YAML, generated artifacts, or secrets.
 
 ## Test design
 
-- unit: NOT REQUIRED (no executable source changed)
-- integration: canonical CI runs unchanged quality-governance / quality-integration suites
-- end-to-end: PR → CI → merge lifecycle itself exercises the new pipeline
-- runtime-manual: agent selection in opencode loads the new orchestrator definition
+- unit: NOT REQUIRED (no executable product source changed)
+- integration: canonical `SLF CI / ci` validation remains the merge gate
+- end-to-end: PR → CI → merge lifecycle verifies the delivery path
+- runtime-manual: agent loading verifies repository-native orchestration
 
 ## Correct-course
 
-If CI flags governance validators due to new top-level files, narrow the change set rather than weakening validators. If the orchestrator model conflicts with a future contract update, contracts win and AGENTS.md is amended.
+Contracts remain authoritative. If future agent wording conflicts with active contracts, update the agent/SDD layer rather than weakening governance.
 
 ## Decisions / rejected alternatives
 
-- **Adapted SLF approval phrase instead of importing `OUTCOME APPROVED`** — keeps single authorization boundary consistent with active governance.
-- **`opencode.json` excluded from Git (gitignored)** — machine-local paths and connector wiring are environment state, not repository truth.
-- **Token via `gh auth token` wrapper instead of config/env file** — zero secret material in project files; single credential source for git and MCP.
+- Keep `commit approved` as the only source authorization phrase.
+- Keep one Delivery Orchestrator instead of multiple competing agents.
+- Keep `SLF CI / ci` as the merge gate; workflow implementation details do not replace canonical context semantics.
+- Keep local connector credentials outside Git.
