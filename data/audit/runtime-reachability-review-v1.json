@@ -1,7 +1,7 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
-  "reviewedAt": "2026-08-05",
-  "reviewCandidateCount": 17,
+  "reviewedAt": "2026-08-22",
+  "reviewCandidateCount": 35,
   "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
@@ -231,6 +231,96 @@
       "evidence": [
         "The module is bundled and published but has no positive reachability evidence in the current dependency audit.",
         "DOM cleanup or analyzer patching may be data-driven and is not proven unreachable by the current static scan."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-table-locator.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 1 verbatim extraction from transfer-market-analyzer.js (specs/002-refactoring-program); 146/146 method bodies verified identical programmatically.",
+        "Methods are assigned onto the TransferMarketAnalyzer facade via Object.assign and invoked through unchanged this-binding call sites.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-money-parser.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 1 verbatim extraction from transfer-market-analyzer.js (specs/002-refactoring-program); 146/146 method bodies verified identical programmatically.",
+        "Methods are assigned onto the TransferMarketAnalyzer facade via Object.assign and invoked through unchanged this-binding call sites.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-analysis-cache.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 1 verbatim extraction from transfer-market-analyzer.js (specs/002-refactoring-program); 146/146 method bodies verified identical programmatically.",
+        "Methods are assigned onto the TransferMarketAnalyzer facade via Object.assign and invoked through unchanged this-binding call sites.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-market-baseline.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 1 verbatim extraction from transfer-market-analyzer.js (specs/002-refactoring-program); 146/146 method bodies verified identical programmatically.",
+        "Methods are assigned onto the TransferMarketAnalyzer facade via Object.assign and invoked through unchanged this-binding call sites.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-history-vps-sync.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 1 verbatim extraction from transfer-market-analyzer.js (specs/002-refactoring-program); 146/146 method bodies verified identical programmatically.",
+        "Methods are assigned onto the TransferMarketAnalyzer facade via Object.assign and invoked through unchanged this-binding call sites.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-details-html-builder.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 1 verbatim extraction from transfer-market-analyzer.js (specs/002-refactoring-program); 146/146 method bodies verified identical programmatically.",
+        "Methods are assigned onto the TransferMarketAnalyzer facade via Object.assign and invoked through unchanged this-binding call sites.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-marker-builder.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 1 verbatim extraction from transfer-market-analyzer.js (specs/002-refactoring-program); 146/146 method bodies verified identical programmatically.",
+        "Methods are assigned onto the TransferMarketAnalyzer facade via Object.assign and invoked through unchanged this-binding call sites.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-verdict-engine.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 1 verbatim extraction from transfer-market-analyzer.js (specs/002-refactoring-program); 146/146 method bodies verified identical programmatically.",
+        "Methods are assigned onto the TransferMarketAnalyzer facade via Object.assign and invoked through unchanged this-binding call sites.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-badge-renderer.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 1 verbatim extraction from transfer-market-analyzer.js (specs/002-refactoring-program); 146/146 method bodies verified identical programmatically.",
+        "Methods are assigned onto the TransferMarketAnalyzer facade via Object.assign and invoked through unchanged this-binding call sites.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-table-sorter.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 1 verbatim extraction from transfer-market-analyzer.js (specs/002-refactoring-program); 146/146 method bodies verified identical programmatically.",
+        "Methods are assigned onto the TransferMarketAnalyzer facade via Object.assign and invoked through unchanged this-binding call sites.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
       ]
     }
   ],
