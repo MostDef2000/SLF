@@ -41,6 +41,16 @@
     "src/modules/transfer-analyzer/tm-enrichment-layer.js",
     "src/modules/transfer-analyzer/slf-alter-layer.js",
     "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+    "src/modules/transfer-analyzer/transfer-table-locator.js",
+    "src/modules/transfer-analyzer/transfer-money-parser.js",
+    "src/modules/transfer-analyzer/transfer-analysis-cache.js",
+    "src/modules/transfer-analyzer/transfer-market-baseline.js",
+    "src/modules/transfer-analyzer/transfer-history-vps-sync.js",
+    "src/modules/transfer-analyzer/transfer-details-html-builder.js",
+    "src/modules/transfer-analyzer/transfer-marker-builder.js",
+    "src/modules/transfer-analyzer/transfer-verdict-engine.js",
+    "src/modules/transfer-analyzer/transfer-badge-renderer.js",
+    "src/modules/transfer-analyzer/transfer-table-sorter.js",
     "src/modules/transfer-analyzer/transfer-history-money-parser.js",
     "src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js",
     "src/modules/transfer-analyzer/transfer-candidate-scanner.js",
@@ -64,7 +74,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 56,
+    "expectedModuleCount": 66,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -1320,6 +1330,144 @@
             "phase": "runtime"
           },
           {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/slf-alter-layer.js",
+            "symbols": [
+              "SLFAlterLayer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document",
+          "window",
+          "setTimeout",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-table-locator.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "URLSearchParams",
+          "document",
+          "location",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-money-parser.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-analysis-cache.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "localStorage",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-market-baseline.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "CONFIG"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/api.js",
+            "symbols": [
+              "Api",
+              "normalizeServerRows"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/slf-alter-layer.js",
+            "symbols": [
+              "SLFAlterLayer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-history-vps-sync.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/domain.js",
+            "symbols": [
+              "buildSlfUrl"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "CONFIG"
+            ],
+            "phase": "runtime"
+          },
+          {
             "file": "src/core/api.js",
             "symbols": [
               "Api",
@@ -1343,15 +1491,119 @@
           }
         ],
         "hostCapabilities": [
-          "URLSearchParams",
-          "document",
           "window",
           "location",
           "localStorage",
-          "setTimeout",
-          "requestAnimationFrame",
           "console"
         ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-details-html-builder.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/slf-alter-layer.js",
+            "symbols": [
+              "SLFAlterLayer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-marker-builder.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/transfer-analyzer/slf-alter-layer.js",
+            "symbols": [
+              "SLFAlterLayer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-verdict-engine.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-badge-renderer.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document",
+          "window",
+          "console",
+          "requestAnimationFrame"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-table-sorter.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": []
       },
       {
         "file": "src/modules/transfer-analyzer/transfer-history-money-parser.js",
