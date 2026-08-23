@@ -144,7 +144,7 @@ const SnapshotEngine = {
     },
 
     sendSnapshot(snapshot) {
-        console.log('[SLF SNAPSHOT]', snapshot);
+        debugLog('[SLF SNAPSHOT]', snapshot);
 
         const record = this.buildSnapshotRecord(snapshot);
 

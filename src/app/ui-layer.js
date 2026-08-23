@@ -82,7 +82,7 @@
                             `API OK v2 | games:${status.games} snapshots:${c.snapshots?.count ?? 0} results:${c.results?.count ?? 0} events:${c.events?.count ?? 0} effects:${c.effects?.count ?? 0} players:${c.players?.count ?? 0}`
                         );
 
-                        console.log('[SLF API v2 canonical]', status);
+                        debugLog('[SLF API v2 canonical]', status);
                     })
                     .catch(error => {
                         this.addParserLog(`API v2 error: ${error?.kind || 'unknown'}`);

@@ -271,7 +271,7 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
             });
             if (changed) writeJson(key, parsed);
         });
-        console.log('[SLF Team4 MIN] reset complete', { storageKey: STORAGE_KEY });
+        debugLog('[SLF Team4 MIN] reset complete', { storageKey: STORAGE_KEY });
     }
 
     async function fetchAlter(playerId) {
@@ -295,14 +295,14 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         const results = [];
 
         if (options.reset !== false) resetMinutesOnly();
-        console.log('[SLF Team4 MIN] refresh started', { players: selectedIds.length, totalRows: rows.length, ids: selectedIds });
+        debugLog('[SLF Team4 MIN] refresh started', { players: selectedIds.length, totalRows: rows.length, ids: selectedIds });
 
         try {
             for (const playerId of selectedIds) {
                 try {
                     const result = await fetchAlter(playerId);
                     results.push(result);
-                    console.log('[SLF Team4 MIN] fetched', {
+                    debugLog('[SLF Team4 MIN] fetched', {
                         playerId,
                         name: result.entry?.playerName || '',
                         minutes: result.entry?.currentSeasonMinutes || 0,
@@ -324,8 +324,8 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
                 season: entry.seasonLabel || '',
                 lastActiveSeason: entry.lastActiveSeasonLabel || ''
             }));
-            console.table(summary);
-            console.log('[SLF Team4 MIN] refresh completed', { saved: summary.length, ms: Date.now() - startedAt });
+            if (CONFIG.DEBUG) console.table(summary);
+            debugLog('[SLF Team4 MIN] refresh completed', { saved: summary.length, ms: Date.now() - startedAt });
             return { ok: true, rows, ids: selectedIds, results, cache };
         } finally {
             refreshRunning = false;
@@ -560,7 +560,7 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
             const parsed = parseAlterDocument(document);
             const id = parseIdFromUrl(location.href) || parsed.playerId;
             const entry = saveMinutesRecord(id, parsed);
-            if (entry) console.log('[SLF Team4 MIN] alter page saved', entry);
+            if (entry) debugLog('[SLF Team4 MIN] alter page saved', entry);
         }
     }
 

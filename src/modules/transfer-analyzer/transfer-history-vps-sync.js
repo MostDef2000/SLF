@@ -41,7 +41,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
             .map((tr, index) => this.parseHistoryRow(tr, index, map))
             .filter(Boolean);
 
-        console.log('[SLF Transfer History] parseHistoryVisibleRows', parsed);
+        debugLog('[SLF Transfer History] parseHistoryVisibleRows', parsed);
 
         return parsed;
     },

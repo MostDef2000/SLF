@@ -26,7 +26,7 @@ const TransferMarketAnalyzer = {
     mount() {
         if (!this.isPage()) return;
 
-        console.log('[SLF Transfer Analyzer] mount on transfers.php');
+        debugLog('[SLF Transfer Analyzer] mount on transfers.php');
 
         this.addToolbar();
 
