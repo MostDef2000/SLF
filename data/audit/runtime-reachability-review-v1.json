@@ -310,7 +310,35 @@
       "classification": "ACTIVE",
       "evidence": [
         "Stage 1 verbatim extraction from transfer-market-analyzer.js (specs/002-refactoring-program); 146/146 method bodies verified identical programmatically.",
+        "Issue #275 split: facade retains row-badge core, ranks and cleanup; 33/33 method bodies verified identical across the four badge files.",
         "Methods are assigned onto the TransferMarketAnalyzer facade via Object.assign and invoked through unchanged this-binding call sites.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-badge-marker-taxonomy.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Issue #275 verbatim extraction from transfer-badge-renderer.js; marker category/slot/rank helpers, 8/8 bodies identical.",
+        "Assigned onto the TransferMarketAnalyzer facade via Object.assign; pure logic, no host capabilities.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-badge-verdict-groups.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Issue #275 verbatim extraction from transfer-badge-renderer.js; analysis-group and verdict rendering, 11/11 bodies identical.",
+        "Assigned onto the TransferMarketAnalyzer facade via Object.assign; string/HTML builders without direct host capabilities.",
+        "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-badge-tooltip-portal.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Issue #275 verbatim extraction from transfer-badge-renderer.js; tooltip styles, portal positioning, structured tooltips and compact chips, 5/5 bodies identical.",
+        "Assigned onto the TransferMarketAnalyzer facade via Object.assign; document/window host capabilities declared.",
         "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
       ]
     },
