@@ -75,3 +75,9 @@ const CurrentActionHintEngine = {
     },
 
 };
+
+if (typeof window !== 'undefined') {
+    window.SLFCurrentActionHintEngine = CurrentActionHintEngine;
+    window.SLFMatchDecisionSignals = CurrentActionHintEngine.MatchDecisionSignals;
+    window.SLFPresetRuleScorer = CurrentActionHintEngine.PresetRuleScorer;
+}

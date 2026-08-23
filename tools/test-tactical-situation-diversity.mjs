@@ -135,7 +135,7 @@ for(const file of ['coach-mode-policy.js','adaptive-opponent-style-layer.js','mo
 }
 
 const tacticalLabContract=JSON.parse(source('data/tactics/tactical-lab-contract-v1.json'));
-const tacticControlEngine=source('src/modules/tactics-presets/tactic-control-engine.js');
+const tacticControlEngine=['tactic-control-engine.js','tactic-control-bridge.js','tactical-lab-v1.js'].map(f=>source(`src/modules/tactics-presets/${f}`)).join('\n');
 const tacticalLabRuntime=tacticControlEngine;
 const strategyDataUi=source('src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js');
 assert.equal(tacticalLabContract.schema,'slf_tactical_lab_contract_v1');
