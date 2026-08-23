@@ -37,6 +37,7 @@ jobs:
           node --check tools/validate-workflow-inventory.mjs
           node --check tools/test-deliberate-execution-contract.mjs
           node --check tools/test-tactical-situation-diversity.mjs
+          node --check tools/test-alter-layer-parsing.mjs
           python3 -m py_compile tools/test-api-contract-compatibility.py
           python3 -m py_compile tools/test-api-adversarial.py
           node -e "JSON.parse(require('node:fs').readFileSync('data/contracts/slf-contracts-v1.schema.json', 'utf8'))"
@@ -59,6 +60,7 @@ jobs:
           node tools/validate-workflow-inventory.mjs
           node tools/test-deliberate-execution-contract.mjs
           node tools/test-tactical-situation-diversity.mjs
+          node tools/test-alter-layer-parsing.mjs
 
       - name: Install pinned VPS API dependencies
         run: python3 -m pip install --disable-pip-version-check -r vps/api/requirements.txt

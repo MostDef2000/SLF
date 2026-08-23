@@ -2,7 +2,7 @@
 // ============================================================
 
 const SLFAlterLayer = {
-    cacheKey: 'slf_alter_cache_v3',
+    cacheKey: 'slf_alter_cache_v4',
     cacheTtlMs: 1000 * 60 * 60 * 24 * (CONFIG.TRANSFER_ANALYZER?.slfAlter?.cacheTtlDays || 1),
 
     loadCache() {
@@ -156,7 +156,11 @@ const SLFAlterLayer = {
     },
 
     parseSkillTables(doc) {
-        const tables = [...doc.querySelectorAll('table.ai_skill')];
+        // 2026 redesign: skill tables lost the dedicated `ai_skill` class and are
+        // now plain `ai-table` blocks; stat tables carry `ai-stat` and must be
+        // excluded. The requests-quota table is also a plain `ai-table`.
+        const tables = [...doc.querySelectorAll('table.ai_skill, table.ai-table:not(.ai-stat)')]
+            .filter(table => !/заявок|пополнить/i.test(this.normalizeText(table.innerText || table.textContent || '')));
         const seasonSkills = [];
         let seasonSkill = null;
         let talentSkill = null;
@@ -216,31 +220,50 @@ const SLFAlterLayer = {
     parseMinutes(text) {
         const clean = this.normalizeText(text);
         const pctMatch = clean.match(/(\d{1,3})\s*%/);
-        const nums = [...clean.matchAll(/\d+/g)].map(x => Number(x[0]));
+        // Minutes may precede or follow the percentage depending on the page
+        // layout; the percentage is removed before number extraction so the
+        // remaining last number is always the played-minutes value.
+        const withoutPct = clean.replace(/\d{1,3}\s*%\s*/g, ' ');
+        const nums = [...withoutPct.matchAll(/\d+/g)].map(x => Number(x[0]));
 
         return {
             minutesText: clean,
             minutesPct: pctMatch ? Number(pctMatch[1]) : null,
-            minutes: nums.length >= 2 ? nums[1] : (pctMatch ? null : (nums[0] ?? null))
+            minutes: nums.length ? nums[nums.length - 1] : null
         };
     },
 
-    parseAiStatRow(tr, season) {
-        const cells = [...tr.querySelectorAll('td, th')]
-            .map(td => this.normalizeText(td.innerText || td.textContent || ''));
-
+    parseStatCells(cells, season) {
         const rowText = cells.join(' | ');
 
         if (!rowText.trim()) return null;
         if (/Лига\s*\|\s*Команда\s*\|\s*Игр/i.test(rowText)) return null;
 
-        const leagueText = cells[1] || '';
-        const teamText = cells[2] || '';
-        const gamesText = cells[3] || '';
-        const startsText = cells[4] || '';
-        const minutesText = cells[5] || '';
-        const goalsText = cells[6] || '';
-        const assistsText = cells[7] || '';
+        // Semantic layout (2026 redesign): locate the games cell ("N/M") and
+        // derive every other column relative to it, so adding or removing
+        // leading columns cannot shift the mapping again.
+        const gamesIdx = cells.findIndex(c => /^\d+\s*\/\s*\d+$/.test(this.normalizeText(c)));
+
+        let leagueText, teamText, gamesText, startsText, minutesText, goalsText, assistsText;
+
+        if (gamesIdx > 0) {
+            leagueText = this.normalizeText(cells.slice(0, gamesIdx - 1).join(' '));
+            teamText = cells[gamesIdx - 1] || '';
+            gamesText = cells[gamesIdx];
+            startsText = cells[gamesIdx + 1] || '';
+            minutesText = cells[gamesIdx + 2] || '';
+            goalsText = cells[gamesIdx + 3] || '';
+            assistsText = cells[gamesIdx + 4] || '';
+        } else {
+            // Legacy fixed-index fallback.
+            leagueText = cells[1] || '';
+            teamText = cells[2] || '';
+            gamesText = cells[3] || '';
+            startsText = cells[4] || '';
+            minutesText = cells[5] || '';
+            goalsText = cells[6] || '';
+            assistsText = cells[7] || '';
+        }
 
         const leagueMatch = leagueText.match(/(\d+)\s*\/\s*(\d+)/);
         const games = this.parseGames(gamesText);
@@ -275,6 +298,13 @@ const SLFAlterLayer = {
             goals: this.toNumber(goalsText),
             assists: this.toNumber(assistsText)
         };
+    },
+
+    parseAiStatRow(tr, season) {
+        const cells = [...tr.querySelectorAll('td, th')]
+            .map(td => this.normalizeText(td.innerText || td.textContent || ''));
+
+        return this.parseStatCells(cells, season);
     },
 
 
