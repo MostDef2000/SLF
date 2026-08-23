@@ -6,7 +6,8 @@ import vm from 'node:vm';
 
 const root = process.cwd();
 const eventTrackerSource = fs.readFileSync(path.join(root, 'src/modules/manual-match-telemetry/event-tracker.js'), 'utf8');
-const runtimeIntegritySource = fs.readFileSync(path.join(root, 'src/modules/manual-match-telemetry/manual-match-runtime.js'), 'utf8');
+const stateIntegritySource = fs.readFileSync(path.join(root, 'src/modules/manual-match-telemetry/manual-state-integrity.js'), 'utf8');
+const runtimeSource = fs.readFileSync(path.join(root, 'src/modules/manual-match-telemetry/manual-match-runtime.js'), 'utf8');
 
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -237,7 +238,7 @@ function createHarness({ effectPostFails = false, persistedPending = null } = {}
 
   vm.createContext(context);
   vm.runInContext(
-    `${eventTrackerSource}\n${runtimeIntegritySource}\nglobalThis.__EventTracker = EventTracker;`,
+    `${eventTrackerSource}\n${stateIntegritySource}\n${runtimeSource}\nglobalThis.__EventTracker = EventTracker;`,
     context,
     { filename: 'manual-match-workflow.bundle.js' }
   );

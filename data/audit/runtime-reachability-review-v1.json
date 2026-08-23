@@ -1,7 +1,7 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
-  "reviewedAt": "2026-08-22",
-  "reviewCandidateCount": 35,
+  "reviewedAt": "2026-08-23",
+  "reviewCandidateCount": 36,
   "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
@@ -321,6 +321,15 @@
         "Stage 1 verbatim extraction from transfer-market-analyzer.js (specs/002-refactoring-program); 146/146 method bodies verified identical programmatically.",
         "Methods are assigned onto the TransferMarketAnalyzer facade via Object.assign and invoked through unchanged this-binding call sites.",
         "Registered in src/app/bundle-order.json dependency audit; loaded after the facade in bundle order."
+      ]
+    },
+    {
+      "file": "src/modules/manual-match-telemetry/manual-state-integrity.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 2 verbatim extraction from manual-match-runtime.js (specs/002-refactoring-program); IIFE boundary split verified byte-identical.",
+        "Installs runtime telemetry integrity via preserved guard flag SnapshotEngine.__runtimeTelemetryIntegrityInstalled.",
+        "Registered in src/app/bundle-order.json dependency audit immediately after event-tracker.js."
       ]
     }
   ],

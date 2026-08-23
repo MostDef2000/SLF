@@ -75,6 +75,7 @@ const uiLayer = sourceByFile.get('src/app/ui-layer.js') || '';
 const snapshotEngine = sourceByFile.get('src/modules/manual-match-telemetry/snapshot-engine.js') || '';
 const eventTracker = sourceByFile.get('src/modules/manual-match-telemetry/event-tracker.js') || '';
 const runtimeIntegrity = sourceByFile.get('src/modules/manual-match-telemetry/manual-match-runtime.js') || '';
+const stateIntegrity = sourceByFile.get('src/modules/manual-match-telemetry/manual-state-integrity.js') || '';
 const recommendationEngine = sourceByFile.get('src/modules/strategy-data-recommendations/recommendation-engine.js') || '';
 const strategyUi = sourceByFile.get('src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js') || '';
 
@@ -84,8 +85,8 @@ assert.doesNotMatch(uiLayer, /SnapshotEngine\.(?:startLive|stopLive|autoResumeIf
 assert.doesNotMatch(snapshotEngine, /startLive\s*\(|stopLive\s*\(|autoResumeIfNeeded\s*\(/);
 assert.doesNotMatch(snapshotEngine, /setInterval\s*\(|15000|rememberLiveSnapshot/);
 assert.doesNotMatch(eventTracker, /startManualTacticWatcher\s*\(/);
-assert.match(runtimeIntegrity, /function\s+installManualWatcher\s*\(/);
-assert.match(runtimeIntegrity, /scheduleManualWatcher\s*\(\)/);
+assert.match(stateIntegrity, /function\s+installManualWatcher\s*\(/);
+assert.match(stateIntegrity, /scheduleManualWatcher\s*\(\)/);
 assert.match(runtimeIntegrity, /pendingPresetEvent/);
 assert.match(runtimeIntegrity, /consumedPresetEventKey/);
 assert.doesNotMatch(runtimeIntegrity, /active:\s*!!STATE\.liveParserTimer/);
@@ -107,7 +108,8 @@ assert.doesNotMatch(snapshotEngine, /compactSegmentSnapshotsForStorage/);
 assert.doesNotMatch(configSource, /LIVE_PARSER_STATE_PREFIX/);
 assert.doesNotMatch(snapshotEngine, /persistLiveState|loadLiveState|clearLiveState|getLiveStorageKey/);
 assert.doesNotMatch(runtimeIntegrity, /persistLiveState|loadLiveState|clearLiveState|originalPersistLiveState|originalLoadLiveState|originalClearLiveState/);
-assert.match(runtimeIntegrity, /legacyStatePrefix = 'slf_live_parser_state_v2'/);
+assert.match(stateIntegrity, /legacyStatePrefix = 'slf_live_parser_state_v2'/);
+assert.match(stateIntegrity, /manualStatePrefix = 'slf_manual_match_state_v1'/);
 
 console.log('[legacy-live-parser-boundary-test] passed');
 for (const finding of findings) {

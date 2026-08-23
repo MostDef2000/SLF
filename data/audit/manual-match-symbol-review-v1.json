@@ -1,6 +1,6 @@
 {
   "schema": "slf_manual_match_symbol_review_v1",
-  "reviewedAt": "2026-08-16",
+  "reviewedAt": "2026-08-23",
   "scope": "Symbol-level boundary between the active manual match workflow and the historical automatic live-parser loop. This file does not authorize deletion.",
   "classifications": {
     "LEGACY_AUTOMATIC_LOOP": "Historical 15-second background parser code not invoked by the current bootstrap or UI.",
@@ -49,11 +49,13 @@
         "src/modules/manual-match-telemetry/event-tracker.js",
         "src/modules/manual-match-telemetry/manual-match-runtime.js",
         "src/modules/strategy-data-recommendations/recommendation-engine.js",
-        "src/modules/tactics-presets/tactic-control-engine.js"
+        "src/modules/tactics-presets/tactic-control-engine.js",
+        "src/modules/manual-match-telemetry/manual-state-integrity.js"
       ],
       "evidence": [
         "All active recommendation, freeze, effect and manual watcher persistence uses the manual-state API.",
-        "Tactical Lab v1 wraps the same reviewed persistence boundary only to preserve its additive per-match lab field when the canonical manual envelope is rewritten."
+        "Tactical Lab v1 wraps the same reviewed persistence boundary only to preserve its additive per-match lab field when the canonical manual envelope is rewritten.",
+        "Stage 2 refactor (specs/002-refactoring-program): state integrity helpers moved verbatim to manual-state-integrity.js; references updated."
       ],
       "deletionStatus": "KEEP"
     },
@@ -63,10 +65,12 @@
       "owner": "src/modules/manual-match-telemetry/manual-match-runtime.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
-        "src/modules/manual-match-telemetry/manual-match-runtime.js"
+        "src/modules/manual-match-telemetry/manual-match-runtime.js",
+        "src/modules/manual-match-telemetry/manual-state-integrity.js"
       ],
       "evidence": [
-        "Prefers the new manual key and migrates a valid legacy record on read."
+        "Prefers the new manual key and migrates a valid legacy record on read.",
+        "Stage 2 refactor (specs/002-refactoring-program): state integrity helpers moved verbatim to manual-state-integrity.js; references updated."
       ],
       "deletionStatus": "KEEP"
     },
@@ -76,23 +80,26 @@
       "owner": "src/modules/manual-match-telemetry/manual-match-runtime.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
-        "src/modules/manual-match-telemetry/manual-match-runtime.js"
+        "src/modules/manual-match-telemetry/manual-match-runtime.js",
+        "src/modules/manual-match-telemetry/manual-state-integrity.js"
       ],
       "evidence": [
-        "Clears both the manual and legacy keys during the compatibility window."
+        "Clears both the manual and legacy keys during the compatibility window.",
+        "Stage 2 refactor (specs/002-refactoring-program): state integrity helpers moved verbatim to manual-state-integrity.js; references updated."
       ],
       "deletionStatus": "KEEP"
     },
     {
       "symbol": "installManualWatcher",
       "token": "installManualWatcher",
-      "owner": "src/modules/manual-match-telemetry/manual-match-runtime.js",
+      "owner": "src/modules/manual-match-telemetry/manual-state-integrity.js",
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
-        "src/modules/manual-match-telemetry/manual-match-runtime.js"
+        "src/modules/manual-match-telemetry/manual-state-integrity.js"
       ],
       "evidence": [
-        "This is the active manual tactic watcher installation path."
+        "This is the active manual tactic watcher installation path.",
+        "Stage 2 refactor (specs/002-refactoring-program): watcher installation moved verbatim to manual-state-integrity.js."
       ],
       "deletionStatus": "KEEP"
     }

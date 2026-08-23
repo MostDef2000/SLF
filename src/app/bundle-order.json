@@ -37,6 +37,7 @@
     "src/app/ui-layer.js",
     "src/app/version-badge.js",
     "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
+    "src/modules/manual-match-telemetry/manual-state-integrity.js",
     "src/modules/manual-match-telemetry/manual-match-runtime.js",
     "src/modules/transfer-analyzer/tm-enrichment-layer.js",
     "src/modules/transfer-analyzer/slf-alter-layer.js",
@@ -74,7 +75,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 66,
+    "expectedModuleCount": 67,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -1183,6 +1184,67 @@
         ]
       },
       {
+        "file": "src/modules/manual-match-telemetry/manual-state-integrity.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "CONFIG",
+              "STATE"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/api.js",
+            "symbols": [
+              "Api"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-control-engine.js",
+            "symbols": [
+              "getCurrentTactic",
+              "applyPresetAsync"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/match-reading/match-state-parser.js",
+            "symbols": [
+              "MatchTimingModel",
+              "MatchStateParser"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/manual-match-telemetry/snapshot-engine.js",
+            "symbols": [
+              "SnapshotEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/manual-match-telemetry/event-tracker.js",
+            "symbols": [
+              "EventTracker"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document",
+          "location",
+          "localStorage",
+          "setTimeout",
+          "clearTimeout",
+          "setInterval",
+          "clearInterval"
+        ]
+      },
+      {
         "file": "src/modules/manual-match-telemetry/manual-match-runtime.js",
         "declares": [],
         "public": [],
@@ -1205,16 +1267,14 @@
           {
             "file": "src/modules/tactics-presets/tactic-control-engine.js",
             "symbols": [
-              "applyPresetAsync",
-              "getCurrentTactic"
+              "applyPresetAsync"
             ],
             "phase": "runtime"
           },
           {
             "file": "src/modules/match-reading/match-state-parser.js",
             "symbols": [
-              "MatchStateParser",
-              "MatchTimingModel"
+              "MatchStateParser"
             ],
             "phase": "runtime"
           },
@@ -1224,20 +1284,12 @@
               "SnapshotEngine"
             ],
             "phase": "runtime"
-          },
-          {
-            "file": "src/modules/manual-match-telemetry/event-tracker.js",
-            "symbols": [
-              "EventTracker"
-            ],
-            "phase": "runtime"
           }
         ],
         "hostCapabilities": [
           "document",
           "location",
           "setTimeout",
-          "clearTimeout",
           "setInterval",
           "clearInterval"
         ]
