@@ -140,7 +140,7 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         if (!season) return null;
 
         const rows = [];
-        const table = block.querySelector('table.ai_stat') || block.querySelector('table');
+        const table = block.querySelector('table.ai_stat') || block.querySelector('table.ai-stat') || block.querySelector('table');
         if (!table) return { season, rows, total: 0 };
 
         const trs = [...table.querySelectorAll('tr')];
