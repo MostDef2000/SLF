@@ -50,12 +50,15 @@
         "src/modules/manual-match-telemetry/manual-match-runtime.js",
         "src/modules/strategy-data-recommendations/recommendation-engine.js",
         "src/modules/tactics-presets/tactic-control-engine.js",
-        "src/modules/manual-match-telemetry/manual-state-integrity.js"
+        "src/modules/manual-match-telemetry/manual-state-integrity.js",
+        "src/modules/strategy-data-recommendations/re-html-utils.js",
+        "src/modules/tactics-presets/tactical-lab-v1.js"
       ],
       "evidence": [
         "All active recommendation, freeze, effect and manual watcher persistence uses the manual-state API.",
         "Tactical Lab v1 wraps the same reviewed persistence boundary only to preserve its additive per-match lab field when the canonical manual envelope is rewritten.",
-        "Stage 2 refactor (specs/002-refactoring-program): state integrity helpers moved verbatim to manual-state-integrity.js; references updated."
+        "Stage 2 refactor (specs/002-refactoring-program): state integrity helpers moved verbatim to manual-state-integrity.js; references updated.",
+        "Stage 4 refactor (specs/002-refactoring-program): verbatim extractions reference persistManualState from new modules; reviewed."
       ],
       "deletionStatus": "KEEP"
     },

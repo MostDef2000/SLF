@@ -76,7 +76,7 @@ const snapshotEngine = sourceByFile.get('src/modules/manual-match-telemetry/snap
 const eventTracker = sourceByFile.get('src/modules/manual-match-telemetry/event-tracker.js') || '';
 const runtimeIntegrity = sourceByFile.get('src/modules/manual-match-telemetry/manual-match-runtime.js') || '';
 const stateIntegrity = sourceByFile.get('src/modules/manual-match-telemetry/manual-state-integrity.js') || '';
-const recommendationEngine = sourceByFile.get('src/modules/strategy-data-recommendations/recommendation-engine.js') || '';
+const recommendationEngine = ['recommendation-engine.js','re-html-utils.js','re-snapshot-model.js','re-preset-family.js','re-plan-engine.js'].map(f => sourceByFile.get(`src/modules/strategy-data-recommendations/${f}`) || '').join('\n');
 const strategyUi = sourceByFile.get('src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js') || '';
 
 assert.match(bootstrap, /Manual-only Coach Hint mode/);
