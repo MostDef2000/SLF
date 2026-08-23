@@ -255,7 +255,7 @@ const SLFAlterLayer = {
             goalsText = cells[gamesIdx + 3] || '';
             assistsText = cells[gamesIdx + 4] || '';
         } else {
-            // Legacy fixed-index fallback.
+            // Pre-redesign fixed-index fallback.
             leagueText = cells[1] || '';
             teamText = cells[2] || '';
             gamesText = cells[3] || '';
