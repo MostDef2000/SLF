@@ -1,7 +1,7 @@
 // 15. App Bootstrap
 // ============================================================
 
-(function installHeaderMatchesLayoutCompatibility() {
+function installHeaderMatchesLayoutCompatibility() {
     const root = document.documentElement;
     if (!root || root.dataset.slfHeaderMatchesFit === '1') return;
     root.dataset.slfHeaderMatchesFit = '1';
@@ -184,9 +184,16 @@
         });
         observer.observe(observerRoot, { childList: true, subtree: true, characterData: true });
     }
-})();
+}
 
-(function installMatchRenderingCompatibility() {
+// Fail-open isolation: a compatibility adapter failure must never stop startup.
+try {
+    installHeaderMatchesLayoutCompatibility();
+} catch (error) {
+    debugWarn('[SLF] header matches layout compatibility adapter failed; continuing startup', error);
+}
+
+function installMatchRenderingCompatibility() {
     if (!location.pathname.includes('/game.php')) return;
 
     const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -346,7 +353,13 @@
         attempts += 1;
         if (enforce() || attempts >= 100 || !location.pathname.includes('/game.php')) clearInterval(timer);
     }, 100);
-})();
+}
+
+try {
+    installMatchRenderingCompatibility();
+} catch (error) {
+    debugWarn('[SLF] match rendering compatibility adapter failed; continuing startup', error);
+}
 
 function applyTacticsDropdownUiPolicy() {
     if (typeof UI === 'undefined' || !UI?.addDropdown || UI.__flatSortedTacticDropdownApplied) return;
