@@ -38,9 +38,10 @@ assert.doesNotMatch(header, /live parser/i);
 assert.match(header, /manual match telemetry/i);
 
 const runtime = fs.readFileSync(path.join(root, 'src/modules/manual-match-telemetry/manual-match-runtime.js'), 'utf8');
-assert.match(runtime, /manualStatePrefix = 'slf_manual_match_state_v1'/);
-assert.match(runtime, /legacyStatePrefix = 'slf_live_parser_state_v2'/);
+const stateIntegrity = fs.readFileSync(path.join(root, 'src/modules/manual-match-telemetry/manual-state-integrity.js'), 'utf8');
+assert.match(stateIntegrity, /manualStatePrefix = 'slf_manual_match_state_v1'/);
+assert.match(stateIntegrity, /legacyStatePrefix = 'slf_live_parser_state_v2'/);
 assert.doesNotMatch(runtime, /setItem\([^\n]*legacyStatePrefix/);
-assert.match(runtime, /readStoredState\(legacyStatePrefix/);
+assert.match(stateIntegrity, /readStoredState\(legacyStatePrefix/);
 
 console.log('[manual-telemetry-final-boundary-test] passed');

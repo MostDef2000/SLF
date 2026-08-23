@@ -5,6 +5,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const root = process.cwd();
+const integritySource = fs.readFileSync(path.join(root, 'src/modules/manual-match-telemetry/manual-state-integrity.js'), 'utf8');
 const source = fs.readFileSync(path.join(root, 'src/modules/manual-match-telemetry/manual-match-runtime.js'), 'utf8');
 
 function createStorage(initial = {}) {
@@ -76,6 +77,7 @@ function createHarness(initialStorage = {}) {
     getCurrentTactic: () => ({ def_line: '1' })
   };
   vm.createContext(context);
+  vm.runInContext(integritySource, context, { filename: 'manual-state-integrity.js' });
   vm.runInContext(source, context, { filename: 'manual-match-runtime.js' });
   return { context, localStorage };
 }
