@@ -40,6 +40,11 @@
     "src/modules/manual-match-telemetry/manual-state-integrity.js",
     "src/modules/manual-match-telemetry/manual-match-runtime.js",
     "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+    "src/modules/transfer-analyzer/tm-enrichment-cache.js",
+    "src/modules/transfer-analyzer/tm-enrichment-transport.js",
+    "src/modules/transfer-analyzer/tm-enrichment-url-text-utils.js",
+    "src/modules/transfer-analyzer/tm-enrichment-profile.js",
+    "src/modules/transfer-analyzer/tm-enrichment-history-rumors.js",
     "src/modules/transfer-analyzer/slf-alter-layer.js",
     "src/modules/transfer-analyzer/transfer-market-analyzer.js",
     "src/modules/transfer-analyzer/transfer-table-locator.js",
@@ -75,7 +80,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 67,
+    "expectedModuleCount": 72,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -1304,9 +1309,61 @@
         ],
         "requires": [
           {
-            "file": "src/core/domain.js",
+            "file": "src/core/config.js",
             "symbols": [
-              "buildSlfUrl"
+              "CONFIG"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/transfer-analyzer/tm-enrichment-cache.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "localStorage",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/tm-enrichment-transport.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "DOMParser",
+          "setTimeout",
+          "GM_xmlhttpRequest"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/tm-enrichment-url-text-utils.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
             ],
             "phase": "runtime"
           },
@@ -1319,11 +1376,46 @@
             "phase": "runtime"
           }
         ],
+        "hostCapabilities": []
+      },
+      {
+        "file": "src/modules/transfer-analyzer/tm-enrichment-profile.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/domain.js",
+            "symbols": [
+              "buildSlfUrl"
+            ],
+            "phase": "runtime"
+          }
+        ],
         "hostCapabilities": [
-          "DOMParser",
-          "localStorage",
-          "setTimeout",
-          "GM_xmlhttpRequest",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/tm-enrichment-history-rumors.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
+            "symbols": [
+              "TMEnrichmentLayer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
           "console"
         ]
       },
