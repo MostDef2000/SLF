@@ -29,7 +29,9 @@ All in-scope stages completed with exact-green-head merges, or descoped with rec
 | recommendation-engine.js | 974 | 5 |
 | current-action-hint-engine.js | 790 | 83 |
 
-Largest remaining module: `manual-match-runtime.js` (951) — its v2 closure decomposition was descoped in stage 2 (shared closure bindings would require non-verbatim rewiring); revisit only when telemetry behaviour work is next touching that file.
+Largest remaining module: `transfer-badge-renderer.js` (1073 lines, created in stage 1) — cohesive badge-rendering code but above the monolith threshold; candidate for a future decomposition stage. Runner-up: `manual-match-runtime.js` (951) — its v2 closure decomposition was descoped in stage 2 (shared closure bindings would require non-verbatim rewiring); revisit only when telemetry behaviour work is next touching that file.
+
+> Correction note: an earlier revision of this table incorrectly named `manual-match-runtime.js` as the largest remaining module; the audit on 2026-08-23 found `transfer-badge-renderer.js` at 1073 lines.
 
 ## Residual risks
 

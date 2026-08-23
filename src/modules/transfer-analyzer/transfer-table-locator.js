@@ -100,7 +100,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
             .sort((a, b) => b.score - a.score);
 
         if (candidates.length) {
-            console.log('[SLF Transfer Analyzer] findTransferTable', {
+            debugLog('[SLF Transfer Analyzer] findTransferTable', {
                 found: true,
                 selected: {
                     score: candidates[0].score,
@@ -162,7 +162,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
 
         const found = fallback[0]?.table || null;
 
-        console.log('[SLF Transfer Analyzer] findTransferTable fallback', {
+        debugLog('[SLF Transfer Analyzer] findTransferTable fallback', {
             found: !!found,
             fallback: fallback.slice(0, 5).map(x => ({
                 count: x.count,
@@ -253,7 +253,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
             bids: find('предл', 'став')
         };
 
-        console.log('[SLF Transfer Analyzer] header map', {
+        debugLog('[SLF Transfer Analyzer] header map', {
             cells,
             map
         });
@@ -275,7 +275,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
             .map((tr, index) => this.parseRow(tr, index, map))
             .filter(Boolean);
 
-        console.log('[SLF Transfer Analyzer] parseVisibleRows', parsed);
+        debugLog('[SLF Transfer Analyzer] parseVisibleRows', parsed);
 
         return parsed;
     },

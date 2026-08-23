@@ -404,7 +404,7 @@
     function snapshotKeyFor(snapshot) {
         if (!snapshot) return '';
         if (typeof SnapshotEngine.buildSnapshotKey === 'function') {
-            try { return String(SnapshotEngine.buildSnapshotKey(snapshot) || ''); } catch (_) {}
+            try { return String(SnapshotEngine.buildSnapshotKey(snapshot) || ''); } catch (error) { debugWarn('[SLF Snapshot] buildSnapshotKey failed', error); return ''; }
         }
         const score = snapshot.score || {};
         return [
@@ -889,7 +889,7 @@
         const result = await applyPresetBeforeV2.apply(this, arguments);
         if (result && location.pathname.includes('/game.php')) {
             setTimeout(() => {
-                try { SnapshotEngine.build(); } catch (_) {}
+                try { SnapshotEngine.build(); } catch (error) { debugWarn('[SLF Snapshot] post-preset build failed', error); }
             }, 0);
         }
         return result;
@@ -898,13 +898,13 @@
     async function pollAutomaticTelemetry() {
         if (!location.pathname.includes('/game.php')) return false;
         let snapshot;
-        try { snapshot = SnapshotEngine.build(); } catch (_) { return false; }
+        try { snapshot = SnapshotEngine.build(); } catch (error) { debugWarn('[SLF Snapshot] poll build failed', error); return false; }
         if (!snapshot?.myTeam || snapshot.matchOwnership === 'foreign') return false;
         if (snapshot.status === 'finished') {
-            try { await captureFinishedResult(snapshot, 'poll_finished'); } catch (_) {}
+            try { await captureFinishedResult(snapshot, 'poll_finished'); } catch (error) { debugWarn('[SLF Telemetry] finished-result capture failed', error); }
             return true;
         }
-        try { await flushOutbox(snapshot.gameId); } catch (_) {}
+        try { await flushOutbox(snapshot.gameId); } catch (error) { debugWarn('[SLF Telemetry] outbox flush failed', error); }
         return true;
     }
 

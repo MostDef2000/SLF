@@ -57,7 +57,7 @@ if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer) {
 
             const transferHistory = this.extractTransferHistory(doc);
 
-            console.log('[SLF TM] history fetch', {
+            debugLog('[SLF TM] history fetch', {
                 historyUrl,
                 htmlLength: html.length,
                 title: doc.title,

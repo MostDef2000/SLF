@@ -285,7 +285,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         const surface = this.findFm2026MarketSurface(document);
         if (surface) {
             const parsed = this.parseFm2026GridRows(surface);
-            console.log('[SLF Transfer Analyzer] parseVisibleRows FM2026 grid', parsed);
+            debugLog('[SLF Transfer Analyzer] parseVisibleRows FM2026 grid', parsed);
             return parsed;
         }
         return parseVisibleRowsBeforeRealFm2026Grid.apply(this, arguments);

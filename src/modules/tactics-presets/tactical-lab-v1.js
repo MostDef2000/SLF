@@ -232,7 +232,7 @@
                 envelope.tacticalLab = clone(state);
                 envelope.ts = Date.now();
                 store.setItem(key, JSON.stringify(envelope));
-            } catch (_) {}
+            } catch (error) { debugWarn('[SLF Tactical Lab] state persist failed', error); }
             return state;
         }
         function installPersistBridge() {

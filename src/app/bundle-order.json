@@ -428,7 +428,8 @@
           {
             "file": "src/core/config.js",
             "symbols": [
-              "STATE"
+              "STATE",
+              "debugWarn"
             ],
             "phase": "runtime"
           },
@@ -546,7 +547,8 @@
             "symbols": [
               "CONFIG",
               "STATE",
-              "num"
+              "num",
+              "debugLog"
             ],
             "phase": "runtime"
           },
@@ -630,8 +632,7 @@
           }
         ],
         "hostCapabilities": [
-          "location",
-          "console"
+          "location"
         ]
       },
       {
@@ -1301,7 +1302,8 @@
           {
             "file": "src/core/config.js",
             "symbols": [
-              "BASE_PRESETS"
+              "BASE_PRESETS",
+              "debugLog"
             ],
             "phase": "runtime"
           },
@@ -1444,7 +1446,8 @@
             "file": "src/core/config.js",
             "symbols": [
               "CONFIG",
-              "STATE"
+              "STATE",
+              "debugWarn"
             ],
             "phase": "runtime"
           },
@@ -1505,7 +1508,9 @@
             "file": "src/core/config.js",
             "symbols": [
               "CONFIG",
-              "STATE"
+              "STATE",
+              "debugWarn"
+            
             ],
             "phase": "runtime"
           },
@@ -1655,6 +1660,13 @@
         "public": [],
         "requires": [
           {
+            "file": "src/core/config.js",
+            "symbols": [
+              "debugLog"
+            ],
+            "phase": "runtime"
+          },
+          {
             "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
             "symbols": [
               "TMEnrichmentLayer"
@@ -1662,9 +1674,7 @@
             "phase": "runtime"
           }
         ],
-        "hostCapabilities": [
-          "console"
-        ]
+        "hostCapabilities": []
       },
       {
         "file": "src/modules/transfer-analyzer/slf-alter-layer.js",
@@ -1716,7 +1726,9 @@
           {
             "file": "src/core/config.js",
             "symbols": [
-              "CONFIG"
+              "CONFIG",
+              "debugLog"
+            
             ],
             "phase": "runtime"
           },
@@ -1747,6 +1759,13 @@
         "declares": [],
         "public": [],
         "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "debugLog"
+            ],
+            "phase": "runtime"
+          },
           {
             "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
             "symbols": [
@@ -1854,7 +1873,9 @@
           {
             "file": "src/core/config.js",
             "symbols": [
-              "CONFIG"
+              "CONFIG",
+              "debugLog"
+            
             ],
             "phase": "runtime"
           },
@@ -2210,6 +2231,13 @@
         "public": [],
         "requires": [
           {
+            "file": "src/core/config.js",
+            "symbols": [
+              "debugLog"
+            ],
+            "phase": "runtime"
+          },
+          {
             "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
             "symbols": [
               "TMEnrichmentLayer"
@@ -2388,7 +2416,16 @@
           "Team4AlterCurrentSeasonMinutesBridge"
         ],
         "public": [],
-        "requires": [],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "CONFIG",
+              "debugLog"
+            ],
+            "phase": "runtime"
+          }
+        ],
         "hostCapabilities": [
           "URL",
           "DOMParser",

@@ -82,7 +82,7 @@
             const migrated = normalizeLegacyManualState(legacy, gameId);
             if (!migrated) return null;
             if (typeof localStorage !== 'undefined') {
-                try { localStorage.setItem(this.getStorageKey(gameId), JSON.stringify(migrated)); } catch (_) {}
+                try { localStorage.setItem(this.getStorageKey(gameId), JSON.stringify(migrated)); } catch (error) { debugWarn('[SLF ManualState] legacy migration persist failed', error); }
             }
             return readStoredState(manualStatePrefix, gameId) || migrated;
         },
