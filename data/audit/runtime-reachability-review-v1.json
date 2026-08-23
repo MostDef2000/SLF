@@ -13,6 +13,30 @@
   },
   "moduleReviews": [
     {
+      "file": "src/app/header-matches-layout-compatibility.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Issue #278 verbatim extraction from bootstrap.js; header-matches layout adapter with fail-open invocation, body verified identical.",
+        "Self-installing module loaded immediately before the bootstrap orchestrator; registered in bundle-order dependency audit."
+      ]
+    },
+    {
+      "file": "src/app/match-rendering-compatibility.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Issue #278 verbatim extraction from bootstrap.js; classic match rendering adapter with fail-open invocation, body verified identical.",
+        "Self-installing module loaded immediately before the bootstrap orchestrator; registered in bundle-order dependency audit."
+      ]
+    },
+    {
+      "file": "src/app/tactics-dropdown-ui-policy.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Issue #278 verbatim extraction from bootstrap.js; flat sorted tactics dropdown policy applied at load, body verified identical.",
+        "Self-installing module loaded immediately before the bootstrap orchestrator; registered in bundle-order dependency audit."
+      ]
+    },
+    {
       "file": "src/app/bootstrap.js",
       "classification": "ACTIVE",
       "evidence": [
