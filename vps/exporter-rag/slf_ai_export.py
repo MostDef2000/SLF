@@ -23,6 +23,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import requests
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from slf_common_utils import first_path, get_path  # noqa: E402
 
 EXPORTER_VERSION = "slf_ai_exporter_v2"
 DEFAULT_COLLECTIONS = [
@@ -175,22 +179,6 @@ def fetch_collection(api_base: str, token: str, collection: str, timeout: int = 
     return normalize_api_payload(payload)
 
 
-def get_path(obj: Mapping[str, Any], path: str) -> Any:
-    cur: Any = obj
-    for part in path.split("."):
-        if isinstance(cur, Mapping):
-            cur = cur.get(part)
-        else:
-            return None
-    return cur
-
-
-def first_path(obj: Mapping[str, Any], paths: Sequence[str]) -> Any:
-    for path in paths:
-        value = get_path(obj, path)
-        if value not in (None, ""):
-            return value
-    return None
 
 
 def age_bucket(age: Any) -> str:

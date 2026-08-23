@@ -14,6 +14,11 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import requests
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from slf_common_utils import first_path, get_path, now_iso, read_json, write_json  # noqa: E402
+
 GENERATOR_VERSION = "5.61"
 GENERATOR_START = dt.datetime(2026, 7, 13, tzinfo=dt.timezone.utc)
 STABLE_START = dt.datetime(2026, 7, 23, tzinfo=dt.timezone.utc)
@@ -25,22 +30,7 @@ CORE_METRICS = ("myXG", "oppXG", "myShots", "oppShots", "myBadActionsPct")
 VALID_SCORE_STATES = {"winning", "losing", "draw"}
 
 
-def now_iso() -> str:
-    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
 
-
-def read_json(path: Path, fallback: Any) -> Any:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return fallback
-
-
-def write_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(path)
 
 
 def safe_float(value: Any) -> float | None:
@@ -58,21 +48,6 @@ def safe_int(value: Any) -> int | None:
     return int(number) if number is not None else None
 
 
-def get_path(obj: Mapping[str, Any] | None, path: str) -> Any:
-    cur: Any = obj
-    for part in path.split("."):
-        if not isinstance(cur, Mapping):
-            return None
-        cur = cur.get(part)
-    return cur
-
-
-def first_path(obj: Mapping[str, Any], paths: Sequence[str]) -> Any:
-    for path in paths:
-        value = get_path(obj, path)
-        if value not in (None, ""):
-            return value
-    return None
 
 
 def normalize_payload(payload: Any) -> list[dict[str, Any]]:

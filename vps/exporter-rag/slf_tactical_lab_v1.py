@@ -11,6 +11,10 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from slf_common_utils import read_json, write_json  # noqa: E402
 
 SUMMARY_SCHEMA = "slf_tactical_lab_summary_v1"
 QUALITY_SCHEMA = "slf_tactical_lab_quality_v1"
@@ -22,18 +26,6 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def read_json(path: Path, fallback: Any) -> Any:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return fallback
-
-
-def write_json(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + ".tmp")
-    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    temp.replace(path)
 
 
 def as_records(value: Any) -> List[Dict[str, Any]]:
