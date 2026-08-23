@@ -65,6 +65,9 @@
     "src/modules/transfer-analyzer/transfer-marker-builder.js",
     "src/modules/transfer-analyzer/transfer-verdict-engine.js",
     "src/modules/transfer-analyzer/transfer-badge-renderer.js",
+    "src/modules/transfer-analyzer/transfer-badge-marker-taxonomy.js",
+    "src/modules/transfer-analyzer/transfer-badge-verdict-groups.js",
+    "src/modules/transfer-analyzer/transfer-badge-tooltip-portal.js",
     "src/modules/transfer-analyzer/transfer-table-sorter.js",
     "src/modules/transfer-analyzer/transfer-history-money-parser.js",
     "src/modules/transfer-analyzer/transfer-market-ui-compact-mkt.js",
@@ -89,7 +92,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 81,
+    "expectedModuleCount": 84,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -2000,6 +2003,58 @@
           "window",
           "console",
           "requestAnimationFrame"
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-badge-marker-taxonomy.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-badge-verdict-groups.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+
+        ]
+      },
+      {
+        "file": "src/modules/transfer-analyzer/transfer-badge-tooltip-portal.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/transfer-analyzer/transfer-market-analyzer.js",
+            "symbols": [
+              "TransferMarketAnalyzer"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document",
+          "window"
         ]
       },
       {
