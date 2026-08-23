@@ -1,5 +1,825 @@
 # Changelog
 
+## 4.4.324
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/team-management/team4-alter-current-season-minutes-fix.js
+
+Approved base commit:
+- a5fe22e0709d2cf3e0412e102e6eb3857591d29a
+
+Approved commit:
+- da7f04e7476fc7882ad8ea225da6fb6980113cae
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.323
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/runtime-reachability-review-v1.json
+- data/quality/reliability-budget-v1.json
+- src/app/bootstrap.js
+- src/app/bundle-order.json
+- src/app/header-matches-layout-compatibility.js
+- src/app/match-rendering-compatibility.js
+- src/app/tactics-dropdown-ui-policy.js
+
+Approved base commit:
+- 5c36248203082e48841fc76de6e1bb11659b77a4
+
+Approved commit:
+- a5fe22e0709d2cf3e0412e102e6eb3857591d29a
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.322
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/transfer-analyzer/slf-alter-layer.js
+
+Approved base commit:
+- 0f38fbb8cfdfe17b0edd49b46f2caa0e3124699a
+
+Approved commit:
+- 5c36248203082e48841fc76de6e1bb11659b77a4
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.321
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/quality-integration.yml
+- src/modules/transfer-analyzer/slf-alter-layer.js
+- tools/test-alter-layer-parsing.mjs
+
+Approved base commit:
+- b96673431319fa918498be760ac90c41ac779c82
+
+Approved commit:
+- 0f38fbb8cfdfe17b0edd49b46f2caa0e3124699a
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.320
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/bootstrap.js
+- src/app/bundle-order.json
+
+Approved base commit:
+- 20239ce73941ee6173fcb926e790e713e625022f
+
+Approved commit:
+- b96673431319fa918498be760ac90c41ac779c82
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.319
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/runtime-reachability-review-v1.json
+- data/quality/reliability-budget-v1.json
+- src/app/bundle-order.json
+- src/modules/transfer-analyzer/transfer-badge-marker-taxonomy.js
+- src/modules/transfer-analyzer/transfer-badge-renderer.js
+- src/modules/transfer-analyzer/transfer-badge-tooltip-portal.js
+- src/modules/transfer-analyzer/transfer-badge-verdict-groups.js
+
+Approved base commit:
+- 1869f9935d1336b5ea033af19f547289980e281c
+
+Approved commit:
+- 20239ce73941ee6173fcb926e790e713e625022f
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.318
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .gitignore
+- specs/002-refactoring-program/tasks.md
+- src/app/bundle-order.json
+- src/app/ui-layer.js
+- src/modules/manual-match-telemetry/manual-match-runtime.js
+- src/modules/manual-match-telemetry/manual-state-integrity.js
+- src/modules/manual-match-telemetry/snapshot-engine.js
+- src/modules/tactics-presets/tactical-lab-v1.js
+- src/modules/team-management/team4-alter-current-season-minutes-fix.js
+- src/modules/transfer-analyzer/tm-enrichment-history-rumors.js
+- src/modules/transfer-analyzer/transfer-history-vps-sync.js
+- src/modules/transfer-analyzer/transfer-market-analyzer.js
+- src/modules/transfer-analyzer/transfer-table-locator.js
+- src/modules/transfer-analyzer/transfer-tm-profile-guard.js
+- vps/exporter-rag/slf_ai_export.py
+- vps/exporter-rag/slf_common_utils.py
+- vps/exporter-rag/slf_preset_evidence_561.py
+- vps/exporter-rag/slf_tactical_lab_v1.py
+
+Approved base commit:
+- d239fb1ed86adff8553a0a572a3f659ca1347857
+
+Approved commit:
+- 1869f9935d1336b5ea033af19f547289980e281c
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.317
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/manual-match-symbol-review-v1.json
+- data/audit/runtime-reachability-review-v1.json
+- data/quality/reliability-budget-v1.json
+- src/app/bundle-order.json
+- src/modules/strategy-data-recommendations/cah-decision-core.js
+- src/modules/strategy-data-recommendations/cah-runtime-context.js
+- src/modules/strategy-data-recommendations/cah-value-utils.js
+- src/modules/strategy-data-recommendations/current-action-hint-engine.js
+- src/modules/strategy-data-recommendations/re-html-utils.js
+- src/modules/strategy-data-recommendations/re-plan-engine.js
+- src/modules/strategy-data-recommendations/re-preset-family.js
+- src/modules/strategy-data-recommendations/re-snapshot-model.js
+- src/modules/strategy-data-recommendations/recommendation-engine.js
+- src/modules/tactics-presets/tactic-control-bridge.js
+- src/modules/tactics-presets/tactic-control-engine.js
+- src/modules/tactics-presets/tactical-lab-v1.js
+- tools/test-manual-telemetry-legacy-boundary.mjs
+- tools/test-tactical-situation-diversity.mjs
+
+Approved base commit:
+- c9b2824dcc2def99a98f3fc435c86967be9d5c9b
+
+Approved commit:
+- d239fb1ed86adff8553a0a572a3f659ca1347857
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.316
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/runtime-reachability-review-v1.json
+- data/quality/reliability-budget-v1.json
+- src/app/bundle-order.json
+- src/modules/transfer-analyzer/tm-enrichment-cache.js
+- src/modules/transfer-analyzer/tm-enrichment-history-rumors.js
+- src/modules/transfer-analyzer/tm-enrichment-layer.js
+- src/modules/transfer-analyzer/tm-enrichment-profile.js
+- src/modules/transfer-analyzer/tm-enrichment-transport.js
+- src/modules/transfer-analyzer/tm-enrichment-url-text-utils.js
+
+Approved base commit:
+- 333b09a452795c84be170453a5cff0fed3c119f5
+
+Approved commit:
+- c9b2824dcc2def99a98f3fc435c86967be9d5c9b
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.315
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/manual-match-symbol-review-v1.json
+- data/audit/runtime-reachability-review-v1.json
+- data/quality/reliability-budget-v1.json
+- src/app/bundle-order.json
+- src/modules/manual-match-telemetry/manual-match-runtime.js
+- src/modules/manual-match-telemetry/manual-state-integrity.js
+- tools/test-manual-match-runtime.mjs
+- tools/test-manual-match-state-bridge.mjs
+- tools/test-manual-match-workflow.mjs
+- tools/test-manual-telemetry-final-boundary.mjs
+- tools/test-manual-telemetry-legacy-boundary.mjs
+- tools/test-telemetry-properties-and-mutations.mjs
+- tools/test-versioned-contracts.mjs
+
+Approved base commit:
+- 1cee7822c3e9a4e03160fc29525aadf365dd428a
+
+Approved commit:
+- 333b09a452795c84be170453a5cff0fed3c119f5
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.314
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .gitignore
+- .opencode/agents/slf-delivery-orchestrator.md
+- .specify/memory/constitution.md
+- AGENTS.md
+- data/audit/runtime-reachability-review-v1.json
+- data/quality/reliability-budget-v1.json
+- specs/001-sdd-adoption/plan.md
+- specs/001-sdd-adoption/spec.md
+- specs/001-sdd-adoption/tasks.md
+- specs/002-refactoring-program/plan.md
+- specs/002-refactoring-program/spec.md
+- specs/002-refactoring-program/tasks.md
+- specs/README.md
+- src/app/bundle-order.json
+- src/modules/transfer-analyzer/transfer-analysis-cache.js
+- src/modules/transfer-analyzer/transfer-badge-renderer.js
+- src/modules/transfer-analyzer/transfer-details-html-builder.js
+- src/modules/transfer-analyzer/transfer-history-vps-sync.js
+- src/modules/transfer-analyzer/transfer-marker-builder.js
+- src/modules/transfer-analyzer/transfer-market-analyzer.js
+- src/modules/transfer-analyzer/transfer-market-baseline.js
+- src/modules/transfer-analyzer/transfer-money-parser.js
+- src/modules/transfer-analyzer/transfer-table-locator.js
+- src/modules/transfer-analyzer/transfer-table-sorter.js
+- src/modules/transfer-analyzer/transfer-verdict-engine.js
+
+Approved base commit:
+- 2eb0d5a15e6659bce65bf486cc1bbb07977c102f
+
+Approved commit:
+- 1cee7822c3e9a4e03160fc29525aadf365dd428a
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.313
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/tactics/tactical-lab-contract-v1.json
+- docs/audit/tactical-lab-v1.md
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- src/modules/tactics-presets/tactic-control-engine.js
+- tests/browser/test_exact_userscript.py
+- tools/test-tactical-situation-diversity.mjs
+
+Approved base commit:
+- 1d85cf50d6aac1c10150f918a5d770dcb0a9a4ef
+
+Approved commit:
+- 2eb0d5a15e6659bce65bf486cc1bbb07977c102f
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.312
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/quality/fm2026-ui-migration-v1.json
+- docs/quality/fm2026-ui-migration-audit.md
+- docs/quality/fm2026-ui-migration.md
+- src/modules/team-management/team4-leadership-upgrade-indicator.js
+- tests/browser/test_fm2026_design_adapter.py
+
+Approved base commit:
+- a28b97bcb75151b600fec6ae048c33e7d8075942
+
+Approved commit:
+- 1d85cf50d6aac1c10150f918a5d770dcb0a9a4ef
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.311
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/tactics-presets/tactic-preset-library-panel.js
+- tests/browser/test_exact_userscript.py
+
+Approved base commit:
+- bef48c4db3f97caf698c57b0ba01968d8513e4e9
+
+Approved commit:
+- a28b97bcb75151b600fec6ae048c33e7d8075942
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.310
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/tactics/tactical-lab-contract-v1.json
+- docs/audit/tactical-lab-v1.md
+- src/modules/tactics-presets/tactic-control-engine.js
+- tests/browser/test_exact_userscript.py
+- tools/test-tactical-situation-diversity.mjs
+
+Approved base commit:
+- dbf1d56423bbcd3ab152f0b5a3a678aa1a9c5d05
+
+Approved commit:
+- bef48c4db3f97caf698c57b0ba01968d8513e4e9
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.309
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/quality-integration.yml
+- data/quality/accepted-risks-v1.json
+- docs/contracts/versioned-data-api-contracts.md
+- docs/security/threat-model.md
+- src/app/ui-layer.js
+- src/app/userscript-header.js
+- tests/browser/test_save_dialog_xss_fixtures.py
+- tools/test-api-contract-compatibility.py
+- tools/test-security-boundaries.mjs
+- vendor/jquery-3.6.0.LICENSE.txt
+- vendor/jquery-3.6.0.min.js
+- vps/api/server.py
+- vps/api/test_server.py
+
+Approved base commit:
+- 07bca7725b8e04bc340ec3a5a6f8e9b1f4e624b2
+
+Approved commit:
+- dbf1d56423bbcd3ab152f0b5a3a678aa1a9c5d05
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.308
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/ISSUE_TEMPLATE/slf-backlog-task.md
+- .github/workflows/build-latest-release.yml
+- .github/workflows/quality-governance.yml
+- contracts/SLF_AGENT_SYSTEM_SPEC.md
+- contracts/SLF_AUTOMATIC_RELEASE_POLICY.md
+- contracts/SLF_GOVERNANCE.md
+- contracts/SLF_ORCHESTRATION_LOOP.md
+- contracts/SLF_ORCHESTRATOR_ENGINE.md
+- contracts/SLF_SINGLE_CHAT_UNIVERSAL_AGENT.md
+- contracts/SLF_STATE_MODEL.md
+- contracts/branches/core-release.md
+- contracts/branches/strategy-data-recommendations.md
+- contracts/branches/team-management.md
+- contracts/branches/transfer-analyzer.md
+- contracts/runtime/COMMIT_APPROVAL_PROMPT.md
+- contracts/runtime/RELEASE_READINESS_GATE.md
+- contracts/runtime/SLF_TASK_RUNTIME.md
+- data/quality/accepted-risks-v1.json
+- data/quality/quality-gates-v1.json
+- docs/architecture/slf-control-plane.md
+- tools/test-tactic-analytics-pipeline.mjs
+- tools/test-versioned-contracts.mjs
+- vps/exporter-rag/run_daily_export.sh
+- vps/exporter-rag/slf_tactical_lab_v1.py
+- vps/exporter-rag/test_slf_tactical_lab_v1.py
+- vps/ops/deploy-code.sh
+- vps/ops/rollback-code.sh
+- vps/ops/test_service_contract.py
+
+Approved base commit:
+- b7f9d96b929ac71b81244985ad3319b07c6397a1
+
+Approved commit:
+- 07bca7725b8e04bc340ec3a5a6f8e9b1f4e624b2
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.307
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/manual-match-symbol-review-v1.json
+- data/tactics/tactical-lab-contract-v1.json
+- docs/audit/tactical-lab-v1.md
+- src/modules/tactics-presets/tactic-control-engine.js
+- tests/browser/test_exact_userscript.py
+- tools/test-tactical-situation-diversity.mjs
+
+Approved base commit:
+- 3bc408f996de619b4b26f8992a257da6a5adcfd3
+
+Approved commit:
+- b7f9d96b929ac71b81244985ad3319b07c6397a1
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.306
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/tactics-presets/tactic-preset-direction-policy.js
+- src/modules/tactics-presets/tactic-preset-library-panel.js
+- tools/test-tactical-situation-diversity.mjs
+
+Approved base commit:
+- a449db232a900f30ae8f78517876ab3b25952ede
+
+Approved commit:
+- 3bc408f996de619b4b26f8992a257da6a5adcfd3
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.305
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/strategy-data-recommendations/adaptive-opponent-style-layer.js
+- src/modules/strategy-data-recommendations/coach-mode-policy.js
+- src/modules/strategy-data-recommendations/moment-drift-stabilizer.js
+- src/modules/tactics-presets/active-preset-registry.js
+- src/modules/tactics-presets/tactic-preset-direction-policy.js
+- tools/test-tactic-analytics-pipeline.mjs
+- tools/test-tactical-situation-diversity.mjs
+- vps/exporter-rag/slf_preset_evidence_561.py
+- vps/exporter-rag/test_slf_preset_evidence_561.py
+
+Approved base commit:
+- f53345c66498350f1b2c733912d9f62e041e0f5c
+
+Approved commit:
+- a449db232a900f30ae8f78517876ab3b25952ede
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.304
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/tactics/tactic-evaluation-contract-v2.json
+- docs/audit/tactic-telemetry-envelope-v2.md
+- src/modules/manual-match-telemetry/manual-match-runtime.js
+- src/modules/manual-match-telemetry/snapshot-engine.js
+- tools/test-manual-match-runtime.mjs
+- tools/test-manual-match-state-bridge.mjs
+- tools/test-manual-match-workflow.mjs
+
+Approved base commit:
+- 10c869655bb8c33ce45083db817e67da654a1912
+
+Approved commit:
+- f53345c66498350f1b2c733912d9f62e041e0f5c
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.303
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/transfer-analyzer/transfer-candidate-full-market-policy.js
+- src/modules/transfer-analyzer/transfer-history-visible-analysis-cleanup.js
+- src/modules/transfer-analyzer/transfer-tm-profile-guard.js
+- tests/browser/fixtures/fm2026-transfer-market.html
+
+Approved base commit:
+- 757fca065ff1577a7bd8f6ff6179ffefa4525af1
+
+Approved commit:
+- 10c869655bb8c33ce45083db817e67da654a1912
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.302
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/transfer-analyzer/transfer-candidate-full-market-policy.js
+- src/modules/transfer-analyzer/transfer-candidate-pagination-policy.js
+- src/modules/transfer-analyzer/transfer-tm-profile-guard.js
+- tests/browser/fixtures/fm2026-transfer-market.html
+
+Approved base commit:
+- a75b7901379d25defda84b6c8ce1410de90f2aad
+
+Approved commit:
+- 757fca065ff1577a7bd8f6ff6179ffefa4525af1
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.301
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/transfer-analyzer/transfer-candidate-pagination-policy.js
+
+Approved base commit:
+- de7566b430e6b16a6118d8f34f2d335b465eff41
+
+Approved commit:
+- a75b7901379d25defda84b6c8ce1410de90f2aad
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.300
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/transfer-analyzer/transfer-history-visible-analysis-cleanup.js
+
+Approved base commit:
+- 423a9f0dd83f41e564562f3c2fd66aaf9cf18061
+
+Approved commit:
+- de7566b430e6b16a6118d8f34f2d335b465eff41
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.299
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/transfer-analyzer/transfer-candidate-pagination-policy.js
+- src/modules/transfer-analyzer/transfer-history-visible-analysis-cleanup.js
+
+Approved base commit:
+- eeae6f59fd82c79a91eb93c040727e2fe8339325
+
+Approved commit:
+- 423a9f0dd83f41e564562f3c2fd66aaf9cf18061
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.298
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- src/modules/tactics-presets/preset-storage.js
+- src/modules/tactics-presets/tactic-preset-library-panel.js
+- tests/browser/test_exact_userscript.py
+
+Approved base commit:
+- 5c1727cb6baf66d2567f507099554fcb41dd319a
+
+Approved commit:
+- eeae6f59fd82c79a91eb93c040727e2fe8339325
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.297
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- src/modules/tactics-presets/active-preset-registry.js
+- tools/test-tactical-situation-diversity.mjs
+
+Approved base commit:
+- 2691d48dd5bd002c0ae3cfc9fef765ccb385b84c
+
+Approved commit:
+- 5c1727cb6baf66d2567f507099554fcb41dd319a
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.296
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/quality/quality-gates-v1.json
+- src/modules/tactics-presets/active-preset-registry.js
+- tools/test-tactical-situation-diversity.mjs
+
+Approved base commit:
+- 6c9278bfe8f344aec755e5e35643dc410e7428a1
+
+Approved commit:
+- 2691d48dd5bd002c0ae3cfc9fef765ccb385b84c
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.295
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- contracts/SLF_AUTOMATIC_RELEASE_POLICY.md
+- contracts/branches/core-release.md
+- contracts/branches/project-manager.md
+- contracts/runtime/RELEASE_READINESS_GATE.md
+- contracts/runtime/SLF_TASK_RUNTIME.md
+- data/quality/quality-gates-v1.json
+- data/quality/workflow-inventory-v1.json
+- docs/decision_records/DR-013-consolidated-ci-release-workflows.md
+- tools/validate-quality-governance.mjs
+
+Approved base commit:
+- 2f18a83b255e306dcfd2ef1dbe6e01a05635d369
+
+Approved commit:
+- 6c9278bfe8f344aec755e5e35643dc410e7428a1
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.294
 
 ### Automatic latest-only build

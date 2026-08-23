@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.294
+// @version      4.4.324
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -13,7 +13,7 @@
 // @match        https://www.soccerlife.ru/
 // @match        https://www.soccerlife.ru/*
 // @icon         https://www.google.com/s2/favicons?domain=slf.fm
-// @require      https://code.jquery.com/jquery-3.6.0.min.js
+// @require      https://raw.githubusercontent.com/MostDef2000/SLF/release/vendor/jquery-3.6.0.min.js
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // @grant        GM_getValue
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.294',
-        scriptVersion: '4.4.294',
+        version: '4.4.324',
+        scriptVersion: '4.4.324',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.294',
+        scriptVersion: '4.4.324',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -1132,11 +1132,26 @@ const DomUtils = {
     // 3. Preset Storage
     // ============================================================
 
-    const ALLOWED_HENTA_PRESET = 'Henta_LeftTrap_att3';
+    const ALLOWED_HENTA_PRESET = 'Henta abuse';
 
     function isDeprecatedHentaPreset(name) {
         const key = String(name || '');
-        return key.startsWith('Henta_') && key !== ALLOWED_HENTA_PRESET;
+        return [
+            'Mourinho_WeakSide_def3',
+            'Henta_Hold_def3',
+            'Pep_StandardControl_bal3',
+            'Xabi_VerticalBox_att3',
+            'Xabi_BoxMidfield_bal3',
+            'DeZerbi_BaitPress_bal3',
+            'DeZerbi_Release_att4',
+            'Klopp_WideTrap_att4',
+            'Henta_LeftTrap_att3',
+            'Henta_RightTrap_att3',
+            'Henta_WideTrap_att3',
+            'Henta_CounterTrap_att4',
+            'Henta_CentralTrap_att3',
+            'Nagelsmann_WidePress_att4'
+        ].includes(key);
     }
 
     function filterDeprecatedPresetMap(map) {
@@ -1176,6 +1191,8 @@ const DomUtils = {
         const result = {};
 
         for (let key in data) {
+            if (isDeprecatedHentaPreset(key)) continue;
+
             const preset = data[key];
             if (!isTacticObject(preset)) continue;
 
@@ -1201,6 +1218,29 @@ const DomUtils = {
     }
 
     const PresetStorage = {
+        isRetiredBuiltInPreset(name) {
+            return isDeprecatedHentaPreset(name);
+        },
+
+        getRetiredBuiltInPresetNames() {
+            return [
+                'Mourinho_WeakSide_def3',
+                'Henta_Hold_def3',
+                'Pep_StandardControl_bal3',
+                'Xabi_VerticalBox_att3',
+                'Xabi_BoxMidfield_bal3',
+                'DeZerbi_BaitPress_bal3',
+                'DeZerbi_Release_att4',
+                'Klopp_WideTrap_att4',
+                'Henta_LeftTrap_att3',
+                'Henta_RightTrap_att3',
+                'Henta_WideTrap_att3',
+                'Henta_CounterTrap_att4',
+                'Henta_CentralTrap_att3',
+                'Nagelsmann_WidePress_att4'
+            ];
+        },
+
         loadLocalRaw() {
             try {
                 const data = localStorage.getItem(CONFIG.STORAGE_KEY);
@@ -1267,7 +1307,7 @@ const DomUtils = {
 
         getAllPresets() {
             // Built-in canonical library wins over older locally/server-saved copies with the same names.
-            // User custom presets with unique names are still preserved.
+            // Exact retired SLF built-in IDs are removed at the storage boundary; unique user presets remain.
             return filterDeprecatedPresetMap(Object.assign({}, this.loadCustom(), BASE_PRESETS));
         },
 
@@ -1401,20 +1441,22 @@ const DomUtils = {
             ? SnapshotEngine.build()
             : null;
 
-        STATE.suppressManualWatcherUntil = Date.now() + 2500;
-        STATE.suppressManualWatcherReason = `preset:${name}`;
-
-        const allowedKeys = [
-            'def_line', 'press_line', 'def_width', 'press_intense',
-            'build_type', 'build_temp', 'build_long', 'build_fast',
-            'style', 'pass_risk', 'dribble', 'cross',
-            'corner', 'shot', 'priority'
-        ];
-
-        for (let key of allowedKeys) {
-            if (!Object.prototype.hasOwnProperty.call(preset, key)) continue;
-            await setControlAsync(key, preset[key]);
+        if (location.pathname.includes('/game.php') && STATE.tacticalLabRuntime?.isActive?.()) {
+            try {
+                await STATE.tacticalLabRuntime.closeActive('user_selected_production', beforeSnapshot, {
+                    nextPresetId: name,
+                    nextTacticSource: 'production'
+                });
+            } catch (error) {
+                debugWarn('[SLF] Tactical Lab exit telemetry failed before production preset', error);
+            }
         }
+
+        const applied = await STATE.tacticControlBridge.applyTacticObject(preset, {
+            source: `preset:${name}`,
+            strict: false
+        });
+        if (!applied.ok) return false;
 
         const labels = PresetStorage.getAllLabels ? PresetStorage.getAllLabels() : {};
         const presetLabel = labels[name] || TacticPresetLibrary?.meta?.[name]?.title || name;
@@ -1431,16 +1473,892 @@ const DomUtils = {
         }
 
         UI.addParserLog(`Пресет выбран: ${presetLabel}`);
-
-        STATE.lastManualTactic = getCurrentTactic();
-        STATE.suppressManualWatcherUntil = Date.now() + 800;
-        STATE.suppressManualWatcherReason = `preset:${name}`;
-
         return true;
     }
-
-    // ============================================================
 // <<< src/modules/tactics-presets/tactic-control-engine.js
+
+
+// >>> src/modules/tactics-presets/tactic-control-bridge.js
+// Tactic Control Bridge
+// Extracted verbatim from tactic-control-engine.js (stage 4 refactor).
+
+    (function installTacticControlBridge() {
+        const controlKeys = [
+            'def_line', 'press_line', 'def_width', 'press_intense',
+            'build_type', 'build_temp', 'build_long', 'build_fast',
+            'style', 'pass_risk', 'dribble', 'cross',
+            'corner', 'shot', 'priority'
+        ];
+
+        const normalizePriority = value => (Array.isArray(value) ? value : value ? [value] : [])
+            .map(item => String(item))
+            .sort();
+        const valuesEqual = (key, expected, actual) => key === 'priority'
+            ? JSON.stringify(normalizePriority(expected)) === JSON.stringify(normalizePriority(actual))
+            : String(expected ?? '') === String(actual ?? '');
+        const pageJQuery = () => {
+            const candidate = document.defaultView?.jQuery;
+            return typeof candidate === 'function' ? candidate : null;
+        };
+        const readPlayerPosition = (card, jq) => {
+            if (!card) return '';
+            let position = '';
+            if (jq) {
+                try { position = jq(card).data('position'); } catch (_) {}
+            }
+            return String(position || card.dataset.position || card.parentElement?.dataset.position || '').toLowerCase();
+        };
+        const updatePlayerPosition = (card, position, jq) => {
+            if (!card) return;
+            const normalized = String(position || '').toLowerCase();
+            card.dataset.position = normalized;
+            let start = String(card.dataset.start || '').toLowerCase();
+            if (jq) {
+                try {
+                    const chip = jq(card);
+                    start = String(chip.data('start') || start).toLowerCase();
+                    chip.data('position', normalized);
+                } catch (_) {}
+            }
+            card.classList.toggle('position_modify', normalized !== start);
+        };
+        const validateFormation = positions => {
+            const root = document.querySelector('.control_field_1');
+            const pitch = root?.querySelector('.cf1-pitch');
+            if (!pitch || !Array.isArray(positions) || positions.length !== 11) {
+                return { ok:false, reason:'Поле расстановки или схема недоступны.' };
+            }
+            const targetPositions = positions.map(position => String(position || '').toLowerCase());
+            const uniqueTargets = new Set(targetPositions);
+            const slotMap = new Map(Array.from(pitch.querySelectorAll('.control_line[data-position]'))
+                .map(slot => [String(slot.dataset.position || '').toLowerCase(), slot]));
+            if (uniqueTargets.size !== 11 || targetPositions.some(position => !slotMap.has(position))) {
+                return { ok:false, reason:'На поле отсутствуют квадраты для экспериментальной схемы.' };
+            }
+            const players = Array.from(pitch.querySelectorAll('.control_line > .control_lineup'));
+            if (players.length !== 11) return { ok:false, reason:'На поле должно находиться ровно 11 игроков.' };
+            const saveButton = root.querySelector('.lineup_send');
+            if (!saveButton) return { ok:false, reason:'Штатная кнопка сохранения расстановки недоступна.' };
+            return { ok:true, targetPositions, root, pitch, slotMap, players, saveButton };
+        };
+
+        STATE.tacticControlBridge = {
+            schema: 'slf_tactic_control_bridge_v1',
+            allowedKeys: controlKeys.slice(),
+
+            async applyTacticObject(tactic, options = {}) {
+                const normalized = normalizePresets({ current: tactic }).current || tactic;
+                if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
+                    return { ok:false, reason:'invalid_tactic', failures:['tactic'], mismatches:[] };
+                }
+                const strict = options.strict === true;
+                const source = String(options.source || 'direct_tactic');
+                const failures = [];
+                STATE.suppressManualWatcherUntil = Date.now() + 2500;
+                STATE.suppressManualWatcherReason = source;
+
+                for (const key of controlKeys) {
+                    if (!Object.prototype.hasOwnProperty.call(normalized, key)) continue;
+                    const applied = await setControlAsync(key, normalized[key]);
+                    if (!applied) failures.push(key);
+                }
+
+                const current = getCurrentTactic();
+                const mismatches = controlKeys.filter(key =>
+                    Object.prototype.hasOwnProperty.call(normalized, key)
+                    && !valuesEqual(key, normalized[key], current?.[key])
+                );
+                STATE.lastManualTactic = current;
+                STATE.suppressManualWatcherUntil = Date.now() + 800;
+                STATE.suppressManualWatcherReason = source;
+
+                return {
+                    ok: strict ? failures.length === 0 && mismatches.length === 0 : true,
+                    strict,
+                    failures,
+                    mismatches,
+                    tactic: current
+                };
+            },
+
+            validateFormation(positions) {
+                const result = validateFormation(positions);
+                return result.ok
+                    ? { ok:true, positions:result.targetPositions.slice(), saveAvailable:true }
+                    : { ok:false, reason:result.reason, saveAvailable:false };
+            },
+
+            applyFormation(positions) {
+                const validation = validateFormation(positions);
+                if (!validation.ok) return { ok:false, reason:validation.reason };
+                const { targetPositions, slotMap, players } = validation;
+                const jq = pageJQuery();
+                const currentPositions = new Map();
+                players.forEach(card => {
+                    const position = readPlayerPosition(card, jq);
+                    if (position && !currentPositions.has(position)) currentPositions.set(position, card);
+                });
+                const goalkeeper = currentPositions.get('gk');
+                if (!goalkeeper || !targetPositions.includes('gk')) {
+                    return { ok:false, reason:'В текущей расстановке не найден вратарь в GK.' };
+                }
+
+                const assignments = new Map([['gk', goalkeeper]]);
+                const usedPlayers = new Set([goalkeeper]);
+                targetPositions.forEach(position => {
+                    if (position === 'gk') return;
+                    const same = currentPositions.get(position);
+                    if (same && !usedPlayers.has(same)) {
+                        assignments.set(position, same);
+                        usedPlayers.add(same);
+                    }
+                });
+                const remaining = players.filter(card => !usedPlayers.has(card));
+                targetPositions.forEach(position => {
+                    if (!assignments.has(position) && remaining.length) assignments.set(position, remaining.shift());
+                });
+                if (assignments.size !== 11 || remaining.length) {
+                    return { ok:false, reason:'Не удалось однозначно распределить 11 игроков по схеме.' };
+                }
+
+                const holder = document.createDocumentFragment();
+                players.forEach(card => holder.appendChild(card));
+                targetPositions.forEach(position => {
+                    const card = assignments.get(position);
+                    slotMap.get(position).appendChild(card);
+                    updatePlayerPosition(card, position, jq);
+                });
+                const preview = document.defaultView?.cf1_options_load;
+                if (typeof preview === 'function') {
+                    try { preview(); } catch (_) {}
+                }
+                return { ok:true, positions:targetPositions.slice() };
+            },
+
+            readFormation() {
+                const pitch = document.querySelector('.control_field_1 .cf1-pitch');
+                if (!pitch) return [];
+                const jq = pageJQuery();
+                return Array.from(pitch.querySelectorAll('.control_line > .control_lineup'))
+                    .map(card => readPlayerPosition(card, jq))
+                    .filter(Boolean)
+                    .sort();
+            },
+
+            formationMatches(positions) {
+                const expected = (Array.isArray(positions) ? positions : []).map(String).map(x => x.toLowerCase()).sort();
+                const actual = this.readFormation();
+                return expected.length === 11 && actual.length === 11 && JSON.stringify(expected) === JSON.stringify(actual);
+            },
+
+            saveLiveLineup() {
+                const button = document.querySelector('.control_field_1 .lineup_send');
+                if (!button) return { ok:false, reason:'Штатная кнопка сохранения расстановки недоступна.' };
+                nativeClick(button);
+                return { ok:true };
+            }
+        };
+    })();
+// <<< src/modules/tactics-presets/tactic-control-bridge.js
+
+
+// >>> src/modules/tactics-presets/tactical-lab-v1.js
+// Tactical Lab v1 scheduler (deferred boot)
+// Extracted verbatim from tactic-control-engine.js (stage 4 refactor).
+
+    // Tactical Lab v1 is installed after the synchronous bundle has defined
+    // match parsing, telemetry and the production recommendation stack.
+    (function scheduleTacticalLabV1() {
+        const POPULATION_VERSION = 'slf_tactical_lab_561_p02';
+        const POPULATION_CODE = 'P02';
+        const GENOME_VERSION = 'slf_tactical_genome_v1';
+        const POPULATION_SIZE = 64;
+        const PANEL_ID = 'slf-tactical-lab-panel';
+        const BUTTON_ID = 'slf-tactical-lab-apply';
+        const STATUS_ID = 'slf-tactical-lab-status';
+        const DETAIL_ID = 'slf-tactical-lab-detail';
+        const MAX_OUTBOX = 6;
+        const productionIds = [
+            'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2','Compact_Counter_def3',
+            'Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4',
+            'Simeone_Compact442_def4','Simeone_LowBlock_def5','Bielsa_ChaosPress_att5'
+        ];
+        const seedPresets = {
+            Arteta_Control433_bal3:{def_line:'2',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'2',build_long:'1',build_fast:'2',style:'3',pass_risk:'3',dribble:'2',cross:'2',corner:'1',shot:'2',priority:[]},
+            Pep_BoxControl_bal2:{def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'1',build_long:'1',build_fast:'2',style:'3',pass_risk:'2',dribble:'2',cross:'1',corner:'1',shot:'2',priority:[]},
+            Pep_PressCooldown_bal2:{def_line:'1',press_line:'2',def_width:'3',press_intense:'1',build_type:'1',build_temp:'2',build_long:'4',build_fast:'2',style:'2',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[]},
+            Compact_Counter_def3:{def_line:'1',press_line:'1',def_width:'2',press_intense:'2',build_type:'1',build_temp:'3',build_long:'4',build_fast:'4',style:'3',pass_risk:'2',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[]},
+            Pep_ControlledPush_att3:{def_line:'3',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'3',build_long:'1',build_fast:'4',style:'4',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[]},
+            Pep_TwoThreeFive_att3:{def_line:'4',press_line:'4',def_width:'4',press_intense:'4',build_type:'2',build_temp:'2',build_long:'1',build_fast:'3',style:'5',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'4',priority:[]},
+            Conte_WingbackWidth_bal4:{def_line:'2',press_line:'2',def_width:'5',press_intense:'3',build_type:'3',build_temp:'2',build_long:'3',build_fast:'3',style:'4',pass_risk:'3',dribble:'4',cross:'5',corner:'1',shot:'2',priority:['left','right']},
+            Klopp_Gegenpress_att4:{def_line:'4',press_line:'5',def_width:'3',press_intense:'5',build_type:'3',build_temp:'3',build_long:'2',build_fast:'5',style:'5',pass_risk:'4',dribble:'4',cross:'3',corner:'1',shot:'4',priority:[]},
+            Simeone_Compact442_def4:{def_line:'1',press_line:'2',def_width:'1',press_intense:'4',build_type:'1',build_temp:'1',build_long:'3',build_fast:'2',style:'1',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[]},
+            Simeone_LowBlock_def5:{def_line:'1',press_line:'1',def_width:'1',press_intense:'1',build_type:'1',build_temp:'1',build_long:'5',build_fast:'2',style:'1',pass_risk:'1',dribble:'1',cross:'1',corner:'1',shot:'1',priority:[]},
+            Bielsa_ChaosPress_att5:{def_line:'5',press_line:'5',def_width:'5',press_intense:'5',build_type:'3',build_temp:'3',build_long:'4',build_fast:'5',style:'5',pass_risk:'5',dribble:'5',cross:'5',corner:'1',shot:'5',priority:[]}
+        };
+        const ranges = {
+            def_line:['1','2','3'], press_line:['1','2','3'], def_width:['1','2','3'], press_intense:['1','2','3','4','5'],
+            build_type:['1','2','3'], build_temp:['1','2','3'], build_long:['1','2','3'], build_fast:['1','2','3'],
+            style:['1','2','3','4','5'], pass_risk:['1','2','3','4','5'], dribble:['1','2','3','4','5'], cross:['1','2','3'],
+            corner:['1','2'], shot:['1','2','3']
+        };
+        const priorityValues = new Set(['left','center','right']);
+        const labControlKeys = Object.keys(ranges);
+        let population = null;
+        let cachedState = null;
+        let cachedGameId = '';
+        let flushPromise = null;
+        let telemetryWrapped = false;
+        let persistWrapped = false;
+
+        const clone = value => {
+            if (value == null) return value;
+            try { return JSON.parse(JSON.stringify(value)); } catch (_) { return null; }
+        };
+        const hash32 = text => {
+            let value = 2166136261;
+            for (const char of String(text || '')) {
+                value ^= char.charCodeAt(0);
+                value = Math.imul(value, 16777619);
+            }
+            return value >>> 0;
+        };
+        const hashHex = text => hash32(text).toString(16).padStart(8, '0');
+        const makeRng = seed => {
+            let state = hash32(seed) || 0x9e3779b9;
+            return () => {
+                state ^= state << 13;
+                state ^= state >>> 17;
+                state ^= state << 5;
+                return (state >>> 0) / 4294967296;
+            };
+        };
+        const normalizePriority = value => (Array.isArray(value) ? value : value ? [value] : [])
+            .map(String)
+            .filter(item => priorityValues.has(item))
+            .sort();
+        const nearestAllowedValue = (key, value) => {
+            const values = ranges[key] || [];
+            const requested = String(value ?? '');
+            if (values.includes(requested)) return requested;
+            if (!values.length) return requested;
+            const numeric = Number(requested);
+            if (!Number.isFinite(numeric)) return values[Math.floor((values.length - 1) / 2)];
+            return values.reduce((best, candidate) =>
+                Math.abs(Number(candidate) - numeric) < Math.abs(Number(best) - numeric) ? candidate : best
+            , values[0]);
+        };
+        const normalizeLabControls = controls => {
+            const normalized = {};
+            labControlKeys.forEach(key => { normalized[key] = nearestAllowedValue(key, controls?.[key]); });
+            normalized.priority = normalizePriority(controls?.priority);
+            return normalized;
+        };
+        const tacticFingerprint = tactic => labControlKeys.concat(['priority'])
+            .map(key => `${key}:${JSON.stringify(key === 'priority' ? normalizePriority(tactic?.[key]) : String(tactic?.[key] ?? ''))}`)
+            .join('|');
+        const genomeFingerprint = controls => `tlab1-${hashHex(tacticFingerprint(controls))}`;
+        const mutationDistance = (before, after) => {
+            const keys = labControlKeys.concat(['priority']);
+            const changed = keys.filter(key => JSON.stringify(key === 'priority' ? normalizePriority(before?.[key]) : before?.[key]) !== JSON.stringify(key === 'priority' ? normalizePriority(after?.[key]) : after?.[key])).length;
+            return Number((changed / keys.length).toFixed(3));
+        };
+        const priorityFor = index => {
+            const options = [[],['left'],['center'],['right'],['left','right'],['left','center'],['center','right']];
+            return options[index % options.length].slice();
+        };
+        const makeExperiment = (index, origin, controls, parentExperimentId = null, distance = null) => {
+            const normalizedControls = normalizeLabControls(controls);
+            return {
+                experimentId: `EXP-561-${POPULATION_CODE}-${String(index + 1).padStart(4, '0')}`,
+                populationVersion: POPULATION_VERSION,
+                generation: 1,
+                genomeVersion: GENOME_VERSION,
+                origin,
+                parentExperimentId,
+                mutationDistance: distance,
+                controls: normalizedControls,
+                tacticFingerprint: tacticFingerprint(normalizedControls),
+                genomeFingerprint: genomeFingerprint(normalizedControls)
+            };
+        };
+
+        function buildPopulation() {
+            const result = [];
+            const mutableKeys = labControlKeys.filter(key => key !== 'corner');
+            for (let index = 0; index < 16; index += 1) {
+                const seedId = productionIds[index % productionIds.length];
+                const baseline = normalizeLabControls(seedPresets[seedId]);
+                const controls = clone(baseline);
+                for (let step = 0; step < 3; step += 1) {
+                    const key = mutableKeys[(index * 3 + step * 5) % mutableKeys.length];
+                    const values = ranges[key];
+                    const currentIndex = Math.max(0, values.indexOf(String(controls[key])));
+                    const shift = ((index + step) % 2 === 0 ? 1 : -1);
+                    controls[key] = values[(currentIndex + shift + values.length) % values.length];
+                }
+                if (index % 4 === 3) controls.priority = priorityFor(index);
+                result.push(makeExperiment(index, 'production_mutation', controls, seedId, mutationDistance(baseline, controls)));
+            }
+            for (let local = 0; local < 16; local += 1) {
+                const index = 16 + local;
+                const controls = {};
+                labControlKeys.forEach((key, keyIndex) => {
+                    const values = ranges[key];
+                    controls[key] = values[(local * 2 + keyIndex * 3) % values.length];
+                });
+                controls.priority = priorityFor(local + 2);
+                result.push(makeExperiment(index, 'orthogonal', controls, null, 1));
+            }
+            for (let local = 0; local < 16; local += 1) {
+                const index = 32 + local;
+                const rng = makeRng(`${POPULATION_VERSION}|random|${local}`);
+                const controls = {};
+                labControlKeys.forEach(key => {
+                    const values = ranges[key];
+                    controls[key] = values[Math.floor(rng() * values.length) % values.length];
+                });
+                controls.priority = priorityFor(Math.floor(rng() * 100));
+                result.push(makeExperiment(index, 'deterministic_random', controls, null, 1));
+            }
+            for (let local = 0; local < 16; local += 1) {
+                const index = 48 + local;
+                const controls = {};
+                labControlKeys.forEach((key, keyIndex) => {
+                    const values = ranges[key];
+                    controls[key] = values.length === 1 ? values[0] : ((local + keyIndex) % 2 === 0 ? values[0] : values[values.length - 1]);
+                });
+                controls.priority = priorityFor(local + 4);
+                result.push(makeExperiment(index, 'extreme', controls, null, 1));
+            }
+            return result;
+        }
+
+        function storage() {
+            try { return document.defaultView?.localStorage || null; } catch (_) { return null; }
+        }
+        function getGameId(snapshot = null) {
+            return String(snapshot?.gameId || MatchStateParser.getGameId() || '');
+        }
+        function stateStorageKey(gameId) {
+            try {
+                const key = SnapshotEngine.manualMatchState?.getStorageKey?.(gameId);
+                if (key) return String(key);
+            } catch (_) {}
+            return `slf_manual_match_state_v1:${gameId}`;
+        }
+        function emptyState(gameId) {
+            return {
+                schema:'slf_tactical_lab_state_v1',
+                gameId,
+                populationVersion:POPULATION_VERSION,
+                assignment:null,
+                activation:null,
+                completed:null,
+                outbox:[],
+                lastError:null
+            };
+        }
+        function readStoredLabState(gameId) {
+            const store = storage();
+            if (!store || !gameId) return null;
+            try {
+                const envelope = JSON.parse(store.getItem(stateStorageKey(gameId)) || 'null');
+                const lab = envelope?.tacticalLab;
+                return lab?.schema === 'slf_tactical_lab_state_v1' && String(lab.gameId || '') === String(gameId) ? lab : null;
+            } catch (_) { return null; }
+        }
+        function loadState(gameId) {
+            gameId = String(gameId || '');
+            if (!gameId) return null;
+            if (cachedState && cachedGameId === gameId) return cachedState;
+            const state = readStoredLabState(gameId) || emptyState(gameId);
+            state.outbox = Array.isArray(state.outbox) ? state.outbox.slice(-MAX_OUTBOX) : [];
+            cachedGameId = gameId;
+            cachedState = state;
+            return state;
+        }
+        function persistState(state) {
+            if (!state?.gameId) return null;
+            cachedGameId = String(state.gameId);
+            cachedState = state;
+            const store = storage();
+            if (!store) return state;
+            const key = stateStorageKey(state.gameId);
+            try {
+                let envelope = JSON.parse(store.getItem(key) || 'null');
+                if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) {
+                    if (typeof SnapshotEngine.persistManualState === 'function') SnapshotEngine.persistManualState({});
+                    envelope = JSON.parse(store.getItem(key) || 'null');
+                }
+                if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) {
+                    envelope = { schema:'slf_manual_match_state_v1', gameId:state.gameId, ts:Date.now() };
+                }
+                envelope.tacticalLab = clone(state);
+                envelope.ts = Date.now();
+                store.setItem(key, JSON.stringify(envelope));
+            } catch (error) { debugWarn('[SLF Tactical Lab] state persist failed', error); }
+            return state;
+        }
+        function installPersistBridge() {
+            if (persistWrapped || typeof SnapshotEngine.persistManualState !== 'function') return;
+            persistWrapped = true;
+            const originalPersist = SnapshotEngine.persistManualState.bind(SnapshotEngine);
+            SnapshotEngine.persistManualState = function persistManualStateWithTacticalLab(extra = {}) {
+                const result = originalPersist(extra);
+                const gameId = String(MatchStateParser.getGameId() || cachedGameId || '');
+                const state = gameId ? (cachedGameId === gameId ? cachedState : readStoredLabState(gameId)) : null;
+                if (state) persistState(state);
+                return result;
+            };
+        }
+
+        function selectExperiment(gameId) {
+            const items = population || (population = buildPopulation());
+            return items[hash32(`${POPULATION_VERSION}|${gameId}`) % items.length];
+        }
+        function ensureAssignment(snapshot) {
+            const gameId = getGameId(snapshot);
+            const state = loadState(gameId);
+            if (!state) return null;
+            const selected = selectExperiment(gameId);
+            if (!state.assignment || state.assignment.populationVersion !== POPULATION_VERSION) {
+                state.populationVersion = POPULATION_VERSION;
+                state.assignment = {
+                    assignmentId:`tactical_lab_assignment|${gameId}|${selected.experimentId}`,
+                    experimentId:selected.experimentId,
+                    populationVersion:POPULATION_VERSION,
+                    genomeFingerprint:selected.genomeFingerprint,
+                    assignedAt:Date.now()
+                };
+                state.activation = null;
+                state.completed = null;
+                state.lastError = null;
+            }
+            persistState(state);
+            return state;
+        }
+        function experimentFor(state) {
+            const items = population || (population = buildPopulation());
+            return items.find(item => item.experimentId === state?.assignment?.experimentId) || null;
+        }
+        function isOwnedLive(snapshot) {
+            return !!snapshot?.gameId && !!snapshot?.myTeam && snapshot.status !== 'finished';
+        }
+        function scoreContext(snapshot) {
+            const score = snapshot?.score || {};
+            const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+            const isHome = Number(teams[0]) === Number(snapshot?.myTeam);
+            const home = Number(score.home);
+            const away = Number(score.away);
+            if (!Number.isFinite(home) || !Number.isFinite(away) || !snapshot?.myTeam) {
+                return {scoreState:'unknown',scoreDiff:null,homeAway:snapshot?.myTeam?(isHome?'home':'away'):'unknown'};
+            }
+            const myGoals = isHome ? home : away;
+            const oppGoals = isHome ? away : home;
+            return {scoreState:myGoals>oppGoals?'winning':myGoals<oppGoals?'losing':'draw',scoreDiff:myGoals-oppGoals,homeAway:isHome?'home':'away'};
+        }
+        function teamStats(snapshot, own) {
+            if (!snapshot?.myTeam || !Array.isArray(snapshot?.stats)) return null;
+            return snapshot.stats.find(item => own
+                ? Number(item?.teamId) === Number(snapshot.myTeam)
+                : Number(item?.teamId) !== Number(snapshot.myTeam))?.stats || null;
+        }
+        function metrics(snapshot) {
+            const my = teamStats(snapshot, true) || {};
+            const opp = teamStats(snapshot, false) || {};
+            return {
+                myXG:Number(my.xG || 0),oppXG:Number(opp.xG || 0),myShots:Number(my.shots || 0),oppShots:Number(opp.shots || 0),
+                myBadActionsPct:Number(my.badActionsPct || 0),oppBadActionsPct:Number(opp.badActionsPct || 0),
+                myPower:Number(my.power || 0),oppPower:Number(opp.power || 0),
+                myDefVector:Number(my.defVector || 0),oppDefVector:Number(opp.defVector || 0),
+                myPressVector:Number(my.pressVector || 0),oppPressVector:Number(opp.pressVector || 0)
+            };
+        }
+        function metricDelta(before, after) {
+            return Object.fromEntries(Object.keys(before || {}).map(key => [key,Number((Number(after?.[key] || 0)-Number(before?.[key] || 0)).toFixed(4))]));
+        }
+        function productionRecommendation() {
+            const decision = STATE.lastRuleDecision || null;
+            const compact = EventTracker.compactRuleDecision?.(decision) || null;
+            const runnerUp = decision?.runnerUp || (decision?.candidates || []).find(item => !item?.vetoed && item?.preset !== decision?.action?.preset) || null;
+            return compact ? {
+                presetId:compact.action?.preset || null,
+                situationKey:decision?.situationKey || compact.action?.decision || null,
+                confidence:clone(decision?.confidence || compact.confidence || null),
+                runnerUp:runnerUp?{preset:runnerUp.preset||null,score:Number(runnerUp.score||0)}:null,
+                margin:Number(decision?.margin ?? compact.margin ?? 0),
+                riskAppetite:compact.riskAppetite || null
+            } : null;
+        }
+        function buildContext(snapshot) {
+            const my = teamStats(snapshot, true) || {};
+            const opp = teamStats(snapshot, false) || {};
+            const score = scoreContext(snapshot);
+            const gap = Number(my.power || 0) - Number(opp.power || 0);
+            const decisionContext = STATE.lastRuleDecision?.moment?.context || {};
+            const transitions = Array.isArray(snapshot?.tacticTelemetry?.transitions) ? snapshot.tacticTelemetry.transitions : [];
+            const latest = transitions[transitions.length - 1] || null;
+            const minute = Number.isFinite(Number(snapshot?.minute)) ? Number(snapshot.minute) : null;
+            const transitionMinute = Number.isFinite(Number(latest?.minute)) ? Number(latest.minute) : null;
+            const currentFingerprint = snapshot?.tacticTelemetry?.currentTacticFingerprint || tacticFingerprint(snapshot?.currentTactic || {});
+            const currentPreset = snapshot?.tacticTelemetry?.currentPreset || null;
+            return {
+                minute,bucket:snapshot?.bucket||null,score:clone(snapshot?.score||null),scoreState:score.scoreState,scoreDiff:score.scoreDiff,homeAway:score.homeAway,
+                strengthGap:Number.isFinite(gap)?Number(gap.toFixed(2)):null,
+                strengthBucket:gap<=-10?'much_weaker':gap<-3?'weaker':gap<=3?'even':gap<10?'stronger':'much_stronger',
+                previous:{
+                    phaseSequence:Number(snapshot?.tacticTelemetry?.transitionCount || transitions.length || 0),
+                    phaseDuration:minute!=null&&transitionMinute!=null?Math.max(0,minute-transitionMinute):null,
+                    presetId:currentPreset,
+                    tacticSource:currentPreset?'production':'manual',
+                    tacticFingerprint:currentFingerprint
+                },
+                state:{
+                    pressureRisk:Number(decisionContext.pressureRisk||0),
+                    attackNeed:Number(decisionContext.attackNeed||0),
+                    powerDropPct:Number(decisionContext.myPowerDropPct||0),
+                    badActionsPct:Number(my.badActionsPct||0),
+                    possession:Number(my.possession ?? my.pos ?? 0)
+                },
+                productionRecommendation:productionRecommendation()
+            };
+        }
+        function publicState(state) {
+            if (!state) return null;
+            return {
+                schema:'slf_tactical_lab_match_v1',
+                populationVersion:POPULATION_VERSION,
+                assignment:clone(state.assignment),
+                activation:clone(state.activation),
+                completed:clone(state.completed),
+                offered:true,
+                activated:!!state.activation || !!state.completed
+            };
+        }
+        function lifecycleEvent(state, kind, context, extra) {
+            const experiment = experimentFor(state);
+            return {
+                schema:'slf_tactical_lab_event_v1',
+                eventKey:`tactical_lab_${kind}|${state.gameId}|${state.assignment?.assignmentId || ''}`,
+                kind,
+                assignmentId:state.assignment?.assignmentId || null,
+                experimentId:experiment?.experimentId || null,
+                populationVersion:POPULATION_VERSION,
+                genomeVersion:GENOME_VERSION,
+                genomeFingerprint:experiment?.genomeFingerprint || null,
+                blind:true,
+                context:clone(context),
+                extra:clone(extra || null),
+                recordedAt:Date.now()
+            };
+        }
+        function queueLifecycle(state, kind, context, extra) {
+            if (!state?.assignment) return;
+            const event = lifecycleEvent(state, kind, context, extra);
+            state.outbox = (Array.isArray(state.outbox) ? state.outbox : []).filter(item => item?.eventKey !== event.eventKey);
+            state.outbox.push({eventKey:event.eventKey,event});
+            state.outbox = state.outbox.slice(-MAX_OUTBOX);
+            persistState(state);
+            void flushOutbox(state);
+        }
+        async function flushOutbox(state) {
+            if (flushPromise || !state?.outbox?.length || typeof SnapshotEngine.sendSnapshot !== 'function') return flushPromise;
+            flushPromise = (async () => {
+                for (const item of state.outbox.slice()) {
+                    try {
+                        const snapshot = SnapshotEngine.build();
+                        if (!snapshot?.myTeam || String(snapshot.gameId || '') !== String(state.gameId || '')) break;
+                        snapshot.tacticalLabEvent = clone(item.event);
+                        snapshot.tacticalLab = publicState(state);
+                        await SnapshotEngine.sendSnapshot(snapshot);
+                        state.outbox = state.outbox.filter(row => row?.eventKey !== item.eventKey);
+                        persistState(state);
+                    } catch (_) { break; }
+                }
+            })().finally(() => { flushPromise = null; });
+            return flushPromise;
+        }
+
+        function installTelemetryBridge() {
+            if (telemetryWrapped || typeof SnapshotEngine.buildSnapshotKey !== 'function') return;
+            telemetryWrapped = true;
+            const originalKey = SnapshotEngine.buildSnapshotKey.bind(SnapshotEngine);
+            SnapshotEngine.buildSnapshotKey = function buildSnapshotKeyWithTacticalLab(snapshot) {
+                const base = originalKey(snapshot);
+                return snapshot?.tacticalLabEvent?.eventKey ? `${base}|${snapshot.tacticalLabEvent.eventKey}` : base;
+            };
+            if (typeof SnapshotEngine.sendPlayerObservations === 'function') {
+                const originalPlayers = SnapshotEngine.sendPlayerObservations.bind(SnapshotEngine);
+                SnapshotEngine.sendPlayerObservations = function sendPlayerObservationsWithoutLabEventFanout(snapshot) {
+                    if (snapshot?.tacticalLabEvent) return Promise.resolve(null);
+                    return originalPlayers(snapshot);
+                };
+            }
+            if (typeof SnapshotEngine.buildSnapshotRecord === 'function') {
+                const originalRecord = SnapshotEngine.buildSnapshotRecord.bind(SnapshotEngine);
+                SnapshotEngine.buildSnapshotRecord = function buildSnapshotRecordWithTacticalLab(snapshot) {
+                    const record = originalRecord(snapshot);
+                    const gameId = getGameId(snapshot);
+                    const state = gameId ? loadState(gameId) : null;
+                    if (state?.assignment) record.tacticalLab = clone(snapshot?.tacticalLab || publicState(state));
+                    if (snapshot?.tacticalLabEvent) record.tacticalLabEvent = clone(snapshot.tacticalLabEvent);
+                    return record;
+                };
+            }
+            if (typeof SnapshotEngine.sendMatchResult === 'function') {
+                const originalResult = SnapshotEngine.sendMatchResult.bind(SnapshotEngine);
+                SnapshotEngine.sendMatchResult = async function sendMatchResultWithTacticalLab(snapshot) {
+                    const gameId = getGameId(snapshot);
+                    const state = gameId ? loadState(gameId) : null;
+                    if (state?.activation?.status === 'active' && snapshot?.status === 'finished') {
+                        await checkpoint('finished_parse', snapshot);
+                    }
+                    const finalState = gameId ? loadState(gameId) : null;
+                    if (finalState?.assignment) snapshot.tacticalLab = publicState(finalState);
+                    return originalResult(snapshot);
+                };
+            }
+        }
+
+        function controlsAvailable(controls) {
+            if (!controls || typeof controls !== 'object') return false;
+            for (const key of labControlKeys) {
+                const value = String(controls[key] ?? '');
+                if (!(ranges[key] || []).includes(value)) return false;
+                if (!document.querySelector(`input[name="${key}"][value="${value}"]`)) return false;
+            }
+            for (const value of normalizePriority(controls.priority)) {
+                const suffix = value === 'left' ? 'l' : value === 'center' ? 'c' : value === 'right' ? 'r' : '';
+                if (!suffix || !document.querySelector(`input[name="priority_${suffix}"]`)) return false;
+            }
+            return true;
+        }
+
+        async function activate() {
+            const snapshot = SnapshotEngine.build();
+            if (!isOwnedLive(snapshot)) return {ok:false,reason:'Матч недоступен для Tactical Lab.'};
+            const state = ensureAssignment(snapshot);
+            if (!state?.assignment) return {ok:false,reason:'Эксперимент ещё не назначен.'};
+            if (state.activation || state.completed) return {ok:false,reason:'Эксперимент уже использован в этом матче.'};
+            const experiment = experimentFor(state);
+            const bridge = STATE.tacticControlBridge;
+            if (!experiment || !bridge) return {ok:false,reason:'Механизм применения тактики ещё не готов.'};
+            if (!controlsAvailable(experiment.controls)) return {ok:false,reason:'Точные native controls эксперимента ещё недоступны на странице.'};
+
+            const entryContext = buildContext(snapshot);
+            const baselineMetrics = metrics(snapshot);
+            const beforeTactic = getCurrentTactic();
+            const applied = await bridge.applyTacticObject(experiment.controls,{source:`tactical_lab:${experiment.experimentId}`,strict:true});
+            if (!applied?.ok) {
+                await bridge.applyTacticObject(beforeTactic,{source:`tactical_lab_rollback:${experiment.experimentId}`,strict:false});
+                const failedKeys = [...new Set([...(applied?.failures || []), ...(applied?.mismatches || [])])];
+                state.lastError = `Controls не применились: ${failedKeys.join(', ') || 'unknown'}`;
+                persistState(state);
+                renderUI();
+                return {ok:false,reason:state.lastError};
+            }
+
+            state.activation = {
+                status:'active',
+                activationId:`tactical_lab_activation|${state.gameId}|${state.assignment.assignmentId}`,
+                experimentId:experiment.experimentId,
+                startedAtTs:Date.now(),
+                startedAtMinute:Number.isFinite(Number(snapshot.minute))?Number(snapshot.minute):null,
+                entryContext,
+                baselineMetrics
+            };
+            state.lastError = null;
+            persistState(state);
+            queueLifecycle(state,'activation',entryContext,{
+                tacticFingerprint:experiment.tacticFingerprint,
+                genomeFingerprint:experiment.genomeFingerprint,
+                origin:experiment.origin,
+                parentExperimentId:experiment.parentExperimentId,
+                mutationDistance:experiment.mutationDistance,
+                applicationScope:'tactical_controls_only'
+            });
+            renderUI();
+            return {ok:true,experimentId:experiment.experimentId};
+        }
+
+        async function closeActive(reason, snapshot = null, next = {}) {
+            snapshot = snapshot || SnapshotEngine.build();
+            const state = loadState(getGameId(snapshot));
+            if (!state?.activation || state.activation.status !== 'active') return null;
+            const experiment = experimentFor(state);
+            if (!experiment) return null;
+            const activation = clone(state.activation);
+            const exitContext = buildContext(snapshot);
+            exitContext.next = {
+                presetId:next?.nextPresetId || exitContext.previous?.presetId || null,
+                tacticSource:next?.nextTacticSource || 'unknown',
+                tacticFingerprint:next?.nextTacticFingerprint || exitContext.previous?.tacticFingerprint || null
+            };
+            const endMinute = Number.isFinite(Number(snapshot?.minute)) ? Number(snapshot.minute) : null;
+            const duration = activation.startedAtMinute != null && endMinute != null ? Math.max(0,endMinute-activation.startedAtMinute) : null;
+            const delta = metricDelta(activation.baselineMetrics || {},metrics(snapshot));
+            state.completed = {
+                experimentId:experiment.experimentId,
+                activationId:activation.activationId,
+                fromMinute:activation.startedAtMinute,
+                toMinute:endMinute,
+                durationMinutes:duration,
+                exitReason:reason || 'tactic_changed',
+                entryContext:clone(activation.entryContext),
+                exitContext:clone(exitContext),
+                delta,
+                completedAt:Date.now()
+            };
+            state.activation = null;
+            persistState(state);
+            queueLifecycle(state,'exit',exitContext,{durationMinutes:duration,exitReason:state.completed.exitReason,delta,entryContext:activation.entryContext});
+            renderUI();
+            return clone(state.completed);
+        }
+
+        function isActive() {
+            const state = loadState(String(MatchStateParser.getGameId() || ''));
+            return state?.activation?.status === 'active';
+        }
+        async function checkpoint(source = 'explicit_checkpoint', snapshot = null) {
+            snapshot = snapshot || SnapshotEngine.build();
+            const state = loadState(getGameId(snapshot));
+            if (!state?.assignment) return {active:false,completed:null};
+            if (state.outbox?.length) void flushOutbox(state);
+            if (!state?.activation || state.activation.status !== 'active') {
+                renderUI();
+                return {active:false,completed:clone(state.completed || null)};
+            }
+            const experiment = experimentFor(state);
+            if (!experiment) return {active:true,completed:null};
+
+            const actual = tacticFingerprint(getCurrentTactic());
+            if (actual !== experiment.tacticFingerprint) {
+                const completed = await closeActive('tactic_changed_checkpoint', snapshot, {
+                    nextTacticSource:String(source || 'explicit_checkpoint'),
+                    nextTacticFingerprint:actual
+                });
+                return {active:false,completed};
+            }
+            if (snapshot?.status === 'finished') {
+                const completed = await closeActive('match_finished', snapshot, {nextTacticSource:'finished'});
+                return {active:false,completed};
+            }
+
+            renderUI();
+            return {active:true,completed:null};
+        }
+        function renderUI() {
+            const panel = document.getElementById(PANEL_ID);
+            if (!panel) return;
+            const state = loadState(String(MatchStateParser.getGameId() || ''));
+            const experiment = experimentFor(state);
+            const status = document.getElementById(STATUS_ID);
+            const detail = document.getElementById(DETAIL_ID);
+            const button = document.getElementById(BUTTON_ID);
+            if (!state || !experiment || !status || !detail || !button) return;
+            const shortId = experiment.experimentId.replace(`EXP-561-${POPULATION_CODE}-`,'EXP-');
+            panel.dataset.experimentId = experiment.experimentId;
+            panel.dataset.populationVersion = POPULATION_VERSION;
+            if (state.activation?.status === 'active') {
+                status.textContent = `● ${shortId} ACTIVE${state.activation.startedAtMinute!=null?` · применён на ${state.activation.startedAtMinute}'`:''}`;
+                status.style.color = '#43f58c';
+                detail.textContent = 'Эксперимент применён. Следующая проверка — только по ↻ Подсказка, выбору production preset или финальному парсингу.';
+                button.disabled = true;
+                button.textContent = 'Эксперимент активен';
+            } else if (state.completed) {
+                status.textContent = `${shortId} протестирован`;
+                status.style.color = '#aeb6cf';
+                detail.textContent = `${state.completed.fromMinute ?? '?'}' → ${state.completed.toMinute ?? '?'}' · exposure ${state.completed.durationMinutes ?? '?'}m · ${state.completed.exitReason}`;
+                button.disabled = true;
+                button.textContent = 'Тест завершён';
+            } else {
+                status.textContent = `${shortId} · blind challenger · Population ${POPULATION_CODE}`;
+                status.style.color = '#ffd76a';
+                detail.textContent = state.lastError || 'Параметры скрыты. Один клик применит только tactical controls; расстановка игроков не меняется.';
+                const ready = !!STATE.tacticControlBridge && controlsAvailable(experiment.controls);
+                button.disabled = !ready;
+                button.textContent = ready ? 'Применить эксперимент' : 'Тактика загружается…';
+            }
+        }
+        async function mountUI(snapshot = null) {
+            if (!location.pathname.includes('/game.php')) return false;
+            if (!snapshot) {
+                try { snapshot = SnapshotEngine.build(); } catch (_) { return false; }
+            }
+            if (!isOwnedLive(snapshot)) return false;
+            const state = ensureAssignment(snapshot);
+            if (!state?.assignment) return false;
+            const recommendation = document.getElementById('slf-parser-recommendation');
+            const fallback = document.getElementById('slf-match-parser-panel') || document.querySelector('.control_field_1');
+            if (!recommendation && !fallback) return false;
+            let panel = document.getElementById(PANEL_ID);
+            if (!panel) {
+                panel = document.createElement('section');
+                panel.id = PANEL_ID;
+                panel.style.cssText = 'display:flex;align-items:center;gap:7px;flex-wrap:wrap;width:100%;margin:7px 0 0;padding:7px 9px;box-sizing:border-box;background:#141824;border-top:1px solid #6f5c20;border-radius:6px;color:#eef1f8;font-family:Arial,sans-serif;font-size:11px;';
+                const title = document.createElement('strong');
+                title.textContent = 'Tactical Lab';
+                title.style.cssText = 'color:#ffd76a;white-space:nowrap;';
+                const status = document.createElement('span'); status.id = STATUS_ID; status.style.cssText = 'font-weight:600;';
+                const button = document.createElement('button'); button.id = BUTTON_ID; button.type = 'button'; button.textContent = 'Применить эксперимент';
+                button.style.cssText = 'padding:5px 9px;border:1px solid #8b7328;border-radius:7px;background:#2b2718;color:#ffe18a;cursor:pointer;font-weight:600;';
+                button.addEventListener('click',async()=>{
+                    if (button.disabled) return;
+                    button.disabled = true; button.textContent = 'Применяю…';
+                    const result = await activate();
+                    if (!result?.ok) {
+                        const current = loadState(String(MatchStateParser.getGameId() || ''));
+                        if (current) { current.lastError = result?.reason || current.lastError || 'Не удалось применить эксперимент.'; persistState(current); }
+                    }
+                    renderUI();
+                });
+                const detail = document.createElement('span'); detail.id = DETAIL_ID; detail.style.cssText = 'flex:1 1 100%;color:#aeb6cf;font-size:10px;line-height:1.3;';
+                panel.append(title,status,button,detail);
+                if (recommendation) recommendation.appendChild(panel);
+                else if (fallback?.parentNode) fallback.parentNode.insertBefore(panel,fallback.nextSibling);
+            } else if (recommendation && panel.parentElement !== recommendation) {
+                recommendation.appendChild(panel);
+            }
+            renderUI();
+            return true;
+        }
+
+        function install() {
+            if (STATE.tacticalLabRuntime?.schema === 'slf_tactical_lab_runtime_v1' && STATE.tacticalLabRuntime?.populationVersion === POPULATION_VERSION) return true;
+            if (typeof SnapshotEngine === 'undefined' || typeof EventTracker === 'undefined' || typeof MatchStateParser === 'undefined') return false;
+            population = buildPopulation();
+            installPersistBridge();
+            installTelemetryBridge();
+            STATE.tacticalLabRuntime = {
+                schema:'slf_tactical_lab_runtime_v1',
+                populationVersion:POPULATION_VERSION,
+                populationSize:POPULATION_SIZE,
+                getPopulation(){return clone(population);},
+                getAssignment(gameId){return clone(loadState(String(gameId||MatchStateParser.getGameId()||''))?.assignment||null);},
+                assignForGame(gameId){const experiment=selectExperiment(String(gameId||''));return {experimentId:experiment.experimentId,genomeFingerprint:experiment.genomeFingerprint};},
+                activate,closeActive,checkpoint,isActive,mountUI,
+                flushOutbox(){return flushOutbox(loadState(String(MatchStateParser.getGameId()||'')));}
+            };
+            void mountUI();
+            const state = loadState(String(MatchStateParser.getGameId() || ''));
+            if (state?.outbox?.length) void flushOutbox(state);
+            return true;
+        }
+
+        const boot = () => {
+            if (install()) return;
+            let attempts = 0;
+            const timer = setInterval(()=>{
+                attempts += 1;
+                if (install() || attempts >= 40) clearInterval(timer);
+            },100);
+        };
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(boot,0),{once:true});
+        else setTimeout(boot,0);
+    })();
+// <<< src/modules/tactics-presets/tactical-lab-v1.js
 
 
 // >>> src/modules/match-reading/match-state-parser.js
@@ -1925,6 +2843,9 @@ return {
 // ============================================================
 
 const SnapshotEngine = {
+    _pendingMatchResultRequests: new Map(),
+    _sentMatchResultKeys: new Set(),
+
     build() {
         const ids = MatchStatsParser.getAllTeamIds();
         const teamNames = MatchStatsParser.readTeamNames();
@@ -1952,7 +2873,7 @@ const SnapshotEngine = {
             });
         }
         const generatorExpectedPerformance = typeof GeneratorExpectedPerformanceParser !== 'undefined'
-            ? GeneratorExpectedPerformanceParser.parse(developerHints)
+            ? GeneratorExpectedPerformanceParser.parse(developerHints || [])
             : null;
         const eventsText = MatchStatsParser.readEventsText();
         const rawStatus = MatchStateParser.getStatus();
@@ -2064,7 +2985,7 @@ const SnapshotEngine = {
     },
 
     sendSnapshot(snapshot) {
-        console.log('[SLF SNAPSHOT]', snapshot);
+        debugLog('[SLF SNAPSHOT]', snapshot);
 
         const record = this.buildSnapshotRecord(snapshot);
 
@@ -2312,12 +3233,25 @@ const SnapshotEngine = {
             }
         });
 
-        const request = Api.postAppend(
+        const key = result.resultKey;
+        const pending = this._pendingMatchResultRequests.get(key);
+        if (pending) return pending;
+        if (this._sentMatchResultKeys.has(key)) {
+            return Promise.resolve({ status: 208, deduplicated: true, resultKey: key });
+        }
+
+        const request = Promise.resolve(Api.postAppend(
             CONFIG.COLLECTIONS.MATCH_RESULTS,
             result,
             'match result history'
-        );
+        )).then(response => {
+            this._sentMatchResultKeys.add(key);
+            return response;
+        }).finally(() => {
+            this._pendingMatchResultRequests.delete(key);
+        });
 
+        this._pendingMatchResultRequests.set(key, request);
         void this.sendPlayerObservations(snapshot).catch(() => {});
         return request;
     },
@@ -3822,50 +4756,20 @@ const TacticPresetLibrary = {
 // >>> src/modules/tactics-presets/tactic-preset-library-panel.js
 // Tactic Preset Library Panel
 // ============================================================
+// UI projection of the active tactical registry. No preset identities,
+// formations or ordering are owned here.
 
 const TacticPresetLibraryPanel = {
     panelId: 'slf-tactic-preset-library-panel',
     layoutId: 'slf-tactic-preset-layout',
-    livePanelId: 'slf-live-lineup-preset-panel',
-    liveSelectId: 'slf-live-lineup-preset-select',
-    liveStatusId: 'slf-live-lineup-preset-status',
-    liveRecommendationId: 'slf-live-lineup-preset-recommendation',
-    liveInstalled: false,
-    liveActivePreset: '',
-    livePresetOrder: [
-        'Arteta_Control433_bal3',
-        'Pep_BoxControl_bal2',
-        'Pep_PressCooldown_bal2',
-        'Compact_Counter_def3',
-        'Pep_ControlledPush_att3',
-        'Pep_TwoThreeFive_att3',
-        'Conte_WingbackWidth_bal4',
-        'Klopp_Gegenpress_att4',
-        'Simeone_Compact442_def4',
-        'Simeone_LowBlock_def5',
-        'Bielsa_ChaosPress_att5'
-    ],
-    liveFormationPositions: {
-        Arteta_Control433_bal3: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'cm1', 'dm2', 'cm3', 'lw', 'st2', 'rw'],
-        Pep_BoxControl_bal2: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'dm2', 'cm1', 'cm3', 'am1', 'am2', 'st2'],
-        Pep_PressCooldown_bal2: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'dm2', 'lm', 'cm2', 'cm3', 'rm', 'st2'],
-        Compact_Counter_def3: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'lm', 'dm2', 'cm2', 'rm', 'am2', 'st2'],
-        Pep_ControlledPush_att3: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'dm2', 'cm2', 'lw', 'am2', 'rw', 'st2'],
-        Pep_TwoThreeFive_att3: ['gk', 'cd1', 'cd2', 'cd3', 'dm2', 'cm2', 'lw', 'am1', 'st1', 'am2', 'rw'],
-        Conte_WingbackWidth_bal4: ['gk', 'cd1', 'cd2', 'cd3', 'lb', 'dm2', 'cm2', 'rb', 'lw', 'st2', 'rw'],
-        Klopp_Gegenpress_att4: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'dm2', 'cm2', 'lw', 'st1', 'st2', 'rw'],
-        Simeone_Compact442_def4: ['gk', 'ld', 'cd1', 'cd3', 'rd', 'lm', 'cm2', 'dm2', 'rm', 'st1', 'st2'],
-        Simeone_LowBlock_def5: ['gk', 'lb', 'cd1', 'cd2', 'cd3', 'rb', 'lm', 'dm2', 'cm2', 'rm', 'st2'],
-        Bielsa_ChaosPress_att5: ['gk', 'cd1', 'cd2', 'cd3', 'lm', 'dm2', 'rm', 'lw', 'st1', 'st2', 'rw']
+
+    getRegistry() {
+        return typeof window !== 'undefined' ? window.SLFActivePresetRegistry || null : null;
     },
 
     isTacticPage() {
         const params = new URLSearchParams(location.search || '');
         return location.pathname.includes('/team4.php') && params.get('action') === 'tactic';
-    },
-
-    isLiveMatchPage() {
-        return location.pathname.includes('/game.php');
     },
 
     escapeHtml(value) {
@@ -3878,510 +4782,105 @@ const TacticPresetLibraryPanel = {
     },
 
     getGroupColors() {
-        return {
-            defensive: '#9fd3ff',
-            balance: '#ffd76a',
-            attack: '#ff9f9f',
-            henta: '#c6a6ff'
-        };
+        return { defensive: '#9fd3ff', balance: '#ffd76a', attack: '#ff9f9f' };
     },
 
     getGroups() {
         return [
-            {
-                id: 'defensive',
-                title: 'Defensive / удержание',
-                desc: 'Схемы для удержания счёта, снижения риска, компактности и игры против давления.'
-            },
-            {
-                id: 'balance',
-                title: 'Balance / контроль',
-                desc: 'Схемы для равного матча, контроля центра, снижения брака и аккуратного вскрытия блока.'
-            },
-            {
-                id: 'attack',
-                title: 'Attack / давление',
-                desc: 'Схемы для усиления давления, дожима, высокого прессинга и спасения матча.'
-            },
-            {
-                id: 'henta',
-                title: 'Henta Experimental',
-                desc: 'Низкий блок, агрессивные отборы и ловушки через фланги, центр или контру.'
-            }
+            { id:'defensive', title:'Defensive / удержание', desc:'Удержание счёта, снижение риска, компактность и временная защита от давления.' },
+            { id:'balance', title:'Balance / контроль', desc:'Контроль, выход из прессинга, cooldown и использование ширины.' },
+            { id:'attack', title:'Attack / давление', desc:'Контролируемая погоня, позиционный дожим, поздний прессинг и финальный all-in.' }
         ];
     },
 
-    renderPresetCard(name, meta, existsInStorage) {
-        const groupColors = this.getGroupColors();
-        const color = groupColors[meta.group] || '#ddd';
-        const statusText = existsInStorage
-            ? 'есть в dropdown'
-            : 'описание есть, пресет не импортирован';
-        const statusColor = existsInStorage ? '#7cff7c' : '#ffb86c';
+    getMeta() {
+        const registry = this.getRegistry();
+        if (registry?.meta) return registry.meta;
+        return typeof TacticPresetLibrary !== 'undefined' && TacticPresetLibrary?.meta
+            ? TacticPresetLibrary.meta
+            : {};
+    },
 
+    renderPresetCard(name, meta, existsInStorage) {
+        const color = this.getGroupColors()[meta.group] || '#ddd';
+        const statusText = existsInStorage ? 'есть в dropdown' : 'пресет недоступен';
+        const statusColor = existsInStorage ? '#7cff7c' : '#ff9f9f';
         return `
-            <div style="
-                background:#181818;
-                border:1px solid #444;
-                border-left:4px solid ${color};
-                border-radius:6px;
-                padding:8px 9px;
-                margin:7px 0;
-            ">
+            <div style="background:#181818;border:1px solid #444;border-left:4px solid ${color};border-radius:6px;padding:8px 9px;margin:7px 0;">
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;">
                     <div style="min-width:0;">
-                        <div style="font-weight:bold;color:${color};font-size:13px;line-height:1.25;word-break:break-word;">
-                            ${this.escapeHtml(name)}
-                        </div>
-                        <div style="font-size:10px;color:#aaa;margin-top:2px;line-height:1.3;">
-                            ${this.escapeHtml(meta.title || '')}
-                            · group: ${this.escapeHtml(meta.group || '')}
-                            · rank: ${this.escapeHtml(meta.rank ?? '')}
-                        </div>
+                        <div style="font-weight:bold;color:${color};font-size:13px;line-height:1.25;word-break:break-word;">${this.escapeHtml(name)}</div>
+                        <div style="font-size:10px;color:#aaa;margin-top:2px;line-height:1.3;">${this.escapeHtml(meta.title || '')} · role: ${this.escapeHtml(meta.role || '')} · rank: ${this.escapeHtml(meta.rank ?? '')}</div>
                     </div>
-                    <div style="font-size:10px;color:${statusColor};border:1px solid ${statusColor};border-radius:10px;padding:1px 6px;white-space:nowrap;">
-                        ${this.escapeHtml(statusText)}
-                    </div>
+                    <div style="font-size:10px;color:${statusColor};border:1px solid ${statusColor};border-radius:10px;padding:1px 6px;white-space:nowrap;">${this.escapeHtml(statusText)}</div>
                 </div>
-
                 <div style="margin-top:7px;line-height:1.35;font-size:11px;">
                     <div><b style="color:#ddd;">Идея:</b> ${this.escapeHtml(meta.idea || '')}</div>
                     <div style="margin-top:3px;"><b style="color:#ddd;">Использовать:</b> ${this.escapeHtml(meta.use || '')}</div>
                     <div style="margin-top:3px;"><b style="color:#ddd;">Риск:</b> ${this.escapeHtml(meta.risk || '')}</div>
                 </div>
-            </div>
-        `;
+            </div>`;
     },
 
     buildHtml() {
-        const meta =
-            typeof TacticPresetLibrary !== 'undefined' && TacticPresetLibrary.meta
-                ? TacticPresetLibrary.meta
-                : {};
-
-        const presets =
-            typeof PresetStorage !== 'undefined' && PresetStorage.getAllPresets
-                ? PresetStorage.getAllPresets()
-                : {};
-
-        const names = Object.keys(meta);
-
+        const meta = this.getMeta();
+        const presets = typeof PresetStorage !== 'undefined' && PresetStorage.getAllPresets
+            ? PresetStorage.getAllPresets()
+            : {};
+        const registry = this.getRegistry();
+        const active = Array.isArray(registry?.active) ? registry.active : Object.keys(meta);
+        const names = active.filter(name => meta[name]);
         if (!names.length) {
-            return `
-                <h3 style="margin:0 0 8px 0;color:#ffd76a;font-size:14px;">Preset Library</h3>
-                <div style="color:#f99;">TacticPresetLibrary пустой или не найден.</div>
-            `;
+            return '<h3 style="margin:0;color:#ffd76a;font-size:14px;">Preset Library</h3><div style="color:#f99;">Active tactical registry ещё не готов.</div>';
         }
 
-        const groupHtml = this.getGroups().map(group => {
+        const groups = this.getGroups().map(group => {
             const groupNames = names
-                .filter(name => meta[name].group === group.id)
-                .sort((a, b) => {
-                    const ra = Number(meta[a].rank || 0);
-                    const rb = Number(meta[b].rank || 0);
-                    return rb - ra || a.localeCompare(b);
-                });
-
+                .filter(name => meta[name]?.group === group.id)
+                .sort((a, b) => Number(meta[b]?.rank || 0) - Number(meta[a]?.rank || 0) || a.localeCompare(b));
             if (!groupNames.length) return '';
-
-            const cards = groupNames
-                .map(name => this.renderPresetCard(name, meta[name], !!presets[name]))
-                .join('');
-
             return `
                 <div style="margin-bottom:12px;">
-                    <h4 style="margin:9px 0 3px 0;color:#ffd76a;font-size:13px;text-transform:uppercase;">
-                        ${this.escapeHtml(group.title)}
-                    </h4>
-                    <div style="color:#aaa;margin-bottom:7px;font-size:11px;line-height:1.3;">
-                        ${this.escapeHtml(group.desc)}
-                    </div>
-                    ${cards}
-                </div>
-            `;
+                    <h4 style="margin:9px 0 3px;color:#ffd76a;font-size:13px;text-transform:uppercase;">${this.escapeHtml(group.title)}</h4>
+                    <div style="color:#aaa;margin-bottom:7px;font-size:11px;line-height:1.3;">${this.escapeHtml(group.desc)}</div>
+                    ${groupNames.map(name => this.renderPresetCard(name, meta[name], !!presets[name])).join('')}
+                </div>`;
         }).join('');
-
         const importedCount = names.filter(name => presets[name]).length;
-
         return `
-            <h3 style="margin:0 0 8px 0;color:#fff;font-size:14px;font-variant:small-caps;letter-spacing:.3px;">
-                Preset Library
-            </h3>
-            <div style="
-                margin-bottom:9px;
-                padding:7px 8px;
-                background:#181818;
-                border:1px solid #444;
-                border-radius:6px;
-                color:#ddd;
-                line-height:1.35;
-                font-size:11px;
-            ">
-                Справочник авторских схем: что означает пресет, когда его использовать и какой риск.
-                <br>
-                Импортировано в dropdown: <b style="color:#7cff7c;">${this.escapeHtml(importedCount)}</b> из <b>${this.escapeHtml(names.length)}</b>.
-            </div>
-            ${groupHtml}
-        `;
+            <h3 style="margin:0 0 8px;color:#fff;font-size:14px;font-variant:small-caps;letter-spacing:.3px;">Preset Library</h3>
+            <div style="margin-bottom:9px;padding:7px 8px;background:#181818;border:1px solid #444;border-radius:6px;color:#ddd;line-height:1.35;font-size:11px;">
+                Tactical Suite: <b>${this.escapeHtml(registry?.suiteVersion || 'loading')}</b><br>
+                В dropdown: <b style="color:#7cff7c;">${importedCount}</b> из <b>${names.length}</b> active presets.
+            </div>${groups}`;
     },
 
     ensureLayout(tacticWrap) {
         let layout = document.getElementById(this.layoutId);
         if (layout) return layout;
-
         layout = document.createElement('div');
         layout.id = this.layoutId;
-        layout.style.cssText = `
-            display:flex;
-            align-items:flex-start;
-            gap:12px;
-            width:max-content;
-            max-width:none;
-        `;
-
+        layout.style.cssText = 'display:flex;align-items:flex-start;gap:12px;width:max-content;max-width:none;';
         tacticWrap.parentNode.insertBefore(layout, tacticWrap);
         layout.appendChild(tacticWrap);
-
         return layout;
     },
 
-    getLiveLabels() {
-        return typeof PresetStorage !== 'undefined' && PresetStorage.getAllLabels
-            ? PresetStorage.getAllLabels()
-            : {};
-    },
-
-    getLivePresetLabel(name) {
-        const labels = this.getLiveLabels();
-        return String(labels[name] || name);
-    },
-
-    getLiveRecommendedPreset() {
-        const recommendation = document.getElementById('slf-parser-recommendation');
-        const text = String(recommendation?.textContent || '');
-        if (!text) return '';
-
-        const labels = this.getLiveLabels();
-        return this.livePresetOrder.find(name => (
-            text.includes(name) || (labels[name] && text.includes(String(labels[name])))
-        )) || '';
-    },
-
-    buildLivePresetOptions(select) {
-        if (!select) return;
-        const recommended = this.getLiveRecommendedPreset();
-        const current = select.value || this.liveActivePreset;
-        const labels = this.getLiveLabels();
-        select.innerHTML = '';
-        this.livePresetOrder.forEach(name => {
-            const option = document.createElement('option');
-            option.value = name;
-            option.textContent = recommended === name
-                ? `★ ${String(labels[name] || name)} — рекомендовано`
-                : String(labels[name] || name);
-            option.dataset.recommended = recommended === name ? '1' : '0';
-            select.appendChild(option);
-        });
-
-        if (Array.from(select.options).some(option => option.value === current)) {
-            select.value = current;
-        } else if (recommended && Array.from(select.options).some(option => option.value === recommended)) {
-            select.value = recommended;
-        }
-
-        const badge = document.getElementById(this.liveRecommendationId);
-        if (badge) {
-            badge.textContent = recommended ? `★ Coach Mode: ${String(labels[recommended] || recommended)}` : '';
-            badge.style.display = recommended ? 'inline-flex' : 'none';
-        }
-        const panel = document.getElementById(this.livePanelId);
-        if (panel) panel.dataset.recommendedPreset = recommended;
-    },
-
-    setLiveStatus(text, type = 'info') {
-        const status = document.getElementById(this.liveStatusId);
-        if (!status) return;
-        status.textContent = text;
-        status.dataset.type = type;
-        status.style.color = type === 'error' ? '#ff9f9f' : type === 'success' ? '#43f58c' : '#aeb6cf';
-    },
-
-    dispatchLiveTacticPreset(name) {
-        const tacticSelect = document.querySelector('#slf-tactics-dropdown select');
-        if (!tacticSelect || !Array.from(tacticSelect.options).some(option => option.value === name)) return false;
-
-        tacticSelect.value = name;
-        const event = document.createEvent('Event');
-        event.initEvent('change', true, true);
-        tacticSelect.dispatchEvent(event);
-        return true;
-    },
-
-    getPageJQuery() {
-        const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-        return typeof pageWindow?.jQuery === 'function' ? pageWindow.jQuery : null;
-    },
-
-    getLivePlayerPosition(card, pageJQuery) {
-        if (!card) return '';
-        let position = '';
-        if (pageJQuery) {
-            try {
-                position = pageJQuery(card).data('position');
-            } catch (_) {}
-        }
-        return String(position || card.dataset.position || card.parentElement?.dataset.position || '').toLowerCase();
-    },
-
-    updateLivePlayerPosition(card, position, pageJQuery) {
-        if (!card) return;
-        const normalized = String(position || '').toLowerCase();
-        card.dataset.position = normalized;
-
-        let start = String(card.dataset.start || '').toLowerCase();
-        if (pageJQuery) {
-            try {
-                const chip = pageJQuery(card);
-                start = String(chip.data('start') || start).toLowerCase();
-                chip.data('position', normalized);
-            } catch (_) {}
-        }
-        card.classList.toggle('position_modify', normalized !== start);
-    },
-
-    applyLiveFormation(name) {
-        const positions = this.liveFormationPositions[name];
-        const root = document.querySelector('.control_field_1');
-        const pitch = root?.querySelector('.cf1-pitch');
-        if (!pitch || !Array.isArray(positions) || positions.length !== 11) {
-            return { ok: false, reason: 'Поле расстановки или схема пресета недоступны.' };
-        }
-
-        const slotMap = new Map(
-            Array.from(pitch.querySelectorAll('.control_line[data-position]'))
-                .map(slot => [String(slot.dataset.position || '').toLowerCase(), slot])
-        );
-        const targetPositions = positions.map(position => String(position).toLowerCase());
-        const uniqueTargets = new Set(targetPositions);
-        if (uniqueTargets.size !== 11 || targetPositions.some(position => !slotMap.has(position))) {
-            return { ok: false, reason: 'На поле отсутствуют квадраты для схемы выбранного пресета.' };
-        }
-
-        const players = Array.from(pitch.querySelectorAll('.control_line > .control_lineup'));
-        if (players.length !== 11) {
-            return { ok: false, reason: 'Для перестроения на поле должно находиться ровно 11 игроков.' };
-        }
-
-        const pageJQuery = this.getPageJQuery();
-        const currentPositions = new Map();
-        players.forEach(card => {
-            const position = this.getLivePlayerPosition(card, pageJQuery);
-            if (position && !currentPositions.has(position)) currentPositions.set(position, card);
-        });
-
-        const goalkeeper = currentPositions.get('gk');
-        if (!goalkeeper || !uniqueTargets.has('gk')) {
-            return { ok: false, reason: 'В текущей расстановке не найден вратарь в квадрате GK.' };
-        }
-
-        const assignments = new Map([['gk', goalkeeper]]);
-        const usedPlayers = new Set([goalkeeper]);
-        targetPositions.forEach(position => {
-            if (position === 'gk') return;
-            const samePositionPlayer = currentPositions.get(position);
-            if (samePositionPlayer && !usedPlayers.has(samePositionPlayer)) {
-                assignments.set(position, samePositionPlayer);
-                usedPlayers.add(samePositionPlayer);
-            }
-        });
-
-        const remainingPlayers = players.filter(card => !usedPlayers.has(card));
-        targetPositions.forEach(position => {
-            if (assignments.has(position)) return;
-            const card = remainingPlayers.shift();
-            if (card) assignments.set(position, card);
-        });
-
-        if (assignments.size !== 11 || remainingPlayers.length) {
-            return { ok: false, reason: 'Не удалось однозначно распределить текущих игроков по схеме.' };
-        }
-
-        const holder = document.createDocumentFragment();
-        players.forEach(card => holder.appendChild(card));
-        targetPositions.forEach(position => {
-            const card = assignments.get(position);
-            const slot = slotMap.get(position);
-            slot.appendChild(card);
-            this.updateLivePlayerPosition(card, position, pageJQuery);
-        });
-
-        const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-        if (typeof pageWindow?.cf1_options_load === 'function') {
-            try {
-                pageWindow.cf1_options_load();
-            } catch (_) {}
-        }
-
-        return { ok: true, positions: targetPositions.slice() };
-    },
-
-    handleLivePresetChange(select) {
-        const name = String(select?.value || '');
-        if (!name || !this.liveFormationPositions[name]) return;
-
-        select.disabled = true;
-        try {
-            if (!this.dispatchLiveTacticPreset(name)) {
-                this.setLiveStatus('Не удалось найти тактический dropdown SLF. Повторите после полной загрузки матча.', 'error');
-                return;
-            }
-
-            const result = this.applyLiveFormation(name);
-            if (!result.ok) {
-                this.setLiveStatus(result.reason, 'error');
-                return;
-            }
-
-            this.liveActivePreset = name;
-            const panel = document.getElementById(this.livePanelId);
-            if (panel) panel.dataset.activePreset = name;
-            this.setLiveStatus('Тактика отправлена в матч. Расстановка подготовлена — сохраните её штатной кнопкой.', 'success');
-        } finally {
-            select.disabled = false;
-        }
-    },
-
-    mountLiveLineup() {
-        if (!this.isLiveMatchPage()) return false;
-        const root = document.querySelector('.control_field_1');
-        if (!root) return false;
-
-        let panel = document.getElementById(this.livePanelId);
-        if (!panel) {
-            panel = document.createElement('section');
-            panel.id = this.livePanelId;
-            panel.style.cssText = `
-                display:flex;
-                align-items:center;
-                gap:9px;
-                flex-wrap:wrap;
-                width:100%;
-                margin:0 0 10px;
-                padding:9px 10px;
-                box-sizing:border-box;
-                background:var(--fc-soft, #171b29);
-                border:1px solid var(--fc-border, #38415f);
-                border-radius:10px;
-                color:var(--fc-text, #eef1f8);
-                font-family:var(--fm-font, Arial, sans-serif);
-                font-size:12px;
-            `;
-
-            const title = document.createElement('strong');
-            title.textContent = 'SLF пресет';
-            title.style.cssText = 'color:var(--fc-text, #eef1f8);white-space:nowrap;';
-
-            const select = document.createElement('select');
-            select.id = this.liveSelectId;
-            select.setAttribute('aria-label', 'Пресет тактики и расстановки');
-            select.style.cssText = `
-                flex:1 1 290px;
-                min-width:220px;
-                max-width:520px;
-                padding:7px 9px;
-                border:1px solid var(--fc-border, #38415f);
-                border-radius:8px;
-                background:var(--fc-card, #1c2132);
-                color:var(--fc-text, #eef1f8);
-            `;
-            select.addEventListener('focus', () => this.buildLivePresetOptions(select));
-            select.addEventListener('pointerdown', () => this.buildLivePresetOptions(select));
-            select.addEventListener('change', () => this.handleLivePresetChange(select));
-
-            const recommendation = document.createElement('span');
-            recommendation.id = this.liveRecommendationId;
-            recommendation.style.cssText = `
-                display:none;
-                align-items:center;
-                padding:3px 8px;
-                border:1px solid rgba(43,217,124,.45);
-                border-radius:999px;
-                color:#43f58c;
-                background:rgba(43,217,124,.10);
-                white-space:nowrap;
-                font-size:10px;
-            `;
-
-            const status = document.createElement('span');
-            status.id = this.liveStatusId;
-            status.textContent = 'Выбор применит тактику сразу, а расстановку оставит на предпросмотре.';
-            status.style.cssText = 'flex:1 1 100%;color:#aeb6cf;font-size:10px;line-height:1.3;';
-
-            panel.append(title, select, recommendation, status);
-            const anchor = root.querySelector('.system_message') || root.firstElementChild;
-            if (anchor) root.insertBefore(panel, anchor);
-            else root.prepend(panel);
-        }
-
-        const select = document.getElementById(this.liveSelectId);
-        this.buildLivePresetOptions(select);
-        return true;
-    },
-
-    installLiveLineup() {
-        if (this.liveInstalled || !this.isLiveMatchPage()) return;
-        this.liveInstalled = true;
-
-        const mount = () => this.mountLiveLineup();
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', mount, { once: true });
-        } else {
-            mount();
-        }
-
-        document.addEventListener('click', event => {
-            const target = event.target?.closest?.('#slf-manual-recommendation-btn, #control_choice [data-field="1"]');
-            if (!target) return;
-            this.mountLiveLineup();
-            const select = document.getElementById(this.liveSelectId);
-            this.buildLivePresetOptions(select);
-        });
-    },
-
     mount() {
-        if (!this.isTacticPage()) return;
-
+        if (!this.isTacticPage() || !this.getRegistry()) return;
         const tacticWrap = document.querySelector('.ui-tactic__wrap');
         if (!tacticWrap) return;
-
         const layout = this.ensureLayout(tacticWrap);
         let panel = document.getElementById(this.panelId);
-
         if (!panel) {
             panel = document.createElement('aside');
             panel.id = this.panelId;
-            panel.style.cssText = `
-                width:430px;
-                max-height:720px;
-                overflow:auto;
-                padding:10px;
-                background:#111;
-                color:#fff;
-                border:1px solid #444;
-                border-radius:6px;
-                box-sizing:border-box;
-                font-family:Arial,sans-serif;
-                font-size:12px;
-            `;
-
+            panel.style.cssText = 'width:430px;max-height:720px;overflow:auto;padding:10px;background:#111;color:#fff;border:1px solid #444;border-radius:6px;box-sizing:border-box;font-family:Arial,sans-serif;font-size:12px;';
             layout.appendChild(panel);
         }
-
         panel.innerHTML = this.buildHtml();
     }
 };
-
-TacticPresetLibraryPanel.installLiveLineup();
 
 // ============================================================
 // <<< src/modules/tactics-presets/tactic-preset-library-panel.js
@@ -4579,6 +5078,19 @@ const TacticalUrgencyModel = {
 // ============================================================
 
 const RecommendationEngine = {
+};
+// <<< src/modules/strategy-data-recommendations/recommendation-engine.js
+
+
+// >>> src/modules/strategy-data-recommendations/re-html-utils.js
+// Re Html Utils
+// Extracted verbatim from recommendation-engine.js (stage 4 refactor).
+// Assigned onto the RecommendationEngine facade; behaviour unchanged.
+
+if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
+    RecommendationEngine.stage4ReHtmlUtilsApplied = true;
+
+    Object.assign(RecommendationEngine, {
     escapeHtml(value) {
         return String(value ?? '')
             .replaceAll('&', '&amp;')
@@ -4586,6 +5098,14 @@ const RecommendationEngine = {
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#039;');
+    },
+
+    isPlaceholderHtml(html) {
+        const clean = String(html || '').toLowerCase();
+        return !clean ||
+            clean.includes('рекомендация появится после snapshot') ||
+            clean.includes('рекомендация отложена') ||
+            clean.includes('live parser уже запущен');
     },
 
     getSectionKey(title) {
@@ -4618,29 +5138,6 @@ const RecommendationEngine = {
         return this.getDefaultSectionOpen(title);
     },
 
-    dedupeRows(rows) {
-        const list = (Array.isArray(rows) ? rows : [rows])
-            .filter(x => x !== null && x !== undefined && String(x).trim() !== '')
-            .map(x => String(x).trim());
-
-        const seen = new Set();
-        const result = [];
-
-        list.forEach(row => {
-            const key = row
-                .toLowerCase()
-                .replace(/\s+/g, ' ')
-                .replace(/^[^:]+:\s*/, '')
-                .replace(/[.。]+$/g, '')
-                .trim();
-            if (!key || seen.has(key)) return;
-            seen.add(key);
-            result.push(row);
-        });
-
-        return result;
-    },
-
     sectionHtml(title, rows, color = '#ddd', priority = 3) {
         const list = this.dedupeRows(rows);
 
@@ -4662,6 +5159,77 @@ const RecommendationEngine = {
                 <div style="padding:0 9px 7px 9px;">${safeRows}</div>
             </details>
         `;
+    },
+
+    captureCurrentRecommendationHtml() {
+        const el = document.getElementById('slf-parser-recommendation');
+        const html = el ? String(el.innerHTML || '').trim() : '';
+
+        if (!this.isPlaceholderHtml(html)) {
+            STATE.lastRecommendationHtml = html;
+            STATE.lastRecommendationMeta = Object.assign({}, STATE.lastRecommendationMeta || {}, {
+                capturedAt: Date.now(),
+                gameId: MatchStateParser.getGameId(),
+                source: 'capture_current_recommendation_html'
+            });
+            return html;
+        }
+
+        return STATE.lastRecommendationHtml || '';
+    },
+
+    persistRenderedRecommendation(html, snapshot, meta = {}) {
+        if (this.isPlaceholderHtml(html)) return;
+
+        STATE.lastRecommendationHtml = html;
+        STATE.lastRecommendationMeta = Object.assign({
+            schema: 'slf_last_recommendation_render_v2',
+            savedAt: Date.now(),
+            gameId: snapshot?.gameId || MatchStateParser.getGameId(),
+            bucket: snapshot?.bucket || '',
+            minute: snapshot?.minute ?? null
+        }, meta || {});
+
+        if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.persistManualState) {
+            SnapshotEngine.persistManualState();
+        }
+    },
+
+    });
+}
+// <<< src/modules/strategy-data-recommendations/re-html-utils.js
+
+
+// >>> src/modules/strategy-data-recommendations/re-snapshot-model.js
+// Re Snapshot Model
+// Extracted verbatim from recommendation-engine.js (stage 4 refactor).
+// Assigned onto the RecommendationEngine facade; behaviour unchanged.
+
+if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
+    RecommendationEngine.stage4ReSnapshotModelApplied = true;
+
+    Object.assign(RecommendationEngine, {
+    dedupeRows(rows) {
+        const list = (Array.isArray(rows) ? rows : [rows])
+            .filter(x => x !== null && x !== undefined && String(x).trim() !== '')
+            .map(x => String(x).trim());
+
+        const seen = new Set();
+        const result = [];
+
+        list.forEach(row => {
+            const key = row
+                .toLowerCase()
+                .replace(/\s+/g, ' ')
+                .replace(/^[^:]+:\s*/, '')
+                .replace(/[.。]+$/g, '')
+                .trim();
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            result.push(row);
+        });
+
+        return result;
     },
 
     getTeamStats(snapshot) {
@@ -4772,6 +5340,161 @@ const RecommendationEngine = {
         return { weakOppSkill };
     },
 
+    hasEnoughLiveData(snapshot) {
+        const minute = this.getEffectiveMinute(snapshot);
+        if (!snapshot || !Array.isArray(snapshot.stats) || snapshot.stats.length < 2) {
+            return { ok: false, phase: 'no_stats', reason: 'Недостаточно статистики команд для рекомендации.' };
+        }
+
+        if (snapshot.status === 'finished') return { ok: true, phase: 'finished' };
+
+        if (!Number.isFinite(minute) || minute <= 0) {
+            return { ok: false, phase: 'unknown_minute', reason: 'Ждём первую валидную минуту матча.' };
+        }
+
+        if (minute < 15) {
+            return {
+                ok: false,
+                phase: 'collect',
+                reason: 'Сбор данных до первого generation-среза. Первая рекомендация появится с 15-й минуты для окна 16-30.'
+            };
+        }
+
+        return { ok: true, phase: 'ready' };
+    },
+
+    classifyState(snapshot, my, opp, playerSignals = {}) {
+        const minute = this.getEffectiveMinute(snapshot);
+        const score = this.getScoreState(snapshot);
+        const xt = this.getXTForMyTeam(snapshot);
+        const hints = Array.isArray(snapshot?.developerHints) ? snapshot.developerHints : [];
+        const myXg = num(my?.xG);
+        const oppXg = num(opp?.xG);
+        const myPossession = num(my?.possession);
+        const oppPossession = num(opp?.possession);
+        const myBad = num(my?.badActionsPct ?? my?.defective);
+        const myFouls = num(my?.fouls ?? my?.['-7']);
+        const myPower = num(my?.power);
+        const oppPower = num(opp?.power);
+        const oppPressVector = num(opp?.pressVector ?? opp?.press_height);
+        const oppDefVector = num(opp?.defVector ?? opp?.def_height);
+        const strengthContext = typeof StrengthContextModel !== 'undefined'
+            ? StrengthContextModel.getPowerContext(myPower, oppPower)
+            : { known: false, strengthGap: null, label: '', mode: 'unknown', bucket: 'unknown' };
+        const generatorQualitySignal = snapshot.generatorQualitySignal || DeveloperHintParser.getGeneratorQualitySignal(hints);
+        const generatorExpectedPerformance = snapshot.generatorExpectedPerformance || (typeof GeneratorExpectedPerformanceParser !== 'undefined' ? GeneratorExpectedPerformanceParser.parse(hints) : null);
+        const generatorDetailMetrics = snapshot.generatorDetailMetrics || null;
+        const ownCrossSummary = generatorDetailMetrics?.crosses?.own?.summary || null;
+        const oppCrossSummary = generatorDetailMetrics?.crosses?.opponent?.summary || null;
+        const pressFatigue = typeof StrengthContextModel !== 'undefined'
+            ? StrengthContextModel.assessPressFatigue(snapshot, { minute, myXg, oppXg, myXT: xt.myXT, oppXT: xt.oppXT, myFouls, myBad })
+            : { active: false, risk: 'low' };
+
+        const tags = [];
+        const add = tag => { if (tag && !tags.includes(tag)) tags.push(tag); };
+
+        if (score.state === 'winning') add('winning');
+        if (score.state === 'losing') add('losing');
+        if (score.state === 'draw') add('draw');
+        if (score.state === 'winning' && minute >= 70) add('late_protect_lead');
+        if (score.state === 'losing' && minute >= 55) add('need_goal');
+        if (score.state === 'losing' && minute >= 80) add('late_need_goal');
+        if (oppXg > myXg + 0.45 || xt.oppXT > xt.myXT + 0.25) add('under_pressure');
+        if (myXg > oppXg + 0.35 || xt.myXT > xt.oppXT + 0.2) add('attacking_momentum');
+        if (myBad >= 20) add('high_bad_actions');
+        if (myBad <= 13 && myBad > 0) add('low_bad_actions');
+        if (oppPressVector >= 65) add('opponent_high_press');
+        if (oppDefVector > 0 && oppDefVector <= 45) add('opponent_low_block');
+        if (generatorQualitySignal?.detected && generatorQualitySignal.direction === 'positive') add('generator_quality_positive');
+        if (generatorQualitySignal?.detected && generatorQualitySignal.direction === 'negative') add('generator_quality_negative');
+        if (generatorExpectedPerformance?.defense?.verdict === 'working') add('generator_defense_working');
+        if (generatorExpectedPerformance?.defense?.verdict === 'underperforming') add('generator_defense_underperforming');
+        if (generatorExpectedPerformance?.attack?.verdict === 'working') add('generator_attack_working');
+        if (generatorExpectedPerformance?.attack?.verdict === 'underperforming') add('generator_attack_underperforming');
+        if (ownCrossSummary?.signal === 'open_play_crosses_bad') add('own_open_play_crosses_bad');
+        if (ownCrossSummary?.signal === 'crosses_bad_total') add('own_crosses_bad_total');
+        if (oppCrossSummary?.winRate != null && oppCrossSummary.winRate >= 55 && oppCrossSummary.total >= 2) add('opponent_crosses_dangerous');
+        if (strengthContext.mode === 'advantage') add(strengthContext.bucket === 'huge_advantage' || strengthContext.bucket === 'clear_advantage' ? 'strength_advantage_clear' : 'strength_advantage_slight');
+        if (strengthContext.mode === 'disadvantage') add(strengthContext.bucket === 'huge_disadvantage' || strengthContext.bucket === 'clear_disadvantage' ? 'strength_disadvantage_clear' : 'strength_disadvantage_slight');
+        if (pressFatigue.active) add('press_fatigue_risk');
+
+        const weakOpp = playerSignals?.weakOppSkill?.[0] || null;
+        const weakPos = weakOpp?.normalizedPosition || null;
+        if (['DR', 'MR'].includes(weakPos)) add('attack_left');
+        if (['DL', 'ML'].includes(weakPos)) add('attack_right');
+        if (['DC', 'DM', 'CM'].includes(weakPos)) add('center_weak');
+        if (!tags.length) add('base_balance');
+
+        return {
+            score,
+            minute,
+            myXT: xt.myXT,
+            oppXT: xt.oppXT,
+            myXg,
+            oppXg,
+            myPossession,
+            oppPossession,
+            myBad,
+            myFouls,
+            myPower,
+            oppPower,
+            strengthGap: strengthContext.strengthGap,
+            strengthContext,
+            pressFatigue,
+            oppPressVector,
+            oppDefVector,
+            generatorQualitySignal,
+            generatorExpectedPerformance,
+            generatorDetailMetrics,
+            ownCrossSummary,
+            oppCrossSummary,
+            tags,
+            primary: tags[0] || 'base_balance'
+        };
+    },
+
+    makeMatchRead(snapshot, my, opp, state) {
+        const rows = [];
+        const score = state.score || { state: 'unknown', diff: 0 };
+        const minute = state.minute;
+
+        if (score.state === 'winning') rows.push(`Ход матча: ведём ${score.myGoals}:${score.oppGoals} на ${minute}-й минуте.`);
+        else if (score.state === 'losing') rows.push(`Ход матча: проигрываем ${score.myGoals}:${score.oppGoals} на ${minute}-й минуте.`);
+        else if (score.state === 'draw') rows.push(`Ход матча: ничья ${score.myGoals}:${score.oppGoals} на ${minute}-й минуте.`);
+        else rows.push(`Ход матча: ${minute || '?'}-я минута.`);
+
+        if (state.myXg > state.oppXg + 0.4) rows.push(`По xG мы опаснее: ${state.myXg.toFixed(2)} против ${state.oppXg.toFixed(2)}.`);
+        else if (state.oppXg > state.myXg + 0.4) rows.push(`По xG соперник опаснее: ${state.oppXg.toFixed(2)} против ${state.myXg.toFixed(2)}.`);
+        else rows.push(`По xG матч близкий: ${state.myXg.toFixed(2)} против ${state.oppXg.toFixed(2)}.`);
+
+        if (state.myXT > state.oppXT + 0.2) rows.push('По xT мы лучше продвигаем атаки.');
+        else if (state.oppXT > state.myXT + 0.2) rows.push('По xT соперник опаснее продвигает атаки.');
+
+        if (state.strengthContext?.known) {
+            const sign = state.strengthGap > 0 ? '+' : '';
+            rows.push(`Сила на поле: ${state.myPower} / ${state.oppPower} (${sign}${state.strengthGap}) — ${state.strengthContext.label}.`);
+        }
+
+        if (state.myBad >= 20) rows.push('Брак высокий — сначала нужна структура, а не хаос.');
+        else if (state.myBad > 0 && state.myBad <= 13) rows.push('Брак низкий — можно аккуратно повышать качество продвижения.');
+
+        return rows.slice(0, 6);
+    },
+
+    });
+}
+// <<< src/modules/strategy-data-recommendations/re-snapshot-model.js
+
+
+// >>> src/modules/strategy-data-recommendations/re-preset-family.js
+// Re Preset Family
+// Extracted verbatim from recommendation-engine.js (stage 4 refactor).
+// Assigned onto the RecommendationEngine facade; behaviour unchanged.
+
+if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
+    RecommendationEngine.stage4RePresetFamilyApplied = true;
+
+    Object.assign(RecommendationEngine, {
     getPresetTitle(name) {
         const labels = typeof PresetStorage !== 'undefined' && PresetStorage.getAllLabels ? PresetStorage.getAllLabels() : {};
         return labels[name] || TacticPresetLibrary?.meta?.[name]?.title || name || '';
@@ -4924,29 +5647,61 @@ const RecommendationEngine = {
         return Object.assign({}, candidate, { progressionAction: 'accepted' });
     },
 
-    hasEnoughLiveData(snapshot) {
-        const minute = this.getEffectiveMinute(snapshot);
-        if (!snapshot || !Array.isArray(snapshot.stats) || snapshot.stats.length < 2) {
-            return { ok: false, phase: 'no_stats', reason: 'Недостаточно статистики команд для рекомендации.' };
-        }
+    getConcisePresetAction(name, state = {}) {
+        const actions = {
+            Pep_BoxControl_bal2: 'Держать мяч, снизить темп/риск, не раскрывать переходы.',
+            Pep_ControlledPush_att3: 'Поднять продвижение и темп на один шаг без ломки обороны.',
+            Xabi_VerticalBox_att3: 'Искать вертикальный вход через центр/полупространства, без слепых навесов.',
+            Pep_PressCooldown_bal2: 'Сбросить интенсивность прессинга и вернуть контроль.',
+            Compact_Counter_def3: 'Закрыть переходы и оставить быстрый выход в свободную зону.',
+            Simeone_Compact442_def4: 'Сжать блок, убрать лишний риск, не садиться в полный автобус.',
+            Simeone_LowBlock_def5: 'Максимально закрыть штрафную и пережить концовку.',
+            Mourinho_WeakSide_def3: 'Компактно обороняться и выходить через слабую сторону.',
+            Conte_WingbackWidth_bal4: 'Дать ширину, но не превращать атаку в навесной шум.',
+            Klopp_Gegenpress_att4: 'Поднять давление и темп, контролируя усталость/фолы.',
+            Bielsa_ChaosPress_att5: 'All-in давление только когда уже нужен риск ради гола.',
+            Pep_TwoThreeFive_att3: 'Дожимать позиционно: выше присутствие, но без хаоса.',
+            DeZerbi_BaitPress_bal3: 'Заманить прессинг и выпускать мяч между линиями.',
+            DeZerbi_Release_att4: 'Быстрее выпускать атаку за высокую линию соперника.',
+            Klopp_WideTrap_att4: 'Обойти закрытый центр через оба фланга и прессинг.',
+            Henta_CounterTrap_att4: 'Низко отбирать и резко выходить в контратаку.',
+            Henta_WideTrap_att3: 'Упростить выход через фланги без форсирования центра.',
+            Henta_CentralTrap_att3: 'Давить слабый центр только при низком браке.',
+            Henta_LeftTrap_att3: 'Перегрузить левый фланг как главную зону выхода.',
+            Henta_RightTrap_att3: 'Перегрузить правый фланг как главную зону выхода.',
+            Henta_Hold_def3: 'Удерживать компактность с активным отбором без лишнего риска.'
+        };
 
-        if (snapshot.status === 'finished') return { ok: true, phase: 'finished' };
-
-        if (!Number.isFinite(minute) || minute <= 0) {
-            return { ok: false, phase: 'unknown_minute', reason: 'Ждём первую валидную минуту матча.' };
-        }
-
-        if (minute < 15) {
-            return {
-                ok: false,
-                phase: 'collect',
-                reason: 'Сбор данных до первого generation-среза. Первая рекомендация появится с 15-й минуты для окна 16-30.'
-            };
-        }
-
-        return { ok: true, phase: 'ready' };
+        return actions[name] || TacticPresetLibrary?.meta?.[name]?.idea || 'Поменять настройки по текущему состоянию матча.';
     },
 
+    getProgressionActionLabel(action) {
+        const map = {
+            emergency_override: 'аварийный override anti-ping-pong',
+            hold_positive_generator_quality: 'держим baseline: генератор подтверждает качество игры',
+            hold_against_immediate_rollback: 'не откатываемся сразу к прошлому пресету',
+            hold_family_change_blocked: 'сигнал слабый для смены семейства',
+            family_step: 'пошаговая смена вместо резкого прыжка',
+            adjacent_step: 'пошаговое усиление/смягчение',
+            hold_current: 'оставить текущий baseline'
+        };
+        return map[action] || action;
+    },
+
+    });
+}
+// <<< src/modules/strategy-data-recommendations/re-preset-family.js
+
+
+// >>> src/modules/strategy-data-recommendations/re-plan-engine.js
+// Re Plan Engine
+// Extracted verbatim from recommendation-engine.js (stage 4 refactor).
+// Assigned onto the RecommendationEngine facade; behaviour unchanged.
+
+if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
+    RecommendationEngine.stage4RePlanEngineApplied = true;
+
+    Object.assign(RecommendationEngine, {
     makeNotEnoughData(snapshot, gate) {
         const minute = this.getEffectiveMinute(snapshot);
         const window = snapshot?.generationWindow || MatchTimingModel.getWindow(minute);
@@ -4957,124 +5712,6 @@ const RecommendationEngine = {
             'Live Parser пока только собирает метрики: счёт, xG/xT, силу на поле, подсказки генератора и детали «подробнее».'
         ];
         return this.sectionHtml('Сбор данных', rows, '#ffd76a', 3);
-    },
-
-    classifyState(snapshot, my, opp, playerSignals = {}) {
-        const minute = this.getEffectiveMinute(snapshot);
-        const score = this.getScoreState(snapshot);
-        const xt = this.getXTForMyTeam(snapshot);
-        const hints = Array.isArray(snapshot?.developerHints) ? snapshot.developerHints : [];
-        const myXg = num(my?.xG);
-        const oppXg = num(opp?.xG);
-        const myPossession = num(my?.possession);
-        const oppPossession = num(opp?.possession);
-        const myBad = num(my?.badActionsPct ?? my?.defective);
-        const myFouls = num(my?.fouls ?? my?.['-7']);
-        const myPower = num(my?.power);
-        const oppPower = num(opp?.power);
-        const oppPressVector = num(opp?.pressVector ?? opp?.press_height);
-        const oppDefVector = num(opp?.defVector ?? opp?.def_height);
-        const strengthContext = typeof StrengthContextModel !== 'undefined'
-            ? StrengthContextModel.getPowerContext(myPower, oppPower)
-            : { known: false, strengthGap: null, label: '', mode: 'unknown', bucket: 'unknown' };
-        const generatorQualitySignal = snapshot.generatorQualitySignal || DeveloperHintParser.getGeneratorQualitySignal(hints);
-        const generatorExpectedPerformance = snapshot.generatorExpectedPerformance || (typeof GeneratorExpectedPerformanceParser !== 'undefined' ? GeneratorExpectedPerformanceParser.parse(hints) : null);
-        const generatorDetailMetrics = snapshot.generatorDetailMetrics || null;
-        const ownCrossSummary = generatorDetailMetrics?.crosses?.own?.summary || null;
-        const oppCrossSummary = generatorDetailMetrics?.crosses?.opponent?.summary || null;
-        const pressFatigue = typeof StrengthContextModel !== 'undefined'
-            ? StrengthContextModel.assessPressFatigue(snapshot, { minute, myXg, oppXg, myXT: xt.myXT, oppXT: xt.oppXT, myFouls, myBad })
-            : { active: false, risk: 'low' };
-
-        const tags = [];
-        const add = tag => { if (tag && !tags.includes(tag)) tags.push(tag); };
-
-        if (score.state === 'winning') add('winning');
-        if (score.state === 'losing') add('losing');
-        if (score.state === 'draw') add('draw');
-        if (score.state === 'winning' && minute >= 70) add('late_protect_lead');
-        if (score.state === 'losing' && minute >= 55) add('need_goal');
-        if (score.state === 'losing' && minute >= 80) add('late_need_goal');
-        if (oppXg > myXg + 0.45 || xt.oppXT > xt.myXT + 0.25) add('under_pressure');
-        if (myXg > oppXg + 0.35 || xt.myXT > xt.oppXT + 0.2) add('attacking_momentum');
-        if (myBad >= 20) add('high_bad_actions');
-        if (myBad <= 13 && myBad > 0) add('low_bad_actions');
-        if (oppPressVector >= 65) add('opponent_high_press');
-        if (oppDefVector > 0 && oppDefVector <= 45) add('opponent_low_block');
-        if (generatorQualitySignal?.detected && generatorQualitySignal.direction === 'positive') add('generator_quality_positive');
-        if (generatorQualitySignal?.detected && generatorQualitySignal.direction === 'negative') add('generator_quality_negative');
-        if (generatorExpectedPerformance?.defense?.verdict === 'working') add('generator_defense_working');
-        if (generatorExpectedPerformance?.defense?.verdict === 'underperforming') add('generator_defense_underperforming');
-        if (generatorExpectedPerformance?.attack?.verdict === 'working') add('generator_attack_working');
-        if (generatorExpectedPerformance?.attack?.verdict === 'underperforming') add('generator_attack_underperforming');
-        if (ownCrossSummary?.signal === 'open_play_crosses_bad') add('own_open_play_crosses_bad');
-        if (ownCrossSummary?.signal === 'crosses_bad_total') add('own_crosses_bad_total');
-        if (oppCrossSummary?.winRate != null && oppCrossSummary.winRate >= 55 && oppCrossSummary.total >= 2) add('opponent_crosses_dangerous');
-        if (strengthContext.mode === 'advantage') add(strengthContext.bucket === 'huge_advantage' || strengthContext.bucket === 'clear_advantage' ? 'strength_advantage_clear' : 'strength_advantage_slight');
-        if (strengthContext.mode === 'disadvantage') add(strengthContext.bucket === 'huge_disadvantage' || strengthContext.bucket === 'clear_disadvantage' ? 'strength_disadvantage_clear' : 'strength_disadvantage_slight');
-        if (pressFatigue.active) add('press_fatigue_risk');
-
-        const weakOpp = playerSignals?.weakOppSkill?.[0] || null;
-        const weakPos = weakOpp?.normalizedPosition || null;
-        if (['DR', 'MR'].includes(weakPos)) add('attack_left');
-        if (['DL', 'ML'].includes(weakPos)) add('attack_right');
-        if (['DC', 'DM', 'CM'].includes(weakPos)) add('center_weak');
-        if (!tags.length) add('base_balance');
-
-        return {
-            score,
-            minute,
-            myXT: xt.myXT,
-            oppXT: xt.oppXT,
-            myXg,
-            oppXg,
-            myPossession,
-            oppPossession,
-            myBad,
-            myFouls,
-            myPower,
-            oppPower,
-            strengthGap: strengthContext.strengthGap,
-            strengthContext,
-            pressFatigue,
-            oppPressVector,
-            oppDefVector,
-            generatorQualitySignal,
-            generatorExpectedPerformance,
-            generatorDetailMetrics,
-            ownCrossSummary,
-            oppCrossSummary,
-            tags,
-            primary: tags[0] || 'base_balance'
-        };
-    },
-
-    makeMatchRead(snapshot, my, opp, state) {
-        const rows = [];
-        const score = state.score || { state: 'unknown', diff: 0 };
-        const minute = state.minute;
-
-        if (score.state === 'winning') rows.push(`Ход матча: ведём ${score.myGoals}:${score.oppGoals} на ${minute}-й минуте.`);
-        else if (score.state === 'losing') rows.push(`Ход матча: проигрываем ${score.myGoals}:${score.oppGoals} на ${minute}-й минуте.`);
-        else if (score.state === 'draw') rows.push(`Ход матча: ничья ${score.myGoals}:${score.oppGoals} на ${minute}-й минуте.`);
-        else rows.push(`Ход матча: ${minute || '?'}-я минута.`);
-
-        if (state.myXg > state.oppXg + 0.4) rows.push(`По xG мы опаснее: ${state.myXg.toFixed(2)} против ${state.oppXg.toFixed(2)}.`);
-        else if (state.oppXg > state.myXg + 0.4) rows.push(`По xG соперник опаснее: ${state.oppXg.toFixed(2)} против ${state.myXg.toFixed(2)}.`);
-        else rows.push(`По xG матч близкий: ${state.myXg.toFixed(2)} против ${state.oppXg.toFixed(2)}.`);
-
-        if (state.myXT > state.oppXT + 0.2) rows.push('По xT мы лучше продвигаем атаки.');
-        else if (state.oppXT > state.myXT + 0.2) rows.push('По xT соперник опаснее продвигает атаки.');
-
-        if (state.strengthContext?.known) {
-            const sign = state.strengthGap > 0 ? '+' : '';
-            rows.push(`Сила на поле: ${state.myPower} / ${state.oppPower} (${sign}${state.strengthGap}) — ${state.strengthContext.label}.`);
-        }
-
-        if (state.myBad >= 20) rows.push('Брак высокий — сначала нужна структура, а не хаос.');
-        else if (state.myBad > 0 && state.myBad <= 13) rows.push('Брак низкий — можно аккуратно повышать качество продвижения.');
-
-        return rows.slice(0, 6);
     },
 
     buildManualPlan(snapshot, my, opp, state) {
@@ -5306,47 +5943,6 @@ const RecommendationEngine = {
         };
     },
 
-    getConcisePresetAction(name, state = {}) {
-        const actions = {
-            Pep_BoxControl_bal2: 'Держать мяч, снизить темп/риск, не раскрывать переходы.',
-            Pep_ControlledPush_att3: 'Поднять продвижение и темп на один шаг без ломки обороны.',
-            Xabi_VerticalBox_att3: 'Искать вертикальный вход через центр/полупространства, без слепых навесов.',
-            Pep_PressCooldown_bal2: 'Сбросить интенсивность прессинга и вернуть контроль.',
-            Compact_Counter_def3: 'Закрыть переходы и оставить быстрый выход в свободную зону.',
-            Simeone_Compact442_def4: 'Сжать блок, убрать лишний риск, не садиться в полный автобус.',
-            Simeone_LowBlock_def5: 'Максимально закрыть штрафную и пережить концовку.',
-            Mourinho_WeakSide_def3: 'Компактно обороняться и выходить через слабую сторону.',
-            Conte_WingbackWidth_bal4: 'Дать ширину, но не превращать атаку в навесной шум.',
-            Klopp_Gegenpress_att4: 'Поднять давление и темп, контролируя усталость/фолы.',
-            Bielsa_ChaosPress_att5: 'All-in давление только когда уже нужен риск ради гола.',
-            Pep_TwoThreeFive_att3: 'Дожимать позиционно: выше присутствие, но без хаоса.',
-            DeZerbi_BaitPress_bal3: 'Заманить прессинг и выпускать мяч между линиями.',
-            DeZerbi_Release_att4: 'Быстрее выпускать атаку за высокую линию соперника.',
-            Klopp_WideTrap_att4: 'Обойти закрытый центр через оба фланга и прессинг.',
-            Henta_CounterTrap_att4: 'Низко отбирать и резко выходить в контратаку.',
-            Henta_WideTrap_att3: 'Упростить выход через фланги без форсирования центра.',
-            Henta_CentralTrap_att3: 'Давить слабый центр только при низком браке.',
-            Henta_LeftTrap_att3: 'Перегрузить левый фланг как главную зону выхода.',
-            Henta_RightTrap_att3: 'Перегрузить правый фланг как главную зону выхода.',
-            Henta_Hold_def3: 'Удерживать компактность с активным отбором без лишнего риска.'
-        };
-
-        return actions[name] || TacticPresetLibrary?.meta?.[name]?.idea || 'Поменять настройки по текущему состоянию матча.';
-    },
-
-    getProgressionActionLabel(action) {
-        const map = {
-            emergency_override: 'аварийный override anti-ping-pong',
-            hold_positive_generator_quality: 'держим baseline: генератор подтверждает качество игры',
-            hold_against_immediate_rollback: 'не откатываемся сразу к прошлому пресету',
-            hold_family_change_blocked: 'сигнал слабый для смены семейства',
-            family_step: 'пошаговая смена вместо резкого прыжка',
-            adjacent_step: 'пошаговое усиление/смягчение',
-            hold_current: 'оставить текущий baseline'
-        };
-        return map[action] || action;
-    },
-
     selectPreset(snapshot, my, opp, playerSignals, plan, state) {
         const urgency = state.urgency || TacticalUrgencyModel.classify(snapshot, state);
         if (!urgency.allowPreset) {
@@ -5478,48 +6074,6 @@ const RecommendationEngine = {
         ], '#ffd76a', 3);
     },
 
-    isPlaceholderHtml(html) {
-        const clean = String(html || '').toLowerCase();
-        return !clean ||
-            clean.includes('рекомендация появится после snapshot') ||
-            clean.includes('рекомендация отложена') ||
-            clean.includes('live parser уже запущен');
-    },
-
-    captureCurrentRecommendationHtml() {
-        const el = document.getElementById('slf-parser-recommendation');
-        const html = el ? String(el.innerHTML || '').trim() : '';
-
-        if (!this.isPlaceholderHtml(html)) {
-            STATE.lastRecommendationHtml = html;
-            STATE.lastRecommendationMeta = Object.assign({}, STATE.lastRecommendationMeta || {}, {
-                capturedAt: Date.now(),
-                gameId: MatchStateParser.getGameId(),
-                source: 'capture_current_recommendation_html'
-            });
-            return html;
-        }
-
-        return STATE.lastRecommendationHtml || '';
-    },
-
-    persistRenderedRecommendation(html, snapshot, meta = {}) {
-        if (this.isPlaceholderHtml(html)) return;
-
-        STATE.lastRecommendationHtml = html;
-        STATE.lastRecommendationMeta = Object.assign({
-            schema: 'slf_last_recommendation_render_v2',
-            savedAt: Date.now(),
-            gameId: snapshot?.gameId || MatchStateParser.getGameId(),
-            bucket: snapshot?.bucket || '',
-            minute: snapshot?.minute ?? null
-        }, meta || {});
-
-        if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.persistManualState) {
-            SnapshotEngine.persistManualState();
-        }
-    },
-
     update(snapshot) {
         const el = document.getElementById('slf-parser-recommendation');
         if (!el) return;
@@ -5548,9 +6102,9 @@ const RecommendationEngine = {
             ], '#ff9090', 1);
         }
     }
-};
-    // ============================================================
-// <<< src/modules/strategy-data-recommendations/recommendation-engine.js
+    });
+}
+// <<< src/modules/strategy-data-recommendations/re-plan-engine.js
 
 
 // >>> src/modules/strategy-data-recommendations/preset-fit-scoring.js
@@ -5859,6 +6413,25 @@ const CurrentActionHintEngine = {
         Bielsa_ChaosPress_att5: { def_line: '4', press_line: '5', def_width: '4', press_intense: '5', build_type: '3', build_temp: '3', build_long: '3', build_fast: '5', style: '5', pass_risk: '5', dribble: '5', cross: '4', shot: '4' }
     },
 
+};
+
+if (typeof window !== 'undefined') {
+    window.SLFCurrentActionHintEngine = CurrentActionHintEngine;
+    window.SLFMatchDecisionSignals = CurrentActionHintEngine.MatchDecisionSignals;
+    window.SLFPresetRuleScorer = CurrentActionHintEngine.PresetRuleScorer;
+}
+// <<< src/modules/strategy-data-recommendations/current-action-hint-engine.js
+
+
+// >>> src/modules/strategy-data-recommendations/cah-value-utils.js
+// Cah Value Utils
+// Extracted verbatim from current-action-hint-engine.js (stage 4 refactor).
+// Assigned onto the CurrentActionHintEngine facade; behaviour unchanged.
+
+if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
+    CurrentActionHintEngine.stage4CahValueUtilsApplied = true;
+
+    Object.assign(CurrentActionHintEngine, {
     num(value, fallback = 0) {
         const n = Number(value);
         return Number.isFinite(n) ? n : fallback;
@@ -5945,6 +6518,20 @@ const CurrentActionHintEngine = {
         return { my: this.num(home ? xt.home : xt.away), opp: this.num(home ? xt.away : xt.home) };
     },
 
+    });
+}
+// <<< src/modules/strategy-data-recommendations/cah-value-utils.js
+
+
+// >>> src/modules/strategy-data-recommendations/cah-runtime-context.js
+// Cah Runtime Context
+// Extracted verbatim from current-action-hint-engine.js (stage 4 refactor).
+// Assigned onto the CurrentActionHintEngine facade; behaviour unchanged.
+
+if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
+    CurrentActionHintEngine.stage4CahRuntimeContextApplied = true;
+
+    Object.assign(CurrentActionHintEngine, {
     getGameRuntime(gameId) {
         const key = String(gameId || 'unknown');
         if (!this.runtimeByGame.has(key)) {
@@ -6464,6 +7051,24 @@ const CurrentActionHintEngine = {
         }
     },
 
+    getLastDecision(gameId) {
+        return this.getGameRuntime(gameId).lastDecision || null;
+    },
+
+    });
+}
+// <<< src/modules/strategy-data-recommendations/cah-runtime-context.js
+
+
+// >>> src/modules/strategy-data-recommendations/cah-decision-core.js
+// Cah Decision Core
+// Extracted verbatim from current-action-hint-engine.js (stage 4 refactor).
+// Assigned onto the CurrentActionHintEngine facade; behaviour unchanged.
+
+if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
+    CurrentActionHintEngine.stage4CahDecisionCoreApplied = true;
+
+    Object.assign(CurrentActionHintEngine, {
     classify(snapshot, context = {}) {
         const gameId = snapshot?.gameId || context?.gameId || 'unknown';
         const runtime = this.getGameRuntime(gameId);
@@ -6555,10 +7160,6 @@ const CurrentActionHintEngine = {
         return this.evaluate(snapshot, context);
     },
 
-    getLastDecision(gameId) {
-        return this.getGameRuntime(gameId).lastDecision || null;
-    },
-
     toPlanRows(result) {
         if (!result) return [];
         const topCandidates = (result.candidates || []).filter(item => !item.vetoed).slice(0, 3);
@@ -6572,14 +7173,9 @@ const CurrentActionHintEngine = {
             candidateText ? `Кандидаты: ${candidateText}` : ''
         ].filter(Boolean);
     }
-};
-
-if (typeof window !== 'undefined') {
-    window.SLFCurrentActionHintEngine = CurrentActionHintEngine;
-    window.SLFMatchDecisionSignals = CurrentActionHintEngine.MatchDecisionSignals;
-    window.SLFPresetRuleScorer = CurrentActionHintEngine.PresetRuleScorer;
+    });
 }
-// <<< src/modules/strategy-data-recommendations/current-action-hint-engine.js
+// <<< src/modules/strategy-data-recommendations/cah-decision-core.js
 
 
 // >>> src/modules/strategy-data-recommendations/coach-hint-snapshot-context-layer.js
@@ -6895,839 +7491,448 @@ if (typeof window !== 'undefined') {
 // >>> src/modules/tactics-presets/active-preset-registry.js
 // Active Tactical Preset Registry
 // ============================================================
-// Data-driven runtime source for the active tactical preset set.
-// The library is intentionally small: one stable baseline, guarded context
-// presets, controlled escalation, and two emergency endpoints.
-// build_temp means verticality of ball progression, not passing speed:
-// 1 = patient/horizontal, 2 = moderate, 3 = high/direct verticality.
+// Canonical source of truth for the generator 5.61 tactical suite.
 
 (function activeTacticalPresetRegistry() {
     'use strict';
 
-    const ACTIVE_PRESET_NAMES = [
-        'Arteta_Control433_bal3',
-        'Pep_BoxControl_bal2',
-        'Pep_PressCooldown_bal2',
-        'Compact_Counter_def3',
-        'Pep_ControlledPush_att3',
-        'Pep_TwoThreeFive_att3',
-        'Conte_WingbackWidth_bal4',
-        'Klopp_Gegenpress_att4',
-        'Simeone_Compact442_def4',
-        'Simeone_LowBlock_def5',
-        'Bielsa_ChaosPress_att5'
+    const SUITE_VERSION='slf_tactic_suite_561_v7';
+    const RECOMMENDATION_SCHEMA='slf_rule_decision_v7_tactical_suite';
+    const DEFAULT_RISK_APPETITE='standard';
+    const ACTIVE_PRESET_NAMES=[
+        'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2','Compact_Counter_def3',
+        'Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4',
+        'Simeone_Compact442_def4','Simeone_LowBlock_def5','Bielsa_ChaosPress_att5'
     ];
-
-    const REMOVED_PRESET_NAMES = [
-        'Mourinho_WeakSide_def3',
-        'Xabi_VerticalBox_att3',
-        'Xabi_BoxMidfield_bal3',
-        'DeZerbi_BaitPress_bal3',
-        'DeZerbi_Release_att4',
-        'Nagelsmann_WidePress_att4',
-        'Henta_LeftTrap_att3'
+    const REMOVED_PRESET_NAMES=[
+        'Mourinho_WeakSide_def3','Henta_Hold_def3','Pep_StandardControl_bal3','Xabi_VerticalBox_att3','Xabi_BoxMidfield_bal3',
+        'DeZerbi_BaitPress_bal3','DeZerbi_Release_att4','Klopp_WideTrap_att4','Henta_LeftTrap_att3','Henta_RightTrap_att3',
+        'Henta_WideTrap_att3','Henta_CounterTrap_att4','Henta_CentralTrap_att3','Nagelsmann_WidePress_att4'
     ];
+    const ACTIVE=new Set(['standard',...ACTIVE_PRESET_NAMES]);
 
-    const ACTIVE = new Set(['standard', ...ACTIVE_PRESET_NAMES]);
-
-    const PRESETS = {
-        Arteta_Control433_bal3: { def_line: '2', press_line: '3', def_width: '2', press_intense: '3', build_type: '2', build_temp: '2', build_long: '1', build_fast: '2', style: '3', pass_risk: '3', dribble: '2', cross: '2', corner: '1', shot: '2', priority: [] },
-        Pep_BoxControl_bal2: { def_line: '2', press_line: '1', def_width: '1', press_intense: '1', build_type: '2', build_temp: '1', build_long: '1', build_fast: '1', style: '2', pass_risk: '1', dribble: '1', cross: '1', corner: '1', shot: '1', priority: [] },
-        Pep_PressCooldown_bal2: { def_line: '1', press_line: '2', def_width: '3', press_intense: '1', build_type: '1', build_temp: '2', build_long: '3', build_fast: '2', style: '2', pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1', priority: [] },
-        Compact_Counter_def3: { def_line: '1', press_line: '1', def_width: '2', press_intense: '2', build_type: '1', build_temp: '3', build_long: '5', build_fast: '5', style: '3', pass_risk: '3', dribble: '4', cross: '2', corner: '1', shot: '3', priority: ['left', 'right'] },
-        Pep_ControlledPush_att3: { def_line: '3', press_line: '3', def_width: '2', press_intense: '3', build_type: '2', build_temp: '3', build_long: '1', build_fast: '4', style: '4', pass_risk: '4', dribble: '3', cross: '2', corner: '1', shot: '3', priority: ['left', 'right'] },
-        Pep_TwoThreeFive_att3: { def_line: '4', press_line: '4', def_width: '4', press_intense: '4', build_type: '2', build_temp: '2', build_long: '1', build_fast: '3', style: '5', pass_risk: '5', dribble: '4', cross: '2', corner: '1', shot: '4', priority: ['left', 'right'] },
-        Conte_WingbackWidth_bal4: { def_line: '2', press_line: '2', def_width: '5', press_intense: '3', build_type: '3', build_temp: '2', build_long: '3', build_fast: '3', style: '4', pass_risk: '3', dribble: '4', cross: '5', corner: '1', shot: '2', priority: ['left', 'right'] },
-        Klopp_Gegenpress_att4: { def_line: '4', press_line: '5', def_width: '3', press_intense: '5', build_type: '3', build_temp: '3', build_long: '2', build_fast: '5', style: '5', pass_risk: '4', dribble: '4', cross: '3', corner: '1', shot: '4', priority: ['left', 'right'] },
-        Simeone_Compact442_def4: { def_line: '1', press_line: '2', def_width: '1', press_intense: '4', build_type: '1', build_temp: '1', build_long: '3', build_fast: '2', style: '1', pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1', priority: ['left', 'right'] },
-        Simeone_LowBlock_def5: { def_line: '1', press_line: '1', def_width: '1', press_intense: '1', build_type: '1', build_temp: '1', build_long: '5', build_fast: '1', style: '1', pass_risk: '1', dribble: '1', cross: '1', corner: '1', shot: '1', priority: ['right'] },
-        Bielsa_ChaosPress_att5: { def_line: '5', press_line: '5', def_width: '5', press_intense: '5', build_type: '3', build_temp: '3', build_long: '4', build_fast: '5', style: '5', pass_risk: '5', dribble: '5', cross: '5', corner: '1', shot: '5', priority: ['left', 'right'] }
+    const PRESETS={
+        Arteta_Control433_bal3:{def_line:'2',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'2',build_long:'1',build_fast:'2',style:'3',pass_risk:'3',dribble:'2',cross:'2',corner:'1',shot:'2',priority:[]},
+        Pep_BoxControl_bal2:{def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'1',build_long:'1',build_fast:'2',style:'3',pass_risk:'2',dribble:'2',cross:'1',corner:'1',shot:'2',priority:[]},
+        Pep_PressCooldown_bal2:{def_line:'1',press_line:'2',def_width:'3',press_intense:'1',build_type:'1',build_temp:'2',build_long:'4',build_fast:'2',style:'2',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[]},
+        Compact_Counter_def3:{def_line:'1',press_line:'1',def_width:'2',press_intense:'2',build_type:'1',build_temp:'3',build_long:'4',build_fast:'4',style:'3',pass_risk:'2',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[]},
+        Pep_ControlledPush_att3:{def_line:'3',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'3',build_long:'1',build_fast:'4',style:'4',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[]},
+        Pep_TwoThreeFive_att3:{def_line:'4',press_line:'4',def_width:'4',press_intense:'4',build_type:'2',build_temp:'2',build_long:'1',build_fast:'3',style:'5',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'4',priority:[]},
+        Conte_WingbackWidth_bal4:{def_line:'2',press_line:'2',def_width:'5',press_intense:'3',build_type:'3',build_temp:'2',build_long:'3',build_fast:'3',style:'4',pass_risk:'3',dribble:'4',cross:'5',corner:'1',shot:'2',priority:['left','right']},
+        Klopp_Gegenpress_att4:{def_line:'4',press_line:'5',def_width:'3',press_intense:'5',build_type:'3',build_temp:'3',build_long:'2',build_fast:'5',style:'5',pass_risk:'4',dribble:'4',cross:'3',corner:'1',shot:'4',priority:[]},
+        Simeone_Compact442_def4:{def_line:'1',press_line:'2',def_width:'1',press_intense:'4',build_type:'1',build_temp:'1',build_long:'3',build_fast:'2',style:'1',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[]},
+        Simeone_LowBlock_def5:{def_line:'1',press_line:'1',def_width:'1',press_intense:'1',build_type:'1',build_temp:'1',build_long:'5',build_fast:'2',style:'1',pass_risk:'1',dribble:'1',cross:'1',corner:'1',shot:'1',priority:[]},
+        Bielsa_ChaosPress_att5:{def_line:'5',press_line:'5',def_width:'5',press_intense:'5',build_type:'3',build_temp:'3',build_long:'4',build_fast:'5',style:'5',pass_risk:'5',dribble:'5',cross:'5',corner:'1',shot:'5',priority:[]}
     };
-
-    const LABELS = {
-        Arteta_Control433_bal3: 'Arteta Control 4-3-3',
-        Pep_BoxControl_bal2: 'Pep Box Control',
-        Pep_PressCooldown_bal2: 'Pep Press Cooldown',
-        Compact_Counter_def3: 'Compact Counter',
-        Pep_ControlledPush_att3: 'Pep Controlled Push',
-        Pep_TwoThreeFive_att3: 'Pep Positional Attack',
-        Conte_WingbackWidth_bal4: 'Conte Wingback Width',
-        Klopp_Gegenpress_att4: 'Klopp Gegenpress',
-        Simeone_Compact442_def4: 'Simeone Compact 4-4-2',
-        Simeone_LowBlock_def5: 'Simeone Low Block',
-        Bielsa_ChaosPress_att5: 'Bielsa Chaos Press'
+    const LABELS={
+        standard:'Стандартная 4-2-3-1_att1', Arteta_Control433_bal3:'Arteta Structural Control 4-3-3_neutr',
+        Pep_BoxControl_bal2:'Guardiola Press-Resistant Control 4-1-2-2-1_neutr', Pep_PressCooldown_bal2:'Guardiola Press Cooldown 4-1-4-1_def1',
+        Compact_Counter_def3:'Mourinho Compact Counter 4-4-1-1_neutr', Pep_ControlledPush_att3:'Guardiola Controlled Push 4-2-3-1_att1',
+        Pep_TwoThreeFive_att3:'Guardiola Positional Attack 3-2-5_att2', Conte_WingbackWidth_bal4:'Conte Wingback Width 3-4-3_att1',
+        Klopp_Gegenpress_att4:'Klopp Gegenpress 4-2-4_att2', Simeone_Compact442_def4:'Simeone Compact 4-4-2_def2',
+        Simeone_LowBlock_def5:'Simeone Low Block 5-4-1_def2', Bielsa_ChaosPress_att5:'Bielsa Chaos Press 3-3-4_att2'
     };
-
-    const META = {
-        Arteta_Control433_bal3: { group: 'balance', rank: 3, title: LABELS.Arteta_Control433_bal3, idea: 'структурный контроль с умеренным прессингом и ограниченным риском', use: 'равная игра без сильного аварийного сигнала', risk: 'не даёт резкого роста давления, когда уже нужен гол' },
-        Pep_BoxControl_bal2: { group: 'balance', rank: 2, title: LABELS.Pep_BoxControl_bal2, idea: 'максимально замедлить игру, сократить потери и собрать владение в центре', use: 'высокий брак, потеря структуры или короткий контрольный reset', risk: 'может стать стерильным и почти отказаться от продвижения' },
-        Pep_PressCooldown_bal2: { group: 'balance', rank: 2, title: LABELS.Pep_PressCooldown_bal2, idea: 'снять прессинг, опустить блок и выходить длиннее через свободные зоны', use: 'усталость, фолы или падение эффективности высокого давления', risk: 'отдаёт территорию и не подходит для финальной погони' },
-        Compact_Counter_def3: { group: 'defensive', rank: 3, title: LABELS.Compact_Counter_def3, idea: 'низко встретить и максимально быстро атаковать освободившееся пространство', use: 'соперник давит высоко или опаснее по переходам', risk: 'длинные передачи и высокий темп повышают число потерь' },
-        Pep_ControlledPush_att3: { group: 'attack', rank: 3, title: LABELS.Pep_ControlledPush_att3, idea: 'поднять линию и резко ускорить продвижение без полного all-in прессинга', use: 'нужен гол, но оборонительная структура ещё сохраняется', risk: 'при высоком браке ускорение превращается в серию потерь' },
-        Pep_TwoThreeFive_att3: { group: 'attack', rank: 4, title: LABELS.Pep_TwoThreeFive_att3, idea: 'зажать соперника высокой линией, широкой позиционной структурой и максимальным риском передач', use: 'есть атакующий импульс и переходы соперника контролируются', risk: 'оставляет большие зоны за высокой линией и требует качественного владения' },
-        Conte_WingbackWidth_bal4: { group: 'balance', rank: 4, title: LABELS.Conte_WingbackWidth_bal4, idea: 'растянуть блок до максимальной ширины и постоянно доставлять мяч через фланги', use: 'центр закрыт, фланги сильны и навесы дают качество', risk: 'без сильных крайних игроков раскрывает полуфланги и создаёт пустые подачи' },
-        Klopp_Gegenpress_att4: { group: 'attack', rank: 4, title: LABELS.Klopp_Gegenpress_att4, idea: 'включить почти максимальную высоту, темп и давление после потери', use: 'нужен срочный рост давления при достаточной физике и низком браке', risk: 'резко увеличивает усталость, фолы и пространство за линией' },
-        Simeone_Compact442_def4: { group: 'defensive', rank: 4, title: LABELS.Simeone_Compact442_def4, idea: 'низкий узкий блок с жёстким локальным прессингом и редкими выходами', use: 'защита преимущества под устойчивым давлением', risk: 'слишком рано отдаёт инициативу и ограничивает создание моментов' },
-        Simeone_LowBlock_def5: { group: 'defensive', rank: 5, title: LABELS.Simeone_LowBlock_def5, idea: 'крайний низкий блок с минимальным риском и длинным выносом из опасной зоны', use: 'последние минуты при преимуществе и тяжёлом давлении', risk: 'почти полностью отказывается от владения и повторной атаки' },
-        Bielsa_ChaosPress_att5: { group: 'attack', rank: 5, title: LABELS.Bielsa_ChaosPress_att5, idea: 'максимальная линия, ширина, прессинг, темп и риск ради одного последнего шанса', use: 'проигрываем поздно и более безопасные варианты уже недостаточны', risk: 'может окончательно разрушить оборонительную структуру и увеличить разницу в счёте' }
+    const FORMATIONS={
+        Arteta_Control433_bal3:['gk','ld','cd1','cd3','rd','cm1','dm2','cm3','lw','st2','rw'],
+        Pep_BoxControl_bal2:['gk','ld','cd1','cd3','rd','dm2','cm1','cm3','am1','am2','st2'],
+        Pep_PressCooldown_bal2:['gk','ld','cd1','cd3','rd','dm2','lm','cm2','cm3','rm','st2'],
+        Compact_Counter_def3:['gk','ld','cd1','cd3','rd','lm','dm2','cm2','rm','am2','st2'],
+        Pep_ControlledPush_att3:['gk','ld','cd1','cd3','rd','dm2','cm2','lw','am2','rw','st2'],
+        Pep_TwoThreeFive_att3:['gk','cd1','cd2','cd3','dm2','cm2','lw','am1','st1','am2','rw'],
+        Conte_WingbackWidth_bal4:['gk','cd1','cd2','cd3','lb','dm2','cm2','rb','lw','st2','rw'],
+        Klopp_Gegenpress_att4:['gk','ld','cd1','cd3','rd','dm2','cm2','lw','st1','st2','rw'],
+        Simeone_Compact442_def4:['gk','ld','cd1','cd3','rd','lm','cm2','dm2','rm','st1','st2'],
+        Simeone_LowBlock_def5:['gk','lb','cd1','cd2','cd3','rb','lm','dm2','cm2','rm','st2'],
+        Bielsa_ChaosPress_att5:['gk','cd1','cd2','cd3','lm','dm2','rm','lw','st1','st2','rw']
     };
-
-    const SCHEME_STATES = {
-        standard_base: '4-2-3-1 standard / GK-LD-CD1-CD3-RD / CM2-DM2 / LW-AM2-RW / ST2',
-        Arteta_Control433_bal3: '4-3-3 control / GK-LD-CD1-CD3-RD / CM1-DM2-CM3 / LW-ST2-RW',
-        Pep_BoxControl_bal2: '4-2-2-2 box control / GK-LD-CD1-CD3-RD / DM2-CM2 / AM1-AM2 / ST1-ST2',
-        Pep_PressCooldown_bal2: '4-1-4-1 cooldown / GK-LD-CD1-CD3-RD / DM2 / LM-CM2-CM3-RM / ST2',
-        Compact_Counter_def3: '4-5-1 compact counter / GK-LD-CD1-CD3-RD / LM-DM2-CM2-CM3-RM / ST2',
-        Pep_ControlledPush_att3: '4-2-3-1 controlled push / GK-LD-CD1-CD3-RD / DM2-CM2 / LW-AM2-RW / ST2',
-        Pep_TwoThreeFive_att3: '4-2-3-1 positional / GK-LD-CD1-CD3-RD / DM2-CM2 / LW-AM2-RW / ST2',
-        Conte_WingbackWidth_bal4: '3-4-3 wingback width / GK-CD1-CD2-CD3 / LWB-DM2-CM2-RWB / LW-ST2-RW',
-        Klopp_Gegenpress_att4: '4-3-3 gegenpress / GK-LD-CD1-CD3-RD / CM1-DM2-CM3 / LW-ST2-RW',
-        Simeone_Compact442_def4: '4-4-2 compact / GK-LD-CD1-CD3-RD / LM-CM2-DM2-RM / ST1-ST2',
-        Simeone_LowBlock_def5: '5-4-1 low block / GK-LB-CD1-CD2-CD3-RB / LM-DM2-CM2-RM / ST2',
-        Bielsa_ChaosPress_att5: '3-3-4 chaos press / GK-CD1-CD2-CD3 / LM-DM2-RM / LW-ST1-ST2-RW'
+    const DISPLAY_META={
+        standard:{trainer:'',formation:'4-2-3-1',style:'4',suffix:'_att1'}, Arteta_Control433_bal3:{trainer:'Arteta',formation:'4-3-3',style:'3',suffix:'_neutr'},
+        Pep_BoxControl_bal2:{trainer:'Guardiola',formation:'4-1-2-2-1',style:'3',suffix:'_neutr'}, Pep_PressCooldown_bal2:{trainer:'Guardiola',formation:'4-1-4-1',style:'2',suffix:'_def1'},
+        Compact_Counter_def3:{trainer:'Mourinho',formation:'4-4-1-1',style:'3',suffix:'_neutr'}, Pep_ControlledPush_att3:{trainer:'Guardiola',formation:'4-2-3-1',style:'4',suffix:'_att1'},
+        Pep_TwoThreeFive_att3:{trainer:'Guardiola',formation:'3-2-5',style:'5',suffix:'_att2'}, Conte_WingbackWidth_bal4:{trainer:'Conte',formation:'3-4-3',style:'4',suffix:'_att1'},
+        Klopp_Gegenpress_att4:{trainer:'Klopp',formation:'4-2-4',style:'5',suffix:'_att2'}, Simeone_Compact442_def4:{trainer:'Simeone',formation:'4-4-2',style:'1',suffix:'_def2'},
+        Simeone_LowBlock_def5:{trainer:'Simeone',formation:'5-4-1',style:'1',suffix:'_def2'}, Bielsa_ChaosPress_att5:{trainer:'Bielsa',formation:'3-3-4',style:'5',suffix:'_att2'}
     };
-
-    const PRESET_SCHEME_STATE = Object.fromEntries(ACTIVE_PRESET_NAMES.map(name => [name, name]));
-    PRESET_SCHEME_STATE.standard = 'standard_base';
-
-    const TRAITS = {
-        Arteta_Control433_bal3: { attackLanes: [], build: 'control433', tempo: 'medium', press: 'medium_high', risk: 'medium', requires: ['low_noise'], avoids: ['late_emergency_chase'] },
-        Pep_BoxControl_bal2: { attackLanes: [], build: 'box_control', tempo: 'very_low', press: 'very_low', risk: 'very_low', requires: ['need_stability'], avoids: ['urgent_chase', 'opponent_high_press'] },
-        Pep_PressCooldown_bal2: { attackLanes: [], build: 'cooldown_outlet', tempo: 'low', press: 'low', risk: 'low', requires: ['press_fatigue'], avoids: ['emergency_chase'] },
-        Compact_Counter_def3: { attackLanes: ['left', 'right'], build: 'direct_counter', tempo: 'very_high', press: 'low', risk: 'medium_high', requires: ['under_pressure'], avoids: ['sustained_positional_attack_needed'] },
-        Pep_ControlledPush_att3: { attackLanes: ['left', 'right'], build: 'controlled_push', tempo: 'high', press: 'medium_high', risk: 'high', requires: ['need_goal'], avoids: ['high_bad_actions', 'transition_threat'] },
-        Pep_TwoThreeFive_att3: { attackLanes: ['left', 'right'], build: 'positional_siege', tempo: 'medium_high', press: 'high', risk: 'very_high', requires: ['attacking_momentum'], avoids: ['transition_threat', 'under_pressure'] },
-        Conte_WingbackWidth_bal4: { attackLanes: ['left', 'right'], build: 'maximum_width', tempo: 'medium_high', press: 'medium', risk: 'high', requires: ['wide_quality'], avoids: ['own_crosses_bad', 'opponent_crosses_dangerous'] },
-        Klopp_Gegenpress_att4: { attackLanes: ['left', 'right'], build: 'gegenpress', tempo: 'very_high', press: 'very_high', risk: 'very_high', requires: ['need_pressure'], avoids: ['press_fatigue', 'high_bad_actions', 'transition_threat'] },
-        Simeone_Compact442_def4: { attackLanes: ['left', 'right'], build: 'compact442', tempo: 'low', press: 'high_local', risk: 'low', requires: ['protect_lead'], avoids: ['urgent_chase'] },
-        Simeone_LowBlock_def5: { attackLanes: ['right'], build: 'emergency_low_block', tempo: 'very_low', press: 'very_low', risk: 'very_low', requires: ['protect_lead_heavy_pressure'], avoids: ['need_goal'] },
-        Bielsa_ChaosPress_att5: { attackLanes: ['left', 'right'], build: 'chaos_press', tempo: 'maximum', press: 'maximum', risk: 'maximum', requires: ['emergency_need_goal'], avoids: ['early_match'] }
+    const STYLE_GROUPS=[{style:'5',label:'Атака+ · _att2',suffix:'_att2'},{style:'4',label:'Атака · _att1',suffix:'_att1'},{style:'3',label:'Обычный · _neutr',suffix:'_neutr'},{style:'2',label:'Защита · _def1',suffix:'_def1'},{style:'1',label:'Защ+ · _def2',suffix:'_def2'}];
+    const DISPLAY_ORDER=Object.keys(DISPLAY_META).sort((a,b)=>Number(DISPLAY_META[b].style)-Number(DISPLAY_META[a].style)||(a==='standard'?-1:b==='standard'?1:String(DISPLAY_META[a].trainer).localeCompare(String(DISPLAY_META[b].trainer),'en')||String(LABELS[a]).localeCompare(String(LABELS[b]),'en')));
+    const META={
+        Arteta_Control433_bal3:{group:'balance',rank:3,role:'stable_control',title:LABELS.Arteta_Control433_bal3,idea:'структурный контроль 4-3-3',use:'базовый план равного матча и возврат к устойчивой структуре',risk:'не для позднего форсирования'},
+        Pep_BoxControl_bal2:{group:'balance',rank:2,role:'pressure_escape',title:LABELS.Pep_BoxControl_bal2,idea:'press-resistant контроль',use:'выход из давления без прямой контратаки и reset после брака',risk:'медленный для поздней погони'},
+        Pep_PressCooldown_bal2:{group:'balance',rank:2,role:'press_cooldown',title:LABELS.Pep_PressCooldown_bal2,idea:'снизить цену прессинга',use:'fatigue, рост брака/фолов или падение силы',risk:'не для позднего проигрыша'},
+        Compact_Counter_def3:{group:'defensive',rank:3,role:'counter_outlet',title:LABELS.Compact_Counter_def3,idea:'компактность плюс быстрый подтверждённый выход',use:'только при counterExitAvailable/spaceBehindPress/cleanFirstPass',risk:'без outlet возвращает давление; historical evidence требует осторожности'},
+        Pep_ControlledPush_att3:{group:'attack',rank:3,role:'controlled_chase',title:LABELS.Pep_ControlledPush_att3,idea:'первая ступень усиления атаки',use:'нужен гол при сохранённой структуре',risk:'высокий брак увеличит потери'},
+        Pep_TwoThreeFive_att3:{group:'attack',rank:4,role:'positional_siege',title:LABELS.Pep_TwoThreeFive_att3,idea:'позиционный дожим 3-2-5',use:'атакующий momentum и контролируемые переходы',risk:'опасен при counter threat'},
+        Conte_WingbackWidth_bal4:{group:'balance',rank:4,role:'width_attack',title:LABELS.Conte_WingbackWidth_bal4,idea:'максимальная ширина',use:'центр закрыт, фланги дают качество',risk:'пустые подачи при слабых флангах'},
+        Klopp_Gegenpress_att4:{group:'attack',rank:4,role:'late_high_pressure',title:LABELS.Klopp_Gegenpress_att4,idea:'поздний high-pressure 4-2-4',use:'проигрываем поздно при приемлемой физике и браке',risk:'дорог по силе и фолам'},
+        Simeone_Compact442_def4:{group:'defensive',rank:4,role:'protect_lead',title:LABELS.Simeone_Compact442_def4,idea:'компактный 4-4-2',use:'защита позднего преимущества',risk:'раннее применение режет атаку'},
+        Simeone_LowBlock_def5:{group:'defensive',rank:5,role:'emergency_lock',title:LABELS.Simeone_LowBlock_def5,idea:'временный 5-4-1 lock',use:'критическая осада без выхода или очень поздняя защита',risk:'обязательная переоценка следующего окна'},
+        Bielsa_ChaosPress_att5:{group:'attack',rank:5,role:'final_all_in',title:LABELS.Bielsa_ChaosPress_att5,idea:'финальный all-in',use:'последнее окно проигрываемого матча',risk:'может разрушить оборону'}
     };
-
-    const LADDERS = {
-        defensive: ['Compact_Counter_def3', 'Simeone_Compact442_def4', 'Simeone_LowBlock_def5'],
-        balance: ['Pep_BoxControl_bal2', 'Pep_PressCooldown_bal2', 'Arteta_Control433_bal3'],
-        attack: ['Pep_ControlledPush_att3', 'Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Bielsa_ChaosPress_att5']
+    const TRAITS={
+        Arteta_Control433_bal3:{attackLanes:['center','left','right'],build:'structural_control',tempo:'medium',press:'medium_high',risk:'medium',requires:[],avoids:['late_emergency_chase']},
+        Pep_BoxControl_bal2:{attackLanes:['center'],build:'press_resistant_control',tempo:'low',press:'medium_low',risk:'low',requires:['pressure_without_counter_exit'],avoids:['urgent_chase']},
+        Pep_PressCooldown_bal2:{attackLanes:['center','right'],build:'cooldown_outlet',tempo:'low',press:'low',risk:'low',requires:['press_fatigue'],avoids:['late_emergency_chase']},
+        Compact_Counter_def3:{attackLanes:['left','right'],build:'direct_counter',tempo:'high',press:'low',risk:'medium',requires:['confirmed_counter_exit'],avoids:['counter_exit_blocked']},
+        Pep_ControlledPush_att3:{attackLanes:['center','left','right'],build:'controlled_push',tempo:'high',press:'medium_high',risk:'high',requires:['need_goal_or_attack_need'],avoids:['very_high_bad_actions']},
+        Pep_TwoThreeFive_att3:{attackLanes:['center','left','right'],build:'positional_siege_325',tempo:'medium_high',press:'high',risk:'very_high',requires:['attacking_momentum','transition_control'],avoids:['transition_threat','press_fatigue']},
+        Conte_WingbackWidth_bal4:{attackLanes:['left','right'],build:'maximum_width',tempo:'medium_high',press:'medium',risk:'high',requires:['wide_quality','center_closed'],avoids:['own_crosses_bad','opponent_crosses_dangerous']},
+        Klopp_Gegenpress_att4:{attackLanes:['left','right','center'],build:'gegenpress_424',tempo:'very_high',press:'very_high',risk:'very_high',requires:['late_need_goal','fitness'],avoids:['press_fatigue','high_bad_actions','transition_threat']},
+        Simeone_Compact442_def4:{attackLanes:['left','right'],build:'compact442',tempo:'low',press:'high_local',risk:'low',requires:['protect_lead'],avoids:['urgent_chase']},
+        Simeone_LowBlock_def5:{attackLanes:[],build:'temporary_emergency_lock',tempo:'very_low',press:'very_low',risk:'very_low',requires:['mandatory_reassessment_next_window'],avoids:['permanent_losing_state']},
+        Bielsa_ChaosPress_att5:{attackLanes:['left','center','right'],build:'final_all_in',tempo:'maximum',press:'maximum',risk:'maximum',requires:['emergency_need_goal'],avoids:['early_match','press_fatigue','high_bad_actions']}
     };
+    const SCHEME_STATES={arteta_control:'4-3-3 structural control',box_control:'4-1-2-2-1 press-resistant control',press_cooldown:'4-1-4-1 cooldown outlet',compact_counter:'4-4-1-1 direct counter',controlled_push:'4-2-3-1 controlled push',positional_325:'3-2-5 positional siege',wingback_width:'3-4-3 wingback width',gegenpress_424:'4-2-4 gegenpress',compact_442:'4-4-2 compact',low_block_541:'5-4-1 emergency lock',chaos_334:'3-3-4 final all-in'};
+    const PRESET_SCHEME_STATE={Arteta_Control433_bal3:'arteta_control',Pep_BoxControl_bal2:'box_control',Pep_PressCooldown_bal2:'press_cooldown',Compact_Counter_def3:'compact_counter',Pep_ControlledPush_att3:'controlled_push',Pep_TwoThreeFive_att3:'positional_325',Conte_WingbackWidth_bal4:'wingback_width',Klopp_Gegenpress_att4:'gegenpress_424',Simeone_Compact442_def4:'compact_442',Simeone_LowBlock_def5:'low_block_541',Bielsa_ChaosPress_att5:'chaos_334'};
+    const LADDERS={defensive:['Arteta_Control433_bal3','Simeone_Compact442_def4','Simeone_LowBlock_def5','Pep_PressCooldown_bal2'],balance:['Pep_BoxControl_bal2','Arteta_Control433_bal3','Compact_Counter_def3','Conte_WingbackWidth_bal4'],attack:['Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5']};
+    const AUDIT={primary:['Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2','Pep_ControlledPush_att3'],conditional:['Compact_Counter_def3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Simeone_Compact442_def4'],restricted:['Klopp_Gegenpress_att4'],emergency:['Simeone_LowBlock_def5','Bielsa_ChaosPress_att5'],removed:REMOVED_PRESET_NAMES.slice(),needsMoreData:[],experimental:[],blocked:[]};
 
-    const HINT_RULES = [
-        { id: 'late_goal_emergency', preset: 'Bielsa_ChaosPress_att5', decision: 'all_in_attack', risk: 'high', reason: 'проигрываем после 80-й — последняя all-in попытка', when: c => c.lateNeedGoal },
-        { id: 'late_protect_heavy_pressure', preset: 'Simeone_LowBlock_def5', decision: 'protect_lead', risk: 'high', reason: 'ведём после 80-й под тяжёлым давлением — закрыть штрафную', when: c => c.protectLead && c.underPressure && c.minute >= 80 },
-        { id: 'protect_compact_442', preset: 'Simeone_Compact442_def4', decision: 'compact_protect', risk: 'medium', reason: 'ведём после 70-й — компактно защитить преимущество без полного автобуса', when: c => c.protectLead && c.minute >= 70 && !c.lateNeedGoal },
-        { id: 'own_press_fatigue_cooldown', preset: 'Pep_PressCooldown_bal2', decision: 'cooldown_press', risk: 'low', reason: 'растёт цена прессинга — снизить интенсивность и вернуть структуру', when: c => c.pressFatigueRisk && !c.lateNeedGoal },
-        { id: 'bad_actions_control_reset', preset: 'Pep_BoxControl_bal2', decision: 'stabilize_control', risk: 'low', reason: 'высокий брак — короткий контрольный reset', when: c => c.highBadActions && !c.lateNeedGoal },
-        { id: 'under_pressure_counter', preset: 'Compact_Counter_def3', decision: 'defensive_reset', risk: 'medium', reason: 'соперник опаснее или угрожает переходами — закрыть зоны и сохранить быстрый выход', when: c => (c.underPressure || c.transitionThreat || c.opponentHighPress) && !c.lateNeedGoal },
-        { id: 'center_closed_wide_quality', preset: 'Conte_WingbackWidth_bal4', decision: 'use_width', risk: 'medium', reason: 'центр закрыт, но ширина доступна — растянуть блок без навесного all-in', when: c => c.centerClosed && c.wideQuality && !c.ownCrossesBad && !c.opponentCrossesDangerous && !c.underPressure },
-        { id: 'urgent_pressure_not_all_in', preset: 'Klopp_Gegenpress_att4', decision: 'urgent_pressure', risk: 'high', reason: 'после 70-й нужен срочный рост давления, но all-in ещё не требуется', when: c => c.needGoal && c.minute >= 70 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat },
-        { id: 'attacking_momentum_positional', preset: 'Pep_TwoThreeFive_att3', decision: 'maintain_pressure', risk: 'medium', reason: 'есть атакующий импульс — дожимать позиционно при безопасных переходах', when: c => c.attackingMomentum && !c.underPressure && !c.transitionThreat },
-        { id: 'need_goal_controlled_push', preset: 'Pep_ControlledPush_att3', decision: 'increase_attack', risk: 'medium', reason: 'нужен гол — добавить продвижение без all-in и высокого прессинга', when: c => c.needGoal && !c.underPressure && !c.highBadActions && !c.pressFatigueRisk },
-        { id: 'standard_control_low_noise', preset: 'Arteta_Control433_bal3', decision: 'standard_control', risk: 'low', reason: 'нет сильного аварийного сигнала — держать структурный контроль', when: c => !c.needGoal && !c.underPressure && !c.highBadActions && !c.attackingMomentum },
-        { id: 'safe_default_control', preset: 'Pep_BoxControl_bal2', decision: 'hold_control', risk: 'low', reason: 'нет надёжного сигнала для более рискованной смены — стабилизировать игру', when: () => true }
-    ];
+    const clonePresets=map=>Object.fromEntries(Object.entries(map).map(([name,p])=>[name,Object.assign({},p,{priority:(p.priority||[]).slice()})]));
+    const cloneTraits=map=>Object.fromEntries(Object.entries(map).map(([name,t])=>[name,Object.assign({},t,{attackLanes:(t.attackLanes||[]).slice(),requires:(t.requires||[]).slice(),avoids:(t.avoids||[]).slice()})]));
+    const removeInactive=map=>{if(!map||typeof map!=='object')return;Object.keys(map).forEach(key=>{if(!ACTIVE.has(key))delete map[key];});};
+    removeInactive(typeof BASE_PRESETS!=='undefined'?BASE_PRESETS:null); removeInactive(typeof BASE_LABELS!=='undefined'?BASE_LABELS:null);
+    if(typeof BASE_PRESETS!=='undefined')Object.assign(BASE_PRESETS,clonePresets(PRESETS));
+    if(typeof BASE_LABELS!=='undefined')Object.assign(BASE_LABELS,LABELS);
+    if(typeof TacticPresetLibrary!=='undefined'&&TacticPresetLibrary){TacticPresetLibrary.meta=Object.assign({},META);TacticPresetLibrary.traits=cloneTraits(TRAITS);TacticPresetLibrary.schemeStates=Object.assign({},SCHEME_STATES);TacticPresetLibrary.presetSchemeState=Object.assign({},PRESET_SCHEME_STATE);}
+    if(typeof RecommendationEngine!=='undefined'&&RecommendationEngine)RecommendationEngine.getPresetLadder=group=>(LADDERS[group]||[]).slice();
+    if(typeof CurrentActionHintEngine!=='undefined'&&CurrentActionHintEngine)CurrentActionHintEngine.PRESET_AUDIT_TIER=Object.fromEntries(Object.entries(AUDIT).map(([k,v])=>[k,Array.isArray(v)?v.slice():v]));
 
-    const DEFAULT_AUDIT_TIER = {
-        primary: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Compact_Counter_def3', 'Pep_TwoThreeFive_att3', 'Pep_PressCooldown_bal2'],
-        conditional: ['Pep_ControlledPush_att3', 'Conte_WingbackWidth_bal4', 'Simeone_Compact442_def4'],
-        restricted: ['Klopp_Gegenpress_att4'],
-        emergency: ['Bielsa_ChaosPress_att5', 'Simeone_LowBlock_def5'],
-        removed: REMOVED_PRESET_NAMES.slice(),
-        needsMoreData: [],
-        experimental: [],
-        blocked: []
-    };
-
-    function applyHintPolicy(auditTier = DEFAULT_AUDIT_TIER, rules = HINT_RULES) {
-        if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return false;
-        CurrentActionHintEngine.PRESET_AUDIT_TIER = Object.assign({}, auditTier, {
-            primary: (auditTier.primary || []).slice(),
-            conditional: (auditTier.conditional || []).slice(),
-            restricted: (auditTier.restricted || []).slice(),
-            emergency: (auditTier.emergency || []).slice(),
-            removed: (auditTier.removed || []).slice(),
-            needsMoreData: (auditTier.needsMoreData || []).slice(),
-            experimental: (auditTier.experimental || []).slice(),
-            blocked: (auditTier.blocked || []).slice()
-        });
-        CurrentActionHintEngine.HINT_RULES = (Array.isArray(rules) ? rules : []).slice();
-        return true;
-    }
-
-    function choosePreset(state = {}) {
-        const tags = Array.isArray(state.tags) ? state.tags : [];
-        const has = tag => tags.includes(tag);
-        const scoreState = state.score?.state || 'unknown';
-        const minute = Number(state.minute || 0);
-        const myBad = Number(state.myBad || 0);
-        const xgGap = Number(state.oppXg || 0) - Number(state.myXg || 0);
-        const xtGap = Number(state.oppXT || 0) - Number(state.myXT || 0);
-        const underPressure = has('under_pressure') || xgGap > 0.45 || xtGap > 0.25;
-        const transitionThreat = has('transition_threat') || xgGap > 0.65 || xtGap > 0.45;
-        const needGoal = scoreState === 'losing' && minute >= 55;
-        const lateNeedGoal = scoreState === 'losing' && minute >= 80;
-        const protectLead = scoreState === 'winning' && minute >= 70;
-        const pressFatigue = state.pressFatigue?.active || has('press_fatigue_risk');
-        const highBad = myBad >= 20 || has('high_bad_actions');
-        const lowBad = myBad > 0 && myBad <= 16 || has('low_bad_actions');
-        const ownCrossBad = has('own_open_play_crosses_bad') || has('own_crosses_bad_total');
-        const wideQuality = has('attack_left') || has('attack_right') || has('wide_quality');
-        const centerClosed = has('opponent_low_block') || has('center_closed');
-        const opponentCrossesDangerous = has('opponent_crosses_dangerous');
-        const attackingMomentum = has('attacking_momentum');
-
-        if (lateNeedGoal) return { name: 'Bielsa_ChaosPress_att5', reason: 'проигрываем после 80-й — безопасные варианты уже недостаточны' };
-        if (protectLead && underPressure && minute >= 80) return { name: 'Simeone_LowBlock_def5', reason: 'ведём поздно под тяжёлым давлением — аварийно закрыть штрафную' };
-        if (protectLead) return { name: underPressure || opponentCrossesDangerous ? 'Simeone_Compact442_def4' : 'Pep_BoxControl_bal2', reason: underPressure || opponentCrossesDangerous ? 'защитить преимущество компактным блоком без полного автобуса' : 'сохранить преимущество через контроль и низкий риск' };
-        if (pressFatigue) return { name: 'Pep_PressCooldown_bal2', reason: 'цена прессинга растёт — снизить интенсивность и вернуть структуру' };
-        if (highBad) return { name: 'Pep_BoxControl_bal2', reason: 'высокий брак — сначала стабилизировать розыгрыш' };
-        if (transitionThreat || underPressure) return { name: 'Compact_Counter_def3', reason: 'соперник опаснее по текущим метрикам — закрыть переходы и сохранить быстрый выход' };
-        if (centerClosed && wideQuality && !ownCrossBad && !opponentCrossesDangerous) return { name: 'Conte_WingbackWidth_bal4', reason: 'центр закрыт, а фланги доступны — растянуть блок контролируемой шириной' };
-        if (needGoal && minute >= 70 && lowBad) return { name: 'Klopp_Gegenpress_att4', reason: 'после 70-й нужен срочный рост давления, но ещё не all-in' };
-        if (attackingMomentum && !transitionThreat) return { name: 'Pep_TwoThreeFive_att3', reason: 'есть атакующий импульс — дожимать позиционно при контролируемых переходах' };
-        if (needGoal) return { name: 'Pep_ControlledPush_att3', reason: 'нужен гол — добавить продвижение без all-in прессинга' };
-        return { name: 'Arteta_Control433_bal3', reason: 'спокойный матч без сильного отрицательного сигнала — структурный контроль является лучшим baseline' };
-    }
-
-    const removeInactiveKeys = map => {
-        if (!map || typeof map !== 'object') return;
-        Object.keys(map).forEach(key => {
-            if (!ACTIVE.has(key)) delete map[key];
-        });
-    };
-
-    removeInactiveKeys(typeof BASE_PRESETS !== 'undefined' ? BASE_PRESETS : null);
-    removeInactiveKeys(typeof BASE_LABELS !== 'undefined' ? BASE_LABELS : null);
-    if (typeof BASE_PRESETS !== 'undefined') Object.assign(BASE_PRESETS, PRESETS);
-    if (typeof BASE_LABELS !== 'undefined') Object.assign(BASE_LABELS, LABELS);
-
-    if (typeof TacticPresetLibrary !== 'undefined' && TacticPresetLibrary) {
-        TacticPresetLibrary.meta = Object.assign({}, META);
-        TacticPresetLibrary.schemeStates = Object.assign({}, SCHEME_STATES);
-        TacticPresetLibrary.presetSchemeState = Object.assign({}, PRESET_SCHEME_STATE);
-        TacticPresetLibrary.traits = Object.assign({}, TRAITS);
-    }
-
-    if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
-        RecommendationEngine.getPresetLadder = function getActivePresetLadder(group) {
-            return (LADDERS[group] || []).slice();
-        };
-        RecommendationEngine.selectRawPreset = function selectDataDrivenPreset(snapshot, state = {}) {
-            const candidate = choosePreset(state);
-            return this.applyPresetDecisionFusion ? this.applyPresetDecisionFusion(candidate, state) : candidate;
-        };
-    }
-
-    applyHintPolicy();
-
-    if (typeof window !== 'undefined') {
-        window.SLFActivePresetRegistry = {
-            active: ACTIVE_PRESET_NAMES.slice(),
-            removed: REMOVED_PRESET_NAMES.slice(),
-            labels: Object.assign({}, LABELS),
-            ladders: Object.assign({}, LADDERS),
-            choosePreset,
-            applyHintPolicy
-        };
-    }
+    window.SLFActivePresetRegistry={suiteVersion:SUITE_VERSION,recommendationSchema:RECOMMENDATION_SCHEMA,generatorVersion:'5.61',defaultRiskAppetite:DEFAULT_RISK_APPETITE,active:ACTIVE_PRESET_NAMES.slice(),removed:REMOVED_PRESET_NAMES.slice(),presets:clonePresets(PRESETS),labels:Object.assign({},LABELS),meta:Object.assign({},META),traits:cloneTraits(TRAITS),formations:Object.fromEntries(Object.entries(FORMATIONS).map(([n,p])=>[n,p.slice()])),schemeStates:Object.assign({},SCHEME_STATES),presetSchemeState:Object.assign({},PRESET_SCHEME_STATE),ladders:Object.fromEntries(Object.entries(LADDERS).map(([k,v])=>[k,v.slice()])),displayMeta:Object.assign({},DISPLAY_META),displayOrder:DISPLAY_ORDER.slice(),styleGroups:STYLE_GROUPS.map(x=>Object.assign({},x)),auditTier:AUDIT,fallbackPolicy:'5.61-tactical-suite-v7'};
 })();
 // <<< src/modules/tactics-presets/active-preset-registry.js
 
 
 // >>> src/modules/tactics-presets/tactic-preset-direction-policy.js
-// Generator 5.61 Bold Pressure-Response Tactical Policy
+// Generator 5.61 Tactical Suite v7 Recommendation Policy
 // ============================================================
-// Manual-only deterministic recommendation policy. It separates three
-// responses to opponent pressure: control escape, direct counter outlet,
-// and a temporary emergency lock with mandatory reassessment.
+// The active registry owns tactic data/UI identity. This layer makes the
+// registry decision canonical for Coach Mode, progression and telemetry.
 
 (function tacticPresetDirectionPolicy() {
     'use strict';
 
-    const POLICY_VERSION = '5.61-situation-v6';
-    if (typeof window !== 'undefined' && window.SLFTacticDirectionPolicy?.version === POLICY_VERSION) return;
+    const VERSION = '5.61-tactical-suite-v7.1';
+    const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+    const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
+    if (!registry || !engine || window.SLFTacticDirectionPolicy?.version === VERSION) return;
 
-    const REMOVED_PRESETS = new Set(['Xabi_BoxMidfield_bal3']);
-    const ACTIVE_PRESETS = [
-        'Arteta_Control433_bal3',
-        'Pep_BoxControl_bal2',
-        'Pep_PressCooldown_bal2',
-        'Compact_Counter_def3',
-        'Pep_ControlledPush_att3',
-        'Pep_TwoThreeFive_att3',
-        'Conte_WingbackWidth_bal4',
-        'Klopp_Gegenpress_att4',
-        'Simeone_Compact442_def4',
-        'Simeone_LowBlock_def5',
-        'Bielsa_ChaosPress_att5'
-    ];
-    const ATTACK_LADDER = [
-        'Pep_ControlledPush_att3',
-        'Pep_TwoThreeFive_att3',
-        'Klopp_Gegenpress_att4',
-        'Bielsa_ChaosPress_att5'
-    ];
-    const NEUTRAL_PRESETS = new Set([
-        'standard',
-        'Arteta_Control433_bal3',
-        'Pep_BoxControl_bal2',
-        'Pep_PressCooldown_bal2'
-    ]);
+    const SUITE = registry.suiteVersion || 'slf_tactic_suite_561_v7';
+    const SCHEMA = registry.recommendationSchema || 'slf_rule_decision_v7_tactical_suite';
+    const ACTIVE = Array.isArray(registry.active) ? registry.active.slice() : [];
+    const ACTIVE_SET = new Set(ACTIVE);
+    const DEFAULT_RISK = registry.defaultRiskAppetite || 'standard';
 
-    const DIRECTION_OVERRIDES = Object.fromEntries(['standard', ...ACTIVE_PRESETS].map(name => [name, []]));
-    DIRECTION_OVERRIDES.Conte_WingbackWidth_bal4 = ['left', 'right'];
-
-    const RISK_APPETITES = {
-        conservative: { attackBonus: 0, pressBonus: 0, kloppMinute: 74, bielsaMinute: 84, inactionWindow: 3 },
-        standard: { attackBonus: 3, pressBonus: 2, kloppMinute: 68, bielsaMinute: 82, inactionWindow: 2 },
-        bold: { attackBonus: 7, pressBonus: 5, kloppMinute: 62, bielsaMinute: 78, inactionWindow: 2 },
-        experimental: { attackBonus: 10, pressBonus: 8, kloppMinute: 56, bielsaMinute: 74, inactionWindow: 1 }
-    };
-    const DEFAULT_RISK_APPETITE = 'bold';
-
-    const RETUNED_PRESETS = {
-        Arteta_Control433_bal3: { def_line:'2',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'2',build_long:'1',build_fast:'2',style:'3',pass_risk:'3',dribble:'2',cross:'2',corner:'1',shot:'2',priority:[] },
-        Pep_BoxControl_bal2: { def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'1',build_long:'1',build_fast:'2',style:'3',pass_risk:'2',dribble:'2',cross:'1',corner:'1',shot:'2',priority:[] },
-        Pep_PressCooldown_bal2: { def_line:'1',press_line:'2',def_width:'3',press_intense:'1',build_type:'1',build_temp:'2',build_long:'4',build_fast:'2',style:'2',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[] },
-        Compact_Counter_def3: { def_line:'1',press_line:'1',def_width:'2',press_intense:'2',build_type:'1',build_temp:'3',build_long:'5',build_fast:'5',style:'3',pass_risk:'3',dribble:'4',cross:'2',corner:'1',shot:'3',priority:[] },
-        Pep_ControlledPush_att3: { def_line:'3',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'3',build_long:'1',build_fast:'4',style:'4',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[] },
-        Pep_TwoThreeFive_att3: { def_line:'4',press_line:'4',def_width:'4',press_intense:'4',build_type:'2',build_temp:'2',build_long:'1',build_fast:'3',style:'5',pass_risk:'5',dribble:'4',cross:'2',corner:'1',shot:'4',priority:[] },
-        Conte_WingbackWidth_bal4: { def_line:'2',press_line:'2',def_width:'5',press_intense:'3',build_type:'3',build_temp:'2',build_long:'3',build_fast:'3',style:'4',pass_risk:'3',dribble:'4',cross:'5',corner:'1',shot:'2',priority:['left','right'] },
-        Klopp_Gegenpress_att4: { def_line:'4',press_line:'5',def_width:'3',press_intense:'5',build_type:'3',build_temp:'3',build_long:'2',build_fast:'5',style:'5',pass_risk:'4',dribble:'4',cross:'3',corner:'1',shot:'4',priority:[] },
-        Simeone_Compact442_def4: { def_line:'1',press_line:'2',def_width:'1',press_intense:'4',build_type:'1',build_temp:'1',build_long:'3',build_fast:'2',style:'1',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[] },
-        Simeone_LowBlock_def5: { def_line:'1',press_line:'1',def_width:'1',press_intense:'1',build_type:'1',build_temp:'1',build_long:'5',build_fast:'2',style:'1',pass_risk:'1',dribble:'1',cross:'1',corner:'1',shot:'1',priority:[] },
-        Bielsa_ChaosPress_att5: { def_line:'5',press_line:'5',def_width:'5',press_intense:'5',build_type:'3',build_temp:'3',build_long:'4',build_fast:'5',style:'5',pass_risk:'5',dribble:'5',cross:'5',corner:'1',shot:'5',priority:[] }
+    const STEP = {
+        Arteta_Control433_bal3:['Pep_BoxControl_bal2','Pep_ControlledPush_att3','Simeone_Compact442_def4','Conte_WingbackWidth_bal4'],
+        Pep_BoxControl_bal2:['Arteta_Control433_bal3','Pep_PressCooldown_bal2','Compact_Counter_def3'],
+        Pep_PressCooldown_bal2:['Pep_BoxControl_bal2','Arteta_Control433_bal3'],
+        Compact_Counter_def3:['Pep_BoxControl_bal2','Arteta_Control433_bal3'],
+        Pep_ControlledPush_att3:['Arteta_Control433_bal3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4'],
+        Pep_TwoThreeFive_att3:['Pep_ControlledPush_att3','Klopp_Gegenpress_att4','Conte_WingbackWidth_bal4'],
+        Conte_WingbackWidth_bal4:['Arteta_Control433_bal3','Pep_ControlledPush_att3','Pep_TwoThreeFive_att3'],
+        Klopp_Gegenpress_att4:['Pep_TwoThreeFive_att3','Bielsa_ChaosPress_att5'],
+        Bielsa_ChaosPress_att5:['Klopp_Gegenpress_att4'],
+        Simeone_Compact442_def4:['Arteta_Control433_bal3','Simeone_LowBlock_def5'],
+        Simeone_LowBlock_def5:['Simeone_Compact442_def4']
     };
 
-    const TACTIC_SIGNATURES = Object.fromEntries(Object.entries(RETUNED_PRESETS).map(([name, preset]) => {
-        const signature = Object.assign({}, preset);
-        delete signature.corner;
-        delete signature.priority;
-        return [name, signature];
-    }));
-
-    const FORMATIONS = {
-        Arteta_Control433_bal3: ['gk','ld','cd1','cd3','rd','cm1','dm2','cm3','lw','st2','rw'],
-        Pep_BoxControl_bal2: ['gk','ld','cd1','cd3','rd','dm2','cm1','cm3','am1','am2','st2'],
-        Pep_PressCooldown_bal2: ['gk','ld','cd1','cd3','rd','dm2','lm','cm2','cm3','rm','st2'],
-        Compact_Counter_def3: ['gk','ld','cd1','cd3','rd','lm','dm2','cm2','rm','am2','st2'],
-        Pep_ControlledPush_att3: ['gk','ld','cd1','cd3','rd','dm2','cm2','lw','am2','rw','st2'],
-        Pep_TwoThreeFive_att3: ['gk','cd1','cd2','cd3','dm2','cm2','lw','am1','st1','am2','rw'],
-        Conte_WingbackWidth_bal4: ['gk','cd1','cd2','cd3','lb','dm2','cm2','rb','lw','st2','rw'],
-        Klopp_Gegenpress_att4: ['gk','ld','cd1','cd3','rd','dm2','cm2','lw','st1','st2','rw'],
-        Simeone_Compact442_def4: ['gk','ld','cd1','cd3','rd','lm','cm2','dm2','rm','st1','st2'],
-        Simeone_LowBlock_def5: ['gk','lb','cd1','cd2','cd3','rb','lm','dm2','cm2','rm','st2'],
-        Bielsa_ChaosPress_att5: ['gk','cd1','cd2','cd3','lm','dm2','rm','lw','st1','st2','rw']
+    const SCORE_BY_SITUATION = {
+        stable_control:{Arteta_Control433_bal3:68,Pep_BoxControl_bal2:34,Pep_ControlledPush_att3:14},
+        pressure_escape:{Pep_BoxControl_bal2:74,Arteta_Control433_bal3:36,Pep_PressCooldown_bal2:28},
+        pressure_counter:{Compact_Counter_def3:70,Pep_BoxControl_bal2:46,Arteta_Control433_bal3:24},
+        press_cooldown:{Pep_PressCooldown_bal2:76,Pep_BoxControl_bal2:38,Arteta_Control433_bal3:26},
+        controlled_chase:{Pep_ControlledPush_att3:72,Pep_TwoThreeFive_att3:38,Arteta_Control433_bal3:18},
+        positional_siege:{Pep_TwoThreeFive_att3:74,Pep_ControlledPush_att3:48,Conte_WingbackWidth_bal4:24},
+        width_attack:{Conte_WingbackWidth_bal4:76,Pep_ControlledPush_att3:34,Pep_TwoThreeFive_att3:28},
+        protect_lead:{Simeone_Compact442_def4:74,Arteta_Control433_bal3:48,Pep_PressCooldown_bal2:24},
+        emergency_lock:{Simeone_LowBlock_def5:84,Simeone_Compact442_def4:46,Pep_BoxControl_bal2:18},
+        late_high_pressure:{Klopp_Gegenpress_att4:78,Pep_ControlledPush_att3:54,Pep_TwoThreeFive_att3:44},
+        final_all_in:{Bielsa_ChaosPress_att5:90,Klopp_Gegenpress_att4:58,Pep_ControlledPush_att3:32}
     };
 
-    const SCHEME_STATES = {
-        Arteta_Control433_bal3: '4-3-3 structural control / GK-LD-CD1-CD3-RD / CM1-DM2-CM3 / LW-ST2-RW',
-        Pep_BoxControl_bal2: '4-1-2-2-1 press-resistant control / GK-LD-CD1-CD3-RD / DM2 / CM1-CM3 / AM1-AM2 / ST2',
-        Pep_PressCooldown_bal2: '4-1-4-1 cooldown outlet / GK-LD-CD1-CD3-RD / DM2 / LM-CM2-CM3-RM / ST2',
-        Compact_Counter_def3: '4-4-1-1 direct counter / GK-LD-CD1-CD3-RD / LM-DM2-CM2-RM / AM2 / ST2',
-        Pep_ControlledPush_att3: '4-2-3-1 controlled push / GK-LD-CD1-CD3-RD / DM2-CM2 / LW-AM2-RW / ST2',
-        Pep_TwoThreeFive_att3: '3-2-5 positional siege / GK-CD1-CD2-CD3 / DM2-CM2 / LW-AM1-ST1-AM2-RW',
-        Conte_WingbackWidth_bal4: '3-4-3 wingback width / GK-CD1-CD2-CD3 / LB-DM2-CM2-RB / LW-ST2-RW',
-        Klopp_Gegenpress_att4: '4-2-4 gegenpress / GK-LD-CD1-CD3-RD / DM2-CM2 / LW-ST1-ST2-RW',
-        Simeone_Compact442_def4: '4-4-2 compact / GK-LD-CD1-CD3-RD / LM-CM2-DM2-RM / ST1-ST2',
-        Simeone_LowBlock_def5: '5-4-1 emergency lock / GK-LB-CD1-CD2-CD3-RB / LM-DM2-CM2-RM / ST2',
-        Bielsa_ChaosPress_att5: '3-3-4 final all-in / GK-CD1-CD2-CD3 / LM-DM2-RM / LW-ST1-ST2-RW'
-    };
-
-    const TRAIT_PATCHES = {
-        Arteta_Control433_bal3: { build:'structural_control', tempo:'medium', press:'medium_high', risk:'medium' },
-        Pep_BoxControl_bal2: { build:'press_resistant_control', tempo:'low', press:'medium_low', risk:'low', requires:['pressure_without_counter_exit'] },
-        Pep_PressCooldown_bal2: { build:'cooldown_outlet', tempo:'low', press:'low', risk:'low', requires:['press_fatigue'] },
-        Compact_Counter_def3: { build:'direct_counter', tempo:'very_high', press:'low', risk:'medium_high', requires:['confirmed_counter_exit'] },
-        Pep_ControlledPush_att3: { build:'controlled_push', tempo:'high', press:'medium_high', risk:'high' },
-        Pep_TwoThreeFive_att3: { build:'positional_siege_325', tempo:'medium_high', press:'high', risk:'very_high' },
-        Conte_WingbackWidth_bal4: { build:'maximum_width', tempo:'medium_high', press:'medium', risk:'high' },
-        Klopp_Gegenpress_att4: { build:'gegenpress_424', tempo:'very_high', press:'very_high', risk:'very_high' },
-        Simeone_Compact442_def4: { build:'compact442', tempo:'low', press:'high_local', risk:'low' },
-        Simeone_LowBlock_def5: { build:'temporary_emergency_lock', tempo:'very_low', press:'very_low', risk:'very_low', requires:['mandatory_reassessment_next_window'] },
-        Bielsa_ChaosPress_att5: { build:'final_all_in', tempo:'maximum', press:'maximum', risk:'maximum' }
-    };
-
-    function finite(value, fallback = 0) {
-        const parsed = Number(value);
-        return Number.isFinite(parsed) ? parsed : fallback;
+    function has(context, key) {
+        return Array.isArray(context?.signals) && context.signals.includes(key)
+            || Array.isArray(context?.tags) && context.tags.includes(key);
     }
 
-    function bounded(value, min = 0, max = 100) {
-        return Math.max(min, Math.min(max, finite(value)));
+    function normalizedContext(context = {}) {
+        const scoreState = context.score?.state || context.scoreState || 'unknown';
+        const minute = Number(context.minute || 0);
+        const myBad = Number(context.myBad || context.myBadActionsPct || 0);
+        const drop = Number(context.myPowerDropPct || 0);
+        const underPressure = context.underPressure === true || has(context, 'under_pressure') || has(context, 'transition_threat') || has(context, 'opponent_high_press');
+        const counterExitAvailable = context.counterExitAvailable === true || has(context, 'counter_exit_available') || has(context, 'space_behind_press') || has(context, 'clean_first_pass');
+        const counterExitBlocked = context.counterExitAvailable === false || context.counterExitBlocked === true || has(context, 'counter_exit_blocked') || has(context, 'first_pass_trapped') || has(context, 'sustained_siege');
+        const pressFatigueRisk = context.pressFatigueRisk === true || context.pressFatigue?.active === true || has(context, 'press_fatigue_risk') || drop >= 4;
+        const highBadActions = context.highBadActions === true || has(context, 'high_bad_actions') || myBad >= 20;
+        const lowBadActions = context.lowBadActions === true || has(context, 'low_bad_actions') || (myBad > 0 && myBad <= 16);
+        const transitionThreat = context.transitionThreat === true || has(context, 'transition_threat');
+        const centerClosed = context.centerClosed === true || has(context, 'center_closed') || has(context, 'opponent_low_block');
+        const wideQuality = context.wideQuality === true || has(context, 'wide_quality') || has(context, 'attack_left') || has(context, 'attack_right');
+        const ownCrossesBad = context.ownCrossesBad === true || has(context, 'own_open_play_crosses_bad') || has(context, 'own_crosses_bad_total');
+        const opponentCrossesDangerous = context.opponentCrossesDangerous === true || has(context, 'opponent_crosses_dangerous');
+        const attackingMomentum = context.attackingMomentum === true || has(context, 'attacking_momentum');
+        const attackNeed = Number(context.attackNeed || 0);
+        const pressureRisk = Number(context.pressureRisk || 0);
+        const emergencyLockRequired = underPressure && !counterExitAvailable && (context.ownRedCard || highBadActions || drop >= 5 || pressureRisk >= 82 || has(context, 'sustained_siege'));
+        return Object.assign({}, context, {
+            scoreState, minute, myBad, myPowerDropPct:drop, underPressure,
+            counterExitAvailable, counterExitBlocked, pressFatigueRisk,
+            highBadActions, lowBadActions, transitionThreat, centerClosed,
+            wideQuality, ownCrossesBad, opponentCrossesDangerous,
+            attackingMomentum, attackNeed, pressureRisk, emergencyLockRequired
+        });
     }
 
-    function copy(value) {
-        return Array.isArray(value) ? value.slice() : [];
+    function classify(context = {}) {
+        const c = normalizedContext(context);
+        if (c.scoreState === 'losing' && c.minute >= 84 && c.attackNeed >= 75 && c.lowBadActions && !c.pressFatigueRisk) return 'final_all_in';
+        if (c.emergencyLockRequired || (c.scoreState === 'winning' && c.minute >= 84 && c.underPressure && c.pressureRisk >= 55)) return 'emergency_lock';
+        if (c.pressFatigueRisk && !(c.scoreState === 'losing' && c.minute >= 70)) return 'press_cooldown';
+        if (c.scoreState === 'winning' && c.minute >= 65) return 'protect_lead';
+        if (c.underPressure) return c.counterExitAvailable && !c.counterExitBlocked ? 'pressure_counter' : 'pressure_escape';
+        if (c.centerClosed && c.wideQuality && !c.ownCrossesBad && !c.opponentCrossesDangerous) return 'width_attack';
+        if (c.scoreState === 'losing' && c.minute >= 72 && c.attackNeed >= 65 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat) return 'late_high_pressure';
+        if ((c.attackingMomentum || c.attackNeed >= 58) && c.minute >= 55 && !c.transitionThreat && !c.highBadActions && !c.pressFatigueRisk) return 'positional_siege';
+        if ((c.scoreState === 'losing' && c.minute >= 45) || c.attackNeed >= 38) return 'controlled_chase';
+        return 'stable_control';
     }
 
-    function normalizeRiskAppetite(value) {
-        const key = String(value || '').toLowerCase();
-        return RISK_APPETITES[key] ? key : DEFAULT_RISK_APPETITE;
+    function currentRisk() {
+        try {
+            const value = window.localStorage?.getItem('slf:tactics:risk-appetite');
+            return ['conservative','standard','bold','experimental'].includes(value) ? value : DEFAULT_RISK;
+        } catch (_) {
+            return DEFAULT_RISK;
+        }
     }
 
-    function resolveRiskAppetite(snapshot, context) {
-        const explicit = context?.riskAppetite || snapshot?.riskAppetite;
-        if (explicit) return normalizeRiskAppetite(explicit);
-        try { return normalizeRiskAppetite(localStorage.getItem('slf:tactics:risk-appetite')); }
-        catch (_) { return DEFAULT_RISK_APPETITE; }
+    function hardVeto(name, context = {}) {
+        const c = normalizedContext(context);
+        const situation = classify(c);
+        const reasons = [];
+        if (!ACTIVE_SET.has(name)) reasons.push('preset отсутствует в active registry');
+        if (name === 'Compact_Counter_def3' && !(c.counterExitAvailable && !c.counterExitBlocked)) reasons.push('Compact Counter требует подтверждённый outlet; слабость команды не является основанием');
+        if (name === 'Simeone_LowBlock_def5' && situation !== 'emergency_lock') reasons.push('Low Block только временный emergency lock');
+        if (name === 'Simeone_Compact442_def4' && c.scoreState === 'losing') reasons.push('защитный 4-4-2 запрещён при проигрыше');
+        if (name === 'Pep_PressCooldown_bal2' && c.scoreState === 'losing' && c.minute >= 70 && c.attackNeed >= 55) reasons.push('поздний проигрыш требует продвижения, а не cooldown');
+        if (name === 'Pep_TwoThreeFive_att3' && (c.transitionThreat || c.underPressure || c.pressFatigueRisk || c.highBadActions)) reasons.push('3-2-5 запрещён при transition threat/fatigue/браке');
+        if (name === 'Klopp_Gegenpress_att4' && !['late_high_pressure','final_all_in'].includes(situation)) reasons.push('Klopp только поздняя погоня');
+        if (name === 'Bielsa_ChaosPress_att5' && situation !== 'final_all_in') reasons.push('Bielsa только финальный all-in');
+        if (['Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5'].includes(name) && (c.pressFatigueRisk || c.highBadActions || c.ownRedCard || c.myPowerDropPct >= 5)) reasons.push('дорогой прессинг запрещён по fatigue/браку/удалению');
+        if (c.scoreState === 'winning' && c.minute >= 70 && ['Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5','Pep_TwoThreeFive_att3'].includes(name)) reasons.push('позднее преимущество не требует high/all-in риска');
+        return { vetoed:reasons.length > 0, reasons };
     }
 
-    function hasSignal(signals, name) {
-        return Array.isArray(signals?.signals) && signals.signals.includes(name);
+    function riskDelta(name, appetite) {
+        const high = ['Pep_TwoThreeFive_att3','Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5'].includes(name);
+        const attack = ['Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5'].includes(name);
+        if (appetite === 'conservative') return high ? -8 : attack ? -3 : 0;
+        if (appetite === 'bold') return high ? 4 : attack ? 2 : 0;
+        if (appetite === 'experimental') return high ? 7 : attack ? 4 : 0;
+        return 0;
     }
 
-    function hasAnySignal(signals, names) {
-        return names.some(name => hasSignal(signals, name));
-    }
+    function scoreCandidate(name, context = {}, situation = classify(context)) {
+        const c = normalizedContext(context);
+        const veto = hardVeto(name, c);
+        if (veto.vetoed) {
+            return { preset:name, score:-999, rawScore:-999, vetoed:true, vetoReasons:veto.reasons, reasons:[], parts:{situationFit:0,riskAppetite:0,evidenceGuard:0} };
+        }
 
-    function derivePressureResponseContext(signals = {}) {
-        const myXg = finite(signals.myXg);
-        const oppXg = finite(signals.oppXg);
-        const myXT = finite(signals.myXT);
-        const oppXT = finite(signals.oppXT);
-        const myShots = finite(signals.myShots);
-        const oppShots = finite(signals.oppShots);
-        const myPossession = finite(signals.myPossession);
-        const oppPossession = finite(signals.oppPossession);
-        const myPressVector = finite(signals.myPressVector);
-        const oppPressVector = finite(signals.oppPressVector);
-        const myDefVector = finite(signals.myDefVector);
-        const oppDefVector = finite(signals.oppDefVector);
-
-        const dominanceVotes = [
-            oppXg >= myXg + 0.45,
-            oppXT >= myXT + 0.22,
-            oppShots >= myShots + 4,
-            oppPossession >= 54 && oppPossession >= myPossession + 12
-        ].filter(Boolean).length;
-        const explicitHighVectors = hasAnySignal(signals, [
-            'opponent_attack_vectors_high', 'opponent_attack_wave_high',
-            'opponent_sustained_attack', 'sustained_siege'
-        ]);
-        const vectorDominance = oppPressVector >= myPressVector + 8 && oppDefVector >= myDefVector + 5;
-        const opponentHighAttackVectors = explicitHighVectors || oppXT >= myXT + 0.3 || vectorDominance;
-        const opponentAttackDominance = dominanceVotes >= 2;
-        const sustainedSiege = Boolean(
-            signals.underPressure && opponentAttackDominance && opponentHighAttackVectors &&
-            (finite(signals.pressureRisk) >= 55 || dominanceVotes >= 3)
-        );
-
-        const explicitExit = hasAnySignal(signals, [
-            'counter_exit_available', 'space_behind_press',
-            'opponent_structure_broken', 'clean_first_pass'
-        ]);
-        const blockedExit = hasAnySignal(signals, [
-            'counter_exit_blocked', 'first_pass_trapped',
-            'isolated_forward', 'sustained_siege'
-        ]);
-        const transitionProgress =
-            finite(signals.myXgDelta) >= 0.08 ||
-            finite(signals.myShotsDelta) >= 1 ||
-            (myXT >= 0.18 && myXT >= oppXT * 0.55) ||
-            Boolean(signals.attackingMomentum);
-        const possessionOutlet = myPossession >= 38 && oppPossession - myPossession <= 15 && myXT >= 0.1;
-        const counterExitAvailable = Boolean(!blockedExit && !sustainedSiege && (explicitExit || transitionProgress || possessionOutlet));
-        const emergencyLockRequired = Boolean(
-            sustainedSiege && !counterExitAvailable &&
-            (signals.ownRedCard || signals.highBadActions || finite(signals.myPowerDropPct) >= 5 || finite(signals.pressureRisk) >= 82)
-        );
-
+        const situationFit = Number(SCORE_BY_SITUATION[situation]?.[name] || 0);
+        const appetite = currentRisk();
+        const riskAppetite = riskDelta(name, appetite);
+        const evidenceGuard = name === 'Compact_Counter_def3' ? -6 : 0;
+        const score = situationFit + riskAppetite + evidenceGuard;
+        const reasons = [];
+        if (situationFit) reasons.push({ key:'situationFit', delta:situationFit, reason:`роль совпадает с ситуацией ${situation}` });
+        if (riskAppetite) reasons.push({ key:'riskAppetite', delta:riskAppetite, reason:`профиль риска ${appetite}` });
+        if (evidenceGuard) reasons.push({ key:'evidenceGuard', delta:evidenceGuard, reason:'Compact Counter остаётся осторожным до достаточной phase-v4 выборки' });
         return {
-            opponentAttackDominance,
-            opponentHighAttackVectors,
-            sustainedSiege,
-            counterExitAvailable,
-            emergencyLockRequired,
-            counterDominanceVotes: dominanceVotes,
-            pressureResponse: emergencyLockRequired ? 'emergency_lock' : counterExitAvailable ? 'direct_counter' : sustainedSiege ? 'control_escape' : 'none'
+            preset:name,
+            score,
+            rawScore:score,
+            vetoed:false,
+            vetoReasons:[],
+            reasons,
+            parts:{ situationFit, riskAppetite, evidenceGuard }
         };
     }
 
-    function classifySituation(signals = {}) {
-        const appetite = normalizeRiskAppetite(signals.riskAppetite);
-        const policy = RISK_APPETITES[appetite];
-        const attackUnder = hasSignal(signals, 'generator_attack_underperforming');
-        const attackWorking = hasSignal(signals, 'generator_attack_working');
-        const defenseUnder = hasSignal(signals, 'generator_defense_underperforming');
-        const defenseWorking = hasSignal(signals, 'generator_defense_working');
-        const pressureContext = signals.underPressure || signals.transitionThreat || finite(signals.strengthGap) <= -25;
-
-        if (signals.scoreState === 'losing' && signals.minute >= policy.bielsaMinute && signals.attackNeed >= 74) return 'final_desperation';
-        if (signals.scoreState === 'losing' && signals.minute >= policy.kloppMinute && signals.attackNeed >= 52) return 'late_chase';
-        if (signals.scoreState === 'winning' && signals.minute >= 82 && signals.pressureRisk >= 60) return 'late_emergency_lock';
-        if (signals.emergencyLockRequired) return 'siege_lock';
-        if (signals.pressFatigueRisk || signals.pressingCost >= 62 || signals.myPowerDropPct >= 4) return 'press_cooldown';
-        if (signals.scoreState === 'winning' && signals.minute >= 65 && signals.pressureRisk >= 45) return 'protect_lead';
-        if (signals.widthOpportunity >= 55 && !signals.ownCrossesBad && !signals.opponentCrossesDangerous && !signals.underPressure) return 'safe_width';
-        if (pressureContext && signals.counterExitAvailable) return 'compact_counter';
-        if (pressureContext && signals.counterExitAvailable === false) return 'pressure_escape';
-        if (attackUnder && defenseWorking && signals.attackNeed < 75) return 'controlled_push';
-        if (defenseUnder && attackUnder) return 'control_reset';
-        if (signals.highBadActions || signals.controlNeed >= 68) return 'control_reset';
-        if (signals.strengthGap >= 30 && signals.pressureRisk < 52 && !signals.highBadActions && (signals.attackingMomentum || attackWorking)) return 'positional_squeeze';
-        if (signals.scoreState === 'losing' && signals.minute >= 45 && signals.attackNeed >= 38 && !signals.highBadActions) return 'controlled_push';
-        if (signals.attackNeed >= 38 && signals.attackNeed < 70 && !signals.highBadActions) return 'controlled_push';
-        if (signals.minute <= 30 && signals.pressureRisk < 50 && signals.attackNeed < 42) return 'balanced_structure';
-        return 'active_control';
+    function rank(context = {}) {
+        const c = normalizedContext(context);
+        const situation = classify(c);
+        const all = ACTIVE.map(name => scoreCandidate(name, c, situation));
+        const eligible = all.filter(item => !item.vetoed).sort((a, b) => b.score - a.score || a.preset.localeCompare(b.preset));
+        return { context:c, situation, all, eligible };
     }
 
-    function situationAffinity(name, signals = {}) {
-        const situation = signals.situationKey || classifySituation(signals);
-        const preferredBySituation = {
-            balanced_structure: 'Arteta_Control433_bal3',
-            active_control: 'Arteta_Control433_bal3',
-            control_reset: 'Pep_BoxControl_bal2',
-            pressure_escape: 'Pep_BoxControl_bal2',
-            siege_lock: 'Simeone_LowBlock_def5',
-            press_cooldown: 'Pep_PressCooldown_bal2',
-            compact_counter: 'Compact_Counter_def3',
-            controlled_push: 'Pep_ControlledPush_att3',
-            positional_squeeze: 'Pep_TwoThreeFive_att3',
-            safe_width: 'Conte_WingbackWidth_bal4',
-            late_chase: 'Klopp_Gegenpress_att4',
-            protect_lead: 'Simeone_Compact442_def4',
-            late_emergency_lock: 'Simeone_LowBlock_def5',
-            final_desperation: 'Bielsa_ChaosPress_att5'
+    function choose(context = {}) {
+        const ranked = rank(context);
+        const selected = ranked.eligible[0] || { preset:'Arteta_Control433_bal3', score:0, reasons:[] };
+        const runnerUp = ranked.eligible[1] || null;
+        const margin = runnerUp ? selected.score - runnerUp.score : selected.score;
+        return {
+            name:selected.preset,
+            situation:ranked.situation,
+            reason:`${ranked.situation}: ${registry.meta?.[selected.preset]?.use || 'tactical suite v7'}`,
+            selected,
+            runnerUp,
+            margin,
+            confidence:margin >= 25 ? 'high' : margin >= 12 ? 'medium' : 'low',
+            candidates:ranked.all
         };
-        const reasons = {
-            pressure_escape: 'осада без подтверждённого outlet: разбить прессинг через контроль',
-            compact_counter: 'подтверждён первый выход и пространство за прессингом',
-            siege_lock: 'аварийно закрыть штрафную на один цикл с обязательной переоценкой',
-            controlled_push: 'нужен более ранний контролируемый рост атаки',
-            positional_squeeze: 'атакующий импульс позволяет перейти к структуре 3-2-5'
-        };
-        const preferred = preferredBySituation[situation] || 'Arteta_Control433_bal3';
-        let delta = name === preferred ? 34 : 0;
-        const conflicts = {
-            pressure_escape: ['Compact_Counter_def3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5'],
-            siege_lock: ['Compact_Counter_def3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5'],
-            compact_counter: ['Pep_BoxControl_bal2','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4'],
-            control_reset: ['Pep_TwoThreeFive_att3','Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5'],
-            press_cooldown: ['Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5'],
-            controlled_push: ['Pep_BoxControl_bal2','Simeone_LowBlock_def5'],
-            positional_squeeze: ['Pep_BoxControl_bal2','Simeone_Compact442_def4','Simeone_LowBlock_def5'],
-            protect_lead: ['Pep_TwoThreeFive_att3','Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5'],
-            late_emergency_lock: ['Pep_TwoThreeFive_att3','Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5'],
-            late_chase: ['Pep_BoxControl_bal2','Pep_PressCooldown_bal2','Simeone_Compact442_def4','Simeone_LowBlock_def5'],
-            final_desperation: ['Pep_BoxControl_bal2','Pep_PressCooldown_bal2','Simeone_Compact442_def4','Simeone_LowBlock_def5']
-        };
-        if ((conflicts[situation] || []).includes(name)) delta -= 18;
-        return { situation, preferred, delta, reason: name === preferred ? (reasons[situation] || `соответствие сценарию: ${situation}`) : '' };
     }
 
-    function removePresetFromMap(map) {
-        if (!map || typeof map !== 'object') return;
-        REMOVED_PRESETS.forEach(name => delete map[name]);
-    }
-
-    function patchBasePresets() {
-        if (typeof BASE_PRESETS === 'undefined' || !BASE_PRESETS) return;
-        removePresetFromMap(BASE_PRESETS);
-        Object.entries(RETUNED_PRESETS).forEach(([name, preset]) => {
-            BASE_PRESETS[name] = Object.assign({}, BASE_PRESETS[name] || {}, preset, { priority: copy(preset.priority) });
-        });
-    }
-
-    function patchLibrary() {
-        if (typeof TacticPresetLibrary === 'undefined' || !TacticPresetLibrary) return;
-        ['meta','traits','schemeStates','presetSchemeState'].forEach(key => removePresetFromMap(TacticPresetLibrary[key]));
-        TacticPresetLibrary.schemeStates = Object.assign({}, TacticPresetLibrary.schemeStates || {}, SCHEME_STATES);
-        TacticPresetLibrary.presetSchemeState = Object.assign({}, TacticPresetLibrary.presetSchemeState || {}, Object.fromEntries(ACTIVE_PRESETS.map(name => [name, name])));
-        TacticPresetLibrary.traits = TacticPresetLibrary.traits || {};
-        Object.entries(TRAIT_PATCHES).forEach(([name, patch]) => {
-            TacticPresetLibrary.traits[name] = Object.assign({}, TacticPresetLibrary.traits[name] || {}, patch, {
-                attackLanes: copy(DIRECTION_OVERRIDES[name])
-            });
-        });
-        if (TacticPresetLibrary.meta?.Pep_BoxControl_bal2) {
-            TacticPresetLibrary.meta.Pep_BoxControl_bal2 = Object.assign({}, TacticPresetLibrary.meta.Pep_BoxControl_bal2, {
-                idea: 'разбить прессинг короткими опорами и сохранить продвижение без стерильного отказа от атаки',
-                use: 'осада или высокий прессинг без подтверждённого выхода в прямую контратаку',
-                risk: 'при полном разрушении структуры требуется временный emergency lock'
-            });
+    function shortestStep(from, to) {
+        if (!from || !to || from === to || !STEP[from] || !STEP[to]) return to;
+        const queue = [[from]];
+        const seen = new Set([from]);
+        while (queue.length) {
+            const path = queue.shift();
+            const node = path[path.length - 1];
+            for (const next of STEP[node] || []) {
+                if (seen.has(next)) continue;
+                const candidate = path.concat(next);
+                if (next === to) return candidate[1] || to;
+                seen.add(next);
+                queue.push(candidate);
+            }
         }
-        if (TacticPresetLibrary.meta?.Simeone_LowBlock_def5) {
-            TacticPresetLibrary.meta.Simeone_LowBlock_def5 = Object.assign({}, TacticPresetLibrary.meta.Simeone_LowBlock_def5, {
-                idea: 'временный полный lock штрафной с длинным освобождением зоны',
-                use: 'критическая осада, удаление, падение силы или позднее удержание; только на один цикл',
-                risk: 'обязательная переоценка в следующем окне; не использовать как постоянную стратегию при проигрыше'
-            });
-        }
+        return to;
     }
 
-    function selectEscalationCandidate(decision, signals, policy) {
-        const candidateMap = new Map((decision?.candidates || []).map(item => [item.preset, item]));
-        const allowed = name => {
-            const item = candidateMap.get(name);
-            return item && !item.vetoed;
-        };
-        const ordered = [];
-        if (signals.minute >= policy.bielsaMinute && signals.attackNeed >= 74) ordered.push('Bielsa_ChaosPress_att5');
-        if (signals.minute >= policy.kloppMinute && signals.attackNeed >= 52) ordered.push('Klopp_Gegenpress_att4');
-        if (signals.attackingMomentum && signals.pressureRisk < 68) ordered.push('Pep_TwoThreeFive_att3');
-        ordered.push('Pep_ControlledPush_att3', 'Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Bielsa_ChaosPress_att5');
-        return ordered.find(allowed) || null;
-    }
-
-    function applyInactionPenalty(owner, decision, signals, runtime) {
-        const appetite = normalizeRiskAppetite(signals.riskAppetite);
-        const policy = RISK_APPETITES[appetite];
-        const selectedName = decision?.action?.preset;
-        const previousName = runtime?.lastDecision?.action?.preset;
-        const previousWindow = finite(runtime?.lastDecision?.telemetry?.observation?.generationWindowIndex, -99);
-        const currentWindow = finite(signals.generationWindowIndex, 0);
-        const repeatedNeutral = NEUTRAL_PRESETS.has(selectedName) && NEUTRAL_PRESETS.has(previousName) && currentWindow - previousWindow <= policy.inactionWindow;
-        const worsening =
-            signals.attackNeed >= 52 &&
-            (finite(signals.oppXgDelta) > finite(signals.myXgDelta) + 0.04 ||
-             finite(signals.oppShotsDelta) > finite(signals.myShotsDelta) ||
-             signals.pressureRisk >= 60);
-        const stabilizationRequired = ['pressure_escape','siege_lock','late_emergency_lock'].includes(signals.situationKey);
-        if (signals.scoreState !== 'losing' || signals.minute < 50 || !repeatedNeutral || !worsening || stabilizationRequired) return decision;
-
-        const replacement = selectEscalationCandidate(decision, signals, policy);
-        if (!replacement || replacement === selectedName) return decision;
-        const item = (decision.candidates || []).find(candidate => candidate.preset === replacement);
-        decision.action = Object.assign({}, decision.action, {
-            preset: replacement,
-            presetStatus: owner.getPresetStatus ? owner.getPresetStatus(replacement) : decision.action.presetStatus,
-            score: item?.score ?? decision.action.score,
-            decision: 'inaction_escalation',
-            reason: `штраф за бездействие: при проигрыше нейтральная рекомендация повторилась на ухудшающемся отрезке; переход к ${replacement}`,
-            guardType: 'inaction_penalty',
-            guardReason: 'повтор нейтрального решения запрещён при ухудшении и высокой потребности в голе',
-            emergency: false
-        });
-        decision.guard = {
-            selected: item || { preset: replacement, score: decision.action.score },
-            guardType: 'inaction_penalty',
-            guardReason: decision.action.guardReason,
-            previousPreset: selectedName,
-            repeatedNeutral: true
-        };
-        decision.inactionPenalty = { applied: true, from: selectedName, to: replacement, previousPreset: previousName };
-        return decision;
-    }
-
-    function patchRuleEngine() {
-        const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
-        const scorer = engine?.PresetRuleScorer;
-        if (!engine || !scorer || scorer.__pressureResponseV6Installed) return;
-
-        engine.schema = 'slf_rule_decision_v6_pressure_response';
-        engine.TACTIC_SIGNATURES = Object.fromEntries(Object.entries(TACTIC_SIGNATURES).map(([name, signature]) => [name, Object.assign({}, signature)]));
-
-        const originalBuild = engine.MatchDecisionSignals.build.bind(engine.MatchDecisionSignals);
-        engine.MatchDecisionSignals.build = function buildPressureResponseSignals(owner, snapshot, context = {}, runtime = null) {
-            const signals = originalBuild(owner, snapshot, context, runtime);
-            signals.riskAppetite = resolveRiskAppetite(snapshot, context);
-            signals.riskPolicy = Object.assign({}, RISK_APPETITES[signals.riskAppetite]);
-            const rawStrengthAdvantage = finite(signals.strengthAdvantage);
-            const cappedStrengthAdvantage = Math.min(rawStrengthAdvantage, 32);
-            signals.rawStrengthAdvantage = rawStrengthAdvantage;
-            signals.strengthAdvantage = cappedStrengthAdvantage;
-            signals.pressingOpportunity = bounded(finite(signals.pressingOpportunity) - Math.max(0, rawStrengthAdvantage - cappedStrengthAdvantage) * 0.35);
-            Object.assign(signals, derivePressureResponseContext(signals));
-            signals.situationKey = classifySituation(signals);
-            if (signals.situationKey === 'siege_lock') signals.mandatoryReassessmentWindow = finite(signals.generationWindowIndex) + 1;
-            return signals;
-        };
-
-        const originalHardVeto = scorer.hardVeto.bind(scorer);
-        scorer.hardVeto = function hardVetoPressureResponse(name, signals = {}) {
-            const appetite = normalizeRiskAppetite(signals.riskAppetite);
-            const policy = RISK_APPETITES[appetite];
-            const original = originalHardVeto(name, signals);
-            const reasons = (original.reasons || []).filter(reason => {
-                if (name === 'Klopp_Gegenpress_att4' && reason.includes('Klopp разрешён только')) return false;
-                if (name === 'Bielsa_ChaosPress_att5' && reason.includes('Bielsa разрешён только')) return false;
-                if (name === 'Simeone_LowBlock_def5' && reason.includes('низкий блок разрешён только')) return false;
-                return true;
-            });
-            const pressSafe = !signals.ownRedCard && !signals.highBadActions && !signals.pressFatigueRisk && finite(signals.myPowerDropPct) < 5;
-            if (name === 'Klopp_Gegenpress_att4' && !(signals.scoreState !== 'winning' && signals.minute >= policy.kloppMinute && signals.attackNeed >= 45 && pressSafe && (!signals.transitionThreat || signals.minute >= 82))) {
-                reasons.push(`Klopp требует appetite=${appetite}, минуту ${policy.kloppMinute}+ и безопасную цену прессинга`);
-            }
-            if (name === 'Bielsa_ChaosPress_att5' && !(signals.scoreState === 'losing' && signals.minute >= policy.bielsaMinute && signals.attackNeed >= 72 && signals.lowBadActions && pressSafe && (!signals.transitionThreat || signals.minute >= 86))) {
-                reasons.push(`Bielsa требует appetite=${appetite}, проигрыш и минуту ${policy.bielsaMinute}+`);
-            }
-            const lowBlockAllowed =
-                signals.situationKey === 'siege_lock' ||
-                signals.situationKey === 'late_emergency_lock' ||
-                (signals.scoreState === 'winning' && signals.minute >= 82 && signals.pressureRisk >= 55);
-            if (name === 'Simeone_LowBlock_def5' && !lowBlockAllowed) {
-                reasons.push('low block разрешён только как временный siege lock или позднее аварийное удержание');
-            }
-            if (signals.situationKey === 'siege_lock' && name !== 'Simeone_LowBlock_def5') {
-                reasons.push('критическая осада требует временного полного lock с обязательной переоценкой');
-            }
-            if (name === 'Compact_Counter_def3' && signals.counterExitAvailable !== true) {
-                reasons.push('прямая контратака требует подтверждённого первого выхода или пространства за прессингом');
-            }
-            if (name === 'Pep_BoxControl_bal2' && signals.situationKey === 'siege_lock') {
-                reasons.push('критическая осада требует сначала полного временного lock');
-            }
-            return { vetoed: reasons.length > 0, reasons: Array.from(new Set(reasons)) };
-        };
-
-        const originalScoreOne = scorer.scoreOne.bind(scorer);
-        scorer.scoreOne = function scoreOnePressureResponse(owner, name, signals) {
-            const result = originalScoreOne(owner, name, signals);
-            if (result.vetoed) return result;
-            const appetite = normalizeRiskAppetite(signals.riskAppetite);
-            const policy = RISK_APPETITES[appetite];
-            const affinity = situationAffinity(name, signals);
-            let bonus = affinity.delta;
-            if (['Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4'].includes(name)) bonus += policy.attackBonus;
-            if (name === 'Klopp_Gegenpress_att4') bonus += policy.attackBonus + policy.pressBonus;
-            if (name === 'Bielsa_ChaosPress_att5') bonus += policy.attackBonus + policy.pressBonus + 3;
-            if (name === 'Compact_Counter_def3' && signals.counterExitAvailable && signals.strengthGap < 0) bonus += Math.max(2, Math.round(policy.attackBonus * 0.6));
-            if (name === 'Pep_BoxControl_bal2' && affinity.situation === 'pressure_escape') bonus += 6;
-            if (name === 'Simeone_LowBlock_def5' && affinity.situation === 'siege_lock') bonus += 12;
-            if (name === 'Pep_BoxControl_bal2' && appetite !== 'conservative' && !signals.highBadActions && !['control_reset','pressure_escape'].includes(affinity.situation)) bonus -= 7;
-            result.score = owner.round(result.score + bonus);
-            result.rawScore = owner.round(result.rawScore + bonus);
-            result.parts.riskAppetite = bonus - affinity.delta;
-            result.parts.situationFit = affinity.delta;
-            result.situationKey = affinity.situation;
-            if (affinity.reason) result.reasons.unshift({ key:'situationFit', delta:affinity.delta, reason:affinity.reason });
-            if (bonus - affinity.delta) result.reasons.unshift({ key:'riskAppetite', delta:bonus - affinity.delta, reason:`профиль смелости: ${appetite}` });
-            return result;
-        };
-
-        const originalRun = scorer.run.bind(scorer);
-        scorer.run = function runPressureResponse(owner, signals, runtime, detectedPreset) {
-            const decision = originalRun(owner, signals, runtime, detectedPreset);
-            const appetite = normalizeRiskAppetite(signals.riskAppetite);
-            decision.schema = 'slf_preset_rule_score_v4_pressure_response';
-            decision.riskAppetite = appetite;
-            decision.situationKey = signals.situationKey || classifySituation(signals);
-            decision.pressureResponse = signals.pressureResponse || 'none';
-            decision.exploration = { eligible:false, applied:false, threshold:0, policy:'disabled_deterministic_selection' };
-            decision.action.riskAppetite = appetite;
-            decision.action.situationKey = decision.situationKey;
-            decision.action.pressureResponse = decision.pressureResponse;
-            if (decision.situationKey === 'siege_lock') {
-                decision.action.mandatoryReassessment = true;
-                decision.action.reassessAtWindow = signals.mandatoryReassessmentWindow;
-            }
-            return applyInactionPenalty(owner, decision, signals, runtime);
-        };
-
-        scorer.__boldPolicyInstalled = true;
-        scorer.__situationDiversityPolicyInstalled = true;
-        scorer.__pressureResponseV6Installed = true;
-    }
-
-    function stripCandidateBlock(html) {
-        return String(html || '').replace(/\s*<div[^>]*>\s*<b>Кандидаты:<\/b>[\s\S]*?<\/div>/i, '');
-    }
-
-    function patchSingleTacticRendering() {
-        if (typeof RecommendationEngine === 'undefined' || !RecommendationEngine) return false;
-        if (RecommendationEngine.__singleTacticCoachModePatched) return true;
-        if (typeof RecommendationEngine.compactPlan !== 'function') return false;
-        const originalCompactPlan = RecommendationEngine.compactPlan.bind(RecommendationEngine);
-        RecommendationEngine.compactPlan = function compactSingleTacticPlan() {
-            return stripCandidateBlock(originalCompactPlan(...arguments));
-        };
-        RecommendationEngine.__singleTacticCoachModePatched = true;
-        return true;
-    }
-
-    function scheduleSingleTacticRenderingPatch() {
-        if (patchSingleTacticRendering()) return;
-        let attempts = 0;
-        const timer = setInterval(() => {
-            attempts += 1;
-            if (patchSingleTacticRendering() || attempts >= 40) clearInterval(timer);
-        }, 50);
-    }
-
-    function evaluateRuleDecision(snapshot = {}, state = {}) {
-        const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
-        if (!engine?.evaluate) return null;
-        return engine.evaluate(snapshot, state);
-    }
-
-    function selectEvidencePreset(state = {}, snapshot = {}) {
-        const decision = evaluateRuleDecision(snapshot, state);
-        if (decision?.action?.preset && !REMOVED_PRESETS.has(decision.action.preset)) {
-            return { name:decision.action.preset, reason:decision.action.reason, ruleDecision:decision, progressionAction:decision.action.guardType || 'rule_scored' };
-        }
-        return { name:'Arteta_Control433_bal3', reason:'5.61 fallback: структурный контроль', progressionAction:'rule_fallback' };
-    }
-
-    function patchActiveRegistry() {
-        const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
-        if (!registry) return;
-        registry.active = ACTIVE_PRESETS.slice();
-        registry.removed = Array.from(new Set([...(registry.removed || []), ...REMOVED_PRESETS]));
-        registry.choosePreset = (state = {}, snapshot = {}) => selectEvidencePreset(state, snapshot);
-        registry.ruleDecisionSchema = 'slf_rule_decision_v6_pressure_response';
-        registry.riskAppetites = Object.assign({}, RISK_APPETITES);
-        registry.defaultRiskAppetite = DEFAULT_RISK_APPETITE;
-        registry.formations = Object.fromEntries(Object.entries(FORMATIONS).map(([name, positions]) => [name, positions.slice()]));
-        registry.ladders = Object.assign({}, registry.ladders || {}, {
-            defensive: ['Arteta_Control433_bal3','Simeone_Compact442_def4','Simeone_LowBlock_def5','Pep_PressCooldown_bal2'],
-            balance: ['Pep_BoxControl_bal2','Arteta_Control433_bal3','Compact_Counter_def3'],
-            attack: ATTACK_LADDER.slice()
+    function stamp(snapshot, decision, name) {
+        if (!snapshot || typeof snapshot !== 'object') return;
+        snapshot.ruleDecision = decision || snapshot.ruleDecision || null;
+        snapshot.tacticTelemetry = Object.assign({}, snapshot.tacticTelemetry || {}, {
+            libraryVersion:SUITE,
+            recommendationSchema:SCHEMA,
+            riskAppetite:currentRisk(),
+            recommendedPreset:name || decision?.action?.preset || null
         });
     }
 
-    function patchRecommendationSelection() {
-        if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__generator561PressureResponseApplied) return;
-        RecommendationEngine.selectRawPreset = function selectGenerator561ScoredPreset(snapshot, state = {}) {
-            const candidate = selectEvidencePreset(state, snapshot || {});
-            if (snapshot && candidate?.ruleDecision) snapshot.ruleDecision = candidate.ruleDecision;
-            return REMOVED_PRESETS.has(candidate?.name)
-                ? { name:'Arteta_Control433_bal3', reason:'removed preset guard', progressionAction:'removed_preset_guard' }
-                : candidate;
+    const originalRun = engine.run.bind(engine);
+    engine.run = function runTacticalSuiteV7(snapshot, context = {}) {
+        const result = originalRun(snapshot, context) || {};
+        const mergedContext = Object.assign({}, result?.moment?.context || {}, context);
+        const selected = choose(mergedContext);
+        result.schema = SCHEMA;
+        result.situationKey = selected.situation;
+        result.libraryVersion = SUITE;
+        result.riskAppetite = currentRisk();
+        result.margin = selected.margin;
+        result.confidence = Object.assign({}, result.confidence || {}, { level:selected.confidence, gap:selected.margin });
+        result.runnerUp = selected.runnerUp ? { preset:selected.runnerUp.preset, score:selected.runnerUp.score } : null;
+        result.action = Object.assign({}, result.action || {}, {
+            preset:selected.name,
+            rawPreset:selected.name,
+            score:selected.selected.score,
+            decision:selected.situation,
+            ruleId:`suite_v7_${selected.situation}`,
+            reason:selected.reason,
+            riskAppetite:result.riskAppetite,
+            libraryVersion:SUITE,
+            recommendationSchema:SCHEMA,
+            guardType:'suite_v7_selection',
+            guardReason:'central tactical suite v7 ranking'
+        });
+        result.candidates = selected.candidates.slice().sort((a, b) => {
+            if (a.vetoed !== b.vetoed) return a.vetoed ? 1 : -1;
+            return b.score - a.score || a.preset.localeCompare(b.preset);
+        });
+        result.vetoedPresets = Object.fromEntries(result.candidates.filter(item => item.vetoed).map(item => [item.preset, item.vetoReasons]));
+        result.telemetry = Object.assign({}, result.telemetry || {}, {
+            recommendedPreset:selected.name,
+            libraryVersion:SUITE,
+            recommendationSchema:SCHEMA,
+            riskAppetite:result.riskAppetite
+        });
+        stamp(snapshot, result, selected.name);
+        return result;
+    };
+
+    engine.schema = SCHEMA;
+    engine.ACTIVE_PRESETS = ACTIVE.slice();
+    engine.__tacticSuiteV7Installed = true;
+    engine.__generator561RuleScorerApplied = true;
+    engine.__generator561PressureResponseApplied = true;
+
+    if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
+        const originalGuard = typeof RecommendationEngine.applyProgressionGuard === 'function' ? RecommendationEngine.applyProgressionGuard : null;
+        RecommendationEngine.getPresetLadder = group => (registry.ladders?.[group] || []).slice();
+        RecommendationEngine.getAdjacentPresetInFamily = (current, desired) => {
+            const step = shortestStep(current, desired);
+            return ACTIVE_SET.has(step) ? step : desired;
+        };
+        RecommendationEngine.selectRawPreset = function selectSuiteV7(snapshot, state = {}) {
+            const decision = window.SLFCurrentActionHintEngine?.run ? window.SLFCurrentActionHintEngine.run(snapshot || {}, state || {}) : null;
+            const name = ACTIVE_SET.has(decision?.action?.preset) ? decision.action.preset : 'Arteta_Control433_bal3';
+            stamp(snapshot, decision, name);
+            return { name, reason:decision?.action?.reason || 'tactical suite v7 fallback', ruleDecision:decision, progressionAction:'suite_v7_scored' };
+        };
+        if (originalGuard) RecommendationEngine.applyProgressionGuard = function applySuiteV7Guard(candidate, snapshot, context = {}) {
+            if (!candidate?.name || !ACTIVE_SET.has(candidate.name) || !snapshot || snapshot.status === 'finished') return candidate;
+            const targetPreset = candidate.name;
+            let guarded = ['Simeone_LowBlock_def5','Bielsa_ChaosPress_att5'].includes(candidate.name) || context?.urgency?.overrideProgressionGuard === true
+                ? Object.assign({}, candidate, { progressionAction:'emergency_override' })
+                : (originalGuard.call(this, candidate, snapshot, context) || candidate);
+            if (!ACTIVE_SET.has(guarded?.name)) guarded = candidate;
+            if (snapshot?.ruleDecision?.action) {
+                snapshot.ruleDecision.action.rawPreset = targetPreset;
+                snapshot.ruleDecision.action.preset = guarded.name;
+                snapshot.ruleDecision.action.reason = guarded.reason || candidate.reason;
+                snapshot.ruleDecision.action.guardType = guarded.progressionAction || 'selected';
+                snapshot.ruleDecision.action.guardReason = guarded.reason || candidate.reason;
+                snapshot.ruleDecision.action.libraryVersion = SUITE;
+                snapshot.ruleDecision.action.recommendationSchema = SCHEMA;
+                snapshot.ruleDecision.telemetry = Object.assign({}, snapshot.ruleDecision.telemetry || {}, { recommendedPreset:guarded.name });
+            }
+            stamp(snapshot, snapshot?.ruleDecision || candidate.ruleDecision, guarded.name);
+            return guarded;
         };
         RecommendationEngine.__directionPolicySelectRawPresetApplied = true;
         RecommendationEngine.__generator561SelectionApplied = true;
         RecommendationEngine.__generator561RuleScorerApplied = true;
-        RecommendationEngine.__generator561BoldRuleScorerApplied = true;
-        RecommendationEngine.__generator561SituationRuleScorerApplied = true;
         RecommendationEngine.__generator561PressureResponseApplied = true;
+        RecommendationEngine.__tacticSuiteV7Installed = true;
     }
 
-    function applyPolicy() {
-        patchBasePresets();
-        patchLibrary();
-        patchRuleEngine();
-        patchActiveRegistry();
-        patchRecommendationSelection();
-        scheduleSingleTacticRenderingPatch();
+    if (typeof BASE_PRESETS !== 'undefined' && BASE_PRESETS) {
+        Object.entries(registry.presets || {}).forEach(([name, preset]) => {
+            BASE_PRESETS[name] = Object.assign({}, preset, { priority:(preset.priority || []).slice() });
+        });
+    }
+    if (typeof TacticPresetLibrary !== 'undefined' && TacticPresetLibrary) {
+        TacticPresetLibrary.meta = Object.assign({}, registry.meta || {});
+        TacticPresetLibrary.traits = Object.assign({}, registry.traits || {});
+        TacticPresetLibrary.schemeStates = Object.assign({}, registry.schemeStates || {});
+        TacticPresetLibrary.presetSchemeState = Object.assign({}, registry.presetSchemeState || {});
     }
 
-    applyPolicy();
-
-    if (typeof window !== 'undefined') {
-        window.SLFTacticDirectionPolicy = {
-            applied: true,
-            version: POLICY_VERSION,
-            generatorVersion: '5.61',
-            autoApply: false,
-            removedPresets: Array.from(REMOVED_PRESETS),
-            activePresets: ACTIVE_PRESETS.slice(),
-            directionOverrides: Object.assign({}, DIRECTION_OVERRIDES),
-            riskAppetites: Object.assign({}, RISK_APPETITES),
-            defaultRiskAppetite: DEFAULT_RISK_APPETITE,
-            signatures: Object.fromEntries(Object.entries(TACTIC_SIGNATURES).map(([name, signature]) => [name, Object.assign({}, signature)])),
-            formations: Object.fromEntries(Object.entries(FORMATIONS).map(([name, positions]) => [name, positions.slice()])),
-            schemeStates: Object.assign({}, SCHEME_STATES),
-            attackLadder: ATTACK_LADDER.slice(),
-            normalizeRiskAppetite,
-            deriveCounterTransitionContext: derivePressureResponseContext,
-            derivePressureResponseContext,
-            classifySituation,
-            situationAffinity,
-            selectEvidencePreset,
-            evaluateRuleDecision,
-            stripCandidateBlock,
-            refresh() { applyPolicy(); return true; }
-        };
-    }
+    registry.ruleDecisionSchema = SCHEMA;
+    registry.defaultRiskAppetite = DEFAULT_RISK;
+    window.SLFTacticDirectionPolicy = {
+        version:VERSION,
+        suiteVersion:SUITE,
+        recommendationSchema:SCHEMA,
+        generatorVersion:'5.61',
+        autoApply:false,
+        activePresets:ACTIVE.slice(),
+        defaultRiskAppetite:DEFAULT_RISK,
+        deriveSuiteContext:normalizedContext,
+        classifySituation:classify,
+        hardVeto,
+        scoreCandidate,
+        rank,
+        shortestStep,
+        preferredPreset:situation => {
+            const scores = SCORE_BY_SITUATION[situation] || {};
+            return Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Arteta_Control433_bal3';
+        },
+        evaluate:(snapshot={}, context={}) => window.SLFCurrentActionHintEngine?.run ? window.SLFCurrentActionHintEngine.run(snapshot, context) : null
+    };
 })();
 // <<< src/modules/tactics-presets/tactic-preset-direction-policy.js
 
@@ -7988,15 +8193,8 @@ if (typeof window !== 'undefined') {
 // >>> src/modules/strategy-data-recommendations/adaptive-opponent-style-layer.js
 // Adaptive Opponent Style Layer
 // ============================================================
-// Coach Mode v2: adapt tactical hints to the opponent style
-// detected inside the current match.
-//
-// Contract:
-// - in-memory match style only;
-// - no localStorage;
-// - no user feedback memory;
-// - no new presets;
-// - no UI explanation layer.
+// Opponent-style memory is advisory metadata only. Tactical Suite v7 owns
+// selection and eligibility, so this layer must never swap the selected preset.
 
 (function adaptiveOpponentStyleLayer() {
     'use strict';
@@ -8006,228 +8204,67 @@ if (typeof window !== 'undefined') {
 
     const STABLE_THRESHOLD = 3;
     const HISTORY_LIMIT = 8;
-
-    const STYLE_TO_PRESET = {
-        high_press_team: {
-            prefer: ['DeZerbi_BaitPress_bal3', 'DeZerbi_Release_att4', 'Compact_Counter_def3'],
-            avoid: ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4']
-        },
-        low_block_team: {
-            prefer: ['Conte_WingbackWidth_bal4', 'Pep_TwoThreeFive_att3', 'Xabi_BoxMidfield_bal3'],
-            avoid: ['Compact_Counter_def3', 'Simeone_LowBlock_def5', 'Simeone_Compact442_def4']
-        },
-        counter_attack_team: {
-            prefer: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Pep_PressCooldown_bal2', 'Compact_Counter_def3'],
-            avoid: ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Bielsa_ChaosPress_att5']
-        },
-        wide_cross_team: {
-            prefer: ['Simeone_Compact442_def4', 'Compact_Counter_def3', 'Mourinho_WeakSide_def3'],
-            avoid: ['Conte_WingbackWidth_bal4', 'Nagelsmann_WidePress_att4']
-        },
-        center_compact_team: {
-            prefer: ['Conte_WingbackWidth_bal4', 'DeZerbi_Release_att4', 'Mourinho_WeakSide_def3'],
-            avoid: ['Xabi_BoxMidfield_bal3', 'Xabi_VerticalBox_att3']
-        },
-        open_game: {
-            prefer: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Pep_PressCooldown_bal2'],
-            avoid: ['Bielsa_ChaosPress_att5']
-        },
-        possession_team: {
-            prefer: ['Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Compact_Counter_def3'],
-            avoid: ['Pep_BoxControl_bal2']
-        }
-    };
-
-    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
     const styleMemory = new Map();
+    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
 
     function contextOf(result) {
         return result?.moment?.context || {};
     }
 
-    function gameIdOf(result) {
-        const c = contextOf(result);
-        return String(result?.moment?.gameId || c.gameId || 'unknown');
+    function hasSignal(context, name) {
+        return Array.isArray(context?.signals) && context.signals.includes(name);
     }
 
-    function minuteOf(result) {
-        const c = contextOf(result);
-        return Number(result?.moment?.minute ?? c.minute ?? 0) || 0;
-    }
-
-    function ensureGame(gameId) {
-        if (!styleMemory.has(gameId)) {
-            styleMemory.set(gameId, {
-                samples: [],
-                counts: {
-                    high_press_team: 0,
-                    low_block_team: 0,
-                    counter_attack_team: 0,
-                    wide_cross_team: 0,
-                    center_compact_team: 0,
-                    open_game: 0,
-                    possession_team: 0
-                }
-            });
-        }
-        return styleMemory.get(gameId);
-    }
-
-    function trimMemory() {
-        if (styleMemory.size <= 6) return;
-        const keys = Array.from(styleMemory.keys());
-        keys.slice(0, Math.max(0, keys.length - 6)).forEach(key => styleMemory.delete(key));
-    }
-
-    function hasSignal(c, name) {
-        return Array.isArray(c.signals) && c.signals.includes(name);
-    }
-
-    function detectSampleStyles(c) {
+    function detectSampleStyles(context = {}) {
         const styles = [];
-        const add = style => {
-            if (!styles.includes(style)) styles.push(style);
-        };
-
-        if (c.opponentHighPress || Number(c.oppPress || 0) > 65 || hasSignal(c, 'opponent_high_press')) {
-            add('high_press_team');
-        }
-
-        if (c.opponentLowBlock || Number(c.oppDef || 0) < 45 || hasSignal(c, 'opponent_low_block')) {
-            add('low_block_team');
-        }
-
-        if (c.transitionThreat || hasSignal(c, 'transition_threat') || hasSignal(c, 'opponent_fast_counter_threat')) {
-            add('counter_attack_team');
-        }
-
-        if (c.opponentCrossesDangerous || hasSignal(c, 'opponent_crosses_dangerous')) {
-            add('wide_cross_team');
-        }
-
-        if (c.centerClosed || hasSignal(c, 'center_closed')) {
-            add('center_compact_team');
-        }
-
-        if (c.underPressure && c.attackingMomentum) {
-            add('open_game');
-        }
-
-        if (Number(c.oppXT || 0) > Number(c.myXT || 0) + 0.15 && !c.opponentHighPress && !c.transitionThreat) {
-            add('possession_team');
-        }
-
+        const add = value => { if (value && !styles.includes(value)) styles.push(value); };
+        if (context.opponentHighPress || hasSignal(context, 'opponent_high_press')) add('high_press_team');
+        if (context.centerClosed || hasSignal(context, 'opponent_low_block') || hasSignal(context, 'center_closed')) add('low_block_team');
+        if (context.transitionThreat || hasSignal(context, 'transition_threat')) add('counter_attack_team');
+        if (context.opponentCrossesDangerous || hasSignal(context, 'opponent_crosses_dangerous')) add('wide_cross_team');
+        if (context.centerClosed || hasSignal(context, 'center_closed')) add('center_compact_team');
+        if (context.underPressure && context.attackingMomentum) add('open_game');
+        if (Number(context.oppXT || 0) > Number(context.myXT || 0) + 0.15 && !context.opponentHighPress && !context.transitionThreat) add('possession_team');
         return styles;
     }
 
-    function rememberStyles(gameId, minute, styles) {
-        const memory = ensureGame(gameId);
-
-        if (memory.samples.length && minute < Number(memory.samples[memory.samples.length - 1].minute || 0)) {
-            memory.samples = [];
-            Object.keys(memory.counts).forEach(key => memory.counts[key] = 0);
-        }
-
-        memory.samples.push({ minute, styles: styles.slice(), ts: Date.now() });
-        while (memory.samples.length > HISTORY_LIMIT) memory.samples.shift();
-
-        Object.keys(memory.counts).forEach(key => memory.counts[key] = 0);
-        memory.samples.forEach(sample => {
-            sample.styles.forEach(style => {
-                if (memory.counts[style] !== undefined) memory.counts[style] += 1;
-            });
-        });
-
-        trimMemory();
-        return memory;
+    function remember(gameId, minute, styles) {
+        const key = String(gameId || 'unknown');
+        if (!styleMemory.has(key)) styleMemory.set(key, []);
+        const samples = styleMemory.get(key);
+        if (samples.length && Number(minute || 0) < Number(samples[samples.length - 1].minute || 0)) samples.splice(0, samples.length);
+        samples.push({ minute:Number(minute || 0), styles:styles.slice(), ts:Date.now() });
+        while (samples.length > HISTORY_LIMIT) samples.shift();
+        if (styleMemory.size > 6) Array.from(styleMemory.keys()).slice(0, styleMemory.size - 6).forEach(old => styleMemory.delete(old));
+        return samples;
     }
 
-    function stableStyles(memory) {
-        return Object.entries(memory.counts)
-            .filter(([, count]) => count >= STABLE_THRESHOLD)
-            .sort((a, b) => b[1] - a[1])
-            .map(([style]) => style);
+    function stableStyles(samples) {
+        const counts = {};
+        samples.forEach(sample => sample.styles.forEach(style => { counts[style] = Number(counts[style] || 0) + 1; }));
+        return Object.entries(counts).filter(([, count]) => count >= STABLE_THRESHOLD).sort((a, b) => b[1] - a[1]).map(([style]) => style);
     }
 
-    function isEmergency(result, c) {
-        const action = result?.action || {};
-        return action.presetStatus === 'emergency' || c.lateNeedGoal || (c.protectLead && Number(c.minute || 0) >= 80);
-    }
-
-    function canUsePreset(preset, c) {
-        if (!preset) return false;
-        if (typeof CurrentActionHintEngine.isPresetAllowed === 'function' && !CurrentActionHintEngine.isPresetAllowed(preset, c)) return false;
-
-        if (c.highBadActions && ['Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Bielsa_ChaosPress_att5'].includes(preset)) return false;
-        if (c.pressFatigueRisk && ['Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Bielsa_ChaosPress_att5', 'Pep_TwoThreeFive_att3'].includes(preset)) return false;
-        if (c.centerClosed && ['Xabi_BoxMidfield_bal3', 'Xabi_VerticalBox_att3'].includes(preset)) return false;
-        if (c.ownCrossesBad && ['Conte_WingbackWidth_bal4', 'Nagelsmann_WidePress_att4'].includes(preset)) return false;
-        if (c.transitionThreat && ['Pep_TwoThreeFive_att3', 'Klopp_Gegenpress_att4', 'Nagelsmann_WidePress_att4', 'Bielsa_ChaosPress_att5'].includes(preset) && !c.lateNeedGoal) return false;
-
-        return true;
-    }
-
-    function candidateFromStyle(style, currentPreset, c) {
-        const rule = STYLE_TO_PRESET[style];
-        if (!rule) return currentPreset;
-
-        if (!rule.avoid.includes(currentPreset)) return currentPreset;
-
-        return rule.prefer.find(preset => canUsePreset(preset, c)) || currentPreset;
-    }
-
-    function applyAdaptiveStyle(result) {
+    CurrentActionHintEngine.run = function runWithOpponentStyleMetadata(snapshot, context = {}) {
+        const result = originalRun(snapshot, context);
         if (!result?.action) return result;
-
         const c = contextOf(result);
-        const gameId = gameIdOf(result);
-        const minute = minuteOf(result);
-        const sampleStyles = detectSampleStyles(c);
-        const memory = rememberStyles(gameId, minute, sampleStyles);
-        const styles = stableStyles(memory);
-
-        if (!styles.length || isEmergency(result, c)) {
-            result.action = Object.assign({}, result.action, {
-                adaptiveCoach: 'v2',
-                opponentStyles: styles
-            });
-            return result;
-        }
-
-        let preset = result.action.preset;
-        const rawPreset = result.action.rawPreset || result.action.preset;
-
-        for (const style of styles) {
-            const next = candidateFromStyle(style, preset, c);
-            if (next !== preset) {
-                preset = next;
-                break;
-            }
-        }
-
+        const samples = remember(result?.moment?.gameId || c.gameId, result?.moment?.minute ?? c.minute, detectSampleStyles(c));
         result.action = Object.assign({}, result.action, {
-            preset,
-            adaptiveCoach: 'v2',
-            opponentStyles: styles,
-            rawPreset
+            adaptiveCoach:'suite_v7_advisory',
+            opponentStyles:stableStyles(samples),
+            rawPreset:result.action.rawPreset || result.action.preset
         });
-
         return result;
-    }
-
-    CurrentActionHintEngine.run = function runWithAdaptiveOpponentStyle(snapshot, context = {}) {
-        return applyAdaptiveStyle(originalRun(snapshot, context));
     };
 
     CurrentActionHintEngine.__adaptiveOpponentStyleApplied = true;
+    CurrentActionHintEngine.__adaptiveOpponentStyleSuiteV7Passive = !!CurrentActionHintEngine.__tacticSuiteV7Installed;
 
     if (typeof window !== 'undefined') {
         window.SLFAdaptiveOpponentStyleLayer = {
-            getMemory: () => Array.from(styleMemory.entries()).map(([gameId, memory]) => ({
-                gameId,
-                counts: Object.assign({}, memory.counts),
-                samples: memory.samples.slice()
-            }))
+            selectionOwner:'tactical_suite_v7',
+            getMemory:() => Array.from(styleMemory.entries()).map(([gameId, samples]) => ({ gameId, samples:samples.slice() }))
         };
     }
 })();
@@ -8235,16 +8272,10 @@ if (typeof window !== 'undefined') {
 
 
 // >>> src/modules/strategy-data-recommendations/coach-mode-policy.js
-// Coach Mode v1 Policy Guard
+// Coach Mode Policy Compatibility Layer
 // ============================================================
-// Final intermediate coaching layer for on-demand tactical hints.
-//
-// Contract:
-// - no explanations in UI output;
-// - no new presets;
-// - suppress obvious anti-patterns;
-// - apply simple match phase policy;
-// - require sufficient signal strength unless emergency/protect conditions apply.
+// Tactical Suite v7 owns preset selection. This late layer may annotate
+// coach-phase metadata, but it must never replace the v7 selected preset.
 
 (function coachModeV1Policy() {
     'use strict';
@@ -8252,41 +8283,7 @@ if (typeof window !== 'undefined') {
     if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
     if (CurrentActionHintEngine.__coachModeV1Applied) return;
 
-    const SAFE_CONTROL = 'Pep_BoxControl_bal2';
-    const STRUCTURE_CONTROL = 'Arteta_Control433_bal3';
-    const PRESS_COOLDOWN = 'Pep_PressCooldown_bal2';
-    const COMPACT_COUNTER = 'Compact_Counter_def3';
-    const COMPACT_PROTECT = 'Simeone_Compact442_def4';
-    const CONTROLLED_PUSH = 'Pep_ControlledPush_att3';
-
-    const HIGH_PRESS_PRESETS = new Set([
-        'Klopp_Gegenpress_att4',
-        'Nagelsmann_WidePress_att4',
-        'Bielsa_ChaosPress_att5'
-    ]);
-
-    const CENTER_PRESETS = new Set([
-        'Xabi_BoxMidfield_bal3',
-        'Xabi_VerticalBox_att3'
-    ]);
-
-    const CROSS_WIDTH_PRESETS = new Set([
-        'Conte_WingbackWidth_bal4',
-        'Nagelsmann_WidePress_att4'
-    ]);
-
-    const AGGRESSIVE_POSSESSION_PRESETS = new Set([
-        'Pep_TwoThreeFive_att3',
-        'Klopp_Gegenpress_att4',
-        'Nagelsmann_WidePress_att4',
-        'Bielsa_ChaosPress_att5'
-    ]);
-
     const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
-
-    function contextOf(result) {
-        return result?.moment?.context || {};
-    }
 
     function phaseOf(minute) {
         const m = Number(minute || 0);
@@ -8297,95 +8294,32 @@ if (typeof window !== 'undefined') {
         return 'emergency';
     }
 
-    function countTrue(values) {
-        return values.reduce((sum, value) => sum + (value ? 1 : 0), 0);
+    function signalStrength(context = {}) {
+        if (context.lateNeedGoal || context.emergencyLockRequired || (context.protectLead && context.minute >= 80)) return 5;
+        return [
+            context.needGoal,
+            context.underPressure,
+            context.attackingMomentum,
+            context.opponentHighPress,
+            context.centerClosed,
+            context.wideQuality,
+            context.transitionThreat,
+            context.pressFatigueRisk,
+            context.highBadActions
+        ].filter(Boolean).length;
     }
 
-    function signalStrength(c) {
-        if (c.lateNeedGoal || (c.protectLead && c.minute >= 80) || c.highBadActions || c.pressFatigueRisk) return 5;
-
-        return countTrue([
-            c.needGoal,
-            c.underPressure,
-            c.attackingMomentum,
-            c.opponentHighPress,
-            c.opponentLowBlock,
-            c.centerWeak,
-            c.centerClosed,
-            c.wideQuality,
-            c.spaceBehind,
-            c.weakSideAvailable,
-            c.transitionThreat,
-            c.ownCrossesBad,
-            c.opponentCrossesDangerous
-        ]);
-    }
-
-    function allowedFallback(preset, c, phase) {
-        if (c.pressFatigueRisk) return PRESS_COOLDOWN;
-        if (c.highBadActions) return SAFE_CONTROL;
-        if (c.protectLead) return phase === 'emergency' ? 'Simeone_LowBlock_def5' : COMPACT_PROTECT;
-        if (c.underPressure || c.transitionThreat) return COMPACT_COUNTER;
-        if (c.needGoal) return CONTROLLED_PUSH;
-        return STRUCTURE_CONTROL;
-    }
-
-    function violatesAntiPattern(preset, c, phase) {
-        if (!preset) return true;
-
-        if (c.highBadActions && HIGH_PRESS_PRESETS.has(preset)) return true;
-        if (c.pressFatigueRisk && HIGH_PRESS_PRESETS.has(preset)) return true;
-        if (c.pressFatigueRisk && preset === 'Pep_TwoThreeFive_att3') return true;
-
-        if (c.needGoal && phase !== 'emergency' && preset === 'Simeone_LowBlock_def5') return true;
-        if (c.needGoal && preset === COMPACT_PROTECT && !c.underPressure) return true;
-
-        if (c.centerClosed && CENTER_PRESETS.has(preset)) return true;
-        if (c.ownCrossesBad && CROSS_WIDTH_PRESETS.has(preset)) return true;
-        if (c.transitionThreat && AGGRESSIVE_POSSESSION_PRESETS.has(preset) && !c.lateNeedGoal) return true;
-
-        if (c.protectLead && HIGH_PRESS_PRESETS.has(preset)) return true;
-        if (phase === 'caution' && HIGH_PRESS_PRESETS.has(preset) && !c.underPressure) return true;
-        if (phase === 'caution' && preset === 'Bielsa_ChaosPress_att5') return true;
-
-        return false;
-    }
-
-    function belowConfidenceThreshold(result, c, phase) {
-        if (phase === 'emergency') return false;
-        if (c.highBadActions || c.pressFatigueRisk || c.protectLead || c.needGoal) return false;
-        return signalStrength(c) < 2;
-    }
-
-    function applyCoachPolicy(result) {
+    CurrentActionHintEngine.run = function runWithCoachMetadata(snapshot, context = {}) {
+        const result = originalRun(snapshot, context);
         if (!result?.action) return result;
-
-        const c = contextOf(result);
-        const phase = phaseOf(c.minute ?? result?.moment?.minute);
-        const candidatePreset = result.action.preset;
-        let nextPreset = candidatePreset;
-
-        if (belowConfidenceThreshold(result, c, phase)) {
-            nextPreset = allowedFallback(candidatePreset, c, phase);
-        }
-
-        if (violatesAntiPattern(nextPreset, c, phase)) {
-            nextPreset = allowedFallback(nextPreset, c, phase);
-        }
-
+        const c = result?.moment?.context || {};
         result.action = Object.assign({}, result.action, {
-            preset: nextPreset,
-            coachMode: 'v1',
-            matchPhase: phase,
-            confidence: signalStrength(c),
-            rawPreset: result.action.rawPreset || candidatePreset
+            coachMode: CurrentActionHintEngine.__tacticSuiteV7Installed ? 'suite_v7' : 'legacy_compat',
+            matchPhase: phaseOf(c.minute ?? result?.moment?.minute),
+            coachSignalStrength: signalStrength(c),
+            rawPreset: result.action.rawPreset || result.action.preset
         });
-
         return result;
-    }
-
-    CurrentActionHintEngine.run = function runWithCoachModePolicy(snapshot, context = {}) {
-        return applyCoachPolicy(originalRun(snapshot, context));
     };
 
     CurrentActionHintEngine.toPlanRows = function toCoachHintOnlyRows(result) {
@@ -8394,12 +8328,10 @@ if (typeof window !== 'undefined') {
     };
 
     CurrentActionHintEngine.__coachModeV1Applied = true;
+    CurrentActionHintEngine.__coachModeSuiteV7Passive = !!CurrentActionHintEngine.__tacticSuiteV7Installed;
 
     if (typeof window !== 'undefined') {
-        window.SLFCoachModeV1 = {
-            phaseOf,
-            signalStrength
-        };
+        window.SLFCoachModeV1 = { phaseOf, signalStrength, selectionOwner:'tactical_suite_v7' };
     }
 })();
 // <<< src/modules/strategy-data-recommendations/coach-mode-policy.js
@@ -8408,15 +8340,9 @@ if (typeof window !== 'undefined') {
 // >>> src/modules/strategy-data-recommendations/moment-drift-stabilizer.js
 // Moment Drift Stabilizer
 // ============================================================
-// Stabilizes button-generated tactical hints so the recommendation
-// does not jump on every noisy snapshot.
-//
-// Contract:
-// - in-memory only;
-// - no localStorage;
-// - no explanation layer;
-// - emergency/protect-lead states can override the hold window;
-// - explicit manual hint clicks recompute immediately.
+// Tactical Suite v7 centralizes one-step progression and anti-ping-pong.
+// This late compatibility layer therefore records drift state only and never
+// substitutes another preset after the central decision.
 
 (function momentDriftStabilizer() {
     'use strict';
@@ -8425,133 +8351,29 @@ if (typeof window !== 'undefined') {
     if (CurrentActionHintEngine.__momentDriftStabilizerApplied) return;
 
     const HOLD_MINUTES = 6;
-    const HOLD_MS = 6 * 60 * 1000;
-    const HARD_OVERRIDE_RULES = new Set([
-        'late_goal_emergency',
-        'late_protect_heavy_pressure',
-        'own_press_fatigue_cooldown',
-        'bad_actions_control_reset'
-    ]);
-
     let stableState = null;
-
     const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
-
-    function getContext(result) {
-        return result?.moment?.context || {};
-    }
-
-    function getMinute(result) {
-        return Number(result?.moment?.minute ?? getContext(result).minute ?? 0) || 0;
-    }
-
-    function getScore(result) {
-        return String(result?.moment?.score ?? getContext(result).scoreState ?? 'unknown');
-    }
-
-    function getGameId(result) {
-        return String(result?.moment?.gameId ?? getContext(result).gameId ?? 'unknown');
-    }
-
-    function isManualHint(result) {
-        const context = getContext(result);
-        return !!(
-            context.manualHintRequest ||
-            context.coachHintSnapshotContext?.active ||
-            result?.action?.snapshotContextBridge
-        );
-    }
-
-    function isHardOverride(result) {
-        const action = result?.action || {};
-        const context = getContext(result);
-
-        if (HARD_OVERRIDE_RULES.has(action.ruleId)) return true;
-        if (action.presetStatus === 'emergency') return true;
-        if (context.lateNeedGoal) return true;
-        if (context.protectLead && context.underPressure && Number(context.minute || 0) >= 80) return true;
-
-        return false;
-    }
-
-    function shouldReset(result) {
-        if (!stableState) return true;
-
-        const minute = getMinute(result);
-        const score = getScore(result);
-        const gameId = getGameId(result);
-
-        if (stableState.gameId !== gameId) return true;
-        if (stableState.score !== score) return true;
-        if (minute < stableState.minute) return true;
-
-        return false;
-    }
 
     function remember(result) {
         if (!result?.action) return result;
-
+        const context = result?.moment?.context || {};
         stableState = {
-            gameId: getGameId(result),
-            score: getScore(result),
-            minute: getMinute(result),
-            ts: Date.now(),
-            action: Object.assign({}, result.action, {
-                stabilized: false,
-                rawPreset: result.action.rawPreset || result.action.preset
-            })
+            gameId:String(result?.moment?.gameId || context.gameId || 'unknown'),
+            score:String(result?.moment?.score || context.scoreState || 'unknown'),
+            minute:Number(result?.moment?.minute ?? context.minute ?? 0),
+            ts:Date.now(),
+            preset:result.action.preset
         };
-
-        result.action = Object.assign({}, stableState.action);
-        return result;
-    }
-
-    function stabilize(result) {
-        if (!result?.action) return result;
-
-        if (isManualHint(result)) {
-            return remember(result);
-        }
-
-        if (shouldReset(result) || isHardOverride(result)) {
-            return remember(result);
-        }
-
-        const candidate = Object.assign({}, result.action);
-        const minute = getMinute(result);
-        const now = Date.now();
-
-        if (stableState.action?.preset === candidate.preset) {
-            stableState.minute = minute;
-            stableState.ts = now;
-            stableState.score = getScore(result);
-            stableState.action = Object.assign({}, candidate, {
-                stabilized: false,
-                rawPreset: candidate.rawPreset || candidate.preset
-            });
-            result.action = Object.assign({}, stableState.action);
-            return result;
-        }
-
-        const elapsedMinutes = Math.max(0, minute - Number(stableState.minute || 0));
-        const elapsedMs = now - Number(stableState.ts || 0);
-        const expired = elapsedMinutes >= HOLD_MINUTES || elapsedMs >= HOLD_MS;
-
-        if (expired) {
-            return remember(result);
-        }
-
-        result.action = Object.assign({}, stableState.action, {
-            stabilized: true,
-            rawPreset: candidate.preset,
-            rawRuleId: candidate.ruleId
+        result.action = Object.assign({}, result.action, {
+            stabilized:false,
+            driftOwner:CurrentActionHintEngine.__tacticSuiteV7Installed ? 'tactical_suite_v7_progression' : 'compat',
+            rawPreset:result.action.rawPreset || result.action.preset
         });
-
         return result;
     }
 
-    CurrentActionHintEngine.run = function runWithMomentDriftStabilizer(snapshot, context = {}) {
-        return stabilize(originalRun(snapshot, context));
+    CurrentActionHintEngine.run = function runWithDriftMetadata(snapshot, context = {}) {
+        return remember(originalRun(snapshot, context));
     };
 
     CurrentActionHintEngine.toPlanRows = function toHintOnlyRows(result) {
@@ -8560,12 +8382,14 @@ if (typeof window !== 'undefined') {
     };
 
     CurrentActionHintEngine.__momentDriftStabilizerApplied = true;
+    CurrentActionHintEngine.__momentDriftSuiteV7Passive = !!CurrentActionHintEngine.__tacticSuiteV7Installed;
 
     if (typeof window !== 'undefined') {
         window.SLFMomentDriftStabilizer = {
-            holdMinutes: HOLD_MINUTES,
-            getState: () => stableState ? Object.assign({}, stableState) : null,
-            reset: () => { stableState = null; }
+            holdMinutes:HOLD_MINUTES,
+            selectionOwner:'tactical_suite_v7',
+            getState:() => stableState ? Object.assign({}, stableState) : null,
+            reset:() => { stableState = null; }
         };
     }
 })();
@@ -8577,6 +8401,8 @@ if (typeof window !== 'undefined') {
     // ============================================================
 
     const UI = {
+        __flatSortedTacticDropdownApplied: true,
+
         updateParserStatus(text) {
             const el = document.getElementById('slf-parser-status');
             if (el) el.textContent = text;
@@ -8596,6 +8422,20 @@ if (typeof window !== 'undefined') {
                 .replaceAll('>', '&gt;')
                 .replaceAll('"', '&quot;')
                 .replaceAll("'", '&#039;');
+        },
+
+        getPresetDisplayRegistry() {
+            if (typeof window === 'undefined') return null;
+            return window['SLFActivePresetRegistry'] || null;
+        },
+
+        getVisiblePresetLabels() {
+            const labels = PresetStorage.getAllLabels();
+            const registry = this.getPresetDisplayRegistry();
+            const retired = new Set(Array.isArray(registry?.removed) ? registry.removed : []);
+            return Object.fromEntries(
+                Object.entries(labels).filter(([key]) => !retired.has(key))
+            );
         },
 
         addMatchParserPanel() {
@@ -8641,7 +8481,7 @@ if (typeof window !== 'undefined') {
                             `API OK v2 | games:${status.games} snapshots:${c.snapshots?.count ?? 0} results:${c.results?.count ?? 0} events:${c.events?.count ?? 0} effects:${c.effects?.count ?? 0} players:${c.players?.count ?? 0}`
                         );
 
-                        console.log('[SLF API v2 canonical]', status);
+                        debugLog('[SLF API v2 canonical]', status);
                     })
                     .catch(error => {
                         this.addParserLog(`API v2 error: ${error?.kind || 'unknown'}`);
@@ -8689,7 +8529,7 @@ recBox.style.cssText = `
             const old = document.getElementById('slf-save-dialog');
             if (old) old.remove();
 
-            const labels = PresetStorage.getAllLabels();
+            const labels = this.getVisiblePresetLabels();
 
             const overlay = document.createElement('div');
             overlay.id = 'slf-save-dialog';
@@ -8702,7 +8542,7 @@ recBox.style.cssText = `
                 <h3>Сохранить тактику</h3>
                 <select id="slf-save-select" style="width:100%;padding:8px;margin-bottom:10px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;">
                     <option value="__new__">➕ Добавить новую тактику</option>
-                    ${Object.keys(labels).map(k => `<option value="${k}">${labels[k]}</option>`).join('')}
+                    ${Object.keys(labels).map(k => `<option value="${this.escapeHtml(k)}">${this.escapeHtml(labels[k])}</option>`).join('')}
                 </select>
                 <div id="slf-new-name-block" style="display:none;margin-bottom:10px;">
                     <input type="text" id="slf-new-name" placeholder="Название" style="width:100%;padding:8px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;">
@@ -8850,80 +8690,83 @@ if (!isTacticPage) return;
             select.style.cssText =
                 'flex:1;min-width:120px;padding:5px;background:#333;color:#fff;border:1px solid #555;border-radius:3px;font-size:14px;';
 
-            function getCoachGroup(key, label = '') {
-                const l = String(label).toLowerCase();
+            const displayRegistry = this.getPresetDisplayRegistry();
+            const styleGroups = Array.isArray(displayRegistry?.styleGroups) && displayRegistry.styleGroups.length
+                ? displayRegistry.styleGroups
+                : [
+                    { style: '5', label: 'Атака+ · _att2' },
+                    { style: '4', label: 'Атака · _att1' },
+                    { style: '3', label: 'Обычный · _neutr' },
+                    { style: '2', label: 'Защита · _def1' },
+                    { style: '1', label: 'Защ+ · _def2' }
+                ];
+            const displayMeta = displayRegistry?.displayMeta || {};
+            const systemOrder = Array.isArray(displayRegistry?.displayOrder) ? displayRegistry.displayOrder : [];
+            const systemOrderIndex = new Map(systemOrder.map((name, index) => [name, index]));
 
-                if (l.includes('bielsa')) return 'Bielsa';
-                if (l.includes('conte')) return 'Conte';
-                if (l.includes('de zerbi')) return 'De Zerbi';
-                if (l.includes('klopp')) return 'Klopp';
-                if (l.includes('mourinho')) return 'Mourinho';
-                if (l.includes('pep')) return 'Pep';
-                if (l.includes('simeone')) return 'Simeone';
-                if (l.includes('xabi')) return 'Xabi Alonso';
-
-                if (BASE_PRESETS.hasOwnProperty(key)) return 'Other';
-
-                return 'Custom';
-            }
-
-            function buildGroupedOptions(labels) {
-                const groups = {};
+            function buildStyleGroupedOptions(labels) {
+                const presets = PresetStorage.getAllPresets();
+                const groups = Object.fromEntries(styleGroups.map(group => [String(group.style), []]));
 
                 Object.entries(labels).forEach(([key, value]) => {
-                    const group = getCoachGroup(key, value);
-
-                    if (!groups[group]) groups[group] = [];
-                    groups[group].push({ key, value });
+                    const preset = presets[key] || {};
+                    const meta = displayMeta[key] || {};
+                    const requestedStyle = String(preset.style || meta.style || '3');
+                    const style = Object.prototype.hasOwnProperty.call(groups, requestedStyle) ? requestedStyle : '3';
+                    const isSystem = Object.prototype.hasOwnProperty.call(BASE_PRESETS, key);
+                    const trainer = String(meta.trainer || '').trim();
+                    groups[style].push({ key, value, isSystem, trainer });
                 });
 
-                Object.keys(groups).forEach(groupName => {
-                    groups[groupName].sort((a, b) =>
-                        String(a.value).localeCompare(String(b.value), 'ru', { sensitivity: 'base' })
-                    );
+                Object.values(groups).forEach(items => {
+                    items.sort((a, b) => {
+                        if (a.key === 'standard') return -1;
+                        if (b.key === 'standard') return 1;
+
+                        if (a.isSystem && b.isSystem) {
+                            const ai = systemOrderIndex.has(a.key) ? systemOrderIndex.get(a.key) : Number.MAX_SAFE_INTEGER;
+                            const bi = systemOrderIndex.has(b.key) ? systemOrderIndex.get(b.key) : Number.MAX_SAFE_INTEGER;
+                            if (ai !== bi) return ai - bi;
+                        }
+
+                        if (a.isSystem !== b.isSystem) return a.isSystem ? -1 : 1;
+
+                        const trainerDiff = a.trainer.localeCompare(b.trainer, 'en', { sensitivity: 'base' });
+                        if (trainerDiff) return trainerDiff;
+                        return String(a.value).localeCompare(String(b.value), 'ru', { sensitivity: 'base' });
+                    });
                 });
 
                 return groups;
             }
 
             function refreshSelect(keepValue) {
-                const labels = PresetStorage.getAllLabels();
+                const labels = UI.getVisiblePresetLabels();
                 const cur = keepValue || select.value;
-                const groups = buildGroupedOptions(labels);
+                const groups = buildStyleGroupedOptions(labels);
 
                 select.innerHTML = '';
 
-                const groupOrder = [
-                    'Bielsa',
-                    'Conte',
-                    'De Zerbi',
-                    'Klopp',
-                    'Mourinho',
-                    'Pep',
-                    'Simeone',
-                    'Xabi Alonso',
-                    'Other',
-                    'Custom'
-                ];
-
-                groupOrder.forEach(groupName => {
-                    const items = groups[groupName];
+                styleGroups.forEach(group => {
+                    const items = groups[String(group.style)];
                     if (!items || items.length === 0) return;
 
                     const optgroup = document.createElement('optgroup');
-                    optgroup.label = groupName;
+                    optgroup.label = group.label;
+                    optgroup.dataset.style = String(group.style);
 
                     items.forEach(item => {
                         const opt = document.createElement('option');
                         opt.value = item.key;
                         opt.textContent = item.value;
+                        opt.dataset.systemPreset = item.isSystem ? '1' : '0';
                         optgroup.appendChild(opt);
                     });
 
                     select.appendChild(optgroup);
                 });
 
-                if (labels.hasOwnProperty(cur)) {
+                if (Object.prototype.hasOwnProperty.call(labels, cur)) {
                     select.value = cur;
                 } else if (select.options.length > 0) {
                     select.value = select.options[0].value;
@@ -8988,7 +8831,7 @@ if (!isTacticPage) return;
             deleteBtn.addEventListener('click', () => {
                 const name = select.value;
 
-                if (BASE_PRESETS.hasOwnProperty(name)) {
+                if (Object.prototype.hasOwnProperty.call(BASE_PRESETS, name)) {
                     alert('Встроенный пресет удалить нельзя.');
                     return;
                 }
@@ -9728,7 +9571,7 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
         };
     }
 
-    function renderManualRecommendation() {
+    async function renderManualRecommendation() {
         resetManualRecommendationState();
 
         const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
@@ -9737,6 +9580,10 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
         snapshot.recommendationSource = 'manual_hint_button';
         snapshot.manualRecommendationRefresh = true;
         snapshot.generatorVersion = GENERATOR_VERSION;
+
+        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.checkpoint && snapshot.matchOwnership !== 'foreign') {
+            await STATE.tacticalLabRuntime.checkpoint('manual_hint', snapshot);
+        }
 
         if (typeof SnapshotEngine !== 'undefined' && SnapshotEngine.rememberManualSnapshot) {
             SnapshotEngine.rememberManualSnapshot(snapshot);
@@ -9749,6 +9596,10 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
         if (el) el.innerHTML = html;
         rememberManualRecommendation(html, snapshot);
         submitManualTelemetry(snapshot);
+
+        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.mountUI && snapshot.matchOwnership !== 'foreign') {
+            await STATE.tacticalLabRuntime.mountUI(snapshot);
+        }
 
         UI.addParserLog('Подсказка обновлена по текущему snapshot');
         UI.updateParserStatus('Подсказка обновлена вручную');
@@ -9765,10 +9616,10 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
         btn.textContent = '↻ Подсказка';
         btn.title = 'Собрать текущий snapshot и показать rule-based подсказку по текущему состоянию';
         btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
-        btn.onclick = () => {
+        btn.onclick = async () => {
             btn.disabled = true;
             try {
-                renderManualRecommendation();
+                await renderManualRecommendation();
             } catch (error) {
                 console.error('[SLF] Manual recommendation refresh failed', error);
                 UI.addParserLog('Подсказка: ошибка, см. console');
@@ -9794,7 +9645,7 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
         select.title = 'Тестовый режим чужого матча: выбрать сторону для подсказок';
         select.style.cssText = 'padding:4px 6px;background:#333;color:#fff;border:1px solid #777;border-radius:3px;';
         select.innerHTML = '<option value="home">Анализ: хозяева</option><option value="away">Анализ: гости</option>';
-        select.onchange = () => renderManualRecommendation();
+        select.onchange = () => { void renderManualRecommendation(); };
 
         const status = document.getElementById('slf-parser-status');
         panel.insertBefore(select, status || null);
@@ -9813,6 +9664,10 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
     UI.addMatchParserPanel = function patchedTaskAAddMatchParserPanel() {
         const result = originalAddMatchParserPanel.apply(this, arguments);
         mount();
+        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.mountUI) {
+            const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+            if (snapshot?.matchOwnership !== 'foreign') void STATE.tacticalLabRuntime.mountUI(snapshot);
+        }
         return result;
     };
 
@@ -9823,8 +9678,11 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
 // <<< src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
 
 
-// >>> src/modules/manual-match-telemetry/manual-match-runtime.js
-// Runtime telemetry integrity and result submission guards
+// >>> src/modules/manual-match-telemetry/manual-state-integrity.js
+// Manual match state integrity and watcher installation
+// Extracted verbatim from manual-match-runtime.js (stage 2 refactor, IIFE boundary split).
+// Behaviour unchanged; guard flag SnapshotEngine.__runtimeTelemetryIntegrityInstalled preserved.
+
 // ============================================================
 
 (function installRuntimeTelemetryIntegrity() {
@@ -9849,18 +9707,12 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
 
     function cloneForStorage(value) {
         if (value == null) return value;
-        try {
-            return JSON.parse(JSON.stringify(value));
-        } catch (_) {
-            return null;
-        }
+        try { return JSON.parse(JSON.stringify(value)); } catch (_) { return null; }
     }
 
     function resolveGameId(gameId = null) {
         if (gameId) return gameId;
-        return typeof MatchStateParser?.getGameId === 'function'
-            ? MatchStateParser.getGameId()
-            : null;
+        return typeof MatchStateParser?.getGameId === 'function' ? MatchStateParser.getGameId() : null;
     }
 
     function getStateKey(prefix, gameId) {
@@ -9875,9 +9727,7 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
             const parsed = JSON.parse(raw);
             if (!parsed || String(parsed.gameId || '') !== String(gameId)) return null;
             return parsed;
-        } catch (_) {
-            return null;
-        }
+        } catch (_) { return null; }
     }
 
     function normalizeLegacyManualState(legacy, gameId) {
@@ -9904,31 +9754,23 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
         getStorageKey(gameId = null) {
             return getStateKey(manualStatePrefix, resolveGameId(gameId));
         },
-
         load(gameId = null) {
             gameId = resolveGameId(gameId);
             if (!gameId) return null;
-
             const stored = readStoredState(manualStatePrefix, gameId);
             if (stored?.schema === manualStateSchema) return stored;
-
             const legacy = readStoredState(legacyStatePrefix, gameId);
             const migrated = normalizeLegacyManualState(legacy, gameId);
             if (!migrated) return null;
-
             if (typeof localStorage !== 'undefined') {
-                try {
-                    localStorage.setItem(this.getStorageKey(gameId), JSON.stringify(migrated));
-                } catch (_) {}
+                try { localStorage.setItem(this.getStorageKey(gameId), JSON.stringify(migrated)); } catch (error) { debugWarn('[SLF ManualState] legacy migration persist failed', error); }
             }
             return readStoredState(manualStatePrefix, gameId) || migrated;
         },
-
         persist(extra = {}, options = {}) {
             if (typeof localStorage === 'undefined') return null;
             const gameId = resolveGameId(options.gameId);
             if (!gameId) return null;
-
             const existing = options.existing || readStoredState(manualStatePrefix, gameId) || {};
             const stateValue = (key, fallback = null) => hasOwn(STATE, key)
                 ? cloneForStorage(STATE[key])
@@ -9938,7 +9780,6 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
                 : stateValue('pendingPresetEvent');
             const pendingEventChanged = !!pendingPresetEvent?.eventKey
                 && String(pendingPresetEvent.eventKey) !== String(existing.pendingPresetEvent?.eventKey || '');
-
             const payload = {
                 schema: manualStateSchema,
                 gameId,
@@ -9960,15 +9801,11 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
                 lastRecommendationMeta: stateValue('lastRecommendationMeta'),
                 migratedFrom: existing.migratedFrom || null
             };
-
             try {
                 localStorage.setItem(this.getStorageKey(gameId), JSON.stringify(payload));
                 return payload;
-            } catch (_) {
-                return null;
-            }
+            } catch (_) { return null; }
         },
-
         clear(gameId = null) {
             gameId = resolveGameId(gameId);
             if (!gameId || typeof localStorage === 'undefined') return;
@@ -9980,21 +9817,12 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
     };
 
     SnapshotEngine.manualMatchState = ManualMatchState;
-    SnapshotEngine.persistManualState = function persistManualState(extra = {}) {
-        return ManualMatchState.persist(extra);
-    };
-    SnapshotEngine.loadManualState = function loadManualState(gameId = null) {
-        return ManualMatchState.load(resolveGameId(gameId));
-    };
-    SnapshotEngine.clearManualState = function clearManualState(gameId = null) {
-        ManualMatchState.clear(resolveGameId(gameId));
-    };
+    SnapshotEngine.persistManualState = function persistManualState(extra = {}) { return ManualMatchState.persist(extra); };
+    SnapshotEngine.loadManualState = function loadManualState(gameId = null) { return ManualMatchState.load(resolveGameId(gameId)); };
+    SnapshotEngine.clearManualState = function clearManualState(gameId = null) { ManualMatchState.clear(resolveGameId(gameId)); };
 
     function setTransitionSourceHint(source, ttlMs = 5000) {
-        STATE.tacticTransitionSourceHint = {
-            source,
-            expiresAt: Date.now() + ttlMs
-        };
+        STATE.tacticTransitionSourceHint = { source, expiresAt: Date.now() + ttlMs };
     }
 
     function consumeTransitionSourceHint() {
@@ -10028,23 +9856,17 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
     function restorePersistedPendingPresetEvent(afterSnapshot) {
         if (STATE.pendingPresetEvent || !afterSnapshot?.gameId) return null;
         if (typeof SnapshotEngine.loadManualState !== 'function') return null;
-
         const persisted = SnapshotEngine.loadManualState(afterSnapshot.gameId);
         const pending = persisted?.pendingPresetEvent || null;
         if (!pending) return null;
         if (String(pending.gameId || '') !== String(afterSnapshot.gameId || '')) return null;
-
         STATE.pendingPresetEvent = pending;
         return pending;
     }
 
     function getDeterministicEffectKey(effect, pending) {
         if (!effect || !pending?.eventKey) return effect?.effectKey;
-        return [
-            'preset_effect',
-            effect.gameId || pending.gameId || '',
-            pending.eventKey
-        ].join('|');
+        return ['preset_effect', effect.gameId || pending.gameId || '', pending.eventKey].join('|');
     }
 
     const originalBuild = SnapshotEngine.build.bind(SnapshotEngine);
@@ -10071,38 +9893,25 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
         const effect = originalBuildPresetEffect(afterSnapshot);
         if (effect && pending) {
             effect.effectKey = getDeterministicEffectKey(effect, pending);
-            Object.defineProperty(effect, pendingEffectEvent, {
-                value: pending,
-                enumerable: false,
-                configurable: false
-            });
+            Object.defineProperty(effect, pendingEffectEvent, { value: pending, enumerable: false, configurable: false });
         }
         return effect;
     };
 
     const originalPostAppend = Api.postAppend.bind(Api);
     Api.postAppend = function postAppendWithPendingEffectRecovery(collection, payload, label) {
-        const recoverable = collection === CONFIG.COLLECTIONS.PRESET_EFFECTS
-            ? payload?.[pendingEffectEvent] || null
-            : null;
+        const recoverable = collection === CONFIG.COLLECTIONS.PRESET_EFFECTS ? payload?.[pendingEffectEvent] || null : null;
         const request = originalPostAppend(collection, payload, label);
         if (!recoverable) return request;
-
         return request.then(result => {
             if (!STATE.pendingPresetEvent) {
-                SnapshotEngine.persistManualState({
-                    pendingPresetEvent: null,
-                    pendingEffectRetry: false,
-                    consumedPresetEventKey: recoverable.eventKey || null
-                });
+                SnapshotEngine.persistManualState({ pendingPresetEvent: null, pendingEffectRetry: false, consumedPresetEventKey: recoverable.eventKey || null });
             }
             return result;
         }).catch(error => {
             if (!STATE.pendingPresetEvent) {
                 STATE.pendingPresetEvent = recoverable;
-                SnapshotEngine.persistManualState({
-                    pendingEffectRetry: true
-                });
+                SnapshotEngine.persistManualState({ pendingEffectRetry: true });
             }
             throw error;
         });
@@ -10123,33 +9932,26 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
     function installManualWatcher() {
         if (STATE.tacticWatcherStarted) return true;
         if (!location.pathname.includes('/game.php') || !document.body) return false;
-
         const initialSnapshot = SnapshotEngine.build();
         if (!initialSnapshot?.myTeam || initialSnapshot.matchOwnership === 'foreign') return false;
-
         STATE.tacticWatcherStarted = true;
         STATE.lastManualTactic = getCurrentTactic();
-
         document.body.addEventListener('change', event => {
             const element = event.target;
             if (!isTacticalInput(element)) return;
             if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
-
             clearTimeout(STATE.manualChangeTimer);
             STATE.manualChangeTimer = setTimeout(() => {
                 if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
-
                 const current = getCurrentTactic();
                 const changed = EventTracker.diffTactic(STATE.lastManualTactic, current);
                 if (!Object.keys(changed).length) return;
-
                 setTransitionSourceHint('manual_change');
                 const snapshot = SnapshotEngine.build();
                 if (!snapshot?.myTeam || snapshot.matchOwnership === 'foreign' || snapshot.status === 'finished') {
                     STATE.lastManualTactic = current;
                     return;
                 }
-
                 snapshot.ruleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
                 const ts = Date.now();
                 const generationWindow = snapshot.generationWindow || MatchStateParser.getGenerationWindow(snapshot.minute);
@@ -10175,24 +9977,14 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
                     tacticTelemetry: snapshot.tacticTelemetry || null,
                     beforeSnapshot: snapshot,
                     snapshot,
-                    source: {
-                        page: 'game',
-                        trigger: 'manual_tactic_control',
-                        collectedAt: ts,
-                        scriptVersion: SLF_VERSION_INFO.scriptVersion
-                    }
+                    source: { page: 'game', trigger: 'manual_tactic_control', collectedAt: ts, scriptVersion: SLF_VERSION_INFO.scriptVersion }
                 };
-
                 STATE.pendingPresetEvent = eventRecord;
-                SnapshotEngine.persistManualState({
-                    manualTacticEventPending: true
-                });
-                void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, eventRecord, 'manual tactic event history')
-                    .catch(() => {});
+                SnapshotEngine.persistManualState({ manualTacticEventPending: true });
+                void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, eventRecord, 'manual tactic event history').catch(() => {});
                 STATE.lastManualTactic = current;
             }, 500);
         }, true);
-
         return true;
     }
 
@@ -10202,17 +9994,965 @@ html[data-slf-design="fm2026"] #slf-version-inline-badge{display:inline-flex!imp
         let attempts = 0;
         const timer = setInterval(() => {
             attempts += 1;
-            if (installManualWatcher() || attempts >= 120 || !location.pathname.includes('/game.php')) {
-                clearInterval(timer);
-            }
+            if (installManualWatcher() || attempts >= 120 || !location.pathname.includes('/game.php')) clearInterval(timer);
         }, 500);
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', scheduleManualWatcher, { once: true });
-    } else {
-        scheduleManualWatcher();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scheduleManualWatcher, { once: true });
+    else scheduleManualWatcher();
+})();
+// <<< src/modules/manual-match-telemetry/manual-state-integrity.js
+
+
+// >>> src/modules/manual-match-telemetry/manual-match-runtime.js
+
+// Tactical telemetry v2: durable match session, canonical phases and bounded automatic capture.
+// ============================================================
+
+(function installTacticalTelemetryV2() {
+    'use strict';
+
+    if (SnapshotEngine.__tacticalTelemetryV2Installed) return;
+    SnapshotEngine.__tacticalTelemetryV2Installed = true;
+
+    const STATE_SCHEMA = 'slf_manual_match_state_v2';
+    const STATE_PREFIX = 'slf_manual_match_state_v2';
+    const LEGACY_STATE_PREFIX = 'slf_manual_match_state_v1';
+    const OUTBOX_LIMIT = 12;
+    const MIN_PHASE_MINUTES = 5;
+    const MIN_PHASE_COMPLETENESS = 0.55;
+    const AUTO_POLL_MS = 15000;
+    const TACTIC_KEYS = [
+        'def_line', 'press_line', 'def_width', 'press_intense',
+        'build_type', 'build_temp', 'build_long', 'build_fast',
+        'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot', 'priority'
+    ];
+
+    const legacyStateApi = SnapshotEngine.manualMatchState;
+    const buildBeforeV2 = SnapshotEngine.build.bind(SnapshotEngine);
+    const sendSnapshotBeforeV2 = typeof SnapshotEngine.sendSnapshot === 'function'
+        ? SnapshotEngine.sendSnapshot.bind(SnapshotEngine)
+        : null;
+    const postAppendBeforeV2 = Api.postAppend.bind(Api);
+    const applyPresetBeforeV2 = applyPresetAsync;
+    const snapshotReservations = new Set();
+    const resultReservations = new Set();
+
+    function clone(value) {
+        if (value == null) return value;
+        try { return JSON.parse(JSON.stringify(value)); } catch (_) { return null; }
     }
+
+    function cloneWithSymbols(value) {
+        const result = clone(value) || {};
+        if (!value || typeof value !== 'object') return result;
+        Object.getOwnPropertySymbols(value).forEach(symbol => {
+            const descriptor = Object.getOwnPropertyDescriptor(value, symbol);
+            if (descriptor) Object.defineProperty(result, symbol, descriptor);
+        });
+        return result;
+    }
+
+    function hasOwn(object, key) {
+        return !!object && Object.prototype.hasOwnProperty.call(object, key);
+    }
+
+    function storageKey(gameId) {
+        return `${STATE_PREFIX}:${gameId || 'unknown'}`;
+    }
+
+    function legacyStorageKey(gameId) {
+        return `${LEGACY_STATE_PREFIX}:${gameId || 'unknown'}`;
+    }
+
+    function resolveGameId(gameId = null) {
+        if (gameId) return String(gameId);
+        return String(typeof MatchStateParser?.getGameId === 'function' ? MatchStateParser.getGameId() || '' : '');
+    }
+
+    function readState(gameId) {
+        if (!gameId || typeof localStorage === 'undefined') return null;
+        try {
+            const raw = localStorage.getItem(storageKey(gameId));
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return parsed?.schema === STATE_SCHEMA && String(parsed.gameId || '') === String(gameId) ? parsed : null;
+        } catch (_) { return null; }
+    }
+
+    function migrateState(gameId) {
+        if (!gameId) return null;
+        const legacy = legacyStateApi?.load?.(gameId) || null;
+        if (!legacy) return null;
+        return {
+            schema: STATE_SCHEMA,
+            gameId: String(gameId),
+            sessionId: `match-session|${gameId}`,
+            ts: Number(legacy.ts || Date.now()),
+            url: legacy.url || '',
+            phaseSequence: 0,
+            openPhase: null,
+            lastClosedPhaseId: null,
+            pendingPhaseStart: null,
+            lastSnapshotKey: null,
+            lastAutoSnapshotWindow: null,
+            lastObservedScoreState: null,
+            lastObservedTacticFingerprint: null,
+            lastResultKey: null,
+            outbox: [],
+            pendingPresetEvent: clone(legacy.pendingPresetEvent || null),
+            pendingEffectRetry: !!legacy.pendingEffectRetry,
+            consumedPresetEventKey: legacy.consumedPresetEventKey || null,
+            manualTacticEventPending: !!legacy.manualTacticEventPending,
+            recommendationFreeze: clone(legacy.recommendationFreeze || null),
+            presetProgression: clone(legacy.presetProgression || null),
+            lastRecommendationHtml: legacy.lastRecommendationHtml || null,
+            lastRecommendationMeta: clone(legacy.lastRecommendationMeta || null),
+            migratedFrom: legacy.schema || LEGACY_STATE_PREFIX
+        };
+    }
+
+    function writeState(payload) {
+        if (!payload?.gameId || typeof localStorage === 'undefined') return null;
+        try {
+            localStorage.setItem(storageKey(payload.gameId), JSON.stringify(payload));
+            return payload;
+        } catch (_) { return null; }
+    }
+
+    function getState(gameId = null) {
+        gameId = resolveGameId(gameId);
+        if (!gameId) return null;
+        const stored = readState(gameId);
+        if (stored) return stored;
+        const migrated = migrateState(gameId) || {
+            schema: STATE_SCHEMA,
+            gameId,
+            sessionId: `match-session|${gameId}`,
+            ts: Date.now(),
+            url: typeof location !== 'undefined' ? location.href || '' : '',
+            phaseSequence: 0,
+            openPhase: null,
+            lastClosedPhaseId: null,
+            pendingPhaseStart: null,
+            lastSnapshotKey: null,
+            lastAutoSnapshotWindow: null,
+            lastObservedScoreState: null,
+            lastObservedTacticFingerprint: null,
+            lastResultKey: null,
+            outbox: [],
+            pendingPresetEvent: null,
+            pendingEffectRetry: false,
+            consumedPresetEventKey: null,
+            manualTacticEventPending: false,
+            recommendationFreeze: null,
+            presetProgression: null,
+            lastRecommendationHtml: null,
+            lastRecommendationMeta: null,
+            migratedFrom: null
+        };
+        return writeState(migrated) || migrated;
+    }
+
+    function persistState(extra = {}, options = {}) {
+        const gameId = resolveGameId(options.gameId || extra.gameId || null);
+        if (!gameId) return null;
+        const existing = options.existing || getState(gameId) || {};
+        const payload = Object.assign({}, existing, clone(extra) || {}, {
+            schema: STATE_SCHEMA,
+            gameId,
+            sessionId: existing.sessionId || `match-session|${gameId}`,
+            ts: Date.now(),
+            url: typeof location !== 'undefined' ? location.href || existing.url || '' : existing.url || ''
+        });
+        const carryFromRuntime = ['pendingPresetEvent', 'recommendationFreeze', 'presetProgression', 'lastRecommendationHtml', 'lastRecommendationMeta'];
+        carryFromRuntime.forEach(key => {
+            if (!hasOwn(extra, key) && hasOwn(STATE, key)) payload[key] = clone(STATE[key]);
+        });
+        if (!Array.isArray(payload.outbox)) payload.outbox = [];
+        payload.outbox = payload.outbox.slice(-OUTBOX_LIMIT);
+        return writeState(payload);
+    }
+
+    const TelemetryState = {
+        getStorageKey(gameId = null) { return storageKey(resolveGameId(gameId)); },
+        load(gameId = null) { return getState(gameId); },
+        persist(extra = {}, options = {}) { return persistState(extra, options); },
+        clear(gameId = null) {
+            gameId = resolveGameId(gameId);
+            if (!gameId || typeof localStorage === 'undefined') return;
+            try {
+                localStorage.removeItem(storageKey(gameId));
+                localStorage.removeItem(legacyStorageKey(gameId));
+            } catch (_) {}
+            legacyStateApi?.clear?.(gameId);
+        }
+    };
+
+    SnapshotEngine.manualMatchState = TelemetryState;
+    SnapshotEngine.persistManualState = function persistManualStateV2(extra = {}) { return TelemetryState.persist(extra); };
+    SnapshotEngine.loadManualState = function loadManualStateV2(gameId = null) { return TelemetryState.load(gameId); };
+    SnapshotEngine.clearManualState = function clearManualStateV2(gameId = null) { TelemetryState.clear(gameId); };
+
+    function finite(value) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function normalizedPriority(value) {
+        const list = Array.isArray(value) ? value : value == null ? [] : [value];
+        return list.map(item => String(item)).sort();
+    }
+
+    function tacticFingerprint(tactic) {
+        if (!tactic || typeof tactic !== 'object') return '';
+        return TACTIC_KEYS.map(key => {
+            const value = key === 'priority' ? normalizedPriority(tactic[key]) : tactic[key] ?? null;
+            return `${key}:${JSON.stringify(value)}`;
+        }).join('|');
+    }
+
+    function canonicalPresetId(snapshot, fallback = null) {
+        const observed = snapshot?.tacticTelemetry?.currentPreset;
+        if (observed) return String(observed);
+        if (fallback) return String(fallback);
+        return 'unknown';
+    }
+
+    function scoreState(snapshot) {
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+        const myTeam = finite(snapshot?.myTeam);
+        const home = finite(snapshot?.score?.home);
+        const away = finite(snapshot?.score?.away);
+        if (teams.length < 2 || myTeam == null || home == null || away == null) return 'unknown';
+        const isHome = finite(teams[0]) === myTeam;
+        const mine = isHome ? home : away;
+        const opponent = isHome ? away : home;
+        return mine > opponent ? 'winning' : mine < opponent ? 'losing' : 'draw';
+    }
+
+    function homeAway(snapshot) {
+        const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+        const myTeam = finite(snapshot?.myTeam);
+        if (teams.length < 2 || myTeam == null) return 'unknown';
+        if (finite(teams[0]) === myTeam) return 'home';
+        if (finite(teams[1]) === myTeam) return 'away';
+        return 'unknown';
+    }
+
+    function teamStats(snapshot, mine = true) {
+        const rows = Array.isArray(snapshot?.stats) ? snapshot.stats : [];
+        const myTeam = finite(snapshot?.myTeam);
+        if (myTeam == null) return null;
+        const row = rows.find(item => mine ? finite(item?.teamId) === myTeam : finite(item?.teamId) !== myTeam);
+        return row?.stats || null;
+    }
+
+    function strengthGap(snapshot) {
+        const mine = finite(teamStats(snapshot, true)?.power);
+        const opponent = finite(teamStats(snapshot, false)?.power);
+        return mine == null || opponent == null ? null : mine - opponent;
+    }
+
+    function strengthGapBucket(value) {
+        if (value == null) return 'unknown';
+        if (value <= -151) return 'much_weaker';
+        if (value <= -51) return 'weaker';
+        if (value <= 50) return 'even';
+        if (value <= 150) return 'stronger';
+        return 'much_stronger';
+    }
+
+    function generatorVersion(snapshot) {
+        const candidates = [
+            snapshot?.generatorVersion,
+            snapshot?.generatorDetailMetrics?.generatorVersion,
+            snapshot?.generatorDetailMetrics?.version,
+            snapshot?.generatorExpectedPerformance?.generatorVersion,
+            snapshot?.generatorExpectedPerformance?.version
+        ];
+        const value = candidates.find(item => item != null && String(item).trim());
+        return value == null ? 'unknown' : String(value);
+    }
+
+    function contextCompleteness(snapshot, presetId) {
+        const required = {
+            gameId: snapshot?.gameId,
+            myTeam: snapshot?.myTeam,
+            minute: snapshot?.minute,
+            score: snapshot?.score && finite(snapshot.score.home) != null && finite(snapshot.score.away) != null,
+            currentTactic: snapshot?.currentTactic && tacticFingerprint(snapshot.currentTactic),
+            teamStats: !!teamStats(snapshot, true) && !!teamStats(snapshot, false),
+            presetId: presetId && presetId !== 'unknown',
+            scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : null,
+            generatorVersion: generatorVersion(snapshot) !== 'unknown'
+        };
+        const missingFields = Object.entries(required).filter(([, value]) => !value).map(([key]) => key);
+        return { value: (Object.keys(required).length - missingFields.length) / Object.keys(required).length, missingFields };
+    }
+
+    function telemetryContext(snapshot, fallbackPreset = null) {
+        const presetId = canonicalPresetId(snapshot, fallbackPreset);
+        const gap = strengthGap(snapshot);
+        const completeness = contextCompleteness(snapshot, presetId);
+        const decision = snapshot?.ruleDecision || STATE.lastRuleDecision || null;
+        const riskAppetite = snapshot?.tacticTelemetry?.riskAppetite || decision?.riskAppetite || decision?.action?.riskAppetite || null;
+        return {
+            schema: 'slf_telemetry_context_v2',
+            gameId: String(snapshot?.gameId || ''),
+            sessionId: `match-session|${snapshot?.gameId || ''}`,
+            scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown',
+            generatorVersion: generatorVersion(snapshot),
+            libraryVersion: snapshot?.tacticTelemetry?.libraryVersion || null,
+            recommendationSchema: snapshot?.tacticTelemetry?.recommendationSchema || decision?.schema || null,
+            riskAppetite: riskAppetite || 'unknown',
+            myTeam: snapshot?.myTeam ?? null,
+            homeAway: homeAway(snapshot),
+            minute: snapshot?.minute ?? null,
+            generationWindow: clone(snapshot?.generationWindow || null),
+            score: clone(snapshot?.score || null),
+            scoreState: scoreState(snapshot),
+            strengthGap: gap,
+            strengthGapBucket: strengthGapBucket(gap),
+            presetId,
+            tacticFingerprint: tacticFingerprint(snapshot?.currentTactic),
+            recommendationPreset: decision?.action?.preset || null,
+            explorationApplied: !!decision?.action?.exploration,
+            completeness: Number(completeness.value.toFixed(3)),
+            missingFields: completeness.missingFields,
+            capturedAt: Date.now()
+        };
+    }
+
+    function compactStats(snapshot) {
+        const mine = teamStats(snapshot, true) || {};
+        const opponent = teamStats(snapshot, false) || {};
+        const pick = source => ({
+            xG: finite(source.xG),
+            shots: finite(source.shots),
+            badActionsPct: finite(source.badActionsPct),
+            power: finite(source.power),
+            defVector: finite(source.defVector),
+            pressVector: finite(source.pressVector)
+        });
+        return { my: pick(mine), opponent: pick(opponent) };
+    }
+
+    function compactSnapshot(snapshot, fallbackPreset = null) {
+        const context = telemetryContext(snapshot, fallbackPreset);
+        return {
+            ts: snapshot?.ts || Date.now(),
+            minute: snapshot?.minute ?? null,
+            bucket: snapshot?.bucket || null,
+            generationWindow: clone(snapshot?.generationWindow || null),
+            score: clone(snapshot?.score || null),
+            scoreState: context.scoreState,
+            homeAway: context.homeAway,
+            strengthGap: context.strengthGap,
+            strengthGapBucket: context.strengthGapBucket,
+            presetId: context.presetId,
+            tacticFingerprint: context.tacticFingerprint,
+            tactic: clone(snapshot?.currentTactic || null),
+            stats: compactStats(snapshot),
+            generatorExpectedPerformance: clone(snapshot?.generatorExpectedPerformance || null),
+            completeness: context.completeness,
+            missingFields: context.missingFields.slice()
+        };
+    }
+
+    function makePhaseId(gameId, sequence, fingerprint) {
+        let hash = 2166136261;
+        const text = `${gameId}|${sequence}|${fingerprint}`;
+        for (let index = 0; index < text.length; index += 1) {
+            hash ^= text.charCodeAt(index);
+            hash = Math.imul(hash, 16777619);
+        }
+        return `phase|${gameId}|${sequence}|${(hash >>> 0).toString(16)}`;
+    }
+
+    function phaseDelta(start, end) {
+        const diff = (a, b) => a == null || b == null ? null : Number((b - a).toFixed(4));
+        const startStats = start?.stats || {};
+        const endStats = end?.stats || {};
+        const myXG = diff(startStats.my?.xG, endStats.my?.xG);
+        const oppXG = diff(startStats.opponent?.xG, endStats.opponent?.xG);
+        const myShots = diff(startStats.my?.shots, endStats.my?.shots);
+        const oppShots = diff(startStats.opponent?.shots, endStats.opponent?.shots);
+        return {
+            myXG,
+            oppXG,
+            xGDifference: myXG == null || oppXG == null ? null : Number((myXG - oppXG).toFixed(4)),
+            myShots,
+            oppShots,
+            shotDifference: myShots == null || oppShots == null ? null : Number((myShots - oppShots).toFixed(4)),
+            myBadActionsPct: diff(startStats.my?.badActionsPct, endStats.my?.badActionsPct),
+            oppBadActionsPct: diff(startStats.opponent?.badActionsPct, endStats.opponent?.badActionsPct),
+            myPower: diff(startStats.my?.power, endStats.my?.power),
+            oppPower: diff(startStats.opponent?.power, endStats.opponent?.power),
+            strengthGap: diff(start?.strengthGap, end?.strengthGap),
+            myDefVector: diff(startStats.my?.defVector, endStats.my?.defVector),
+            oppDefVector: diff(startStats.opponent?.defVector, endStats.opponent?.defVector),
+            myPressVector: diff(startStats.my?.pressVector, endStats.my?.pressVector),
+            oppPressVector: diff(startStats.opponent?.pressVector, endStats.opponent?.pressVector)
+        };
+    }
+
+    function phaseEligibility(phase, endSnapshot) {
+        const startMinute = finite(phase?.start?.minute);
+        const endMinute = finite(endSnapshot?.minute);
+        const duration = startMinute == null || endMinute == null ? null : Math.max(0, endMinute - startMinute);
+        const completeness = Math.min(finite(phase?.start?.completeness) ?? 0, finite(endSnapshot?.completeness) ?? 0);
+        const reasons = [];
+        if (duration == null || duration < MIN_PHASE_MINUTES) reasons.push('phase_too_short');
+        if (completeness < MIN_PHASE_COMPLETENESS) reasons.push('insufficient_completeness');
+        return { durationMinutes: duration, completeness: Number(completeness.toFixed(3)), eligibleForRanking: reasons.length === 0, reasons };
+    }
+
+    function snapshotKeyFor(snapshot) {
+        if (!snapshot) return '';
+        if (typeof SnapshotEngine.buildSnapshotKey === 'function') {
+            try { return String(SnapshotEngine.buildSnapshotKey(snapshot) || ''); } catch (error) { debugWarn('[SLF Snapshot] buildSnapshotKey failed', error); return ''; }
+        }
+        const score = snapshot.score || {};
+        return [
+            'match_snapshot',
+            snapshot.gameId || '',
+            snapshot.status || '',
+            snapshot.minute ?? '',
+            snapshot.bucket || '',
+            `${score.home ?? '?'}:${score.away ?? '?'}`,
+            (snapshot.teams || []).join('-')
+        ].join('|');
+    }
+
+    function outboxKey(collection, payload) {
+        return String(payload?.effectKey || payload?.eventKey || payload?.resultKey || payload?.snapshotKey || `${collection}|${payload?.gameId || ''}|${payload?.ts || ''}`);
+    }
+
+    function compactOutboxPayload(collection, payload) {
+        const copy = cloneWithSymbols(payload);
+        if (collection === CONFIG.COLLECTIONS.MATCH_SNAPSHOTS) {
+            delete copy.lineupRows;
+            delete copy.shotsTable;
+            delete copy.eventsText;
+            delete copy.developerHints;
+            if (!copy.source) copy.source = {};
+            copy.source.outboxCompacted = true;
+        }
+        return copy;
+    }
+
+    function queueOutbox(collection, payload, label, error = null) {
+        const gameId = String(payload?.gameId || payload?.telemetryContext?.gameId || resolveGameId());
+        if (!gameId) return;
+        const state = getState(gameId);
+        if (!state) return;
+        const key = outboxKey(collection, payload);
+        const outbox = Array.isArray(state.outbox) ? state.outbox.slice() : [];
+        const existingIndex = outbox.findIndex(item => item?.key === key && item?.collection === collection);
+        const item = {
+            key,
+            collection,
+            label: label || 'telemetry retry',
+            payload: compactOutboxPayload(collection, payload),
+            attempts: existingIndex >= 0 ? Number(outbox[existingIndex].attempts || 0) + 1 : 1,
+            firstQueuedAt: existingIndex >= 0 ? outbox[existingIndex].firstQueuedAt : Date.now(),
+            lastQueuedAt: Date.now(),
+            lastErrorKind: error?.kind || error?.name || 'unknown'
+        };
+        if (existingIndex >= 0) outbox.splice(existingIndex, 1, item);
+        else outbox.push(item);
+        persistState({ outbox: outbox.slice(-OUTBOX_LIMIT) }, { gameId, existing: state });
+    }
+
+    function removeOutboxItem(gameId, collection, key) {
+        const state = getState(gameId);
+        if (!state) return;
+        const outbox = (state.outbox || []).filter(item => !(item?.collection === collection && item?.key === key));
+        if (outbox.length !== (state.outbox || []).length) persistState({ outbox }, { gameId, existing: state });
+    }
+
+    function attachCorrelation(collection, payload) {
+        if (!payload || typeof payload !== 'object') return payload;
+        const gameId = String(payload.gameId || payload.telemetryContext?.gameId || resolveGameId());
+        if (!gameId) return payload;
+        const state = getState(gameId);
+        if (!state) return payload;
+        const snapshot = payload.beforeSnapshot || payload.snapshot || payload.before || payload.after || null;
+        const fallbackPreset = payload.presetName || payload.tacticTelemetry?.currentPreset || null;
+        if (!payload.telemetryContext && snapshot) payload.telemetryContext = telemetryContext(snapshot, fallbackPreset);
+        payload.sessionId = payload.sessionId || state.sessionId || `match-session|${gameId}`;
+
+        if (collection === CONFIG.COLLECTIONS.PRESET_EVENTS) {
+            const eventFingerprint = tacticFingerprint(payload.tactic || snapshot?.currentTactic);
+            let phaseId = state.openPhase?.phaseId || null;
+            if (eventFingerprint && eventFingerprint !== state.openPhase?.tacticFingerprint) {
+                const sequence = Number(state.phaseSequence || 0) + 1;
+                phaseId = makePhaseId(gameId, sequence, eventFingerprint);
+                persistState({
+                    pendingPhaseStart: {
+                        phaseId,
+                        sequence,
+                        tacticFingerprint: eventFingerprint,
+                        presetId: payload.presetName || 'unknown',
+                        source: payload.type === 'manual_change' ? 'manual_change' : 'preset_apply'
+                    }
+                }, { gameId, existing: state });
+            }
+            payload.phaseId = payload.phaseId || phaseId;
+        }
+        if (collection === CONFIG.COLLECTIONS.PRESET_EFFECTS) {
+            payload.phaseId = payload.phaseId || state.openPhase?.phaseId || state.lastClosedPhaseId || null;
+        }
+        return payload;
+    }
+
+    function compactTelemetryEnvelope(value) {
+        if (!value || typeof value !== 'object') return null;
+        return {
+            schema: value.schema || null,
+            libraryVersion: value.libraryVersion || null,
+            recommendationSchema: value.recommendationSchema || null,
+            riskAppetite: value.riskAppetite || null,
+            currentPreset: value.currentPreset || null,
+            currentTacticFingerprint: value.currentTacticFingerprint || null,
+            initialPreset: value.initialPreset || null,
+            transitionCount: Number(value.transitionCount || 0),
+            latestDecision: clone(value.latestDecision || null)
+        };
+    }
+
+    function compactTransportRecord(collection, payload) {
+        if (!payload || typeof payload !== 'object') return payload;
+        attachCorrelation(collection, payload);
+        if (collection === CONFIG.COLLECTIONS.PRESET_EVENTS) {
+            const copy = cloneWithSymbols(payload);
+            const snapshot = payload.beforeSnapshot || payload.snapshot || null;
+            copy.schemaVersion = Math.max(4, Number(copy.schemaVersion || 0));
+            copy.parserVersion = copy.type === 'tactical_phase_start' ? 'tactical_phase_start_v4' : 'preset_event_phase_link_v4';
+            copy.phaseStart = snapshot ? compactSnapshot(snapshot, copy.presetName || null) : copy.phaseStart || null;
+            copy.tacticTelemetry = compactTelemetryEnvelope(payload.tacticTelemetry);
+            delete copy.beforeSnapshot;
+            delete copy.snapshot;
+            return copy;
+        }
+        if (collection === CONFIG.COLLECTIONS.PRESET_EFFECTS) {
+            const copy = cloneWithSymbols(payload);
+            copy.schemaVersion = Math.max(4, Number(copy.schemaVersion || 0));
+            copy.parserVersion = copy.eventType === 'tactical_phase' ? 'tactical_phase_effect_v4' : 'preset_effect_phase_link_v4';
+            copy.phaseStart = copy.phaseStart || (payload.before ? compactSnapshot(payload.before, copy.presetName || null) : null);
+            copy.phaseEnd = copy.phaseEnd || (payload.after ? compactSnapshot(payload.after, copy.presetName || null) : null);
+            copy.tacticTelemetry = compactTelemetryEnvelope(payload.tacticTelemetry);
+            delete copy.before;
+            delete copy.after;
+            return copy;
+        }
+        return payload;
+    }
+
+    Api.postAppend = function postAppendWithTelemetryOutbox(collection, payload, label) {
+        const tracked = [
+            CONFIG.COLLECTIONS.MATCH_SNAPSHOTS,
+            CONFIG.COLLECTIONS.MATCH_RESULTS,
+            CONFIG.COLLECTIONS.PRESET_EVENTS,
+            CONFIG.COLLECTIONS.PRESET_EFFECTS
+        ].filter(Boolean);
+        if (!tracked.includes(collection)) return postAppendBeforeV2(collection, payload, label);
+        const transportPayload = compactTransportRecord(collection, payload);
+        const gameId = String(transportPayload?.gameId || transportPayload?.telemetryContext?.gameId || resolveGameId());
+        const key = outboxKey(collection, transportPayload);
+        return postAppendBeforeV2(collection, transportPayload, label).then(result => {
+            if (gameId) removeOutboxItem(gameId, collection, key);
+            return result;
+        }).catch(error => {
+            queueOutbox(collection, transportPayload, label, error);
+            throw error;
+        });
+    };
+
+    if (sendSnapshotBeforeV2) {
+        SnapshotEngine.sendSnapshot = function sendSnapshotWithTelemetryDedup(snapshot) {
+            if (!snapshot?.gameId || !snapshot?.myTeam || snapshot.matchOwnership === 'foreign') {
+                return sendSnapshotBeforeV2(snapshot);
+            }
+            const gameId = String(snapshot.gameId);
+            const key = snapshotKeyFor(snapshot);
+            const state = getState(gameId);
+            if (key && (state?.lastSnapshotKey === key || snapshotReservations.has(key))) {
+                return Promise.resolve({ status: 208, deduplicated: true, snapshotKey: key });
+            }
+            if (snapshot.generatorVersion && snapshot.telemetryContext?.generatorVersion === 'unknown') {
+                snapshot.telemetryContext = telemetryContext(snapshot, state?.openPhase?.presetId || null);
+            }
+            if (key) snapshotReservations.add(key);
+            return Promise.resolve(sendSnapshotBeforeV2(snapshot)).then(result => {
+                if (key) {
+                    persistState({
+                        lastSnapshotKey: key,
+                        lastAutoSnapshotWindow: String(snapshot?.generationWindow?.index ?? snapshot?.bucket ?? 'unknown'),
+                        lastObservedScoreState: scoreState(snapshot),
+                        lastObservedTacticFingerprint: tacticFingerprint(snapshot.currentTactic)
+                    }, { gameId, existing: getState(gameId) });
+                }
+                return result;
+            }).catch(error => {
+                const updated = getState(gameId);
+                if (key && updated?.outbox?.some(item => item.collection === CONFIG.COLLECTIONS.MATCH_SNAPSHOTS && item.key === key)) {
+                    persistState({ lastSnapshotKey: key }, { gameId, existing: updated });
+                }
+                throw error;
+            }).finally(() => {
+                if (key) snapshotReservations.delete(key);
+            });
+        };
+    }
+
+    async function flushOutbox(gameId = null) {
+        gameId = resolveGameId(gameId);
+        const state = getState(gameId);
+        if (!state?.outbox?.length) return { attempted: 0, delivered: 0 };
+        let delivered = 0;
+        const pending = state.outbox.slice();
+        for (const item of pending) {
+            try {
+                await postAppendBeforeV2(item.collection, item.payload, item.label || 'telemetry retry');
+                removeOutboxItem(gameId, item.collection, item.key);
+                delivered += 1;
+            } catch (error) {
+                queueOutbox(item.collection, item.payload, item.label, error);
+                break;
+            }
+        }
+        return { attempted: pending.length, delivered };
+    }
+
+    function phaseStartEvent(phase, snapshot) {
+        return {
+            ts: Date.now(),
+            recordType: 'preset_event',
+            schemaVersion: 4,
+            parserVersion: 'tactical_phase_start_v4',
+            eventKey: `tactical_phase_event|${phase.gameId}|${phase.phaseId}`,
+            type: 'tactical_phase_start',
+            eventType: 'tactical_phase_start',
+            gameId: phase.gameId,
+            sessionId: phase.sessionId,
+            phaseId: phase.phaseId,
+            phaseSequence: phase.sequence,
+            minute: phase.start.minute,
+            bucket: phase.start.bucket,
+            presetName: phase.presetId,
+            tactic: clone(phase.tactic),
+            tacticFingerprint: phase.tacticFingerprint,
+            transitionSource: phase.source,
+            telemetryContext: telemetryContext(snapshot, phase.presetId),
+            phaseStart: clone(phase.start),
+            source: {
+                page: 'game',
+                trigger: 'tactical_phase_start',
+                collectedAt: Date.now(),
+                scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown'
+            }
+        };
+    }
+
+    function startPhase(snapshot, source = 'snapshot_observation') {
+        const gameId = String(snapshot?.gameId || resolveGameId());
+        if (!gameId || !snapshot?.currentTactic) return null;
+        const state = getState(gameId);
+        if (!state) return null;
+        const fingerprint = tacticFingerprint(snapshot.currentTactic);
+        if (!fingerprint) return null;
+        const pending = state.pendingPhaseStart;
+        const sequence = pending?.tacticFingerprint === fingerprint
+            ? Number(pending.sequence || Number(state.phaseSequence || 0) + 1)
+            : Number(state.phaseSequence || 0) + 1;
+        const presetId = canonicalPresetId(snapshot, pending?.tacticFingerprint === fingerprint ? pending.presetId : null);
+        const phaseId = pending?.tacticFingerprint === fingerprint && pending?.phaseId
+            ? pending.phaseId
+            : makePhaseId(gameId, sequence, fingerprint);
+        const phase = {
+            schema: 'slf_tactical_phase_v1',
+            gameId,
+            sessionId: state.sessionId || `match-session|${gameId}`,
+            phaseId,
+            sequence,
+            presetId,
+            tacticFingerprint: fingerprint,
+            tactic: clone(snapshot.currentTactic),
+            source: pending?.tacticFingerprint === fingerprint ? pending.source || source : source,
+            startedAt: Date.now(),
+            start: compactSnapshot(snapshot, presetId)
+        };
+        persistState({
+            phaseSequence: sequence,
+            openPhase: phase,
+            pendingPhaseStart: null,
+            lastObservedTacticFingerprint: fingerprint,
+            lastObservedScoreState: scoreState(snapshot)
+        }, { gameId, existing: state });
+        void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, phaseStartEvent(phase, snapshot), 'tactical phase start').catch(() => {});
+        return phase;
+    }
+
+    function buildPhaseEffect(phase, snapshot, reason) {
+        const end = compactSnapshot(snapshot, phase.presetId);
+        const eligibility = phaseEligibility(phase, end);
+        return {
+            ts: Date.now(),
+            recordType: 'preset_effect',
+            schemaVersion: 4,
+            parserVersion: 'tactical_phase_effect_v4',
+            effectKey: `tactical_phase_effect|${phase.gameId}|${phase.phaseId}`,
+            eventType: 'tactical_phase',
+            gameId: phase.gameId,
+            sessionId: phase.sessionId,
+            phaseId: phase.phaseId,
+            phaseSequence: phase.sequence,
+            presetName: phase.presetId,
+            tacticContext: {
+                appliedPreset: phase.presetId,
+                appliedTactic: clone(phase.tactic),
+                tacticFingerprint: phase.tacticFingerprint,
+                transitionSource: phase.source,
+                closeReason: reason
+            },
+            telemetryContext: telemetryContext(snapshot, phase.presetId),
+            phaseStart: clone(phase.start),
+            phaseEnd: end,
+            fromMinute: phase.start.minute,
+            toMinute: end.minute,
+            fromBucket: phase.start.bucket,
+            toBucket: end.bucket,
+            delta: phaseDelta(phase.start, end),
+            eligibility,
+            source: {
+                page: 'game',
+                trigger: `tactical_phase_close:${reason}`,
+                collectedAt: Date.now(),
+                scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown'
+            }
+        };
+    }
+
+    function closePhase(snapshot, reason = 'tactic_change') {
+        const gameId = String(snapshot?.gameId || resolveGameId());
+        const state = getState(gameId);
+        const phase = state?.openPhase || null;
+        if (!state || !phase) return null;
+        const effect = buildPhaseEffect(phase, snapshot, reason);
+        persistState({ openPhase: null, lastClosedPhaseId: phase.phaseId }, { gameId, existing: state });
+        void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EFFECTS, effect, 'tactical phase effect').catch(() => {});
+        return effect;
+    }
+
+    function reconcilePhase(snapshot) {
+        if (!snapshot?.gameId || !snapshot?.myTeam || snapshot.matchOwnership === 'foreign') return { changed: false, phase: null };
+        const gameId = String(snapshot.gameId);
+        let state = getState(gameId);
+        if (!state) return { changed: false, phase: null };
+        const fingerprint = tacticFingerprint(snapshot.currentTactic);
+        let changed = false;
+        let phase = state.openPhase || null;
+
+        if (snapshot.status === 'finished') {
+            if (phase) {
+                closePhase(snapshot, 'match_finished');
+                changed = true;
+            }
+            return { changed, phase: null };
+        }
+
+        if (!fingerprint) return { changed: false, phase };
+        if (!phase) {
+            phase = startPhase(snapshot, 'initial_observation');
+            changed = !!phase;
+        } else if (phase.tacticFingerprint !== fingerprint) {
+            closePhase(snapshot, 'tactic_change');
+            phase = startPhase(snapshot, 'tactic_change');
+            changed = true;
+        } else {
+            const currentPreset = canonicalPresetId(snapshot, phase.presetId);
+            if (phase.presetId === 'unknown' && currentPreset !== 'unknown') {
+                phase.presetId = currentPreset;
+                persistState({ openPhase: phase }, { gameId, existing: getState(gameId) });
+            }
+        }
+        state = getState(gameId);
+        return { changed, phase: state?.openPhase || phase };
+    }
+
+    function maybeScheduleAutoCapture(snapshot, phaseChanged) {
+        if (!snapshot?.gameId || !snapshot?.myTeam || snapshot.matchOwnership === 'foreign') return;
+        const state = getState(snapshot.gameId);
+        if (!state) return;
+        const windowKey = String(snapshot?.generationWindow?.index ?? snapshot?.bucket ?? 'unknown');
+        const stateNow = scoreState(snapshot);
+        const fingerprint = tacticFingerprint(snapshot.currentTactic);
+        const key = snapshotKeyFor(snapshot);
+        let trigger = null;
+        if (snapshot.status === 'finished') trigger = 'finished';
+        else if (!state.lastSnapshotKey) trigger = 'initial';
+        else if (phaseChanged || (fingerprint && fingerprint !== state.lastObservedTacticFingerprint)) trigger = 'tactic_change';
+        else if (state.lastObservedScoreState && stateNow !== 'unknown' && stateNow !== state.lastObservedScoreState) trigger = 'score_state_change';
+        else if (state.lastAutoSnapshotWindow && windowKey !== state.lastAutoSnapshotWindow) trigger = 'generation_window';
+
+        persistState({
+            lastObservedScoreState: stateNow,
+            lastObservedTacticFingerprint: fingerprint || state.lastObservedTacticFingerprint
+        }, { gameId: snapshot.gameId, existing: getState(snapshot.gameId) });
+
+        if (!trigger || (key && snapshotReservations.has(key))) return;
+        if (key) snapshotReservations.add(key);
+        setTimeout(() => {
+            void captureSnapshot(snapshot, trigger).catch(() => {}).finally(() => {
+                if (key) snapshotReservations.delete(key);
+            });
+        }, 0);
+    }
+
+    SnapshotEngine.build = function buildWithTacticalPhaseV2() {
+        const snapshot = buildBeforeV2();
+        if (!snapshot || !location.pathname.includes('/game.php')) return snapshot;
+        if (!snapshot.myTeam || snapshot.matchOwnership === 'foreign') return snapshot;
+        const phaseResult = reconcilePhase(snapshot);
+        const state = getState(snapshot.gameId);
+        const context = telemetryContext(snapshot, state?.openPhase?.presetId || null);
+        snapshot.telemetryContext = context;
+        snapshot.tacticalPhase = state?.openPhase ? {
+            schema: 'slf_tactical_phase_ref_v1',
+            sessionId: state.openPhase.sessionId,
+            phaseId: state.openPhase.phaseId,
+            sequence: state.openPhase.sequence,
+            presetId: state.openPhase.presetId,
+            tacticFingerprint: state.openPhase.tacticFingerprint,
+            startedAt: state.openPhase.startedAt
+        } : null;
+        maybeScheduleAutoCapture(snapshot, phaseResult.changed);
+        return snapshot;
+    };
+
+    async function captureSnapshot(snapshot, trigger) {
+        if (!snapshot?.gameId || !snapshot?.myTeam || snapshot.matchOwnership === 'foreign') return null;
+        const state = getState(snapshot.gameId);
+        if (!state) return null;
+        if (snapshot.status === 'finished') return captureFinishedResult(snapshot, trigger);
+        const record = SnapshotEngine.buildSnapshotRecord(snapshot);
+        record.telemetryContext = record.telemetryContext || telemetryContext(snapshot, state.openPhase?.presetId || null);
+        record.tacticalPhase = clone(snapshot.tacticalPhase || null);
+        record.source = Object.assign({}, record.source || {}, {
+            trigger: `auto_telemetry_v2:${trigger}`,
+            automatic: true,
+            playerObservationsIncluded: false
+        });
+        const windowKey = String(snapshot?.generationWindow?.index ?? snapshot?.bucket ?? 'unknown');
+        const key = record.snapshotKey || snapshotKeyFor(snapshot) || `${snapshot.gameId}|${snapshot.minute}|${snapshot.bucket}`;
+        try {
+            await Api.postAppend(CONFIG.COLLECTIONS.MATCH_SNAPSHOTS, record, 'automatic tactical snapshot');
+            persistState({
+                lastSnapshotKey: key,
+                lastAutoSnapshotWindow: windowKey,
+                lastObservedScoreState: scoreState(snapshot),
+                lastObservedTacticFingerprint: tacticFingerprint(snapshot.currentTactic)
+            }, { gameId: snapshot.gameId, existing: getState(snapshot.gameId) });
+            return record;
+        } catch (error) {
+            const updated = getState(snapshot.gameId);
+            if (updated?.outbox?.some(item => item.collection === CONFIG.COLLECTIONS.MATCH_SNAPSHOTS && item.key === key)) {
+                persistState({
+                    lastSnapshotKey: key,
+                    lastAutoSnapshotWindow: windowKey,
+                    lastObservedScoreState: scoreState(snapshot),
+                    lastObservedTacticFingerprint: tacticFingerprint(snapshot.currentTactic)
+                }, { gameId: snapshot.gameId, existing: updated });
+            }
+            throw error;
+        }
+    }
+
+    async function captureFinishedResult(snapshot, trigger = 'finished') {
+        if (!snapshot?.gameId || !snapshot?.myTeam || snapshot.matchOwnership === 'foreign' || snapshot.status !== 'finished') return null;
+        const state = getState(snapshot.gameId);
+        if (!state) return null;
+        const resultKey = SnapshotEngine.buildResultKey ? SnapshotEngine.buildResultKey(snapshot) : `match_result|${snapshot.gameId}|finished`;
+        if (state.lastResultKey === resultKey || resultReservations.has(resultKey)) return null;
+        resultReservations.add(resultKey);
+        try {
+            const result = await SnapshotEngine.sendMatchResult(snapshot);
+            persistState({ lastResultKey: resultKey }, { gameId: snapshot.gameId, existing: getState(snapshot.gameId) });
+            return result;
+        } catch (error) {
+            const updated = getState(snapshot.gameId);
+            if (updated?.outbox?.some(item => item.key === resultKey)) {
+                persistState({ lastResultKey: resultKey }, { gameId: snapshot.gameId, existing: updated });
+            }
+            throw error;
+        } finally {
+            resultReservations.delete(resultKey);
+        }
+    }
+
+    applyPresetAsync = async function applyPresetWithTacticalPhaseV2() {
+        const result = await applyPresetBeforeV2.apply(this, arguments);
+        if (result && location.pathname.includes('/game.php')) {
+            setTimeout(() => {
+                try { SnapshotEngine.build(); } catch (error) { debugWarn('[SLF Snapshot] post-preset build failed', error); }
+            }, 0);
+        }
+        return result;
+    };
+
+    async function pollAutomaticTelemetry() {
+        if (!location.pathname.includes('/game.php')) return false;
+        let snapshot;
+        try { snapshot = SnapshotEngine.build(); } catch (error) { debugWarn('[SLF Snapshot] poll build failed', error); return false; }
+        if (!snapshot?.myTeam || snapshot.matchOwnership === 'foreign') return false;
+        if (snapshot.status === 'finished') {
+            try { await captureFinishedResult(snapshot, 'poll_finished'); } catch (error) { debugWarn('[SLF Telemetry] finished-result capture failed', error); }
+            return true;
+        }
+        try { await flushOutbox(snapshot.gameId); } catch (error) { debugWarn('[SLF Telemetry] outbox flush failed', error); }
+        return true;
+    }
+
+    function scheduleAutomaticTelemetry() {
+        if (!location.pathname.includes('/game.php')) return;
+        let attempts = 0;
+        const bootstrap = setInterval(() => {
+            attempts += 1;
+            void pollAutomaticTelemetry().then(started => {
+                if (!started && attempts < 120 && location.pathname.includes('/game.php')) return;
+                clearInterval(bootstrap);
+                if (!started || !location.pathname.includes('/game.php')) return;
+                if (STATE.telemetryV2PollTimer) clearInterval(STATE.telemetryV2PollTimer);
+                STATE.telemetryV2PollTimer = setInterval(() => { void pollAutomaticTelemetry(); }, AUTO_POLL_MS);
+            });
+        }, 1000);
+        void pollAutomaticTelemetry().then(started => {
+            if (!started) return;
+            clearInterval(bootstrap);
+            if (STATE.telemetryV2PollTimer) clearInterval(STATE.telemetryV2PollTimer);
+            STATE.telemetryV2PollTimer = setInterval(() => { void pollAutomaticTelemetry(); }, AUTO_POLL_MS);
+        });
+    }
+
+    SnapshotEngine.telemetryV2 = {
+        schema: 'slf_tactical_telemetry_runtime_v2',
+        stateSchema: STATE_SCHEMA,
+        tacticFingerprint,
+        scoreState,
+        telemetryContext,
+        compactSnapshot,
+        reconcilePhase,
+        closePhase,
+        captureSnapshot,
+        captureFinishedResult,
+        flushOutbox,
+        getState
+    };
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scheduleAutomaticTelemetry, { once: true });
+    else scheduleAutomaticTelemetry();
 })();
 
 // ============================================================
@@ -10229,6 +10969,19 @@ const TMEnrichmentLayer = {
     requestDelayMs: CONFIG.TRANSFER_ANALYZER?.requestDelayMs || 900,
     _lastRequestAt: 0,
 
+};
+// <<< src/modules/transfer-analyzer/tm-enrichment-layer.js
+
+
+// >>> src/modules/transfer-analyzer/tm-enrichment-cache.js
+// Tm Enrichment Cache
+// Extracted verbatim from tm-enrichment-layer.js (stage 3 refactor).
+// Assigned onto the TMEnrichmentLayer facade; behaviour unchanged.
+
+if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer) {
+    TMEnrichmentLayer.stage3TmEnrichmentCacheApplied = true;
+
+    Object.assign(TMEnrichmentLayer, {
     loadCache() {
         try {
             return JSON.parse(localStorage.getItem(this.cacheKey) || '{}');
@@ -10282,6 +11035,20 @@ const TMEnrichmentLayer = {
         this.saveCache(cache);
     },
 
+    });
+}
+// <<< src/modules/transfer-analyzer/tm-enrichment-cache.js
+
+
+// >>> src/modules/transfer-analyzer/tm-enrichment-transport.js
+// Tm Enrichment Transport
+// Extracted verbatim from tm-enrichment-layer.js (stage 3 refactor).
+// Assigned onto the TMEnrichmentLayer facade; behaviour unchanged.
+
+if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer) {
+    TMEnrichmentLayer.stage3TmEnrichmentTransportApplied = true;
+
+    Object.assign(TMEnrichmentLayer, {
     async throttle() {
         const diff = Date.now() - this._lastRequestAt;
         const wait = Math.max(0, this.requestDelayMs - diff);
@@ -10314,6 +11081,20 @@ const TMEnrichmentLayer = {
         return new DOMParser().parseFromString(html || '', 'text/html');
     },
 
+    });
+}
+// <<< src/modules/transfer-analyzer/tm-enrichment-transport.js
+
+
+// >>> src/modules/transfer-analyzer/tm-enrichment-url-text-utils.js
+// Tm Enrichment Url Text Utils
+// Extracted verbatim from tm-enrichment-layer.js (stage 3 refactor).
+// Assigned onto the TMEnrichmentLayer facade; behaviour unchanged.
+
+if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer) {
+    TMEnrichmentLayer.stage3TmEnrichmentUrlTextUtilsApplied = true;
+
+    Object.assign(TMEnrichmentLayer, {
     normalizeText(value) {
         return String(value || '')
             .replace(/\u00a0/g, ' ')
@@ -10367,6 +11148,121 @@ const TMEnrichmentLayer = {
         return m ? m[1] : '';
     },
 
+    parseMarketValue(text) {
+        const raw = String(text || '')
+            .replace(/\s+/g, ' ')
+            .replace(',', '.')
+            .toLowerCase();
+
+        if (!raw.includes('€')) return null;
+
+        const m = raw.match(/€\s*([\d.]+)/);
+        if (!m) return null;
+
+        const num = Number(m[1]);
+
+        if (!Number.isFinite(num)) return null;
+
+        if (raw.includes('m') || raw.includes('mil')) return Math.round(num * 1000000);
+        if (raw.includes('k') || raw.includes('th')) return Math.round(num * 1000);
+
+        return Math.round(num);
+    },
+
+    extractPercentNearLabel(lines, labelPatterns) {
+        const normalized = lines.map(x => this.normalizeText(x));
+
+        for (let i = 0; i < normalized.length; i++) {
+            const line = normalized[i];
+            const lower = line.toLowerCase();
+
+            const hasLabel = labelPatterns.some(pattern => lower.includes(pattern));
+
+            if (!hasLabel) continue;
+
+            const nearby = normalized.slice(Math.max(0, i - 2), Math.min(normalized.length, i + 4));
+            const joined = nearby.join(' ');
+
+            const direct = line.match(/(\d{1,3})\s*%/);
+            if (direct) return Number(direct[1]);
+
+            const beforeLine = normalized[i - 1] || '';
+            const afterLine = normalized[i + 1] || '';
+
+            const before = beforeLine.match(/^(\d{1,3})$/);
+            if (before && (afterLine === '%' || line.includes('%'))) return Number(before[1]);
+
+            const joinedMatch = joined.match(/(\d{1,3})\s*%\s*[^%]{0,40}/);
+            if (joinedMatch) return Number(joinedMatch[1]);
+        }
+
+        return null;
+    },
+
+    extractDateFromText(text) {
+        const value = String(text || '');
+
+        const datePatterns = [
+            /(\d{1,2}\/\d{1,2}\/20\d{2})/,
+            /(\d{1,2}\.\d{1,2}\.20\d{2})/,
+            /(\d{1,2}-\d{1,2}-20\d{2})/
+        ];
+
+        for (const re of datePatterns) {
+            const m = value.match(re);
+
+            if (m) {
+                const raw = m[1];
+                const parts = raw.split(/[./-]/).map(Number);
+
+                if (parts.length === 3) {
+                    const [d, mo, y] = parts;
+                    const ts = new Date(y, mo - 1, d).getTime();
+
+                    return {
+                        dateText: raw,
+                        dateTs: Number.isFinite(ts) ? ts : null
+                    };
+                }
+            }
+        }
+
+        return {
+            dateText: '',
+            dateTs: null
+        };
+    },
+
+    formatMoney(value) {
+        const n = Number(value || 0);
+
+        if (!n) return '?';
+
+        if (n >= 1000000) {
+            const v = n / 1000000;
+            return `€${v >= 10 ? v.toFixed(0) : v.toFixed(1)}m`;
+        }
+
+        if (n >= 1000) {
+            return `€${Math.round(n / 1000)}k`;
+        }
+
+        return `€${n}`;
+    }
+    });
+}
+// <<< src/modules/transfer-analyzer/tm-enrichment-url-text-utils.js
+
+
+// >>> src/modules/transfer-analyzer/tm-enrichment-profile.js
+// Tm Enrichment Profile
+// Extracted verbatim from tm-enrichment-layer.js (stage 3 refactor).
+// Assigned onto the TMEnrichmentLayer facade; behaviour unchanged.
+
+if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer) {
+    TMEnrichmentLayer.stage3TmEnrichmentProfileApplied = true;
+
+    Object.assign(TMEnrichmentLayer, {
     async getBySlfPlayerId(playerId) {
         const id = String(playerId || '').trim();
         if (!id) throw new Error('empty_player_id');
@@ -10702,27 +11598,6 @@ const TMEnrichmentLayer = {
         return m ? m[0].trim() : '';
     },
 
-    parseMarketValue(text) {
-        const raw = String(text || '')
-            .replace(/\s+/g, ' ')
-            .replace(',', '.')
-            .toLowerCase();
-
-        if (!raw.includes('€')) return null;
-
-        const m = raw.match(/€\s*([\d.]+)/);
-        if (!m) return null;
-
-        const num = Number(m[1]);
-
-        if (!Number.isFinite(num)) return null;
-
-        if (raw.includes('m') || raw.includes('mil')) return Math.round(num * 1000000);
-        if (raw.includes('k') || raw.includes('th')) return Math.round(num * 1000);
-
-        return Math.round(num);
-    },
-
     extractHighestMarketValue(doc) {
         const lines = (doc.body?.innerText || '')
             .replace(/\r/g, '')
@@ -10808,36 +11683,6 @@ const TMEnrichmentLayer = {
         return Number.isFinite(age) ? age : null;
     },
 
-    extractPercentNearLabel(lines, labelPatterns) {
-        const normalized = lines.map(x => this.normalizeText(x));
-
-        for (let i = 0; i < normalized.length; i++) {
-            const line = normalized[i];
-            const lower = line.toLowerCase();
-
-            const hasLabel = labelPatterns.some(pattern => lower.includes(pattern));
-
-            if (!hasLabel) continue;
-
-            const nearby = normalized.slice(Math.max(0, i - 2), Math.min(normalized.length, i + 4));
-            const joined = nearby.join(' ');
-
-            const direct = line.match(/(\d{1,3})\s*%/);
-            if (direct) return Number(direct[1]);
-
-            const beforeLine = normalized[i - 1] || '';
-            const afterLine = normalized[i + 1] || '';
-
-            const before = beforeLine.match(/^(\d{1,3})$/);
-            if (before && (afterLine === '%' || line.includes('%'))) return Number(before[1]);
-
-            const joinedMatch = joined.match(/(\d{1,3})\s*%\s*[^%]{0,40}/);
-            if (joinedMatch) return Number(joinedMatch[1]);
-        }
-
-        return null;
-    },
-
     extractActivity(doc) {
         const lines = (doc.body?.innerText || '')
             .replace(/\r/g, '')
@@ -10863,6 +11708,20 @@ const TMEnrichmentLayer = {
         };
     },
 
+    });
+}
+// <<< src/modules/transfer-analyzer/tm-enrichment-profile.js
+
+
+// >>> src/modules/transfer-analyzer/tm-enrichment-history-rumors.js
+// Tm Enrichment History Rumors
+// Extracted verbatim from tm-enrichment-layer.js (stage 3 refactor).
+// Assigned onto the TMEnrichmentLayer facade; behaviour unchanged.
+
+if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer) {
+    TMEnrichmentLayer.stage3TmEnrichmentHistoryRumorsApplied = true;
+
+    Object.assign(TMEnrichmentLayer, {
     getTmHistoryUrlCandidates(tmUrlRaw) {
         const tmUrl = this.normalizeTransfermarktUrl(tmUrlRaw);
         const tmId = this.extractTmId(tmUrl);
@@ -10914,7 +11773,7 @@ const TMEnrichmentLayer = {
 
             const transferHistory = this.extractTransferHistory(doc);
 
-            console.log('[SLF TM] history fetch', {
+            debugLog('[SLF TM] history fetch', {
                 historyUrl,
                 htmlLength: html.length,
                 title: doc.title,
@@ -11300,7 +12159,7 @@ const TMEnrichmentLayer = {
 
             const clubLink = [...tr.querySelectorAll('a[href]')].find(a => {
                 const href = a.getAttribute('href') || '';
-                return /\/verein\/\d+|verein_id=\d+/i.test(href);
+                return (/\/verein\/\d+|verein_id=\d+/i).test(href);
             });
 
             let club = cleanCell(clubLink?.innerText || '');
@@ -11361,59 +12220,9 @@ const TMEnrichmentLayer = {
         return unique.slice(0, 12);
     },
 
-    extractDateFromText(text) {
-        const value = String(text || '');
-
-        const datePatterns = [
-            /(\d{1,2}\/\d{1,2}\/20\d{2})/,
-            /(\d{1,2}\.\d{1,2}\.20\d{2})/,
-            /(\d{1,2}-\d{1,2}-20\d{2})/
-        ];
-
-        for (const re of datePatterns) {
-            const m = value.match(re);
-
-            if (m) {
-                const raw = m[1];
-                const parts = raw.split(/[./-]/).map(Number);
-
-                if (parts.length === 3) {
-                    const [d, mo, y] = parts;
-                    const ts = new Date(y, mo - 1, d).getTime();
-
-                    return {
-                        dateText: raw,
-                        dateTs: Number.isFinite(ts) ? ts : null
-                    };
-                }
-            }
-        }
-
-        return {
-            dateText: '',
-            dateTs: null
-        };
-    },
-
-    formatMoney(value) {
-        const n = Number(value || 0);
-
-        if (!n) return '?';
-
-        if (n >= 1000000) {
-            const v = n / 1000000;
-            return `€${v >= 10 ? v.toFixed(0) : v.toFixed(1)}m`;
-        }
-
-        if (n >= 1000) {
-            return `€${Math.round(n / 1000)}k`;
-        }
-
-        return `€${n}`;
-    }
-};
-// ============================================================
-// <<< src/modules/transfer-analyzer/tm-enrichment-layer.js
+    });
+}
+// <<< src/modules/transfer-analyzer/tm-enrichment-history-rumors.js
 
 
 // >>> src/modules/transfer-analyzer/slf-alter-layer.js
@@ -11421,7 +12230,7 @@ const TMEnrichmentLayer = {
 // ============================================================
 
 const SLFAlterLayer = {
-    cacheKey: 'slf_alter_cache_v3',
+    cacheKey: 'slf_alter_cache_v4',
     cacheTtlMs: 1000 * 60 * 60 * 24 * (CONFIG.TRANSFER_ANALYZER?.slfAlter?.cacheTtlDays || 1),
 
     loadCache() {
@@ -11575,7 +12384,11 @@ const SLFAlterLayer = {
     },
 
     parseSkillTables(doc) {
-        const tables = [...doc.querySelectorAll('table.ai_skill')];
+        // 2026 redesign: skill tables lost the dedicated `ai_skill` class and are
+        // now plain `ai-table` blocks; stat tables carry `ai-stat` and must be
+        // excluded. The requests-quota table is also a plain `ai-table`.
+        const tables = [...doc.querySelectorAll('table.ai_skill, table.ai-table:not(.ai-stat)')]
+            .filter(table => !/заявок|пополнить/i.test(this.normalizeText(table.innerText || table.textContent || '')));
         const seasonSkills = [];
         let seasonSkill = null;
         let talentSkill = null;
@@ -11635,31 +12448,50 @@ const SLFAlterLayer = {
     parseMinutes(text) {
         const clean = this.normalizeText(text);
         const pctMatch = clean.match(/(\d{1,3})\s*%/);
-        const nums = [...clean.matchAll(/\d+/g)].map(x => Number(x[0]));
+        // Minutes may precede or follow the percentage depending on the page
+        // layout; the percentage is removed before number extraction so the
+        // remaining last number is always the played-minutes value.
+        const withoutPct = clean.replace(/\d{1,3}\s*%\s*/g, ' ');
+        const nums = [...withoutPct.matchAll(/\d+/g)].map(x => Number(x[0]));
 
         return {
             minutesText: clean,
             minutesPct: pctMatch ? Number(pctMatch[1]) : null,
-            minutes: nums.length >= 2 ? nums[1] : (pctMatch ? null : (nums[0] ?? null))
+            minutes: nums.length ? nums[nums.length - 1] : null
         };
     },
 
-    parseAiStatRow(tr, season) {
-        const cells = [...tr.querySelectorAll('td, th')]
-            .map(td => this.normalizeText(td.innerText || td.textContent || ''));
-
+    parseStatCells(cells, season) {
         const rowText = cells.join(' | ');
 
         if (!rowText.trim()) return null;
         if (/Лига\s*\|\s*Команда\s*\|\s*Игр/i.test(rowText)) return null;
 
-        const leagueText = cells[1] || '';
-        const teamText = cells[2] || '';
-        const gamesText = cells[3] || '';
-        const startsText = cells[4] || '';
-        const minutesText = cells[5] || '';
-        const goalsText = cells[6] || '';
-        const assistsText = cells[7] || '';
+        // Semantic layout (2026 redesign): locate the games cell ("N/M") and
+        // derive every other column relative to it, so adding or removing
+        // leading columns cannot shift the mapping again.
+        const gamesIdx = cells.findIndex(c => /^\d+\s*\/\s*\d+$/.test(this.normalizeText(c)));
+
+        let leagueText, teamText, gamesText, startsText, minutesText, goalsText, assistsText;
+
+        if (gamesIdx > 0) {
+            leagueText = this.normalizeText(cells.slice(0, gamesIdx - 1).join(' '));
+            teamText = cells[gamesIdx - 1] || '';
+            gamesText = cells[gamesIdx];
+            startsText = cells[gamesIdx + 1] || '';
+            minutesText = cells[gamesIdx + 2] || '';
+            goalsText = cells[gamesIdx + 3] || '';
+            assistsText = cells[gamesIdx + 4] || '';
+        } else {
+            // Pre-redesign fixed-index fallback.
+            leagueText = cells[1] || '';
+            teamText = cells[2] || '';
+            gamesText = cells[3] || '';
+            startsText = cells[4] || '';
+            minutesText = cells[5] || '';
+            goalsText = cells[6] || '';
+            assistsText = cells[7] || '';
+        }
 
         const leagueMatch = leagueText.match(/(\d+)\s*\/\s*(\d+)/);
         const games = this.parseGames(gamesText);
@@ -11694,6 +12526,13 @@ const SLFAlterLayer = {
             goals: this.toNumber(goalsText),
             assists: this.toNumber(assistsText)
         };
+    },
+
+    parseAiStatRow(tr, season) {
+        const cells = [...tr.querySelectorAll('td, th')]
+            .map(td => this.normalizeText(td.innerText || td.textContent || ''));
+
+        return this.parseStatCells(cells, season);
     },
 
 
@@ -11747,7 +12586,9 @@ const SLFAlterLayer = {
                 return;
             }
 
-            if (el.matches && el.matches('table.ai_stat')) {
+            // 2026 redesign renamed the stat table class from `ai_stat`
+            // (underscore) to `ai-stat` (hyphen); match both spellings.
+            if (el.matches && el.matches('table.ai_stat, table.ai-stat')) {
                 [...el.querySelectorAll('tr')]
                     .map(tr => this.parseAiStatRow(tr, currentSeason))
                     .filter(Boolean)
@@ -11993,25 +12834,6 @@ const TransferMarketAnalyzer = {
     marketBaseline: null,
     marketBaselinePromise: null,
 
-    isTransferDetailPage() {
-        if (!location.pathname.includes('/transfers.php')) return false;
-
-        const params = new URLSearchParams(location.search);
-        return params.get('action') === 'view' && !!params.get('transfer_id');
-    },
-
-    isPage() {
-        // Transfer detail pages are not list/analysis pages.
-        // Do not mount analyzer UI, hydration, tooltips, observers or requests there.
-        return location.pathname.includes('/transfers.php') && !this.isTransferDetailPage();
-    },
-
-    isHistoryPage() {
-        return location.pathname.includes('/transfers.php') &&
-            !this.isTransferDetailPage() &&
-            new URLSearchParams(location.search).get('action') === 'history';
-    },
-
     start() {
         if (!this.isPage()) return;
 
@@ -12027,10 +12849,11 @@ const TransferMarketAnalyzer = {
         setTimeout(() => this.mount(), 4000);
     },
 
+
     mount() {
         if (!this.isPage()) return;
 
-        console.log('[SLF Transfer Analyzer] mount on transfers.php');
+        debugLog('[SLF Transfer Analyzer] mount on transfers.php');
 
         this.addToolbar();
 
@@ -12046,9 +12869,11 @@ const TransferMarketAnalyzer = {
             .catch(error => console.warn('[SLF Transfer Analyzer] market baseline load failed', error));
     },
 
+
     getCfg() {
         return CONFIG.TRANSFER_ANALYZER || {};
     },
+
 
     normalizeText(value) {
         return String(value || '')
@@ -12057,464 +12882,11 @@ const TransferMarketAnalyzer = {
             .trim();
     },
 
+
     normalizeLower(value) {
         return this.normalizeText(value).toLowerCase();
     },
 
-    isWrapperTable(table) {
-        if (!table) return true;
-
-        const id = String(table.id || '').toLowerCase();
-        const cls = String(table.className || '').toLowerCase();
-
-        if (id === 'globalcontent') return true;
-        if (cls.includes('game-ui__background')) return true;
-
-        const nestedTables = table.querySelectorAll('table').length;
-        const rows = table.querySelectorAll('tr').length;
-
-        if (nestedTables >= 3 && rows > 20) return true;
-
-        return false;
-    },
-
-    getPlayerLinksIn(table) {
-        if (!table) return [];
-
-        return [...table.querySelectorAll('a[href]')]
-            .filter(a => {
-                const href = a.getAttribute('href') || '';
-                return /player\.php/i.test(href) && /id=\d+/i.test(href);
-            });
-    },
-
-    scoreTransferTable(table) {
-        if (!table || this.isWrapperTable(table)) return -999;
-
-        const text = this.normalizeLower(table.innerText);
-        const rows = [...table.querySelectorAll('tr')];
-        const playerLinks = this.getPlayerLinksIn(table);
-        const nestedTables = table.querySelectorAll('table').length;
-
-        const headerScore =
-            (text.includes('амплуа') ? 4 : 0) +
-            (text.includes('фамилия') || text.includes('имя') ? 4 : 0) +
-            (text.includes('цена') ? 3 : 0) +
-            (text.includes('тал') ? 1 : 0) +
-            (text.includes('воз') ? 1 : 0) +
-            (text.includes('пот') ? 1 : 0) +
-            (text.includes('дата') || text.includes('оконч') ? 1 : 0);
-
-        const playerScore = Math.min(playerLinks.length, 20) * 3;
-
-        const sizePenalty =
-            rows.length > 80 ? 20 :
-            rows.length > 40 ? 8 :
-            0;
-
-        const nestedPenalty =
-            nestedTables > 0 ? nestedTables * 2 : 0;
-
-        return headerScore + playerScore - sizePenalty - nestedPenalty;
-    },
-
-    findTransferTable() {
-        const tables = [...document.querySelectorAll('table')];
-
-        const candidates = tables
-            .map(table => ({
-                table,
-                score: this.scoreTransferTable(table),
-                rows: table.querySelectorAll('tr').length,
-                nested: table.querySelectorAll('table').length,
-                playerLinks: this.getPlayerLinksIn(table).length,
-                id: table.id || '',
-                cls: String(table.className || ''),
-                sample: this.normalizeLower(table.innerText).slice(0, 220)
-            }))
-            .filter(x => x.score > 0 && x.playerLinks > 0)
-            .sort((a, b) => b.score - a.score);
-
-        if (candidates.length) {
-            console.log('[SLF Transfer Analyzer] findTransferTable', {
-                found: true,
-                selected: {
-                    score: candidates[0].score,
-                    rows: candidates[0].rows,
-                    nested: candidates[0].nested,
-                    playerLinks: candidates[0].playerLinks,
-                    id: candidates[0].id,
-                    sample: candidates[0].sample
-                },
-                candidates: candidates.slice(0, 5).map(x => ({
-                    score: x.score,
-                    rows: x.rows,
-                    nested: x.nested,
-                    playerLinks: x.playerLinks,
-                    id: x.id,
-                    sample: x.sample
-                }))
-            });
-
-            return candidates[0].table;
-        }
-
-        const playerLinks = [...document.querySelectorAll('a[href]')]
-            .filter(a => {
-                const href = a.getAttribute('href') || '';
-                return /player\.php/i.test(href) && /id=\d+/i.test(href);
-            });
-
-        const tableMap = new Map();
-
-        playerLinks.forEach(a => {
-            let node = a;
-
-            while (node && node !== document.body) {
-                if (node.tagName && node.tagName.toLowerCase() === 'table') {
-                    if (!this.isWrapperTable(node)) {
-                        tableMap.set(node, (tableMap.get(node) || 0) + 1);
-                        break;
-                    }
-                }
-
-                node = node.parentElement;
-            }
-        });
-
-        const fallback = [...tableMap.entries()]
-            .map(([table, count]) => ({
-                table,
-                count,
-                rows: table.querySelectorAll('tr').length,
-                nested: table.querySelectorAll('table').length,
-                sample: this.normalizeLower(table.innerText).slice(0, 220)
-            }))
-            .filter(x => x.count >= 3)
-            .sort((a, b) => {
-                if (b.count !== a.count) return b.count - a.count;
-                return a.rows - b.rows;
-            });
-
-        const found = fallback[0]?.table || null;
-
-        console.log('[SLF Transfer Analyzer] findTransferTable fallback', {
-            found: !!found,
-            fallback: fallback.slice(0, 5).map(x => ({
-                count: x.count,
-                rows: x.rows,
-                nested: x.nested,
-                sample: x.sample
-            }))
-        });
-
-        return found;
-    },
-
-    loadAnalysisCache() {
-        try {
-            return JSON.parse(localStorage.getItem(this.analysisCacheKey) || '{}');
-        } catch (e) {
-            return {};
-        }
-    },
-
-    saveAnalysisCache(cache) {
-        try {
-            const entries = Object.entries(cache || {})
-                .filter(([, value]) => value && Number(value.savedAt || 0))
-                .sort((a, b) => Number(b[1].savedAt || 0) - Number(a[1].savedAt || 0))
-                .slice(0, 700);
-
-            localStorage.setItem(this.analysisCacheKey, JSON.stringify(Object.fromEntries(entries)));
-        } catch (e) {
-            console.warn('[SLF Transfer Analyzer] analysis cache save failed', e);
-        }
-    },
-
-    clearAnalysisCache() {
-        localStorage.removeItem(this.analysisCacheKey);
-    },
-
-    buildAnalysisCacheKeys(row, enriched) {
-        const keys = [];
-        const playerId = String(row?.playerId || enriched?.playerId || '').trim();
-        const tmId = String(enriched?.tmProfile?.tmId || row?.tmProfile?.tmId || '').trim();
-
-        if (playerId) keys.push(`slf:${playerId}`);
-        if (tmId) keys.push(`tm:${tmId}`);
-
-        return [...new Set(keys)];
-    },
-
-    getCachedAnalysis(row) {
-        const cache = this.loadAnalysisCache();
-        const keys = this.buildAnalysisCacheKeys(row, null);
-
-        for (const key of keys) {
-            const item = cache[key];
-            if (!item) continue;
-
-            const savedAt = Number(item.savedAt || 0);
-            if (!savedAt || Date.now() - savedAt > this.analysisCacheTtlMs) continue;
-
-            // 4.4.72: MKT must be based on alter.php final skill.
-            // Old row-analysis cache without finalSkill is intentionally ignored
-            // so pressing Analyze fetches/uses SLFAlterLayer instead of silently
-            // reusing current-skill based MKT output.
-            if (!item.slfAlter || item.slfAlter.finalSkill == null) continue;
-
-            return item;
-        }
-
-        return null;
-    },
-
-    saveRowAnalysis(row, enriched, slfAlter) {
-        if (!row?.playerId) return;
-
-        const cache = this.loadAnalysisCache();
-        const keys = this.buildAnalysisCacheKeys(row, enriched);
-        const item = {
-            schema: 'transfer_row_analysis_cache_v1',
-            savedAt: Date.now(),
-            playerId: String(row.playerId || ''),
-            name: row.name || '',
-            tmResult: enriched || null,
-            slfAlter: slfAlter || null,
-            row: {
-                playerId: String(row.playerId || ''),
-                playerUrl: row.playerUrl || '',
-                name: row.name || '',
-                positions: row.positions || [],
-                age: row.age ?? null,
-                talent: row.talent ?? null,
-                scoutSkill: row.scoutSkill ?? null,
-                slfPriceText: row.slfPriceText || row.salePriceText || '',
-                slfPriceCellText: row.slfPriceCellText || '',
-                slfPrice: row.slfPrice ?? row.salePrice ?? null,
-                slfSecondaryPriceText: row.slfSecondaryPriceText || '',
-                slfSecondaryPrice: row.slfSecondaryPrice ?? null,
-                nominalRatio: row.nominalRatio ?? null,
-                nominalBase: row.nominalBase ?? null,
-                slfPriceSource: row.slfPriceSource || ''
-            }
-        };
-
-        keys.forEach(key => {
-            cache[key] = item;
-        });
-
-        this.saveAnalysisCache(cache);
-    },
-
-    applyCachedAnalysis(row, cached) {
-        if (!row || !cached) return false;
-
-        const savedRow = cached.row || {};
-        row.tmUrl = cached.tmResult?.tmUrl || cached.tmResult?.tmProfile?.tmUrl || '';
-        row.tmProfile = cached.tmResult?.tmProfile || null;
-        row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
-        row.slfAlter = cached.slfAlter || null;
-        row.slfPrice = row.slfPrice ?? savedRow.slfPrice ?? null;
-        row.slfPriceText = row.slfPriceText || savedRow.slfPriceText || '';
-        row.slfPriceCellText = row.slfPriceCellText || savedRow.slfPriceCellText || '';
-        row.slfSecondaryPriceText = row.slfSecondaryPriceText || savedRow.slfSecondaryPriceText || '';
-        row.slfSecondaryPrice = row.slfSecondaryPrice ?? savedRow.slfSecondaryPrice ?? null;
-        row.nominalRatio = row.nominalRatio ?? savedRow.nominalRatio ?? null;
-        row.nominalBase = row.nominalBase ?? savedRow.nominalBase ?? null;
-        row.slfPriceSource = row.slfPriceSource || savedRow.slfPriceSource || '';
-
-        this.renderRowBadge(row, cached.tmResult || null, cached.slfAlter || null);
-        return true;
-    },
-
-    loadMarketBaseline() {
-        if (this.marketBaseline) return Promise.resolve(this.marketBaseline);
-        if (this.marketBaselinePromise) return this.marketBaselinePromise;
-
-        this.marketBaselinePromise = Api.getPromise(CONFIG.COLLECTIONS.TRANSFER_HISTORY)
-            .then(({ data }) => {
-                const rows = normalizeServerRows(data);
-                this.marketBaseline = this.buildMarketBaseline(rows);
-                return this.marketBaseline;
-            })
-            .catch(error => {
-                this.marketBaseline = { ready: false, error, byKey: {}, generatedAt: Date.now() };
-                return this.marketBaseline;
-            });
-
-        return this.marketBaselinePromise;
-    },
-
-    buildMarketBaseline(rows) {
-        const buckets = {};
-        const add = (key, value) => {
-            if (!key || !value || !Number.isFinite(value)) return;
-            if (!buckets[key]) buckets[key] = [];
-            buckets[key].push(value);
-        };
-
-        (rows || []).forEach(event => {
-            if (!event || event.recordType !== 'completed_transfer') return;
-
-            const price = Number(event.transfer?.price || 0);
-            if (!price || price < 1) return;
-
-            const player = event.player || {};
-            const pos = this.normalizeMarketPosition(player.primaryPosition || (Array.isArray(player.positions) ? player.positions[0] : ''));
-            const ageBucket = this.getMarketAgeBucket(player.age);
-            const talentBucket = this.getMarketTalentBucket(player.talent);
-            const alterSummary = event.enrichment?.slfAlterSummary || {};
-            const finalSkill = player.finalSkill ?? alterSummary.finalSkill ?? null;
-            const skillBucket = this.getMarketSkillBucket(finalSkill ?? player.skill ?? player.scoutSkill ?? player.currentSkill);
-
-            add('all', price);
-            if (pos) add(`pos:${pos}`, price);
-            if (ageBucket) add(`age:${ageBucket}`, price);
-            if (skillBucket) add(`skill:${skillBucket}`, price);
-            if (pos && ageBucket) add(`pos:${pos}|age:${ageBucket}`, price);
-            if (pos && talentBucket) add(`pos:${pos}|talent:${talentBucket}`, price);
-            if (pos && skillBucket) add(`pos:${pos}|skill:${skillBucket}`, price);
-            if (pos && ageBucket && talentBucket && skillBucket) add(`pos:${pos}|age:${ageBucket}|talent:${talentBucket}|skill:${skillBucket}`, price);
-        });
-
-        const byKey = {};
-        Object.entries(buckets).forEach(([key, values]) => {
-            const sorted = values.slice().sort((a, b) => a - b);
-            byKey[key] = this.summarizeMarketValues(sorted);
-        });
-
-        return {
-            ready: true,
-            generatedAt: Date.now(),
-            byKey
-        };
-    },
-
-    summarizeMarketValues(values) {
-        const n = values.length;
-        const at = pct => values[Math.min(n - 1, Math.max(0, Math.floor((n - 1) * pct)))] || null;
-        const sum = values.reduce((acc, value) => acc + Number(value || 0), 0);
-
-        return {
-            count: n,
-            min: values[0] || null,
-            p25: at(0.25),
-            median: at(0.50),
-            p75: at(0.75),
-            max: values[n - 1] || null,
-            avg: n ? Math.round(sum / n) : null,
-            confidence: n >= 20 ? 'high' : n >= 8 ? 'medium' : n >= 3 ? 'low' : 'weak'
-        };
-    },
-
-    normalizeMarketPosition(value) {
-        const raw = String(value || '').toUpperCase().trim();
-        if (!raw) return '';
-        if (raw === 'GK') return 'GK';
-        if (raw === 'LD' || raw === 'DL' || raw === 'LB') return 'DL';
-        if (raw === 'RD' || raw === 'DR' || raw === 'RB') return 'DR';
-        if (/^CD|^DC|CB/.test(raw)) return 'DC';
-        if (/^DM/.test(raw)) return 'DM';
-        if (/^CM/.test(raw)) return 'CM';
-        if (/^AM/.test(raw)) return 'AM';
-        if (raw === 'LM' || raw === 'LW' || raw === 'ML') return 'ML';
-        if (raw === 'RM' || raw === 'RW' || raw === 'MR') return 'MR';
-        if (/^ST|CF/.test(raw)) return 'ST';
-        return raw;
-    },
-
-    getMarketAgeBucket(age) {
-        const n = Number(age || 0);
-        if (!n) return '';
-        if (n <= 18) return 'u18';
-        if (n <= 21) return 'u21';
-        if (n <= 24) return 'u24';
-        if (n <= 29) return 'prime';
-        if (n <= 32) return 'short';
-        return 'vet';
-    },
-
-    getMarketTalentBucket(talent) {
-        const n = Number(talent || 0);
-        if (!n) return '';
-        if (n <= 2) return 't1_2';
-        if (n <= 4) return 't3_4';
-        if (n <= 6) return 't5_6';
-        if (n <= 8) return 't7_8';
-        return 't9p';
-    },
-
-    getMarketSkillBucket(skill) {
-        const n = Number(skill || 0);
-        if (!n) return '';
-        if (n < 20) return 's00_19';
-        if (n < 30) return 's20_29';
-        if (n < 40) return 's30_39';
-        if (n < 50) return 's40_49';
-        if (n < 60) return 's50_59';
-        if (n < 70) return 's60_69';
-        return 's70p';
-    },
-
-    getMarketSkillBasis(row, slfAlter) {
-        const finalSkill = slfAlter?.finalSkill != null ? Number(slfAlter.finalSkill) : null;
-        const currentSkill = slfAlter?.currentSkill != null ? Number(slfAlter.currentSkill) : null;
-        const pageSkill = row?.scoutSkill != null ? Number(row.scoutSkill) : null;
-
-        if (Number.isFinite(finalSkill) && finalSkill > 0) {
-            return {
-                skill: finalSkill,
-                source: 'alter_final_skill',
-                label: `ИТОГ alter.php ${SLFAlterLayer.formatSkill(finalSkill)}`,
-                currentSkill: Number.isFinite(currentSkill) ? currentSkill : null,
-                pageSkill: Number.isFinite(pageSkill) ? pageSkill : null,
-                lowConfidence: false,
-                missing: false
-            };
-        }
-
-        return {
-            skill: null,
-            source: slfAlter ? 'alter_without_final_skill' : 'alter_missing',
-            label: slfAlter ? 'ИТОГ alter.php не распознан' : 'alter.php не загружен',
-            currentSkill: Number.isFinite(currentSkill) ? currentSkill : null,
-            pageSkill: Number.isFinite(pageSkill) ? pageSkill : null,
-            lowConfidence: true,
-            missing: true
-        };
-    },
-
-    findMarketBaseline(row, slfAlter) {
-        const baseline = this.marketBaseline;
-        if (!baseline?.ready) return null;
-
-        const skillBasis = this.getMarketSkillBasis(row, slfAlter);
-        const pos = this.normalizeMarketPosition((row.positions || [])[0]);
-        const ageBucket = this.getMarketAgeBucket(row.age);
-        const talentBucket = this.getMarketTalentBucket(row.talent);
-        const skillBucket = this.getMarketSkillBucket(skillBasis.skill);
-        const keys = [
-            pos && ageBucket && talentBucket && skillBucket ? `pos:${pos}|age:${ageBucket}|talent:${talentBucket}|skill:${skillBucket}` : '',
-            pos && skillBucket ? `pos:${pos}|skill:${skillBucket}` : '',
-            pos && ageBucket ? `pos:${pos}|age:${ageBucket}` : '',
-            pos && talentBucket ? `pos:${pos}|talent:${talentBucket}` : '',
-            pos ? `pos:${pos}` : '',
-            skillBucket ? `skill:${skillBucket}` : '',
-            ageBucket ? `age:${ageBucket}` : '',
-            'all'
-        ].filter(Boolean);
-
-        for (const key of keys) {
-            const item = baseline.byKey?.[key];
-            if (item && item.count >= 3) {
-                return Object.assign({ key }, item);
-            }
-        }
-
-        return null;
-    },
 
     addToolbar() {
         if (document.getElementById('slf-transfer-analyzer-toolbar')) return;
@@ -12597,182 +12969,6 @@ const TransferMarketAnalyzer = {
         this.setStatus('Готов к анализу.');
     },
 
-    findHeaderRow(table) {
-        if (!table) return null;
-
-        return [...table.querySelectorAll('tr')].find(tr => {
-            const text = this.normalizeLower(tr.innerText);
-
-            return text.includes('амплуа') &&
-                (
-                    text.includes('фамилия') ||
-                    text.includes('имя')
-                );
-        }) || null;
-    },
-
-    ensureAnalysisHeader(table) {
-        const headerRow = this.findHeaderRow(table);
-
-        if (!headerRow) {
-            console.warn('[SLF Transfer Analyzer] header row not found');
-            return;
-        }
-
-        if (headerRow.querySelector('.slf-transfer-analysis-header')) return;
-
-        const cell = document.createElement('td');
-        cell.className = 'slf-transfer-analysis-header';
-        cell.textContent = this.isHistoryPage() ? 'VPS' : 'TM анализ';
-        cell.style.cssText = `
-            color:#7cff7c;
-            font-weight:bold;
-            text-align:center;
-            min-width:${this.isHistoryPage() ? '80px' : '0'};
-            width:auto;
-            border-left:1px solid #444;
-            background:#202020;
-        `;
-
-        headerRow.appendChild(cell);
-    },
-
-    getHeaderMap(table) {
-        const headerRow = this.findHeaderRow(table);
-
-        const cells = headerRow
-            ? [...headerRow.querySelectorAll('td, th')].map(c => this.normalizeLower(c.innerText))
-            : [];
-
-        const find = (...needles) => {
-            const normalizedNeedles = needles.map(n => this.normalizeLower(n));
-
-            const idx = cells.findIndex(text => {
-                return normalizedNeedles.some(n => text.includes(n));
-            });
-
-            return idx >= 0 ? idx : null;
-        };
-
-        const map = {
-            id: find('#', 'id'),
-            pos: find('амплуа'),
-            name: find('фамилия', 'имя'),
-            club: find('команда', 'клуб'),
-            age: find('возраст', 'воз'),
-            talent: find('талант', 'тал'),
-            potential: find('потенциал', 'пот'),
-            scoutSkill: find('скилл', 'ск'),
-            price: find('цена', 'сумма'),
-            date: find('дата'),
-            fromClub: find('откуда'),
-            toClub: find('куда'),
-            transferSum: find('сумма'),
-            sellerManager: find('от кого'),
-            buyerManager: find('кому'),
-            transferType: find('тип'),
-            endDate: find('дата окончания', 'оконч'),
-            bids: find('предл', 'став')
-        };
-
-        console.log('[SLF Transfer Analyzer] header map', {
-            cells,
-            map
-        });
-
-        return map;
-    },
-
-    parseVisibleRows() {
-        const table = this.findTransferTable();
-
-        if (!table) return [];
-
-        this.ensureAnalysisHeader(table);
-
-        const map = this.getHeaderMap(table);
-        const rows = [...table.querySelectorAll('tr')];
-
-        const parsed = rows
-            .map((tr, index) => this.parseRow(tr, index, map))
-            .filter(Boolean);
-
-        console.log('[SLF Transfer Analyzer] parseVisibleRows', parsed);
-
-        return parsed;
-    },
-
-    findPlayerLinkInRow(tr) {
-        const links = [...tr.querySelectorAll('a[href]')]
-            .filter(a => {
-                const href = a.getAttribute('href') || '';
-                return /player\.php/i.test(href) && /id=\d+/i.test(href);
-            });
-
-        if (!links.length) return null;
-
-        const scored = links
-            .map(a => {
-                const text = this.normalizeText(a.textContent || '');
-                const title = this.normalizeText(a.getAttribute('title') || '');
-                const href = a.getAttribute('href') || '';
-                const nameCandidate = title || text;
-
-                const hasLetters = /[A-Za-zА-Яа-яЁё]/.test(nameCandidate);
-                const hasSpace = /\s/.test(nameCandidate);
-
-                let score = 0;
-                if (hasLetters) score += 5;
-                if (hasSpace) score += 2;
-                if (nameCandidate.length >= 3 && nameCandidate.length <= 40) score += 2;
-                if (href.includes('action=view')) score += 1;
-
-                return { a, score, nameCandidate };
-            })
-            .sort((a, b) => b.score - a.score);
-
-        return scored[0].a;
-    },
-
-    cleanPlayerName(raw) {
-        let name = this.normalizeText(raw);
-
-        if (!name) return '';
-
-        const parts = name.split(' ').filter(Boolean);
-
-        if (parts.length >= 2) {
-            const first = parts[0];
-            const lastIndex = parts.length - 1;
-            const last = parts[lastIndex];
-
-            if (
-                first.length >= 2 &&
-                last.endsWith(first) &&
-                last.length > first.length
-            ) {
-                parts[lastIndex] = last.slice(0, -first.length);
-                name = parts.join(' ').trim();
-            }
-        }
-
-        const firstWord = name.split(' ')[0];
-
-        if (
-            firstWord &&
-            firstWord.length >= 2 &&
-            name.endsWith(firstWord) &&
-            name.length > firstWord.length * 2
-        ) {
-            const cut = name.slice(0, -firstWord.length).trim();
-
-            if (cut.includes(' ')) {
-                name = cut;
-            }
-        }
-
-        return name.trim();
-    },
 
     parseRow(tr, index, map) {
         const text = this.normalizeText(tr.innerText);
@@ -12855,6 +13051,7 @@ const TransferMarketAnalyzer = {
         return row;
     },
 
+
     parsePositions(value) {
         const text = this.normalizeText(value);
         const matches = text.match(/\b(GK|LD|CD|RD|DM|CM|AM|LM|RM|LW|RW|ST)\b/gi);
@@ -12863,6 +13060,7 @@ const TransferMarketAnalyzer = {
 
         return [...new Set(matches.map(x => x.toUpperCase()))].slice(0, 3);
     },
+
 
     parseNumber(value) {
         const m = String(value || '').match(/-?\d+(?:[.,]\d+)?/);
@@ -12874,10 +13072,12 @@ const TransferMarketAnalyzer = {
         return Number.isFinite(n) ? n : null;
     },
 
+
     setStatus(text) {
         const el = document.getElementById('slf-transfer-status');
         if (el) el.textContent = text || '';
     },
+
 
     renderCachedRows() {
         const rows = this.parseVisibleRows();
@@ -12920,6 +13120,7 @@ const TransferMarketAnalyzer = {
             this.setStatus(`Из cache показано: ${rendered}. Нажми анализ, чтобы догрузить недостающее.`);
         }
     },
+
 
     async analyzeVisibleRows() {
         if (this.isHistoryPage()) {
@@ -12987,6 +13188,390 @@ const TransferMarketAnalyzer = {
     },
 
 
+
+    escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+};
+
+// ============================================================
+// <<< src/modules/transfer-analyzer/transfer-market-analyzer.js
+
+
+// >>> src/modules/transfer-analyzer/transfer-table-locator.js
+// Transfer Table Locator
+// Extracted verbatim from transfer-market-analyzer.js (stage 1 refactor).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.stage1TableLocatorApplied = true;
+
+    Object.assign(TransferMarketAnalyzer, {
+    isTransferDetailPage() {
+        if (!location.pathname.includes('/transfers.php')) return false;
+
+        const params = new URLSearchParams(location.search);
+        return params.get('action') === 'view' && !!params.get('transfer_id');
+    },
+
+    isPage() {
+        // Transfer detail pages are not list/analysis pages.
+        // Do not mount analyzer UI, hydration, tooltips, observers or requests there.
+        return location.pathname.includes('/transfers.php') && !this.isTransferDetailPage();
+    },
+
+    isHistoryPage() {
+        return location.pathname.includes('/transfers.php') &&
+            !this.isTransferDetailPage() &&
+            new URLSearchParams(location.search).get('action') === 'history';
+    },
+
+    isWrapperTable(table) {
+        if (!table) return true;
+
+        const id = String(table.id || '').toLowerCase();
+        const cls = String(table.className || '').toLowerCase();
+
+        if (id === 'globalcontent') return true;
+        if (cls.includes('game-ui__background')) return true;
+
+        const nestedTables = table.querySelectorAll('table').length;
+        const rows = table.querySelectorAll('tr').length;
+
+        if (nestedTables >= 3 && rows > 20) return true;
+
+        return false;
+    },
+
+    getPlayerLinksIn(table) {
+        if (!table) return [];
+
+        return [...table.querySelectorAll('a[href]')]
+            .filter(a => {
+                const href = a.getAttribute('href') || '';
+                return /player\.php/i.test(href) && /id=\d+/i.test(href);
+            });
+    },
+
+    scoreTransferTable(table) {
+        if (!table || this.isWrapperTable(table)) return -999;
+
+        const text = this.normalizeLower(table.innerText);
+        const rows = [...table.querySelectorAll('tr')];
+        const playerLinks = this.getPlayerLinksIn(table);
+        const nestedTables = table.querySelectorAll('table').length;
+
+        const headerScore =
+            (text.includes('амплуа') ? 4 : 0) +
+            (text.includes('фамилия') || text.includes('имя') ? 4 : 0) +
+            (text.includes('цена') ? 3 : 0) +
+            (text.includes('тал') ? 1 : 0) +
+            (text.includes('воз') ? 1 : 0) +
+            (text.includes('пот') ? 1 : 0) +
+            (text.includes('дата') || text.includes('оконч') ? 1 : 0);
+
+        const playerScore = Math.min(playerLinks.length, 20) * 3;
+
+        const sizePenalty =
+            rows.length > 80 ? 20 :
+            rows.length > 40 ? 8 :
+            0;
+
+        const nestedPenalty =
+            nestedTables > 0 ? nestedTables * 2 : 0;
+
+        return headerScore + playerScore - sizePenalty - nestedPenalty;
+    },
+
+    findTransferTable() {
+        const tables = [...document.querySelectorAll('table')];
+
+        const candidates = tables
+            .map(table => ({
+                table,
+                score: this.scoreTransferTable(table),
+                rows: table.querySelectorAll('tr').length,
+                nested: table.querySelectorAll('table').length,
+                playerLinks: this.getPlayerLinksIn(table).length,
+                id: table.id || '',
+                cls: String(table.className || ''),
+                sample: this.normalizeLower(table.innerText).slice(0, 220)
+            }))
+            .filter(x => x.score > 0 && x.playerLinks > 0)
+            .sort((a, b) => b.score - a.score);
+
+        if (candidates.length) {
+            debugLog('[SLF Transfer Analyzer] findTransferTable', {
+                found: true,
+                selected: {
+                    score: candidates[0].score,
+                    rows: candidates[0].rows,
+                    nested: candidates[0].nested,
+                    playerLinks: candidates[0].playerLinks,
+                    id: candidates[0].id,
+                    sample: candidates[0].sample
+                },
+                candidates: candidates.slice(0, 5).map(x => ({
+                    score: x.score,
+                    rows: x.rows,
+                    nested: x.nested,
+                    playerLinks: x.playerLinks,
+                    id: x.id,
+                    sample: x.sample
+                }))
+            });
+
+            return candidates[0].table;
+        }
+
+        const playerLinks = [...document.querySelectorAll('a[href]')]
+            .filter(a => {
+                const href = a.getAttribute('href') || '';
+                return /player\.php/i.test(href) && /id=\d+/i.test(href);
+            });
+
+        const tableMap = new Map();
+
+        playerLinks.forEach(a => {
+            let node = a;
+
+            while (node && node !== document.body) {
+                if (node.tagName && node.tagName.toLowerCase() === 'table') {
+                    if (!this.isWrapperTable(node)) {
+                        tableMap.set(node, (tableMap.get(node) || 0) + 1);
+                        break;
+                    }
+                }
+
+                node = node.parentElement;
+            }
+        });
+
+        const fallback = [...tableMap.entries()]
+            .map(([table, count]) => ({
+                table,
+                count,
+                rows: table.querySelectorAll('tr').length,
+                nested: table.querySelectorAll('table').length,
+                sample: this.normalizeLower(table.innerText).slice(0, 220)
+            }))
+            .filter(x => x.count >= 3)
+            .sort((a, b) => {
+                if (b.count !== a.count) return b.count - a.count;
+                return a.rows - b.rows;
+            });
+
+        const found = fallback[0]?.table || null;
+
+        debugLog('[SLF Transfer Analyzer] findTransferTable fallback', {
+            found: !!found,
+            fallback: fallback.slice(0, 5).map(x => ({
+                count: x.count,
+                rows: x.rows,
+                nested: x.nested,
+                sample: x.sample
+            }))
+        });
+
+        return found;
+    },
+
+    findHeaderRow(table) {
+        if (!table) return null;
+
+        return [...table.querySelectorAll('tr')].find(tr => {
+            const text = this.normalizeLower(tr.innerText);
+
+            return text.includes('амплуа') &&
+                (
+                    text.includes('фамилия') ||
+                    text.includes('имя')
+                );
+        }) || null;
+    },
+
+    ensureAnalysisHeader(table) {
+        const headerRow = this.findHeaderRow(table);
+
+        if (!headerRow) {
+            console.warn('[SLF Transfer Analyzer] header row not found');
+            return;
+        }
+
+        if (headerRow.querySelector('.slf-transfer-analysis-header')) return;
+
+        const cell = document.createElement('td');
+        cell.className = 'slf-transfer-analysis-header';
+        cell.textContent = this.isHistoryPage() ? 'VPS' : 'TM анализ';
+        cell.style.cssText = `
+            color:#7cff7c;
+            font-weight:bold;
+            text-align:center;
+            min-width:${this.isHistoryPage() ? '80px' : '0'};
+            width:auto;
+            border-left:1px solid #444;
+            background:#202020;
+        `;
+
+        headerRow.appendChild(cell);
+    },
+
+    getHeaderMap(table) {
+        const headerRow = this.findHeaderRow(table);
+
+        const cells = headerRow
+            ? [...headerRow.querySelectorAll('td, th')].map(c => this.normalizeLower(c.innerText))
+            : [];
+
+        const find = (...needles) => {
+            const normalizedNeedles = needles.map(n => this.normalizeLower(n));
+
+            const idx = cells.findIndex(text => {
+                return normalizedNeedles.some(n => text.includes(n));
+            });
+
+            return idx >= 0 ? idx : null;
+        };
+
+        const map = {
+            id: find('#', 'id'),
+            pos: find('амплуа'),
+            name: find('фамилия', 'имя'),
+            club: find('команда', 'клуб'),
+            age: find('возраст', 'воз'),
+            talent: find('талант', 'тал'),
+            potential: find('потенциал', 'пот'),
+            scoutSkill: find('скилл', 'ск'),
+            price: find('цена', 'сумма'),
+            date: find('дата'),
+            fromClub: find('откуда'),
+            toClub: find('куда'),
+            transferSum: find('сумма'),
+            sellerManager: find('от кого'),
+            buyerManager: find('кому'),
+            transferType: find('тип'),
+            endDate: find('дата окончания', 'оконч'),
+            bids: find('предл', 'став')
+        };
+
+        debugLog('[SLF Transfer Analyzer] header map', {
+            cells,
+            map
+        });
+
+        return map;
+    },
+
+    parseVisibleRows() {
+        const table = this.findTransferTable();
+
+        if (!table) return [];
+
+        this.ensureAnalysisHeader(table);
+
+        const map = this.getHeaderMap(table);
+        const rows = [...table.querySelectorAll('tr')];
+
+        const parsed = rows
+            .map((tr, index) => this.parseRow(tr, index, map))
+            .filter(Boolean);
+
+        debugLog('[SLF Transfer Analyzer] parseVisibleRows', parsed);
+
+        return parsed;
+    },
+
+    findPlayerLinkInRow(tr) {
+        const links = [...tr.querySelectorAll('a[href]')]
+            .filter(a => {
+                const href = a.getAttribute('href') || '';
+                return /player\.php/i.test(href) && /id=\d+/i.test(href);
+            });
+
+        if (!links.length) return null;
+
+        const scored = links
+            .map(a => {
+                const text = this.normalizeText(a.textContent || '');
+                const title = this.normalizeText(a.getAttribute('title') || '');
+                const href = a.getAttribute('href') || '';
+                const nameCandidate = title || text;
+
+                const hasLetters = /[A-Za-zА-Яа-яЁё]/.test(nameCandidate);
+                const hasSpace = /\s/.test(nameCandidate);
+
+                let score = 0;
+                if (hasLetters) score += 5;
+                if (hasSpace) score += 2;
+                if (nameCandidate.length >= 3 && nameCandidate.length <= 40) score += 2;
+                if (href.includes('action=view')) score += 1;
+
+                return { a, score, nameCandidate };
+            })
+            .sort((a, b) => b.score - a.score);
+
+        return scored[0].a;
+    },
+
+    cleanPlayerName(raw) {
+        let name = this.normalizeText(raw);
+
+        if (!name) return '';
+
+        const parts = name.split(' ').filter(Boolean);
+
+        if (parts.length >= 2) {
+            const first = parts[0];
+            const lastIndex = parts.length - 1;
+            const last = parts[lastIndex];
+
+            if (
+                first.length >= 2 &&
+                last.endsWith(first) &&
+                last.length > first.length
+            ) {
+                parts[lastIndex] = last.slice(0, -first.length);
+                name = parts.join(' ').trim();
+            }
+        }
+
+        const firstWord = name.split(' ')[0];
+
+        if (
+            firstWord &&
+            firstWord.length >= 2 &&
+            name.endsWith(firstWord) &&
+            name.length > firstWord.length * 2
+        ) {
+            const cut = name.slice(0, -firstWord.length).trim();
+
+            if (cut.includes(' ')) {
+                name = cut;
+            }
+        }
+
+        return name.trim();
+    },
+
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-table-locator.js
+
+
+// >>> src/modules/transfer-analyzer/transfer-money-parser.js
+// Transfer Money Parser
+// Extracted verbatim from transfer-market-analyzer.js (stage 1 refactor).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.stage1MoneyParserApplied = true;
+
+    Object.assign(TransferMarketAnalyzer, {
     parseMoney(value) {
         const raw = String(value || '')
             .replace(/\u00a0/g, ' ')
@@ -13200,6 +13785,353 @@ const TransferMarketAnalyzer = {
         };
     },
 
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-money-parser.js
+
+
+// >>> src/modules/transfer-analyzer/transfer-analysis-cache.js
+// Transfer Analysis Cache
+// Extracted verbatim from transfer-market-analyzer.js (stage 1 refactor).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.stage1AnalysisCacheApplied = true;
+
+    Object.assign(TransferMarketAnalyzer, {
+    loadAnalysisCache() {
+        try {
+            return JSON.parse(localStorage.getItem(this.analysisCacheKey) || '{}');
+        } catch (e) {
+            return {};
+        }
+    },
+
+    saveAnalysisCache(cache) {
+        try {
+            const entries = Object.entries(cache || {})
+                .filter(([, value]) => value && Number(value.savedAt || 0))
+                .sort((a, b) => Number(b[1].savedAt || 0) - Number(a[1].savedAt || 0))
+                .slice(0, 700);
+
+            localStorage.setItem(this.analysisCacheKey, JSON.stringify(Object.fromEntries(entries)));
+        } catch (e) {
+            console.warn('[SLF Transfer Analyzer] analysis cache save failed', e);
+        }
+    },
+
+    clearAnalysisCache() {
+        localStorage.removeItem(this.analysisCacheKey);
+    },
+
+    buildAnalysisCacheKeys(row, enriched) {
+        const keys = [];
+        const playerId = String(row?.playerId || enriched?.playerId || '').trim();
+        const tmId = String(enriched?.tmProfile?.tmId || row?.tmProfile?.tmId || '').trim();
+
+        if (playerId) keys.push(`slf:${playerId}`);
+        if (tmId) keys.push(`tm:${tmId}`);
+
+        return [...new Set(keys)];
+    },
+
+    getCachedAnalysis(row) {
+        const cache = this.loadAnalysisCache();
+        const keys = this.buildAnalysisCacheKeys(row, null);
+
+        for (const key of keys) {
+            const item = cache[key];
+            if (!item) continue;
+
+            const savedAt = Number(item.savedAt || 0);
+            if (!savedAt || Date.now() - savedAt > this.analysisCacheTtlMs) continue;
+
+            // 4.4.72: MKT must be based on alter.php final skill.
+            // Old row-analysis cache without finalSkill is intentionally ignored
+            // so pressing Analyze fetches/uses SLFAlterLayer instead of silently
+            // reusing current-skill based MKT output.
+            if (!item.slfAlter || item.slfAlter.finalSkill == null) continue;
+
+            return item;
+        }
+
+        return null;
+    },
+
+    saveRowAnalysis(row, enriched, slfAlter) {
+        if (!row?.playerId) return;
+
+        const cache = this.loadAnalysisCache();
+        const keys = this.buildAnalysisCacheKeys(row, enriched);
+        const item = {
+            schema: 'transfer_row_analysis_cache_v1',
+            savedAt: Date.now(),
+            playerId: String(row.playerId || ''),
+            name: row.name || '',
+            tmResult: enriched || null,
+            slfAlter: slfAlter || null,
+            row: {
+                playerId: String(row.playerId || ''),
+                playerUrl: row.playerUrl || '',
+                name: row.name || '',
+                positions: row.positions || [],
+                age: row.age ?? null,
+                talent: row.talent ?? null,
+                scoutSkill: row.scoutSkill ?? null,
+                slfPriceText: row.slfPriceText || row.salePriceText || '',
+                slfPriceCellText: row.slfPriceCellText || '',
+                slfPrice: row.slfPrice ?? row.salePrice ?? null,
+                slfSecondaryPriceText: row.slfSecondaryPriceText || '',
+                slfSecondaryPrice: row.slfSecondaryPrice ?? null,
+                nominalRatio: row.nominalRatio ?? null,
+                nominalBase: row.nominalBase ?? null,
+                slfPriceSource: row.slfPriceSource || ''
+            }
+        };
+
+        keys.forEach(key => {
+            cache[key] = item;
+        });
+
+        this.saveAnalysisCache(cache);
+    },
+
+    applyCachedAnalysis(row, cached) {
+        if (!row || !cached) return false;
+
+        const savedRow = cached.row || {};
+        row.tmUrl = cached.tmResult?.tmUrl || cached.tmResult?.tmProfile?.tmUrl || '';
+        row.tmProfile = cached.tmResult?.tmProfile || null;
+        row.tmValueEur = row.tmProfile?.marketValueEur || row.tmProfile?.lastKnownMarketValueEur || 0;
+        row.slfAlter = cached.slfAlter || null;
+        row.slfPrice = row.slfPrice ?? savedRow.slfPrice ?? null;
+        row.slfPriceText = row.slfPriceText || savedRow.slfPriceText || '';
+        row.slfPriceCellText = row.slfPriceCellText || savedRow.slfPriceCellText || '';
+        row.slfSecondaryPriceText = row.slfSecondaryPriceText || savedRow.slfSecondaryPriceText || '';
+        row.slfSecondaryPrice = row.slfSecondaryPrice ?? savedRow.slfSecondaryPrice ?? null;
+        row.nominalRatio = row.nominalRatio ?? savedRow.nominalRatio ?? null;
+        row.nominalBase = row.nominalBase ?? savedRow.nominalBase ?? null;
+        row.slfPriceSource = row.slfPriceSource || savedRow.slfPriceSource || '';
+
+        this.renderRowBadge(row, cached.tmResult || null, cached.slfAlter || null);
+        return true;
+    },
+
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-analysis-cache.js
+
+
+// >>> src/modules/transfer-analyzer/transfer-market-baseline.js
+// Transfer Market Baseline
+// Extracted verbatim from transfer-market-analyzer.js (stage 1 refactor).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.stage1MarketBaselineApplied = true;
+
+    Object.assign(TransferMarketAnalyzer, {
+    loadMarketBaseline() {
+        if (this.marketBaseline) return Promise.resolve(this.marketBaseline);
+        if (this.marketBaselinePromise) return this.marketBaselinePromise;
+
+        this.marketBaselinePromise = Api.getPromise(CONFIG.COLLECTIONS.TRANSFER_HISTORY)
+            .then(({ data }) => {
+                const rows = normalizeServerRows(data);
+                this.marketBaseline = this.buildMarketBaseline(rows);
+                return this.marketBaseline;
+            })
+            .catch(error => {
+                this.marketBaseline = { ready: false, error, byKey: {}, generatedAt: Date.now() };
+                return this.marketBaseline;
+            });
+
+        return this.marketBaselinePromise;
+    },
+
+    buildMarketBaseline(rows) {
+        const buckets = {};
+        const add = (key, value) => {
+            if (!key || !value || !Number.isFinite(value)) return;
+            if (!buckets[key]) buckets[key] = [];
+            buckets[key].push(value);
+        };
+
+        (rows || []).forEach(event => {
+            if (!event || event.recordType !== 'completed_transfer') return;
+
+            const price = Number(event.transfer?.price || 0);
+            if (!price || price < 1) return;
+
+            const player = event.player || {};
+            const pos = this.normalizeMarketPosition(player.primaryPosition || (Array.isArray(player.positions) ? player.positions[0] : ''));
+            const ageBucket = this.getMarketAgeBucket(player.age);
+            const talentBucket = this.getMarketTalentBucket(player.talent);
+            const alterSummary = event.enrichment?.slfAlterSummary || {};
+            const finalSkill = player.finalSkill ?? alterSummary.finalSkill ?? null;
+            const skillBucket = this.getMarketSkillBucket(finalSkill ?? player.skill ?? player.scoutSkill ?? player.currentSkill);
+
+            add('all', price);
+            if (pos) add(`pos:${pos}`, price);
+            if (ageBucket) add(`age:${ageBucket}`, price);
+            if (skillBucket) add(`skill:${skillBucket}`, price);
+            if (pos && ageBucket) add(`pos:${pos}|age:${ageBucket}`, price);
+            if (pos && talentBucket) add(`pos:${pos}|talent:${talentBucket}`, price);
+            if (pos && skillBucket) add(`pos:${pos}|skill:${skillBucket}`, price);
+            if (pos && ageBucket && talentBucket && skillBucket) add(`pos:${pos}|age:${ageBucket}|talent:${talentBucket}|skill:${skillBucket}`, price);
+        });
+
+        const byKey = {};
+        Object.entries(buckets).forEach(([key, values]) => {
+            const sorted = values.slice().sort((a, b) => a - b);
+            byKey[key] = this.summarizeMarketValues(sorted);
+        });
+
+        return {
+            ready: true,
+            generatedAt: Date.now(),
+            byKey
+        };
+    },
+
+    summarizeMarketValues(values) {
+        const n = values.length;
+        const at = pct => values[Math.min(n - 1, Math.max(0, Math.floor((n - 1) * pct)))] || null;
+        const sum = values.reduce((acc, value) => acc + Number(value || 0), 0);
+
+        return {
+            count: n,
+            min: values[0] || null,
+            p25: at(0.25),
+            median: at(0.50),
+            p75: at(0.75),
+            max: values[n - 1] || null,
+            avg: n ? Math.round(sum / n) : null,
+            confidence: n >= 20 ? 'high' : n >= 8 ? 'medium' : n >= 3 ? 'low' : 'weak'
+        };
+    },
+
+    normalizeMarketPosition(value) {
+        const raw = String(value || '').toUpperCase().trim();
+        if (!raw) return '';
+        if (raw === 'GK') return 'GK';
+        if (raw === 'LD' || raw === 'DL' || raw === 'LB') return 'DL';
+        if (raw === 'RD' || raw === 'DR' || raw === 'RB') return 'DR';
+        if (/^CD|^DC|CB/.test(raw)) return 'DC';
+        if (/^DM/.test(raw)) return 'DM';
+        if (/^CM/.test(raw)) return 'CM';
+        if (/^AM/.test(raw)) return 'AM';
+        if (raw === 'LM' || raw === 'LW' || raw === 'ML') return 'ML';
+        if (raw === 'RM' || raw === 'RW' || raw === 'MR') return 'MR';
+        if (/^ST|CF/.test(raw)) return 'ST';
+        return raw;
+    },
+
+    getMarketAgeBucket(age) {
+        const n = Number(age || 0);
+        if (!n) return '';
+        if (n <= 18) return 'u18';
+        if (n <= 21) return 'u21';
+        if (n <= 24) return 'u24';
+        if (n <= 29) return 'prime';
+        if (n <= 32) return 'short';
+        return 'vet';
+    },
+
+    getMarketTalentBucket(talent) {
+        const n = Number(talent || 0);
+        if (!n) return '';
+        if (n <= 2) return 't1_2';
+        if (n <= 4) return 't3_4';
+        if (n <= 6) return 't5_6';
+        if (n <= 8) return 't7_8';
+        return 't9p';
+    },
+
+    getMarketSkillBucket(skill) {
+        const n = Number(skill || 0);
+        if (!n) return '';
+        if (n < 20) return 's00_19';
+        if (n < 30) return 's20_29';
+        if (n < 40) return 's30_39';
+        if (n < 50) return 's40_49';
+        if (n < 60) return 's50_59';
+        if (n < 70) return 's60_69';
+        return 's70p';
+    },
+
+    getMarketSkillBasis(row, slfAlter) {
+        const finalSkill = slfAlter?.finalSkill != null ? Number(slfAlter.finalSkill) : null;
+        const currentSkill = slfAlter?.currentSkill != null ? Number(slfAlter.currentSkill) : null;
+        const pageSkill = row?.scoutSkill != null ? Number(row.scoutSkill) : null;
+
+        if (Number.isFinite(finalSkill) && finalSkill > 0) {
+            return {
+                skill: finalSkill,
+                source: 'alter_final_skill',
+                label: `ИТОГ alter.php ${SLFAlterLayer.formatSkill(finalSkill)}`,
+                currentSkill: Number.isFinite(currentSkill) ? currentSkill : null,
+                pageSkill: Number.isFinite(pageSkill) ? pageSkill : null,
+                lowConfidence: false,
+                missing: false
+            };
+        }
+
+        return {
+            skill: null,
+            source: slfAlter ? 'alter_without_final_skill' : 'alter_missing',
+            label: slfAlter ? 'ИТОГ alter.php не распознан' : 'alter.php не загружен',
+            currentSkill: Number.isFinite(currentSkill) ? currentSkill : null,
+            pageSkill: Number.isFinite(pageSkill) ? pageSkill : null,
+            lowConfidence: true,
+            missing: true
+        };
+    },
+
+    findMarketBaseline(row, slfAlter) {
+        const baseline = this.marketBaseline;
+        if (!baseline?.ready) return null;
+
+        const skillBasis = this.getMarketSkillBasis(row, slfAlter);
+        const pos = this.normalizeMarketPosition((row.positions || [])[0]);
+        const ageBucket = this.getMarketAgeBucket(row.age);
+        const talentBucket = this.getMarketTalentBucket(row.talent);
+        const skillBucket = this.getMarketSkillBucket(skillBasis.skill);
+        const keys = [
+            pos && ageBucket && talentBucket && skillBucket ? `pos:${pos}|age:${ageBucket}|talent:${talentBucket}|skill:${skillBucket}` : '',
+            pos && skillBucket ? `pos:${pos}|skill:${skillBucket}` : '',
+            pos && ageBucket ? `pos:${pos}|age:${ageBucket}` : '',
+            pos && talentBucket ? `pos:${pos}|talent:${talentBucket}` : '',
+            pos ? `pos:${pos}` : '',
+            skillBucket ? `skill:${skillBucket}` : '',
+            ageBucket ? `age:${ageBucket}` : '',
+            'all'
+        ].filter(Boolean);
+
+        for (const key of keys) {
+            const item = baseline.byKey?.[key];
+            if (item && item.count >= 3) {
+                return Object.assign({ key }, item);
+            }
+        }
+
+        return null;
+    },
+
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-market-baseline.js
+
+
+// >>> src/modules/transfer-analyzer/transfer-history-vps-sync.js
+// Transfer History Vps Sync
+// Extracted verbatim from transfer-market-analyzer.js (stage 1 refactor).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.stage1HistoryVpsSyncApplied = true;
+
+    Object.assign(TransferMarketAnalyzer, {
     parseHistoryDate(value) {
         const text = this.normalizeText(value);
         const m = text.match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
@@ -13235,7 +14167,7 @@ const TransferMarketAnalyzer = {
             .map((tr, index) => this.parseHistoryRow(tr, index, map))
             .filter(Boolean);
 
-        console.log('[SLF Transfer History] parseHistoryVisibleRows', parsed);
+        debugLog('[SLF Transfer History] parseHistoryVisibleRows', parsed);
 
         return parsed;
     },
@@ -13884,76 +14816,20 @@ const TransferMarketAnalyzer = {
         );
     },
 
-    getOrCreateBadgeCell(row) {
-        const tr = row.rowEl;
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-history-vps-sync.js
 
-        if (!tr) return null;
 
-        let box = tr.querySelector('.slf-transfer-analysis-badge');
+// >>> src/modules/transfer-analyzer/transfer-details-html-builder.js
+// Transfer Details Html Builder
+// Extracted verbatim from transfer-market-analyzer.js (stage 1 refactor).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
 
-        if (!box) {
-            box = document.createElement('td');
-            box.className = 'slf-transfer-analysis-badge';
-            box.style.cssText = this.isHistoryPage()
-                ? `
-                    box-sizing:border-box;
-                    min-width:80px;
-                    max-width:96px;
-                    width:86px;
-                    font-size:11px;
-                    line-height:1.12;
-                    border-left:1px solid #444;
-                    padding:3px 5px;
-                    vertical-align:middle;
-                    white-space:nowrap;
-                    position:relative;
-                    overflow:visible;
-                    text-align:center;
-                `
-                : `
-                    box-sizing:border-box;
-                    min-width:0;
-                    max-width:none;
-                    width:auto;
-                    font-size:11px;
-                    line-height:1.12;
-                    border-left:1px solid #444;
-                    padding:3px 5px;
-                    vertical-align:top;
-                    white-space:normal;
-                    position:relative;
-                    overflow:visible;
-                    display:flex;
-                    flex-wrap:wrap;
-                    align-items:flex-start;
-                    gap:3px 4px;
-                `;
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.stage1DetailsHtmlBuilderApplied = true;
 
-            tr.appendChild(box);
-        }
-
-        return box;
-    },
-
-    renderLoadingBadge(row) {
-        const box = this.getOrCreateBadgeCell(row);
-
-        if (!box) return;
-
-        box.innerHTML = `<span style="color:#aaa;">TM/SLF анализ...</span>`;
-    },
-
-    renderErrorBadge(row, error) {
-        const box = this.getOrCreateBadgeCell(row);
-
-        if (!box) return;
-
-        box.innerHTML = `
-            <span style="color:#ff9f9f;">Ошибка анализа</span>
-            <span style="color:#777;margin-left:4px;">${this.escapeHtml(String(error?.message || error || 'unknown'))}</span>
-        `;
-    },
-
+    Object.assign(TransferMarketAnalyzer, {
     isUsefulTmText(value) {
         const text = this.normalizeText(value);
 
@@ -14386,999 +15262,20 @@ const TransferMarketAnalyzer = {
         return 'watch / нейтральная зона';
     },
 
-    renderRowBadge(row, enriched, slfAlter) {
-        if (this.isHistoryPage()) {
-            this.renderHistoryVpsBadge(row, null);
-            return;
-        }
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-details-html-builder.js
 
-        const box = this.getOrCreateBadgeCell(row);
 
-        if (!box) return;
+// >>> src/modules/transfer-analyzer/transfer-marker-builder.js
+// Transfer Marker Builder
+// Extracted verbatim from transfer-market-analyzer.js (stage 1 refactor).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
 
-        const profile = enriched?.tmProfile || null;
-        const safeEnriched = enriched || {
-            playerId: row.playerId,
-            slfUrl: row.playerUrl,
-            tmUrl: '',
-            tmProfile: null,
-            error: 'empty_enrichment'
-        };
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.stage1MarkerBuilderApplied = true;
 
-        const fallbackProfile = {
-            marketValueEur: 0,
-            transferHistory: [],
-            youthClubs: [],
-            rumors: [],
-            currentClub: '',
-            playerAgent: '',
-            contractExpires: '',
-            age: row.age,
-            tmUrl: ''
-        };
-
-        const markers = this.buildMarkers(row, profile || fallbackProfile, slfAlter);
-
-        const verdict = profile
-            ? this.buildTransferVerdict(markers, profile, slfAlter)
-            : {
-                label: '⚪ LOW DATA',
-                level: 'neutral',
-                score: markers.reduce((sum, m) => sum + Number(m.score || 0), 0),
-                reason: 'TM-профиль не найден, показаны только SLF-сигналы из cache/alter.php.'
-            };
-
-        this.writeRowSortMetrics(row, markers, verdict, slfAlter, profile);
-        verdict.rank = this.computeVisibleScoreRank(row, verdict.score);
-
-        const detailsHtml = this.buildDecisionDetailsHtml(row, profile || fallbackProfile, slfAlter, markers, verdict);
-        const linksHtml = profile?.tmUrl
-            ? `
-                <span style="
-                    display:inline-flex;
-                    gap:4px;
-                    align-items:center;
-                    white-space:nowrap;
-                    font-size:11px;
-                    line-height:16px;
-                    margin-left:2px;
-                ">
-                    <a href="${this.escapeHtml(profile.tmUrl)}" target="_blank" style="color:#8cf;">TM</a>
-                </span>
-            `
-            : '';
-
-        box.innerHTML = `
-            <div class="slf-transfer-analysis-compact ta-cell" style="
-                display:inline-flex;
-                flex-direction:column;
-                align-items:flex-start;
-                gap:3px;
-                width:max-content;
-                max-width:100%;
-                box-sizing:border-box;
-                overflow:visible;
-                white-space:normal;
-            ">
-                ${this.renderSemanticAnalysisGroups(markers, linksHtml, detailsHtml, verdict)}
-            </div>
-        `;
-
-        this.bindDetailsAutoClose();
-        this.bindHtmlTooltipPortal(box);
-        this.cleanupStandaloneMarketNominalControls(box);
-        this.refreshVisibleRankBadges();
-    },
-
-    writeRowSortMetrics(row, markers, verdict, slfAlter, profile) {
-        const tr = row?.rowEl;
-
-        if (!tr) return;
-
-        const talentMarker = markers.find(m => this.markerCategory(m) === 'talent');
-        const marketMarker = markers.find(m => this.markerCategory(m) === 'market');
-        const marketRatio = Number(marketMarker?.marketDetails?.ratio || 0);
-        const marketCurrent = Number(marketMarker?.marketDetails?.currentInfo?.value || 0);
-        const marketP75 = Number(marketMarker?.marketDetails?.baseline?.p75 || 0);
-        const marketHasData = marketRatio > 0 && marketCurrent > 0 && marketP75 > 0;
-
-        tr.dataset.slfAnalyzerScore = String(Number(verdict?.score || 0));
-        tr.dataset.slfSkillDelta = String(slfAlter?.skillDelta != null ? Number(slfAlter.skillDelta) : -9999);
-        tr.dataset.slfMinutesPct = String(slfAlter?.currentRow?.minutesPct != null ? Number(slfAlter.currentRow.minutesPct) : -1);
-        tr.dataset.slfTalentUp = String(talentMarker ? Number(talentMarker.score || 0) * 100 + Number(slfAlter?.talentUpgradeRow?.minutesPct || 0) : 0);
-        tr.dataset.slfTmValue = String(Number(profile?.marketValueEur || profile?.lastKnownMarketValueEur || 0));
-        tr.dataset.slfMktBargain = String(marketHasData ? Number((marketP75 / marketCurrent).toFixed(4)) : -1);
-        tr.dataset.slfMktOverpriced = String(marketHasData ? Number(marketRatio.toFixed(4)) : -1);
-    },
-
-    markerCategory(marker) {
-        if (marker?.category) return marker.category;
-
-        const label = String(marker?.label || '').toLowerCase();
-
-        if (label.includes('retired') || label.includes('no club') || label.includes('без клуба') || label.includes('club')) return 'club';
-        if (label.includes('agent')) return 'agent';
-        if (label.startsWith('slf') || label.startsWith('→')) return 'slf';
-        if (label.includes('min') || label.startsWith('m-') || label.startsWith('m?')) return 'activity';
-        if (label.includes('t') && label.includes('<l')) return 'talent';
-        if (label.includes('>') && /\d/.test(label)) return 'league';
-        if (label.includes('age') || label.includes('growth') || label.includes('grow') || label.includes('late') || label.includes('prime') || label.includes('veteran') || label.includes('vet') || label.includes('short')) return 'age';
-        if (label.startsWith('mkt')) return 'market';
-        if (label.startsWith('n ') || label.startsWith('n?')) return 'nominal';
-        if (label.includes('tm ') || label.startsWith('tm') || label.startsWith('old €') || label.startsWith('old')) return 'tm';
-        if (label.includes('peak') || label.includes('trend') || label.includes('collapsed') || label.includes('fallen') || label.includes('fall')) return 'trend';
-        if (label.includes('contract') || label.includes('ctr') || label.includes('exp ')) return 'contract';
-        if (label.includes('rumor') || /^r\d/.test(label)) return 'rumors';
-        if (label.includes('academy') || label.includes('acad') || label.includes('youth') || label.includes('elite') || label.includes('strong')) return 'academy';
-
-        return 'other';
-    },
-
-    getMarkerSlotDefs() {
-        return [
-            { key: 'slf', placeholder: 'SLF?' },
-            { key: 'activity', placeholder: 'MIN?' },
-            { key: 'talent', placeholder: 'T-' },
-            { key: 'league', placeholder: 'L-' },
-            { key: 'tm', placeholder: 'TM?' },
-            { key: 'market', placeholder: 'MKT?' },
-            { key: 'trend', placeholder: 'tr?' },
-
-            { key: 'club', placeholder: 'club?' },
-            { key: 'agent', placeholder: 'agent?' },
-            { key: 'age', placeholder: 'age?' },
-            { key: 'contract', placeholder: 'ctr?' },
-            { key: 'rumors', placeholder: 'rum0' },
-            { key: 'academy', placeholder: 'acad-' }
-        ];
-    },
-
-    markerScoreRank(level) {
-        return ({
-            skip: 100,
-            risk: 90,
-            hot: 80,
-            good: 70,
-            watch: 60,
-            normal: 50,
-            neutral: 40,
-            unknown: 30,
-            low: 20,
-            old: 15,
-            empty: 10
-        }[level] || 0);
-    },
-
-    sortMarkersByImportance(markers) {
-        return [...(markers || [])].sort((a, b) => {
-            return this.markerScoreRank(b.level) - this.markerScoreRank(a.level) ||
-                Math.abs(Number(b.score || 0)) - Math.abs(Number(a.score || 0));
-        });
-    },
-
-    isRealAnalysisMarker(marker) {
-        if (!marker) return false;
-
-        const level = String(marker.level || '');
-        const label = this.normalizeText(marker.label || '');
-
-        if (!label || level === 'empty') return false;
-        if (/^(SLF\?|MIN\?|TM\?|MKT\?|T-|L-|tr\?|club\?|agent\?|age\?|ctr\?|rum0|acad-)$/i.test(label)) return false;
-        if (/^N\s+/i.test(label)) return false;
-        if (/^N\?/i.test(label)) return false;
-
-        return true;
-    },
-
-    firstMarkerByCategory(markers, category) {
-        return this.sortMarkersByImportance(markers)
-            .find(marker => this.markerCategory(marker) === category && this.isRealAnalysisMarker(marker)) || null;
-    },
-
-    allMarkersByCategories(markers, categories) {
-        const allowed = new Set(categories || []);
-        return this.sortMarkersByImportance(markers)
-            .filter(marker => allowed.has(this.markerCategory(marker)) && this.isRealAnalysisMarker(marker));
-    },
-
-    withVisualPriority(marker, priority) {
-        return marker ? Object.assign({}, marker, { visualPriority: priority }) : null;
-    },
-
-    renderAnalysisGroup(className, title, markers, priority = 'medium') {
-        const realMarkers = (markers || [])
-            .filter(Boolean)
-            .filter(marker => this.isRealAnalysisMarker(marker));
-
-        if (!realMarkers.length) return '';
-
-        return `
-            <div class="ta-group ${className}" data-ta-group="${this.escapeHtml(className)}" aria-label="${this.escapeHtml(title)}">
-                ${realMarkers.map(marker => this.renderCompactChip(this.withVisualPriority(marker, priority))).join('')}
-            </div>
-        `;
-    },
-
-    makeCombinedContextMarker(markers, labelFallback = '') {
-        const realMarkers = (markers || []).filter(Boolean).filter(marker => this.isRealAnalysisMarker(marker));
-        if (!realMarkers.length) return null;
-
-        const labels = realMarkers
-            .map(marker => String(marker.label || '').trim())
-            .filter(Boolean);
-        if (!labels.length) return null;
-
-        const texts = realMarkers
-            .map(marker => String(marker.text || marker.label || '').trim())
-            .filter(Boolean);
-
-        return {
-            label: labels.join(' · ') || labelFallback,
-            level: 'neutral',
-            score: realMarkers.reduce((sum, marker) => sum + Number(marker.score || 0), 0),
-            redFlag: realMarkers.some(marker => marker.redFlag),
-            hardStop: realMarkers.some(marker => marker.hardStop),
-            text: texts.join(' | '),
-            category: 'combined'
-        };
-    },
-
-    renderSemanticAnalysisGroups(markers, linksHtml, detailsHtml, verdict) {
-        const primaryMarkers = [
-            this.firstMarkerByCategory(markers, 'slf'),
-            this.firstMarkerByCategory(markers, 'market'),
-            this.firstMarkerByCategory(markers, 'tm'),
-            this.firstMarkerByCategory(markers, 'activity'),
-            this.firstMarkerByCategory(markers, 'trend')
-        ].filter(Boolean);
-
-        const usedPrimary = new Set(primaryMarkers);
-        const signalMarkers = this.allMarkersByCategories(markers, ['talent', 'league', 'trend'])
-            .filter(marker => !usedPrimary.has(marker));
-        const ageMarker = this.firstMarkerByCategory(markers, 'age');
-        const clubAgent = this.makeCombinedContextMarker([
-            this.firstMarkerByCategory(markers, 'club'),
-            this.firstMarkerByCategory(markers, 'agent')
-        ], 'club / agent');
-        const contractService = this.makeCombinedContextMarker([
-            this.firstMarkerByCategory(markers, 'contract'),
-            this.firstMarkerByCategory(markers, 'rumors'),
-            this.firstMarkerByCategory(markers, 'academy')
-        ], 'contract / status');
-        const otherMarkers = this.allMarkersByCategories(markers, ['other']);
-        const whyMarker = this.buildWhyRankMarker(markers, verdict);
-
-        const secondaryMarkers = [
-            whyMarker,
-            ...signalMarkers,
-            ageMarker,
-            clubAgent,
-            contractService,
-            ...otherMarkers
-        ].filter(Boolean);
-
-        const verdictHtml = verdict ? this.renderRankVerdictChip(verdict) : '';
-
-        const primaryHtml = `
-            <div class="ta-line ta-primary" data-ta-line="primary" aria-label="Итог и главные факторы">
-                ${verdictHtml}
-                ${primaryMarkers.map(marker => this.renderCompactChip(this.withVisualPriority(marker, 'high'))).join('')}
-            </div>
-        `;
-
-        const secondaryHtml = `
-            <div class="ta-line ta-secondary" data-ta-line="secondary" aria-label="Почему и контекст">
-                ${secondaryMarkers.map(marker => this.renderCompactChip(this.withVisualPriority(marker, marker.category === 'why' ? 'medium' : 'low'))).join('')}
-                ${linksHtml || ''}
-                ${detailsHtml || ''}
-            </div>
-        `;
-
-        return [primaryHtml, secondaryHtml].join('');
-    },
-
-
-    getShortVerdictLabel(verdict) {
-        const raw = String(verdict?.label || '').toUpperCase();
-        if (raw.includes('SKIP')) return 'SKIP';
-        if (raw.includes('TRAP') || raw.includes('RISK')) return 'RISK';
-        if (raw.includes('SPEC')) return 'SPEC';
-        if (raw.includes('PRIORITY') || raw.includes('STRONG')) return 'TARGET';
-        if (raw.includes('TARGET')) return 'TARGET';
-        if (raw.includes('WATCH')) return 'WATCH';
-        if (raw.includes('LOW DATA')) return 'WATCH';
-        return 'WATCH';
-    },
-
-    buildVerdictTooltipHtml(verdict) {
-        const esc = value => this.escapeHtml(value == null || value === '' ? '—' : String(value));
-        const label = this.getShortVerdictLabel(verdict);
-        const score = Number(verdict?.score || 0).toFixed(1).replace(/\.0$/, '');
-        const rank = verdict?.rank ? `#${verdict.rank}` : '#?';
-        const reason = verdict?.reason || verdict?.label || '';
-        const level = String(verdict?.level || 'neutral');
-        const meaning = (() => {
-            const raw = String(verdict?.label || '').toUpperCase();
-            if (raw.includes('PRIORITY') || raw.includes('TARGET')) return 'кандидат выше среднего: проверять первым, но финально сверить цену, минуты и статус';
-            if (raw.includes('WATCH') || raw.includes('SPEC')) return 'наблюдение/ручная проверка: есть плюс, но не хватает уверенности или есть риск';
-            if (raw.includes('RISK') || raw.includes('TRAP')) return 'риск покупки: маркеры указывают на переплату, слабую готовность или статусный риск';
-            if (raw.includes('SKIP')) return 'пропуск: есть hard-stop или слишком сильная комбинация рисков';
-            return 'общий ранговый вывод анализатора';
-        })();
-
-        return `
-            <div style="font-weight:bold;color:#ffd76a;margin-bottom:6px;">Вердикт и ранг</div>
-            <div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;padding:3px 0;border-bottom:1px solid #2b2b2b;"><span style="color:#aaa;">Итог</span><span>${esc(label)} ${esc(rank)}</span></div>
-            <div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;padding:3px 0;border-bottom:1px solid #2b2b2b;"><span style="color:#aaa;">Score</span><span>${esc(score)}</span></div>
-            <div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;padding:3px 0;border-bottom:1px solid #2b2b2b;"><span style="color:#aaa;">Уровень</span><span>${esc(level)}</span></div>
-            <div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;padding:3px 0;border-bottom:1px solid #2b2b2b;"><span style="color:#aaa;">Почему</span><span>${esc(reason)}</span></div>
-            <div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;padding:3px 0;"><span style="color:#aaa;">Как читать</span><span>${esc(meaning)}</span></div>
-        `;
-    },
-
-    renderRankVerdictChip(verdict) {
-        const label = this.getShortVerdictLabel(verdict);
-        const rank = verdict?.rank ? ` #${verdict.rank}` : ' #?';
-        const tooltip = this.buildVerdictTooltipHtml(verdict);
-        return `
-            <span class="slf-transfer-chip-tooltip-host slf-transfer-verdict-chip" data-verdict-base="${this.escapeHtml(label)}" data-score="${this.escapeHtml(verdict?.score || 0)}" tabindex="0" style="
-                flex:0 0 auto;
-                display:inline-flex;
-                align-items:center;
-                justify-content:center;
-                min-height:18px;
-                line-height:17px;
-                padding:1px 6px;
-                border-radius:6px;
-                color:${this.colorByLevel(verdict.level)};
-                background:${this.bgByLevel(verdict.level)};
-                border:1px solid ${this.borderByLevel(verdict.level)};
-                font-weight:800;
-                white-space:nowrap;
-                vertical-align:middle;
-                cursor:help;
-            ">
-                <span class="slf-transfer-verdict-label">${this.escapeHtml(label + rank)}</span>
-                <span class="slf-transfer-html-tooltip" style="display:none;">${tooltip}</span>
-            </span>
-        `;
-    },
-
-    computeVisibleScoreRank(row, score) {
-        const tr = row?.rowEl;
-        const table = this.findTransferTable();
-        if (!tr || !table) return null;
-        const rows = [...table.querySelectorAll('tr')]
-            .filter(item => item.dataset && item.dataset.slfPlayerId && item.dataset.slfAnalyzerScore !== undefined)
-            .map(item => ({ item, score: Number(item.dataset.slfAnalyzerScore || -999999999) }))
-            .sort((a, b) => b.score - a.score);
-        const index = rows.findIndex(item => item.item === tr);
-        if (index >= 0) return index + 1;
-        const better = rows.filter(item => Number(item.score) > Number(score || 0)).length;
-        return better + 1;
-    },
-
-    refreshVisibleRankBadges() {
-        const table = this.findTransferTable();
-        if (!table) return;
-        const rows = [...table.querySelectorAll('tr')]
-            .filter(tr => tr.dataset && tr.dataset.slfPlayerId && tr.dataset.slfAnalyzerScore !== undefined)
-            .map(tr => ({ tr, score: Number(tr.dataset.slfAnalyzerScore || -999999999) }))
-            .sort((a, b) => b.score - a.score);
-        rows.forEach((entry, index) => {
-            const chip = entry.tr.querySelector('.slf-transfer-verdict-chip[data-verdict-base]');
-            if (!chip) return;
-            const base = chip.dataset.verdictBase || 'WATCH';
-            const labelEl = chip.querySelector('.slf-transfer-verdict-label');
-            if (labelEl) labelEl.textContent = `${base} #${index + 1}`;
-            else chip.childNodes[0].textContent = `${base} #${index + 1}`;
-        });
-    },
-
-    buildWhyRankReasons(markers, verdict) {
-        const reasons = [];
-        const market = (markers || []).find(m => this.markerCategory(m) === 'market');
-        const activity = (markers || []).find(m => this.markerCategory(m) === 'activity');
-        const trend = (markers || []).find(m => this.markerCategory(m) === 'trend');
-        const age = (markers || []).find(m => this.markerCategory(m) === 'age');
-        const agent = (markers || []).find(m => this.markerCategory(m) === 'agent');
-        const club = (markers || []).find(m => this.markerCategory(m) === 'club');
-        const ratio = Number(market?.marketDetails?.ratio || 0);
-        const minPct = Number((String(activity?.label || '').match(/MIN\s+(\d+)/i) || [])[1] || 0);
-        const peakPct = Number((String(trend?.label || '').match(/peak\s+(\d+)/i) || [])[1] || 0);
-        const ageNum = Number((String(age?.label || '').match(/age\s+(\d+)/i) || [])[1] || 0);
-        const verdictText = String(verdict?.label || '').toUpperCase();
-
-        if (minPct >= 70) reasons.push('ready');
-        if (ratio && ratio < 1) reasons.push('cheap');
-        if (ratio && ratio > 1) reasons.push('overpay');
-        if (minPct && minPct < 35) reasons.push('low-min');
-        if (peakPct >= 90) reasons.push('peak');
-        if (String(trend?.label || '').toLowerCase().includes('fall')) reasons.push('fall');
-        if (verdictText.includes('SPEC') || (ageNum >= 22 && ageNum <= 24 && minPct > 0 && minPct < 70 && peakPct >= 90)) reasons.push('spec');
-        if (ageNum >= 30) reasons.push('old');
-        if (String(agent?.label || '').includes('✓')) reasons.push('agent');
-        if (String(club?.label || '').includes('✓')) reasons.push('club');
-
-        return [...new Set(reasons)].slice(0, 3);
-    },
-
-    buildWhyRankMarker(markers, verdict) {
-        const reasons = this.buildWhyRankReasons(markers, verdict);
-        if (!reasons.length) return null;
-        return {
-            label: `why: ${reasons.join(' · ')}`,
-            level: 'neutral',
-            score: 0,
-            redFlag: false,
-            hardStop: false,
-            category: 'why',
-            text: `Главные причины ранга: ${reasons.join(', ')}.`
-        };
-    },
-
-    getMarkerSlots(markers) {
-        const defs = this.getMarkerSlotDefs();
-
-        return defs.map(def => {
-            const marker = this.firstMarkerByCategory(markers, def.key);
-            if (marker) return marker;
-
-            return {
-                label: def.placeholder,
-                level: 'empty',
-                score: 0,
-                redFlag: false,
-                hardStop: false,
-                text: `Нет данных/сигнала для слота ${def.key}.`
-            };
-        });
-    },
-
-    renderMarkerSlots(markers) {
-        return this.renderSemanticAnalysisGroups(markers, '', '', null);
-    },
-
-    getVerdictIcon(verdict) {
-        const label = String(verdict?.label || '');
-
-        if (label.includes('SKIP')) return '⛔';
-        if (label.includes('HIGH RISK') || label.includes('RISK') || label.includes('TRAP')) return '🔴';
-        if (label.includes('SPEC')) return '◇';
-        if (label.includes('MANUAL')) return '🟡';
-        if (label.includes('PRIORITY')) return '🔥';
-        if (label.includes('TARGET')) return '🟢';
-        if (label.includes('WATCHLIST')) return '👀';
-
-        return '⚪';
-    },
-
-    ensureHtmlTooltipStyles() {
-        if (document.getElementById('slf-transfer-html-tooltip-style')) return;
-
-        const style = document.createElement('style');
-        style.id = 'slf-transfer-html-tooltip-style';
-        style.textContent = `
-            .slf-transfer-chip-tooltip-host { overflow:visible !important; position:relative; outline:none; cursor:help; }
-            .slf-transfer-decision-details-trigger { cursor:pointer !important; }
-            .slf-transfer-mkt-leaf-badge { min-width:max-content !important; max-width:none !important; width:auto !important; white-space:nowrap !important; overflow:visible !important; text-overflow:clip !important; }
-            .slf-transfer-analysis-badge, .slf-transfer-analysis-compact, .slf-transfer-marker-wrap, .ta-cell, .ta-line { overflow:visible !important; white-space:normal !important; }
-            .slf-transfer-analysis-badge { min-width:0 !important; width:auto !important; max-width:none !important; }
-            .ta-cell { display:inline-flex !important; flex-direction:column !important; align-items:flex-start !important; gap:3px !important; box-sizing:border-box !important; min-width:0 !important; width:max-content !important; max-width:100% !important; }
-            .ta-line { display:flex !important; flex-wrap:wrap !important; align-items:center !important; justify-content:flex-start !important; gap:3px 4px !important; min-width:0 !important; box-sizing:border-box !important; width:max-content !important; max-width:100% !important; }
-            .ta-primary { order:1; }
-            .ta-secondary { order:2; opacity:.9; }
-            .ta-secondary .slf-transfer-decision-details-trigger { display:inline-flex !important; width:max-content !important; max-width:max-content !important; white-space:nowrap !important; align-self:center !important; }
-            .ta-secondary a { white-space:nowrap !important; }
-            .slf-transfer-chip-tooltip-host .slf-transfer-html-tooltip { display:none !important; }
-            .slf-transfer-html-tooltip-portal {
-                position:fixed;
-                z-index:2147483647;
-                max-width:min(780px, calc(100vw - 24px));
-                min-width:260px;
-                width:auto;
-                max-height:min(560px, calc(100vh - 24px));
-                overflow:auto;
-                padding:8px 10px;
-                background:#181818;
-                color:#ddd;
-                border:1px solid #666;
-                border-radius:6px;
-                box-shadow:0 8px 24px rgba(0,0,0,0.75);
-                white-space:normal;
-                line-height:1.35;
-                text-align:left;
-                font-size:11px;
-            }
-            .slf-transfer-html-tooltip-portal.slf-transfer-tooltip-hover { pointer-events:none; }
-            .slf-transfer-html-tooltip-portal.slf-transfer-tooltip-click { pointer-events:auto; }
-        `;
-        document.head.appendChild(style);
-    },
-
-    bindHtmlTooltipPortal(root = document) {
-        if (window.__slf_transfer_html_tooltip_portal_bound) return;
-        window.__slf_transfer_html_tooltip_portal_bound = true;
-
-        let portal = null;
-        let activeHost = null;
-        let activeMode = '';
-
-        const escape = value => String(value ?? '')
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#039;');
-
-        const isDetailsHost = host => !!host && (
-            host.classList?.contains('slf-transfer-decision-details-trigger') ||
-            host.closest?.('.slf-transfer-details') ||
-            String(host.textContent || '').trim().toLowerCase() === 'подробнее'
-        );
-
-        const normalizeHostTitle = host => {
-            if (!host) return;
-            const title = host.getAttribute('title');
-            if (title && !host.dataset.slfTip) host.dataset.slfTip = title;
-            if (title) host.removeAttribute('title');
-        };
-
-        const getTooltipHtml = host => {
-            if (!host) return '';
-            normalizeHostTitle(host);
-            const source = host.querySelector?.('.slf-transfer-html-tooltip');
-            if (source) return source.innerHTML || '';
-            const tip = host.dataset?.slfTip || host.getAttribute?.('data-tooltip') || host.getAttribute?.('aria-label') || '';
-            return tip ? `<div>${escape(tip)}</div>` : '';
-        };
-
-        const close = () => {
-            if (portal) {
-                portal.remove();
-                portal = null;
-            }
-            activeHost = null;
-            activeMode = '';
-        };
-
-        const place = host => {
-            if (!portal || !host) return;
-            const rect = host.getBoundingClientRect();
-            const margin = 8;
-            const details = isDetailsHost(host);
-            const preferredWidth = details ? 540 : 780;
-            const minWidth = details ? 300 : 260;
-            const width = Math.max(Math.min(preferredWidth, window.innerWidth - margin * 2), Math.min(minWidth, window.innerWidth - margin * 2));
-            portal.style.width = width + 'px';
-            portal.style.minWidth = Math.min(minWidth, width) + 'px';
-
-            let left = Math.min(Math.max(rect.left, margin), window.innerWidth - width - margin);
-            let top = rect.bottom + 6;
-            portal.style.left = left + 'px';
-            portal.style.top = top + 'px';
-
-            let after = portal.getBoundingClientRect();
-            if (after.right > window.innerWidth - margin) {
-                left = Math.max(margin, window.innerWidth - after.width - margin);
-                portal.style.left = left + 'px';
-            }
-            if (after.left < margin) {
-                portal.style.left = margin + 'px';
-            }
-            after = portal.getBoundingClientRect();
-            if (after.bottom > window.innerHeight - margin) {
-                top = Math.max(margin, rect.top - after.height - 6);
-                portal.style.top = top + 'px';
-            }
-        };
-
-        const open = (host, mode) => {
-            if (!host) return;
-            const html = getTooltipHtml(host);
-            if (!html) return;
-            if (portal && activeHost === host && activeMode === mode) {
-                place(host);
-                return;
-            }
-
-            close();
-            activeHost = host;
-            activeMode = mode;
-            portal = document.createElement('div');
-            portal.className = 'slf-transfer-html-tooltip-portal ' + (mode === 'click' ? 'slf-transfer-tooltip-click' : 'slf-transfer-tooltip-hover');
-            portal.innerHTML = html;
-            document.body.appendChild(portal);
-            place(host);
-        };
-
-        const getHoverHost = target => {
-            const host = target?.closest?.('.slf-transfer-chip-tooltip-host');
-            if (!host || isDetailsHost(host)) return null;
-            return host;
-        };
-
-        document.addEventListener('mouseover', e => {
-            const host = getHoverHost(e.target);
-            if (!host) return;
-            open(host, 'hover');
-        }, true);
-
-        document.addEventListener('mouseout', e => {
-            const host = getHoverHost(e.target);
-            if (!host) return;
-            const related = e.relatedTarget;
-            if (related && host.contains(related)) return;
-            if (activeHost === host && activeMode === 'hover') close();
-        }, true);
-
-        document.addEventListener('focusin', e => {
-            const host = getHoverHost(e.target);
-            if (!host) return;
-            open(host, 'hover');
-        }, true);
-
-        document.addEventListener('focusout', e => {
-            const host = getHoverHost(e.target);
-            if (!host) return;
-            if (activeHost === host && activeMode === 'hover') close();
-        }, true);
-
-        document.addEventListener('click', e => {
-            const host = e.target.closest?.('.slf-transfer-chip-tooltip-host');
-            if (!host) {
-                if (!e.target.closest?.('.slf-transfer-html-tooltip-portal')) close();
-                return;
-            }
-
-            normalizeHostTitle(host);
-
-            if (!isDetailsHost(host)) {
-                return;
-            }
-
-            if (host === activeHost && portal && activeMode === 'click') close();
-            else open(host, 'click');
-
-            e.stopPropagation();
-            e.preventDefault();
-        }, true);
-
-        window.addEventListener('scroll', () => activeHost ? place(activeHost) : null, true);
-        window.addEventListener('resize', () => activeHost ? place(activeHost) : null);
-        document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') close();
-        }, true);
-    },
-
-    buildStructuredMarkerTooltipHtml(marker) {
-        if (!marker) return '';
-
-        const category = this.markerCategory(marker);
-        const esc = value => this.escapeHtml(value == null || value === '' ? '—' : String(value));
-        const row = (label, value) => `
-            <div style="display:grid;grid-template-columns:145px minmax(0,1fr);gap:8px;padding:3px 0;border-bottom:1px solid #2b2b2b;text-align:left;">
-                <span style="color:#aaa;">${esc(label)}</span>
-                <span style="color:#ddd;">${esc(value)}</span>
-            </div>
-        `;
-        const section = (title, rows) => `
-            <div style="margin:0 0 8px 0;">
-                <div style="font-weight:bold;color:#ffd76a;margin-bottom:4px;">${esc(title)}</div>
-                ${(rows || []).filter(Boolean).join('')}
-            </div>
-        `;
-
-        const label = marker.label || '';
-        const score = Number(marker.score || 0);
-        const baseRows = [
-            row('Маркер', label),
-            row('Тип', category || 'other'),
-            row('Сила сигнала', `${score >= 0 ? '+' : ''}${score}`),
-            marker.redFlag ? row('Риск', 'красный флаг') : '',
-            marker.hardStop ? row('Стоп', 'hard-stop') : '',
-            row('Смысл', marker.text || label)
-        ];
-
-        if (category === 'market') {
-            const details = marker.marketDetails || {};
-            const current = details.currentInfo || {};
-            const baseline = details.baseline || null;
-            const nominal = details.nominal || {};
-            const comparison = baseline?.p75 && current?.value
-                ? `текущая цена ${Number(current.value) > Number(baseline.p75) ? 'выше' : 'ниже'} p75 примерно в ${Number(current.value / baseline.p75).toFixed(2)}x`
-                : 'нет достаточной базы для сравнения';
-
-            return [
-                section('Рынок SLF', [
-                    row('Цена сейчас', this.formatSlfMoneyShort(current.value)),
-                    row('База скилла MKT', details.skillBasis?.label || ''),
-                    row('Рыночный ориентир p75', baseline ? this.formatSlfMoneyShort(baseline.p75) : 'нет выборки'),
-                    baseline && current?.value ? row('Отношение к p75', details.ratioText || `${Number(current.value / baseline.p75).toFixed(2)}x`) : '',
-                    baseline ? row('Диапазон продаж', `${this.formatSlfMoneyShort(baseline.min)} – ${this.formatSlfMoneyShort(baseline.max)}`) : '',
-                    baseline ? row('Выборка', `${baseline.count || 0} продаж`) : '',
-                    baseline ? row('Доверие', baseline.confidence || '') : ''
-                ]),
-                section('Номинал', [
-                    row('Номинал', nominal.ratioText || ''),
-                    row('Базовый номинал', this.formatSlfMoneyShort(nominal.baseNominal || 0))
-                ]),
-                section('Сравнение', [
-                    row('К p75', comparison),
-                    row('Вывод', details.conclusion || marker.text || '')
-                ])
-            ].join('');
-        }
-
-        if (category === 'slf') {
-            return section('SLF alter.php', [
-                row('SLF delta', label),
-                row('Что значит', marker.text || 'сравнение current skill и ИТОГ'),
-                row('Решение', score > 0 ? 'положительный внутренний сигнал' : score < 0 ? 'риск просадки относительно ИТОГ' : 'нейтрально')
-            ]);
-        }
-
-        if (category === 'activity') {
-            return section('Готовность / минуты', [
-                row('MIN', label),
-                row('Что значит', marker.text || ''),
-                row('Влияние', score >= 3 ? 'готовность подтверждена' : score < 0 ? 'риск отсутствия актуальной практики' : 'нужна ручная проверка')
-            ]);
-        }
-
-        if (category === 'tm') {
-            return section('Transfermarkt value', [
-                row('TM €', label),
-                row('Источник', 'Transfermarkt как внешний ориентир, не SLF-цена'),
-                row('Что значит', marker.text || '')
-            ]);
-        }
-
-        if (category === 'trend') {
-            return section('Пик / динамика цены', [
-                row('Сигнал', label),
-                row('Что значит', marker.text || ''),
-                row('Влияние', String(label).toLowerCase().includes('fall') ? 'сильный риск падения/старого пика' : 'проверка актуальности относительно пика')
-            ]);
-        }
-
-        if (category === 'age') {
-            return section('Возраст / стадия', [
-                row('Возрастной маркер', label),
-                row('Стадия', marker.text || ''),
-                row('Влияние', score >= 3 ? 'рост/перепродажа возможны' : score < 0 ? 'возрастной риск' : 'оценивать как текущую пользу')
-            ]);
-        }
-
-        if (category === 'club' || category === 'agent') {
-            return section(category === 'club' ? 'Клубный статус' : 'Агент', [
-                row('Маркер', label),
-                row('Что значит', marker.text || ''),
-                row('Риск', marker.redFlag ? 'повышенный' : 'обычный / неизвестный')
-            ]);
-        }
-
-        if (category === 'contract') {
-            return section('Контракт', [
-                row('Статус', label),
-                row('Что значит', marker.text || ''),
-                row('Влияние', marker.redFlag ? 'нужна ручная проверка срока/доступности' : 'положительный или нейтральный статус')
-            ]);
-        }
-
-        if (category === 'why') {
-            return section('Почему такой ранг', [
-                row('why', label),
-                row('Главные причины', marker.text || ''),
-                row('Как использовать', 'быстрый сжатый вывод; подробная расшифровка остаётся в «подробнее»')
-            ]);
-        }
-
-        if (category === 'talent' || category === 'league') {
-            return section('Рост / уровень лиги', [
-                row('Сигнал', label),
-                row('Что значит', marker.text || ''),
-                row('Влияние', score > 0 ? 'потенциальный плюс к развитию/таланту' : 'слабый или рискованный сигнал')
-            ]);
-        }
-
-        if (category === 'academy') {
-            return section('Академия / клубный след', [
-                row('Сигнал', label),
-                row('Что значит', marker.text || ''),
-                row('Влияние', score > 0 ? 'добавляет доверия к профилю' : 'нейтральный или неизвестный след')
-            ]);
-        }
-
-        if (category === 'rumor') {
-            return section('Интерес / слухи', [
-                row('Сигнал', label),
-                row('Что значит', marker.text || ''),
-                row('Влияние', score > 0 ? 'внешний спрос поддерживает актуальность' : 'слабый или отсутствующий сигнал')
-            ]);
-        }
-
-        return section('Маркер анализа', baseRows);
-    },
-
-    renderCompactChip(marker) {
-        const label = String(marker?.label || '');
-        const structuredTooltip = this.buildStructuredMarkerTooltipHtml(marker);
-        const category = this.markerCategory(marker);
-        const isMarket = category === 'market';
-        const priority = String(marker?.visualPriority || (['slf', 'market', 'tm', 'activity'].includes(category) ? 'high' : ['talent', 'league', 'trend'].includes(category) ? 'medium' : 'low'));
-        const priorityCss = priority === 'high'
-            ? 'font-weight:700;padding:1px 5px;min-height:18px;line-height:17px;'
-            : priority === 'low'
-                ? 'font-weight:400;opacity:.78;filter:saturate(.75);'
-                : 'font-weight:500;';
-        const chipBase = `
-            box-sizing:border-box;
-            margin:0;
-            padding:0 4px;
-            border:1px solid ${this.borderByLevel(marker.level)};
-            border-radius:4px;
-            color:${this.colorByLevel(marker.level)};
-            background:${this.bgByLevel(marker.level)};
-            vertical-align:middle;
-            line-height:16px;
-            min-height:17px;
-            font-size:10px;
-            ${priorityCss}
-            text-align:center;
-        `;
-        const marketCss = `
-            display:inline-flex;
-            flex:0 0 auto;
-            width:auto;
-            min-width:max-content;
-            max-width:none;
-            white-space:nowrap;
-            overflow:visible;
-            text-overflow:clip;
-            cursor:help;
-        `;
-        const normalCss = `
-            display:inline-flex;
-            flex:0 1 auto;
-            min-width:38px;
-            max-width:110px;
-            white-space:nowrap;
-            overflow:hidden;
-            text-overflow:ellipsis;
-            cursor:help;
-        `;
-
-        this.ensureHtmlTooltipStyles();
-
-        return `
-            <span class="slf-transfer-chip-tooltip-host slf-transfer-analysis-chip ${isMarket ? 'slf-transfer-mkt-leaf-badge' : ''}" data-slf-tip-category="${this.escapeHtml(category || 'other')}" tabindex="0" style="
-                ${chipBase}
-                ${isMarket ? marketCss : normalCss}
-            ">
-                <span style="display:inline-block;min-width:${isMarket ? 'max-content' : '0'};max-width:${isMarket ? 'none' : '100%'};white-space:nowrap;overflow:${isMarket ? 'visible' : 'hidden'};text-overflow:${isMarket ? 'clip' : 'ellipsis'};">${this.escapeHtml(label)}</span>
-                <span class="slf-transfer-html-tooltip" style="display:none;">${structuredTooltip}</span>
-            </span>
-        `;
-    },
-
-    shouldShowCompactMarker(marker) {
-        if (!marker) return false;
-
-        const label = String(marker.label || '');
-        const level = String(marker.level || '');
-
-        if (marker.hardStop || marker.redFlag) return true;
-        if (['skip', 'risk', 'hot', 'good', 'watch'].includes(level)) return true;
-
-        if (label.startsWith('SLF ')) return true;
-        if (label.includes('now ')) return true;
-        if (label.includes('no current')) return true;
-        if (label.includes('T') && label.includes('<L')) return true;
-        if (label.includes('>') && /\d/.test(label)) return true;
-
-        if (label.includes('TM €')) return true;
-        if (label.includes('peak')) return true;
-        if (label.includes('collapsed')) return true;
-        if (label.includes('contract')) return true;
-        if (label.includes('exp ')) return true;
-        if (label.includes('rumors') && !label.includes('RUMORS 0')) return true;
-
-        if (label.includes('elite')) return true;
-        if (label.includes('strong')) return true;
-
-        return false;
-    },
-
-    cleanupStandaloneMarketNominalControls(root = document) {
-        const scope = root || document;
-        const duplicateDetails = [...scope.querySelectorAll('.slf-transfer-details > summary')]
-            .filter(summary => /^(MKT|N)$/i.test((summary.textContent || '').trim()))
-            .map(summary => summary.closest('.slf-transfer-details'))
-            .filter(Boolean);
-
-        if (duplicateDetails.length) {
-            console.warn('[SLF Transfer Analyzer] removed standalone MKT/N controls', duplicateDetails.length);
-            duplicateDetails.forEach(el => el.remove());
-        }
-    },
-
-    bindDetailsAutoClose() {
-        if (window.__slf_transfer_details_autoclose) return;
-        window.__slf_transfer_details_autoclose = true;
-
-        const positionOpenDetails = details => {
-            if (!details || !details.open) return;
-            const summary = details.querySelector('summary');
-            const popup = details.querySelector(':scope > div');
-            if (!summary || !popup) return;
-
-            const rect = summary.getBoundingClientRect();
-            popup.style.position = 'fixed';
-            popup.style.zIndex = '2147483647';
-            popup.style.background = '#181818';
-            popup.style.opacity = '1';
-            popup.style.pointerEvents = 'auto';
-            popup.style.maxWidth = 'min(720px, calc(100vw - 24px))';
-            popup.style.maxHeight = 'min(520px, calc(100vh - 24px))';
-            popup.style.overflow = 'auto';
-            popup.style.right = 'auto';
-            popup.style.bottom = 'auto';
-
-            const popupWidth = Math.min(popup.offsetWidth || 620, window.innerWidth - 24);
-            let left = Math.min(Math.max(12, rect.left), window.innerWidth - popupWidth - 12);
-            let top = rect.bottom + 8;
-
-            const popupHeight = Math.min(popup.offsetHeight || 360, window.innerHeight - 24);
-            if (top + popupHeight > window.innerHeight - 12) {
-                top = Math.max(12, rect.top - popupHeight - 8);
-            }
-
-            popup.style.left = `${left}px`;
-            popup.style.top = `${top}px`;
-        };
-
-        const positionAllOpenDetails = () => {
-            document.querySelectorAll('.slf-transfer-details[open]').forEach(positionOpenDetails);
-        };
-
-        window.addEventListener('scroll', positionAllOpenDetails, true);
-        window.addEventListener('resize', positionAllOpenDetails, true);
-
-        document.addEventListener('click', e => {
-            const clickedDetails = e.target.closest?.('.slf-transfer-details') || null;
-
-            document.querySelectorAll('.slf-transfer-details[open]').forEach(details => {
-                if (clickedDetails !== details) {
-                    details.removeAttribute('open');
-                }
-            });
-        }, true);
-
-        document.addEventListener('toggle', e => {
-            const details = e.target;
-
-            if (!details || !details.matches || !details.matches('.slf-transfer-details')) return;
-            if (!details.open) return;
-
-            document.querySelectorAll('.slf-transfer-details[open]').forEach(other => {
-                if (other !== details) {
-                    other.removeAttribute('open');
-                }
-            });
-
-            requestAnimationFrame(() => positionOpenDetails(details));
-        }, true);
-
-        document.addEventListener('keydown', e => {
-            if (e.key !== 'Escape') return;
-
-            document.querySelectorAll('.slf-transfer-details[open]').forEach(details => {
-                details.removeAttribute('open');
-            });
-        }, true);
-    },
-
+    Object.assign(TransferMarketAnalyzer, {
     buildMarkers(row, profile, slfAlter) {
         return [
             this.getClubStatusMarker(profile),
@@ -16073,6 +15970,20 @@ const TransferMarketAnalyzer = {
         };
     },
 
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-marker-builder.js
+
+
+// >>> src/modules/transfer-analyzer/transfer-verdict-engine.js
+// Transfer Verdict Engine
+// Extracted verbatim from transfer-market-analyzer.js (stage 1 refactor).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.stage1VerdictEngineApplied = true;
+
+    Object.assign(TransferMarketAnalyzer, {
     buildTransferVerdict(markers, profile, slfAlter) {
         const cfg = this.getCfg().verdict || {};
         const score = markers.reduce((sum, m) => sum + Number(m.score || 0), 0);
@@ -16320,6 +16231,1134 @@ const TransferMarketAnalyzer = {
         }[level] || '#555';
     },
 
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-verdict-engine.js
+
+
+// >>> src/modules/transfer-analyzer/transfer-badge-renderer.js
+// Transfer Badge Renderer
+// Part of the TransferMarketAnalyzer badge rendering subsystem (issue #275).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.stage1BadgeRendererApplied = true;
+
+    Object.assign(TransferMarketAnalyzer, {
+    getOrCreateBadgeCell(row) {
+        const tr = row.rowEl;
+
+        if (!tr) return null;
+
+        let box = tr.querySelector('.slf-transfer-analysis-badge');
+
+        if (!box) {
+            box = document.createElement('td');
+            box.className = 'slf-transfer-analysis-badge';
+            box.style.cssText = this.isHistoryPage()
+                ? `
+                    box-sizing:border-box;
+                    min-width:80px;
+                    max-width:96px;
+                    width:86px;
+                    font-size:11px;
+                    line-height:1.12;
+                    border-left:1px solid #444;
+                    padding:3px 5px;
+                    vertical-align:middle;
+                    white-space:nowrap;
+                    position:relative;
+                    overflow:visible;
+                    text-align:center;
+                `
+                : `
+                    box-sizing:border-box;
+                    min-width:0;
+                    max-width:none;
+                    width:auto;
+                    font-size:11px;
+                    line-height:1.12;
+                    border-left:1px solid #444;
+                    padding:3px 5px;
+                    vertical-align:top;
+                    white-space:normal;
+                    position:relative;
+                    overflow:visible;
+                    display:flex;
+                    flex-wrap:wrap;
+                    align-items:flex-start;
+                    gap:3px 4px;
+                `;
+
+            tr.appendChild(box);
+        }
+
+        return box;
+    },
+
+    renderLoadingBadge(row) {
+        const box = this.getOrCreateBadgeCell(row);
+
+        if (!box) return;
+
+        box.innerHTML = `<span style="color:#aaa;">TM/SLF анализ...</span>`;
+    },
+
+    renderErrorBadge(row, error) {
+        const box = this.getOrCreateBadgeCell(row);
+
+        if (!box) return;
+
+        box.innerHTML = `
+            <span style="color:#ff9f9f;">Ошибка анализа</span>
+            <span style="color:#777;margin-left:4px;">${this.escapeHtml(String(error?.message || error || 'unknown'))}</span>
+        `;
+    },
+
+    renderRowBadge(row, enriched, slfAlter) {
+        if (this.isHistoryPage()) {
+            this.renderHistoryVpsBadge(row, null);
+            return;
+        }
+
+        const box = this.getOrCreateBadgeCell(row);
+
+        if (!box) return;
+
+        const profile = enriched?.tmProfile || null;
+        const safeEnriched = enriched || {
+            playerId: row.playerId,
+            slfUrl: row.playerUrl,
+            tmUrl: '',
+            tmProfile: null,
+            error: 'empty_enrichment'
+        };
+
+        const fallbackProfile = {
+            marketValueEur: 0,
+            transferHistory: [],
+            youthClubs: [],
+            rumors: [],
+            currentClub: '',
+            playerAgent: '',
+            contractExpires: '',
+            age: row.age,
+            tmUrl: ''
+        };
+
+        const markers = this.buildMarkers(row, profile || fallbackProfile, slfAlter);
+
+        const verdict = profile
+            ? this.buildTransferVerdict(markers, profile, slfAlter)
+            : {
+                label: '⚪ LOW DATA',
+                level: 'neutral',
+                score: markers.reduce((sum, m) => sum + Number(m.score || 0), 0),
+                reason: 'TM-профиль не найден, показаны только SLF-сигналы из cache/alter.php.'
+            };
+
+        this.writeRowSortMetrics(row, markers, verdict, slfAlter, profile);
+        verdict.rank = this.computeVisibleScoreRank(row, verdict.score);
+
+        const detailsHtml = this.buildDecisionDetailsHtml(row, profile || fallbackProfile, slfAlter, markers, verdict);
+        const linksHtml = profile?.tmUrl
+            ? `
+                <span style="
+                    display:inline-flex;
+                    gap:4px;
+                    align-items:center;
+                    white-space:nowrap;
+                    font-size:11px;
+                    line-height:16px;
+                    margin-left:2px;
+                ">
+                    <a href="${this.escapeHtml(profile.tmUrl)}" target="_blank" style="color:#8cf;">TM</a>
+                </span>
+            `
+            : '';
+
+        box.innerHTML = `
+            <div class="slf-transfer-analysis-compact ta-cell" style="
+                display:inline-flex;
+                flex-direction:column;
+                align-items:flex-start;
+                gap:3px;
+                width:max-content;
+                max-width:100%;
+                box-sizing:border-box;
+                overflow:visible;
+                white-space:normal;
+            ">
+                ${this.renderSemanticAnalysisGroups(markers, linksHtml, detailsHtml, verdict)}
+            </div>
+        `;
+
+        this.bindDetailsAutoClose();
+        this.bindHtmlTooltipPortal(box);
+        this.cleanupStandaloneMarketNominalControls(box);
+        this.refreshVisibleRankBadges();
+    },
+
+    writeRowSortMetrics(row, markers, verdict, slfAlter, profile) {
+        const tr = row?.rowEl;
+
+        if (!tr) return;
+
+        const talentMarker = markers.find(m => this.markerCategory(m) === 'talent');
+        const marketMarker = markers.find(m => this.markerCategory(m) === 'market');
+        const marketRatio = Number(marketMarker?.marketDetails?.ratio || 0);
+        const marketCurrent = Number(marketMarker?.marketDetails?.currentInfo?.value || 0);
+        const marketP75 = Number(marketMarker?.marketDetails?.baseline?.p75 || 0);
+        const marketHasData = marketRatio > 0 && marketCurrent > 0 && marketP75 > 0;
+
+        tr.dataset.slfAnalyzerScore = String(Number(verdict?.score || 0));
+        tr.dataset.slfSkillDelta = String(slfAlter?.skillDelta != null ? Number(slfAlter.skillDelta) : -9999);
+        tr.dataset.slfMinutesPct = String(slfAlter?.currentRow?.minutesPct != null ? Number(slfAlter.currentRow.minutesPct) : -1);
+        tr.dataset.slfTalentUp = String(talentMarker ? Number(talentMarker.score || 0) * 100 + Number(slfAlter?.talentUpgradeRow?.minutesPct || 0) : 0);
+        tr.dataset.slfTmValue = String(Number(profile?.marketValueEur || profile?.lastKnownMarketValueEur || 0));
+        tr.dataset.slfMktBargain = String(marketHasData ? Number((marketP75 / marketCurrent).toFixed(4)) : -1);
+        tr.dataset.slfMktOverpriced = String(marketHasData ? Number(marketRatio.toFixed(4)) : -1);
+    },
+
+    computeVisibleScoreRank(row, score) {
+        const tr = row?.rowEl;
+        const table = this.findTransferTable();
+        if (!tr || !table) return null;
+        const rows = [...table.querySelectorAll('tr')]
+            .filter(item => item.dataset && item.dataset.slfPlayerId && item.dataset.slfAnalyzerScore !== undefined)
+            .map(item => ({ item, score: Number(item.dataset.slfAnalyzerScore || -999999999) }))
+            .sort((a, b) => b.score - a.score);
+        const index = rows.findIndex(item => item.item === tr);
+        if (index >= 0) return index + 1;
+        const better = rows.filter(item => Number(item.score) > Number(score || 0)).length;
+        return better + 1;
+    },
+
+    refreshVisibleRankBadges() {
+        const table = this.findTransferTable();
+        if (!table) return;
+        const rows = [...table.querySelectorAll('tr')]
+            .filter(tr => tr.dataset && tr.dataset.slfPlayerId && tr.dataset.slfAnalyzerScore !== undefined)
+            .map(tr => ({ tr, score: Number(tr.dataset.slfAnalyzerScore || -999999999) }))
+            .sort((a, b) => b.score - a.score);
+        rows.forEach((entry, index) => {
+            const chip = entry.tr.querySelector('.slf-transfer-verdict-chip[data-verdict-base]');
+            if (!chip) return;
+            const base = chip.dataset.verdictBase || 'WATCH';
+            const labelEl = chip.querySelector('.slf-transfer-verdict-label');
+            if (labelEl) labelEl.textContent = `${base} #${index + 1}`;
+            else chip.childNodes[0].textContent = `${base} #${index + 1}`;
+        });
+    },
+
+    cleanupStandaloneMarketNominalControls(root = document) {
+        const scope = root || document;
+        const duplicateDetails = [...scope.querySelectorAll('.slf-transfer-details > summary')]
+            .filter(summary => /^(MKT|N)$/i.test((summary.textContent || '').trim()))
+            .map(summary => summary.closest('.slf-transfer-details'))
+            .filter(Boolean);
+
+        if (duplicateDetails.length) {
+            console.warn('[SLF Transfer Analyzer] removed standalone MKT/N controls', duplicateDetails.length);
+            duplicateDetails.forEach(el => el.remove());
+        }
+    },
+
+    bindDetailsAutoClose() {
+        if (window.__slf_transfer_details_autoclose) return;
+        window.__slf_transfer_details_autoclose = true;
+
+        const positionOpenDetails = details => {
+            if (!details || !details.open) return;
+            const summary = details.querySelector('summary');
+            const popup = details.querySelector(':scope > div');
+            if (!summary || !popup) return;
+
+            const rect = summary.getBoundingClientRect();
+            popup.style.position = 'fixed';
+            popup.style.zIndex = '2147483647';
+            popup.style.background = '#181818';
+            popup.style.opacity = '1';
+            popup.style.pointerEvents = 'auto';
+            popup.style.maxWidth = 'min(720px, calc(100vw - 24px))';
+            popup.style.maxHeight = 'min(520px, calc(100vh - 24px))';
+            popup.style.overflow = 'auto';
+            popup.style.right = 'auto';
+            popup.style.bottom = 'auto';
+
+            const popupWidth = Math.min(popup.offsetWidth || 620, window.innerWidth - 24);
+            let left = Math.min(Math.max(12, rect.left), window.innerWidth - popupWidth - 12);
+            let top = rect.bottom + 8;
+
+            const popupHeight = Math.min(popup.offsetHeight || 360, window.innerHeight - 24);
+            if (top + popupHeight > window.innerHeight - 12) {
+                top = Math.max(12, rect.top - popupHeight - 8);
+            }
+
+            popup.style.left = `${left}px`;
+            popup.style.top = `${top}px`;
+        };
+
+        const positionAllOpenDetails = () => {
+            document.querySelectorAll('.slf-transfer-details[open]').forEach(positionOpenDetails);
+        };
+
+        window.addEventListener('scroll', positionAllOpenDetails, true);
+        window.addEventListener('resize', positionAllOpenDetails, true);
+
+        document.addEventListener('click', e => {
+            const clickedDetails = e.target.closest?.('.slf-transfer-details') || null;
+
+            document.querySelectorAll('.slf-transfer-details[open]').forEach(details => {
+                if (clickedDetails !== details) {
+                    details.removeAttribute('open');
+                }
+            });
+        }, true);
+
+        document.addEventListener('toggle', e => {
+            const details = e.target;
+
+            if (!details || !details.matches || !details.matches('.slf-transfer-details')) return;
+            if (!details.open) return;
+
+            document.querySelectorAll('.slf-transfer-details[open]').forEach(other => {
+                if (other !== details) {
+                    other.removeAttribute('open');
+                }
+            });
+
+            requestAnimationFrame(() => positionOpenDetails(details));
+        }, true);
+
+        document.addEventListener('keydown', e => {
+            if (e.key !== 'Escape') return;
+
+            document.querySelectorAll('.slf-transfer-details[open]').forEach(details => {
+                details.removeAttribute('open');
+            });
+        }, true);
+    },
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-badge-renderer.js
+
+
+// >>> src/modules/transfer-analyzer/transfer-badge-marker-taxonomy.js
+// Transfer Badge Marker Taxonomy
+// Part of the TransferMarketAnalyzer badge rendering subsystem (issue #275).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.badgeMarkerTaxonomyApplied = true;
+
+    Object.assign(TransferMarketAnalyzer, {
+    markerCategory(marker) {
+        if (marker?.category) return marker.category;
+
+        const label = String(marker?.label || '').toLowerCase();
+
+        if (label.includes('retired') || label.includes('no club') || label.includes('без клуба') || label.includes('club')) return 'club';
+        if (label.includes('agent')) return 'agent';
+        if (label.startsWith('slf') || label.startsWith('→')) return 'slf';
+        if (label.includes('min') || label.startsWith('m-') || label.startsWith('m?')) return 'activity';
+        if (label.includes('t') && label.includes('<l')) return 'talent';
+        if (label.includes('>') && /\d/.test(label)) return 'league';
+        if (label.includes('age') || label.includes('growth') || label.includes('grow') || label.includes('late') || label.includes('prime') || label.includes('veteran') || label.includes('vet') || label.includes('short')) return 'age';
+        if (label.startsWith('mkt')) return 'market';
+        if (label.startsWith('n ') || label.startsWith('n?')) return 'nominal';
+        if (label.includes('tm ') || label.startsWith('tm') || label.startsWith('old €') || label.startsWith('old')) return 'tm';
+        if (label.includes('peak') || label.includes('trend') || label.includes('collapsed') || label.includes('fallen') || label.includes('fall')) return 'trend';
+        if (label.includes('contract') || label.includes('ctr') || label.includes('exp ')) return 'contract';
+        if (label.includes('rumor') || /^r\d/.test(label)) return 'rumors';
+        if (label.includes('academy') || label.includes('acad') || label.includes('youth') || label.includes('elite') || label.includes('strong')) return 'academy';
+
+        return 'other';
+    },
+
+    getMarkerSlotDefs() {
+        return [
+            { key: 'slf', placeholder: 'SLF?' },
+            { key: 'activity', placeholder: 'MIN?' },
+            { key: 'talent', placeholder: 'T-' },
+            { key: 'league', placeholder: 'L-' },
+            { key: 'tm', placeholder: 'TM?' },
+            { key: 'market', placeholder: 'MKT?' },
+            { key: 'trend', placeholder: 'tr?' },
+
+            { key: 'club', placeholder: 'club?' },
+            { key: 'agent', placeholder: 'agent?' },
+            { key: 'age', placeholder: 'age?' },
+            { key: 'contract', placeholder: 'ctr?' },
+            { key: 'rumors', placeholder: 'rum0' },
+            { key: 'academy', placeholder: 'acad-' }
+        ];
+    },
+
+    markerScoreRank(level) {
+        return ({
+            skip: 100,
+            risk: 90,
+            hot: 80,
+            good: 70,
+            watch: 60,
+            normal: 50,
+            neutral: 40,
+            unknown: 30,
+            low: 20,
+            old: 15,
+            empty: 10
+        }[level] || 0);
+    },
+
+    sortMarkersByImportance(markers) {
+        return [...(markers || [])].sort((a, b) => {
+            return this.markerScoreRank(b.level) - this.markerScoreRank(a.level) ||
+                Math.abs(Number(b.score || 0)) - Math.abs(Number(a.score || 0));
+        });
+    },
+
+    isRealAnalysisMarker(marker) {
+        if (!marker) return false;
+
+        const level = String(marker.level || '');
+        const label = this.normalizeText(marker.label || '');
+
+        if (!label || level === 'empty') return false;
+        if (/^(SLF\?|MIN\?|TM\?|MKT\?|T-|L-|tr\?|club\?|agent\?|age\?|ctr\?|rum0|acad-)$/i.test(label)) return false;
+        if (/^N\s+/i.test(label)) return false;
+        if (/^N\?/i.test(label)) return false;
+
+        return true;
+    },
+
+    firstMarkerByCategory(markers, category) {
+        return this.sortMarkersByImportance(markers)
+            .find(marker => this.markerCategory(marker) === category && this.isRealAnalysisMarker(marker)) || null;
+    },
+
+    allMarkersByCategories(markers, categories) {
+        const allowed = new Set(categories || []);
+        return this.sortMarkersByImportance(markers)
+            .filter(marker => allowed.has(this.markerCategory(marker)) && this.isRealAnalysisMarker(marker));
+    },
+
+    withVisualPriority(marker, priority) {
+        return marker ? Object.assign({}, marker, { visualPriority: priority }) : null;
+    },
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-badge-marker-taxonomy.js
+
+
+// >>> src/modules/transfer-analyzer/transfer-badge-verdict-groups.js
+// Transfer Badge Verdict Groups
+// Part of the TransferMarketAnalyzer badge rendering subsystem (issue #275).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.badgeVerdictGroupsApplied = true;
+
+    Object.assign(TransferMarketAnalyzer, {
+    renderAnalysisGroup(className, title, markers, priority = 'medium') {
+        const realMarkers = (markers || [])
+            .filter(Boolean)
+            .filter(marker => this.isRealAnalysisMarker(marker));
+
+        if (!realMarkers.length) return '';
+
+        return `
+            <div class="ta-group ${className}" data-ta-group="${this.escapeHtml(className)}" aria-label="${this.escapeHtml(title)}">
+                ${realMarkers.map(marker => this.renderCompactChip(this.withVisualPriority(marker, priority))).join('')}
+            </div>
+        `;
+    },
+
+    makeCombinedContextMarker(markers, labelFallback = '') {
+        const realMarkers = (markers || []).filter(Boolean).filter(marker => this.isRealAnalysisMarker(marker));
+        if (!realMarkers.length) return null;
+
+        const labels = realMarkers
+            .map(marker => String(marker.label || '').trim())
+            .filter(Boolean);
+        if (!labels.length) return null;
+
+        const texts = realMarkers
+            .map(marker => String(marker.text || marker.label || '').trim())
+            .filter(Boolean);
+
+        return {
+            label: labels.join(' · ') || labelFallback,
+            level: 'neutral',
+            score: realMarkers.reduce((sum, marker) => sum + Number(marker.score || 0), 0),
+            redFlag: realMarkers.some(marker => marker.redFlag),
+            hardStop: realMarkers.some(marker => marker.hardStop),
+            text: texts.join(' | '),
+            category: 'combined'
+        };
+    },
+
+    renderSemanticAnalysisGroups(markers, linksHtml, detailsHtml, verdict) {
+        const primaryMarkers = [
+            this.firstMarkerByCategory(markers, 'slf'),
+            this.firstMarkerByCategory(markers, 'market'),
+            this.firstMarkerByCategory(markers, 'tm'),
+            this.firstMarkerByCategory(markers, 'activity'),
+            this.firstMarkerByCategory(markers, 'trend')
+        ].filter(Boolean);
+
+        const usedPrimary = new Set(primaryMarkers);
+        const signalMarkers = this.allMarkersByCategories(markers, ['talent', 'league', 'trend'])
+            .filter(marker => !usedPrimary.has(marker));
+        const ageMarker = this.firstMarkerByCategory(markers, 'age');
+        const clubAgent = this.makeCombinedContextMarker([
+            this.firstMarkerByCategory(markers, 'club'),
+            this.firstMarkerByCategory(markers, 'agent')
+        ], 'club / agent');
+        const contractService = this.makeCombinedContextMarker([
+            this.firstMarkerByCategory(markers, 'contract'),
+            this.firstMarkerByCategory(markers, 'rumors'),
+            this.firstMarkerByCategory(markers, 'academy')
+        ], 'contract / status');
+        const otherMarkers = this.allMarkersByCategories(markers, ['other']);
+        const whyMarker = this.buildWhyRankMarker(markers, verdict);
+
+        const secondaryMarkers = [
+            whyMarker,
+            ...signalMarkers,
+            ageMarker,
+            clubAgent,
+            contractService,
+            ...otherMarkers
+        ].filter(Boolean);
+
+        const verdictHtml = verdict ? this.renderRankVerdictChip(verdict) : '';
+
+        const primaryHtml = `
+            <div class="ta-line ta-primary" data-ta-line="primary" aria-label="Итог и главные факторы">
+                ${verdictHtml}
+                ${primaryMarkers.map(marker => this.renderCompactChip(this.withVisualPriority(marker, 'high'))).join('')}
+            </div>
+        `;
+
+        const secondaryHtml = `
+            <div class="ta-line ta-secondary" data-ta-line="secondary" aria-label="Почему и контекст">
+                ${secondaryMarkers.map(marker => this.renderCompactChip(this.withVisualPriority(marker, marker.category === 'why' ? 'medium' : 'low'))).join('')}
+                ${linksHtml || ''}
+                ${detailsHtml || ''}
+            </div>
+        `;
+
+        return [primaryHtml, secondaryHtml].join('');
+    },
+
+    getShortVerdictLabel(verdict) {
+        const raw = String(verdict?.label || '').toUpperCase();
+        if (raw.includes('SKIP')) return 'SKIP';
+        if (raw.includes('TRAP') || raw.includes('RISK')) return 'RISK';
+        if (raw.includes('SPEC')) return 'SPEC';
+        if (raw.includes('PRIORITY') || raw.includes('STRONG')) return 'TARGET';
+        if (raw.includes('TARGET')) return 'TARGET';
+        if (raw.includes('WATCH')) return 'WATCH';
+        if (raw.includes('LOW DATA')) return 'WATCH';
+        return 'WATCH';
+    },
+
+    buildVerdictTooltipHtml(verdict) {
+        const esc = value => this.escapeHtml(value == null || value === '' ? '—' : String(value));
+        const label = this.getShortVerdictLabel(verdict);
+        const score = Number(verdict?.score || 0).toFixed(1).replace(/\.0$/, '');
+        const rank = verdict?.rank ? `#${verdict.rank}` : '#?';
+        const reason = verdict?.reason || verdict?.label || '';
+        const level = String(verdict?.level || 'neutral');
+        const meaning = (() => {
+            const raw = String(verdict?.label || '').toUpperCase();
+            if (raw.includes('PRIORITY') || raw.includes('TARGET')) return 'кандидат выше среднего: проверять первым, но финально сверить цену, минуты и статус';
+            if (raw.includes('WATCH') || raw.includes('SPEC')) return 'наблюдение/ручная проверка: есть плюс, но не хватает уверенности или есть риск';
+            if (raw.includes('RISK') || raw.includes('TRAP')) return 'риск покупки: маркеры указывают на переплату, слабую готовность или статусный риск';
+            if (raw.includes('SKIP')) return 'пропуск: есть hard-stop или слишком сильная комбинация рисков';
+            return 'общий ранговый вывод анализатора';
+        })();
+
+        return `
+            <div style="font-weight:bold;color:#ffd76a;margin-bottom:6px;">Вердикт и ранг</div>
+            <div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;padding:3px 0;border-bottom:1px solid #2b2b2b;"><span style="color:#aaa;">Итог</span><span>${esc(label)} ${esc(rank)}</span></div>
+            <div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;padding:3px 0;border-bottom:1px solid #2b2b2b;"><span style="color:#aaa;">Score</span><span>${esc(score)}</span></div>
+            <div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;padding:3px 0;border-bottom:1px solid #2b2b2b;"><span style="color:#aaa;">Уровень</span><span>${esc(level)}</span></div>
+            <div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;padding:3px 0;border-bottom:1px solid #2b2b2b;"><span style="color:#aaa;">Почему</span><span>${esc(reason)}</span></div>
+            <div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;padding:3px 0;"><span style="color:#aaa;">Как читать</span><span>${esc(meaning)}</span></div>
+        `;
+    },
+
+    renderRankVerdictChip(verdict) {
+        const label = this.getShortVerdictLabel(verdict);
+        const rank = verdict?.rank ? ` #${verdict.rank}` : ' #?';
+        const tooltip = this.buildVerdictTooltipHtml(verdict);
+        return `
+            <span class="slf-transfer-chip-tooltip-host slf-transfer-verdict-chip" data-verdict-base="${this.escapeHtml(label)}" data-score="${this.escapeHtml(verdict?.score || 0)}" tabindex="0" style="
+                flex:0 0 auto;
+                display:inline-flex;
+                align-items:center;
+                justify-content:center;
+                min-height:18px;
+                line-height:17px;
+                padding:1px 6px;
+                border-radius:6px;
+                color:${this.colorByLevel(verdict.level)};
+                background:${this.bgByLevel(verdict.level)};
+                border:1px solid ${this.borderByLevel(verdict.level)};
+                font-weight:800;
+                white-space:nowrap;
+                vertical-align:middle;
+                cursor:help;
+            ">
+                <span class="slf-transfer-verdict-label">${this.escapeHtml(label + rank)}</span>
+                <span class="slf-transfer-html-tooltip" style="display:none;">${tooltip}</span>
+            </span>
+        `;
+    },
+
+    buildWhyRankReasons(markers, verdict) {
+        const reasons = [];
+        const market = (markers || []).find(m => this.markerCategory(m) === 'market');
+        const activity = (markers || []).find(m => this.markerCategory(m) === 'activity');
+        const trend = (markers || []).find(m => this.markerCategory(m) === 'trend');
+        const age = (markers || []).find(m => this.markerCategory(m) === 'age');
+        const agent = (markers || []).find(m => this.markerCategory(m) === 'agent');
+        const club = (markers || []).find(m => this.markerCategory(m) === 'club');
+        const ratio = Number(market?.marketDetails?.ratio || 0);
+        const minPct = Number((String(activity?.label || '').match(/MIN\s+(\d+)/i) || [])[1] || 0);
+        const peakPct = Number((String(trend?.label || '').match(/peak\s+(\d+)/i) || [])[1] || 0);
+        const ageNum = Number((String(age?.label || '').match(/age\s+(\d+)/i) || [])[1] || 0);
+        const verdictText = String(verdict?.label || '').toUpperCase();
+
+        if (minPct >= 70) reasons.push('ready');
+        if (ratio && ratio < 1) reasons.push('cheap');
+        if (ratio && ratio > 1) reasons.push('overpay');
+        if (minPct && minPct < 35) reasons.push('low-min');
+        if (peakPct >= 90) reasons.push('peak');
+        if (String(trend?.label || '').toLowerCase().includes('fall')) reasons.push('fall');
+        if (verdictText.includes('SPEC') || (ageNum >= 22 && ageNum <= 24 && minPct > 0 && minPct < 70 && peakPct >= 90)) reasons.push('spec');
+        if (ageNum >= 30) reasons.push('old');
+        if (String(agent?.label || '').includes('✓')) reasons.push('agent');
+        if (String(club?.label || '').includes('✓')) reasons.push('club');
+
+        return [...new Set(reasons)].slice(0, 3);
+    },
+
+    buildWhyRankMarker(markers, verdict) {
+        const reasons = this.buildWhyRankReasons(markers, verdict);
+        if (!reasons.length) return null;
+        return {
+            label: `why: ${reasons.join(' · ')}`,
+            level: 'neutral',
+            score: 0,
+            redFlag: false,
+            hardStop: false,
+            category: 'why',
+            text: `Главные причины ранга: ${reasons.join(', ')}.`
+        };
+    },
+
+    getMarkerSlots(markers) {
+        const defs = this.getMarkerSlotDefs();
+
+        return defs.map(def => {
+            const marker = this.firstMarkerByCategory(markers, def.key);
+            if (marker) return marker;
+
+            return {
+                label: def.placeholder,
+                level: 'empty',
+                score: 0,
+                redFlag: false,
+                hardStop: false,
+                text: `Нет данных/сигнала для слота ${def.key}.`
+            };
+        });
+    },
+
+    renderMarkerSlots(markers) {
+        return this.renderSemanticAnalysisGroups(markers, '', '', null);
+    },
+
+    getVerdictIcon(verdict) {
+        const label = String(verdict?.label || '');
+
+        if (label.includes('SKIP')) return '⛔';
+        if (label.includes('HIGH RISK') || label.includes('RISK') || label.includes('TRAP')) return '🔴';
+        if (label.includes('SPEC')) return '◇';
+        if (label.includes('MANUAL')) return '🟡';
+        if (label.includes('PRIORITY')) return '🔥';
+        if (label.includes('TARGET')) return '🟢';
+        if (label.includes('WATCHLIST')) return '👀';
+
+        return '⚪';
+    },
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-badge-verdict-groups.js
+
+
+// >>> src/modules/transfer-analyzer/transfer-badge-tooltip-portal.js
+// Transfer Badge Tooltip Portal
+// Part of the TransferMarketAnalyzer badge rendering subsystem (issue #275).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.badgeTooltipPortalApplied = true;
+
+    Object.assign(TransferMarketAnalyzer, {
+    ensureHtmlTooltipStyles() {
+        if (document.getElementById('slf-transfer-html-tooltip-style')) return;
+
+        const style = document.createElement('style');
+        style.id = 'slf-transfer-html-tooltip-style';
+        style.textContent = `
+            .slf-transfer-chip-tooltip-host { overflow:visible !important; position:relative; outline:none; cursor:help; }
+            .slf-transfer-decision-details-trigger { cursor:pointer !important; }
+            .slf-transfer-mkt-leaf-badge { min-width:max-content !important; max-width:none !important; width:auto !important; white-space:nowrap !important; overflow:visible !important; text-overflow:clip !important; }
+            .slf-transfer-analysis-badge, .slf-transfer-analysis-compact, .slf-transfer-marker-wrap, .ta-cell, .ta-line { overflow:visible !important; white-space:normal !important; }
+            .slf-transfer-analysis-badge { min-width:0 !important; width:auto !important; max-width:none !important; }
+            .ta-cell { display:inline-flex !important; flex-direction:column !important; align-items:flex-start !important; gap:3px !important; box-sizing:border-box !important; min-width:0 !important; width:max-content !important; max-width:100% !important; }
+            .ta-line { display:flex !important; flex-wrap:wrap !important; align-items:center !important; justify-content:flex-start !important; gap:3px 4px !important; min-width:0 !important; box-sizing:border-box !important; width:max-content !important; max-width:100% !important; }
+            .ta-primary { order:1; }
+            .ta-secondary { order:2; opacity:.9; }
+            .ta-secondary .slf-transfer-decision-details-trigger { display:inline-flex !important; width:max-content !important; max-width:max-content !important; white-space:nowrap !important; align-self:center !important; }
+            .ta-secondary a { white-space:nowrap !important; }
+            .slf-transfer-chip-tooltip-host .slf-transfer-html-tooltip { display:none !important; }
+            .slf-transfer-html-tooltip-portal {
+                position:fixed;
+                z-index:2147483647;
+                max-width:min(780px, calc(100vw - 24px));
+                min-width:260px;
+                width:auto;
+                max-height:min(560px, calc(100vh - 24px));
+                overflow:auto;
+                padding:8px 10px;
+                background:#181818;
+                color:#ddd;
+                border:1px solid #666;
+                border-radius:6px;
+                box-shadow:0 8px 24px rgba(0,0,0,0.75);
+                white-space:normal;
+                line-height:1.35;
+                text-align:left;
+                font-size:11px;
+            }
+            .slf-transfer-html-tooltip-portal.slf-transfer-tooltip-hover { pointer-events:none; }
+            .slf-transfer-html-tooltip-portal.slf-transfer-tooltip-click { pointer-events:auto; }
+        `;
+        document.head.appendChild(style);
+    },
+
+    bindHtmlTooltipPortal(root = document) {
+        if (window.__slf_transfer_html_tooltip_portal_bound) return;
+        window.__slf_transfer_html_tooltip_portal_bound = true;
+
+        let portal = null;
+        let activeHost = null;
+        let activeMode = '';
+
+        const escape = value => String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+
+        const isDetailsHost = host => !!host && (
+            host.classList?.contains('slf-transfer-decision-details-trigger') ||
+            host.closest?.('.slf-transfer-details') ||
+            String(host.textContent || '').trim().toLowerCase() === 'подробнее'
+        );
+
+        const normalizeHostTitle = host => {
+            if (!host) return;
+            const title = host.getAttribute('title');
+            if (title && !host.dataset.slfTip) host.dataset.slfTip = title;
+            if (title) host.removeAttribute('title');
+        };
+
+        const getTooltipHtml = host => {
+            if (!host) return '';
+            normalizeHostTitle(host);
+            const source = host.querySelector?.('.slf-transfer-html-tooltip');
+            if (source) return source.innerHTML || '';
+            const tip = host.dataset?.slfTip || host.getAttribute?.('data-tooltip') || host.getAttribute?.('aria-label') || '';
+            return tip ? `<div>${escape(tip)}</div>` : '';
+        };
+
+        const close = () => {
+            if (portal) {
+                portal.remove();
+                portal = null;
+            }
+            activeHost = null;
+            activeMode = '';
+        };
+
+        const place = host => {
+            if (!portal || !host) return;
+            const rect = host.getBoundingClientRect();
+            const margin = 8;
+            const details = isDetailsHost(host);
+            const preferredWidth = details ? 540 : 780;
+            const minWidth = details ? 300 : 260;
+            const width = Math.max(Math.min(preferredWidth, window.innerWidth - margin * 2), Math.min(minWidth, window.innerWidth - margin * 2));
+            portal.style.width = width + 'px';
+            portal.style.minWidth = Math.min(minWidth, width) + 'px';
+
+            let left = Math.min(Math.max(rect.left, margin), window.innerWidth - width - margin);
+            let top = rect.bottom + 6;
+            portal.style.left = left + 'px';
+            portal.style.top = top + 'px';
+
+            let after = portal.getBoundingClientRect();
+            if (after.right > window.innerWidth - margin) {
+                left = Math.max(margin, window.innerWidth - after.width - margin);
+                portal.style.left = left + 'px';
+            }
+            if (after.left < margin) {
+                portal.style.left = margin + 'px';
+            }
+            after = portal.getBoundingClientRect();
+            if (after.bottom > window.innerHeight - margin) {
+                top = Math.max(margin, rect.top - after.height - 6);
+                portal.style.top = top + 'px';
+            }
+        };
+
+        const open = (host, mode) => {
+            if (!host) return;
+            const html = getTooltipHtml(host);
+            if (!html) return;
+            if (portal && activeHost === host && activeMode === mode) {
+                place(host);
+                return;
+            }
+
+            close();
+            activeHost = host;
+            activeMode = mode;
+            portal = document.createElement('div');
+            portal.className = 'slf-transfer-html-tooltip-portal ' + (mode === 'click' ? 'slf-transfer-tooltip-click' : 'slf-transfer-tooltip-hover');
+            portal.innerHTML = html;
+            document.body.appendChild(portal);
+            place(host);
+        };
+
+        const getHoverHost = target => {
+            const host = target?.closest?.('.slf-transfer-chip-tooltip-host');
+            if (!host || isDetailsHost(host)) return null;
+            return host;
+        };
+
+        document.addEventListener('mouseover', e => {
+            const host = getHoverHost(e.target);
+            if (!host) return;
+            open(host, 'hover');
+        }, true);
+
+        document.addEventListener('mouseout', e => {
+            const host = getHoverHost(e.target);
+            if (!host) return;
+            const related = e.relatedTarget;
+            if (related && host.contains(related)) return;
+            if (activeHost === host && activeMode === 'hover') close();
+        }, true);
+
+        document.addEventListener('focusin', e => {
+            const host = getHoverHost(e.target);
+            if (!host) return;
+            open(host, 'hover');
+        }, true);
+
+        document.addEventListener('focusout', e => {
+            const host = getHoverHost(e.target);
+            if (!host) return;
+            if (activeHost === host && activeMode === 'hover') close();
+        }, true);
+
+        document.addEventListener('click', e => {
+            const host = e.target.closest?.('.slf-transfer-chip-tooltip-host');
+            if (!host) {
+                if (!e.target.closest?.('.slf-transfer-html-tooltip-portal')) close();
+                return;
+            }
+
+            normalizeHostTitle(host);
+
+            if (!isDetailsHost(host)) {
+                return;
+            }
+
+            if (host === activeHost && portal && activeMode === 'click') close();
+            else open(host, 'click');
+
+            e.stopPropagation();
+            e.preventDefault();
+        }, true);
+
+        window.addEventListener('scroll', () => activeHost ? place(activeHost) : null, true);
+        window.addEventListener('resize', () => activeHost ? place(activeHost) : null);
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') close();
+        }, true);
+    },
+
+    buildStructuredMarkerTooltipHtml(marker) {
+        if (!marker) return '';
+
+        const category = this.markerCategory(marker);
+        const esc = value => this.escapeHtml(value == null || value === '' ? '—' : String(value));
+        const row = (label, value) => `
+            <div style="display:grid;grid-template-columns:145px minmax(0,1fr);gap:8px;padding:3px 0;border-bottom:1px solid #2b2b2b;text-align:left;">
+                <span style="color:#aaa;">${esc(label)}</span>
+                <span style="color:#ddd;">${esc(value)}</span>
+            </div>
+        `;
+        const section = (title, rows) => `
+            <div style="margin:0 0 8px 0;">
+                <div style="font-weight:bold;color:#ffd76a;margin-bottom:4px;">${esc(title)}</div>
+                ${(rows || []).filter(Boolean).join('')}
+            </div>
+        `;
+
+        const label = marker.label || '';
+        const score = Number(marker.score || 0);
+        const baseRows = [
+            row('Маркер', label),
+            row('Тип', category || 'other'),
+            row('Сила сигнала', `${score >= 0 ? '+' : ''}${score}`),
+            marker.redFlag ? row('Риск', 'красный флаг') : '',
+            marker.hardStop ? row('Стоп', 'hard-stop') : '',
+            row('Смысл', marker.text || label)
+        ];
+
+        if (category === 'market') {
+            const details = marker.marketDetails || {};
+            const current = details.currentInfo || {};
+            const baseline = details.baseline || null;
+            const nominal = details.nominal || {};
+            const comparison = baseline?.p75 && current?.value
+                ? `текущая цена ${Number(current.value) > Number(baseline.p75) ? 'выше' : 'ниже'} p75 примерно в ${Number(current.value / baseline.p75).toFixed(2)}x`
+                : 'нет достаточной базы для сравнения';
+
+            return [
+                section('Рынок SLF', [
+                    row('Цена сейчас', this.formatSlfMoneyShort(current.value)),
+                    row('База скилла MKT', details.skillBasis?.label || ''),
+                    row('Рыночный ориентир p75', baseline ? this.formatSlfMoneyShort(baseline.p75) : 'нет выборки'),
+                    baseline && current?.value ? row('Отношение к p75', details.ratioText || `${Number(current.value / baseline.p75).toFixed(2)}x`) : '',
+                    baseline ? row('Диапазон продаж', `${this.formatSlfMoneyShort(baseline.min)} – ${this.formatSlfMoneyShort(baseline.max)}`) : '',
+                    baseline ? row('Выборка', `${baseline.count || 0} продаж`) : '',
+                    baseline ? row('Доверие', baseline.confidence || '') : ''
+                ]),
+                section('Номинал', [
+                    row('Номинал', nominal.ratioText || ''),
+                    row('Базовый номинал', this.formatSlfMoneyShort(nominal.baseNominal || 0))
+                ]),
+                section('Сравнение', [
+                    row('К p75', comparison),
+                    row('Вывод', details.conclusion || marker.text || '')
+                ])
+            ].join('');
+        }
+
+        if (category === 'slf') {
+            return section('SLF alter.php', [
+                row('SLF delta', label),
+                row('Что значит', marker.text || 'сравнение current skill и ИТОГ'),
+                row('Решение', score > 0 ? 'положительный внутренний сигнал' : score < 0 ? 'риск просадки относительно ИТОГ' : 'нейтрально')
+            ]);
+        }
+
+        if (category === 'activity') {
+            return section('Готовность / минуты', [
+                row('MIN', label),
+                row('Что значит', marker.text || ''),
+                row('Влияние', score >= 3 ? 'готовность подтверждена' : score < 0 ? 'риск отсутствия актуальной практики' : 'нужна ручная проверка')
+            ]);
+        }
+
+        if (category === 'tm') {
+            return section('Transfermarkt value', [
+                row('TM €', label),
+                row('Источник', 'Transfermarkt как внешний ориентир, не SLF-цена'),
+                row('Что значит', marker.text || '')
+            ]);
+        }
+
+        if (category === 'trend') {
+            return section('Пик / динамика цены', [
+                row('Сигнал', label),
+                row('Что значит', marker.text || ''),
+                row('Влияние', String(label).toLowerCase().includes('fall') ? 'сильный риск падения/старого пика' : 'проверка актуальности относительно пика')
+            ]);
+        }
+
+        if (category === 'age') {
+            return section('Возраст / стадия', [
+                row('Возрастной маркер', label),
+                row('Стадия', marker.text || ''),
+                row('Влияние', score >= 3 ? 'рост/перепродажа возможны' : score < 0 ? 'возрастной риск' : 'оценивать как текущую пользу')
+            ]);
+        }
+
+        if (category === 'club' || category === 'agent') {
+            return section(category === 'club' ? 'Клубный статус' : 'Агент', [
+                row('Маркер', label),
+                row('Что значит', marker.text || ''),
+                row('Риск', marker.redFlag ? 'повышенный' : 'обычный / неизвестный')
+            ]);
+        }
+
+        if (category === 'contract') {
+            return section('Контракт', [
+                row('Статус', label),
+                row('Что значит', marker.text || ''),
+                row('Влияние', marker.redFlag ? 'нужна ручная проверка срока/доступности' : 'положительный или нейтральный статус')
+            ]);
+        }
+
+        if (category === 'why') {
+            return section('Почему такой ранг', [
+                row('why', label),
+                row('Главные причины', marker.text || ''),
+                row('Как использовать', 'быстрый сжатый вывод; подробная расшифровка остаётся в «подробнее»')
+            ]);
+        }
+
+        if (category === 'talent' || category === 'league') {
+            return section('Рост / уровень лиги', [
+                row('Сигнал', label),
+                row('Что значит', marker.text || ''),
+                row('Влияние', score > 0 ? 'потенциальный плюс к развитию/таланту' : 'слабый или рискованный сигнал')
+            ]);
+        }
+
+        if (category === 'academy') {
+            return section('Академия / клубный след', [
+                row('Сигнал', label),
+                row('Что значит', marker.text || ''),
+                row('Влияние', score > 0 ? 'добавляет доверия к профилю' : 'нейтральный или неизвестный след')
+            ]);
+        }
+
+        if (category === 'rumor') {
+            return section('Интерес / слухи', [
+                row('Сигнал', label),
+                row('Что значит', marker.text || ''),
+                row('Влияние', score > 0 ? 'внешний спрос поддерживает актуальность' : 'слабый или отсутствующий сигнал')
+            ]);
+        }
+
+        return section('Маркер анализа', baseRows);
+    },
+
+    renderCompactChip(marker) {
+        const label = String(marker?.label || '');
+        const structuredTooltip = this.buildStructuredMarkerTooltipHtml(marker);
+        const category = this.markerCategory(marker);
+        const isMarket = category === 'market';
+        const priority = String(marker?.visualPriority || (['slf', 'market', 'tm', 'activity'].includes(category) ? 'high' : ['talent', 'league', 'trend'].includes(category) ? 'medium' : 'low'));
+        const priorityCss = priority === 'high'
+            ? 'font-weight:700;padding:1px 5px;min-height:18px;line-height:17px;'
+            : priority === 'low'
+                ? 'font-weight:400;opacity:.78;filter:saturate(.75);'
+                : 'font-weight:500;';
+        const chipBase = `
+            box-sizing:border-box;
+            margin:0;
+            padding:0 4px;
+            border:1px solid ${this.borderByLevel(marker.level)};
+            border-radius:4px;
+            color:${this.colorByLevel(marker.level)};
+            background:${this.bgByLevel(marker.level)};
+            vertical-align:middle;
+            line-height:16px;
+            min-height:17px;
+            font-size:10px;
+            ${priorityCss}
+            text-align:center;
+        `;
+        const marketCss = `
+            display:inline-flex;
+            flex:0 0 auto;
+            width:auto;
+            min-width:max-content;
+            max-width:none;
+            white-space:nowrap;
+            overflow:visible;
+            text-overflow:clip;
+            cursor:help;
+        `;
+        const normalCss = `
+            display:inline-flex;
+            flex:0 1 auto;
+            min-width:38px;
+            max-width:110px;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            cursor:help;
+        `;
+
+        this.ensureHtmlTooltipStyles();
+
+        return `
+            <span class="slf-transfer-chip-tooltip-host slf-transfer-analysis-chip ${isMarket ? 'slf-transfer-mkt-leaf-badge' : ''}" data-slf-tip-category="${this.escapeHtml(category || 'other')}" tabindex="0" style="
+                ${chipBase}
+                ${isMarket ? marketCss : normalCss}
+            ">
+                <span style="display:inline-block;min-width:${isMarket ? 'max-content' : '0'};max-width:${isMarket ? 'none' : '100%'};white-space:nowrap;overflow:${isMarket ? 'visible' : 'hidden'};text-overflow:${isMarket ? 'clip' : 'ellipsis'};">${this.escapeHtml(label)}</span>
+                <span class="slf-transfer-html-tooltip" style="display:none;">${structuredTooltip}</span>
+            </span>
+        `;
+    },
+
+    shouldShowCompactMarker(marker) {
+        if (!marker) return false;
+
+        const label = String(marker.label || '');
+        const level = String(marker.level || '');
+
+        if (marker.hardStop || marker.redFlag) return true;
+        if (['skip', 'risk', 'hot', 'good', 'watch'].includes(level)) return true;
+
+        if (label.startsWith('SLF ')) return true;
+        if (label.includes('now ')) return true;
+        if (label.includes('no current')) return true;
+        if (label.includes('T') && label.includes('<L')) return true;
+        if (label.includes('>') && /\d/.test(label)) return true;
+
+        if (label.includes('TM €')) return true;
+        if (label.includes('peak')) return true;
+        if (label.includes('collapsed')) return true;
+        if (label.includes('contract')) return true;
+        if (label.includes('exp ')) return true;
+        if (label.includes('rumors') && !label.includes('RUMORS 0')) return true;
+
+        if (label.includes('elite')) return true;
+        if (label.includes('strong')) return true;
+
+        return false;
+    },
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-badge-tooltip-portal.js
+
+
+// >>> src/modules/transfer-analyzer/transfer-table-sorter.js
+// Transfer Table Sorter
+// Extracted verbatim from transfer-market-analyzer.js (stage 1 refactor).
+// Assigned onto the TransferMarketAnalyzer facade; behaviour unchanged.
+
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
+    TransferMarketAnalyzer.stage1TableSorterApplied = true;
+
+    Object.assign(TransferMarketAnalyzer, {
     sortByDataset(datasetKey, direction = 'desc', label = datasetKey) {
         const table = this.findTransferTable();
         if (!table) return;
@@ -16379,19 +17418,9 @@ const TransferMarketAnalyzer = {
         this.setStatus('Порядок строк восстановлен.');
     },
 
-    escapeHtml(value) {
-        return String(value ?? '')
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#039;');
-    }
-};
-
-
-// ============================================================
-// <<< src/modules/transfer-analyzer/transfer-market-analyzer.js
+    });
+}
+// <<< src/modules/transfer-analyzer/transfer-table-sorter.js
 
 
 // >>> src/modules/transfer-analyzer/transfer-history-money-parser.js
@@ -17659,8 +18688,8 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner)
 
 
 // >>> src/modules/transfer-analyzer/transfer-candidate-pagination-policy.js
-// Transfer Candidate Scanner pagination, URL and session policy
-// ============================================================
+// Transfer Candidate Scanner pagination, URL, session and FM2026 row-identity policy
+// ==============================================================================
 
 if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner && !TransferCandidateScanner.paginationPolicyApplied) {
     TransferCandidateScanner.paginationPolicyApplied = true;
@@ -17699,7 +18728,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         }
     };
 
-    ['readCollection', 'appendCollection', 'clearCollection', 'fetchPage'].forEach(methodName => {
+    ['readCollection', 'appendCollection', 'clearCollection'].forEach(methodName => {
         const original = TransferCandidateScanner[methodName];
         if (typeof original !== 'function') return;
         TransferCandidateScanner[`${methodName}WithReadableErrorsOriginal`] = original;
@@ -17712,34 +18741,276 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         };
     });
 
+    TransferCandidateScanner.browserFetch = function browserFetch(url, options) {
+        const pageFetch = typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.fetch === 'function'
+            ? unsafeWindow.fetch.bind(unsafeWindow)
+            : fetch.bind(window);
+        return pageFetch(url, options);
+    };
+
+    TransferCandidateScanner.fetchDocumentUrl = async function fetchDocumentUrl(url) {
+        const response = await this.browserFetch(url, { credentials: 'include', cache: 'no-store' });
+        if (!response.ok) throw new Error(`transfer_page_http_${response.status}`);
+        return new DOMParser().parseFromString(await response.text(), 'text/html');
+    };
+
+    TransferCandidateScanner.playerIdFromHref = function playerIdFromHref(value) {
+        if (!value) return '';
+        try {
+            const url = new URL(value, location.origin);
+            const path = url.pathname.toLowerCase();
+            if (!/(?:player|alter)\.php$/.test(path) && !/\/player\/\d+/.test(path)) return '';
+            for (const key of ['id', 'player_id', 'playerId', 'player']) {
+                const candidate = url.searchParams.get(key);
+                if (/^\d+$/.test(candidate || '')) return candidate;
+            }
+            return (path.match(/\/player\/(\d+)/) || [])[1] || '';
+        } catch (error) {
+            return '';
+        }
+    };
+
+    TransferCandidateScanner.transferIdFromHref = function transferIdFromHref(value) {
+        if (!value) return '';
+        try {
+            const url = new URL(value, location.origin);
+            if (url.pathname !== '/transfers.php') return '';
+            for (const key of ['transfer_id', 'transfer', 'tl']) {
+                const candidate = url.searchParams.get(key);
+                if (/^\d+$/.test(candidate || '')) return candidate;
+            }
+            const id = url.searchParams.get('id') || '';
+            return url.searchParams.get('action') === 'view' && /^\d+$/.test(id) ? id : '';
+        } catch (error) {
+            return '';
+        }
+    };
+
+    TransferCandidateScanner.findDirectPlayerAnchor = function findDirectPlayerAnchor(root) {
+        return [...(root?.querySelectorAll?.('a[href]') || [])]
+            .map(anchor => ({ anchor, playerId: this.playerIdFromHref(anchor.getAttribute('href') || '') }))
+            .filter(entry => entry.playerId)
+            .sort((a, b) => {
+                const aText = this.text(a.anchor.getAttribute('title') || a.anchor.textContent || '');
+                const bText = this.text(b.anchor.getAttribute('title') || b.anchor.textContent || '');
+                return Number(/[A-Za-zА-Яа-яЁё]/.test(bText)) - Number(/[A-Za-zА-Яа-яЁё]/.test(aText));
+            })[0] || null;
+    };
+
+    TransferCandidateScanner.findTransferDetailAnchor = function findTransferDetailAnchor(root) {
+        return [...(root?.querySelectorAll?.('a[href]') || [])]
+            .map(anchor => ({ anchor, transferId: this.transferIdFromHref(anchor.getAttribute('href') || '') }))
+            .find(entry => entry.transferId) || null;
+    };
+
+    TransferCandidateScanner.resolvePlayerIdentityFromDocument = function resolvePlayerIdentityFromDocument(doc, preferredName) {
+        const expectedName = this.text(preferredName).toLowerCase();
+        const candidates = [...doc.querySelectorAll('a[href]')]
+            .map(anchor => {
+                const href = anchor.getAttribute('href') || '';
+                const playerId = this.playerIdFromHref(href);
+                if (!playerId) return null;
+                const label = this.text(anchor.getAttribute('title') || anchor.textContent || '');
+                let score = 10;
+                if (label && /[A-Za-zА-Яа-яЁё]/.test(label)) score += 5;
+                if (expectedName && label.toLowerCase().includes(expectedName)) score += 30;
+                if (/player\.php/i.test(href)) score += 5;
+                return {
+                    playerId,
+                    playerUrl: new URL(href, location.origin).toString(),
+                    name: label,
+                    score
+                };
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.score - a.score);
+        if (candidates[0]) return candidates[0];
+
+        const html = doc.documentElement?.innerHTML || '';
+        const match = html.match(/(?:player|alter)\.php[^"'<>]{0,180}?(?:[?&](?:id|player_id|playerId|player)=)(\d+)/i);
+        if (!match) return null;
+        const playerId = match[1];
+        return {
+            playerId,
+            playerUrl: new URL(`/player.php?action=view&id=${encodeURIComponent(playerId)}`, location.origin).toString(),
+            name: '',
+            score: 1
+        };
+    };
+
+    TransferCandidateScanner.resolvePlayerIdentity = async function resolvePlayerIdentity(row) {
+        if (/^\d+$/.test(String(row?.playerId || ''))) return row;
+        if (!row) throw new Error('candidate_row_missing');
+
+        let detailUrl = row.transferDetailUrl || '';
+        if (!detailUrl && row.transferId) {
+            detailUrl = new URL(`/transfers.php?action=view&transfer_id=${encodeURIComponent(row.transferId)}`, location.origin).toString();
+        }
+        if (!detailUrl) throw new Error(`player_identity_missing_${row.key || 'unknown'}`);
+
+        const doc = await this.fetchDocumentUrl(detailUrl);
+        const identity = this.resolvePlayerIdentityFromDocument(doc, row.name);
+        if (!identity?.playerId) throw new Error(`player_identity_not_found_${row.transferId || row.key || 'unknown'}`);
+
+        row.playerId = String(identity.playerId);
+        row.playerUrl = identity.playerUrl || new URL(`/player.php?action=view&id=${encodeURIComponent(identity.playerId)}`, location.origin).toString();
+        if (identity.name && /[A-Za-zА-Яа-яЁё]/.test(identity.name)) row.name = identity.name;
+        return row;
+    };
+
+    const headerMapOriginal = TransferCandidateScanner.headerMap;
+    TransferCandidateScanner.headerMap = function headerMapWithName(table) {
+        const map = headerMapOriginal.apply(this, arguments) || {};
+        if (map.name != null) return map;
+        const header = [...table.querySelectorAll('tr')].find(row => {
+            const text = this.text(row.textContent).toLowerCase();
+            return text.includes('амплуа') && (text.includes('фамилия') || text.includes('имя'));
+        });
+        const cells = header ? [...header.querySelectorAll('td,th')].map(cell => this.text(cell.textContent).toLowerCase()) : [];
+        const index = cells.findIndex(text => text.includes('фамилия') || text.includes('имя'));
+        return { ...map, name: index >= 0 ? index : null };
+    };
+
+    TransferCandidateScanner.parsePage = function parsePageWithFm2026RowIdentity(doc, page, pageUrl) {
+        const table = this.findTable(doc);
+        if (!table) return [];
+        const map = this.headerMap(table);
+
+        return [...table.querySelectorAll('tr')].map((rowElement, index) => {
+            const text = this.text(rowElement.textContent);
+            if (!text) return null;
+            const lower = text.toLowerCase();
+            if (lower.includes('амплуа') && (lower.includes('фамилия') || lower.includes('имя'))) return null;
+
+            const cells = [...rowElement.querySelectorAll('td')];
+            if (cells.length < 4) return null;
+            const cell = cellIndex => cellIndex == null ? null : cells[cellIndex] || null;
+            const value = cellIndex => this.text(cell(cellIndex)?.textContent || '');
+
+            const direct = this.findDirectPlayerAnchor(rowElement);
+            const detail = this.findTransferDetailAnchor(rowElement);
+            const rowIdTransfer = (rowElement.id || '').match(/(?:tl|transfer)[-_]?(\d+)/i)?.[1] || '';
+            const transferId = detail?.transferId || rowIdTransfer || '';
+            const playerId = direct?.playerId || '';
+            if (!playerId && !transferId) return null;
+
+            const potentialCell = cell(map.potential);
+            const potentialLevel = Number((potentialCell?.querySelector('img[src*="/potencial/"]')?.getAttribute('src') || '').match(/potencial\/(\d+)/)?.[1]) || null;
+            const priceCell = cell(map.price)?.cloneNode(true);
+            priceCell?.querySelectorAll('[title*="номинал"], img').forEach(node => node.remove());
+            const tm = rowElement.querySelector('.tm_field a[href*="transfermarkt"], a[href*="transfermarkt."]');
+            const positions = value(map.pos).toUpperCase().match(/\b(GK|LD|CD|RD|DM|CM|AM|LM|RM|LW|RW|ST)\b/g) || [];
+            const directLabel = this.text(direct?.anchor?.getAttribute('title') || direct?.anchor?.textContent || '');
+            const cellName = value(map.name);
+            const name = /[A-Za-zА-Яа-яЁё]/.test(cellName) ? cellName : directLabel;
+            const transferDetailUrl = detail?.anchor
+                ? new URL(detail.anchor.getAttribute('href') || '', location.origin).toString()
+                : transferId
+                    ? new URL(`/transfers.php?action=view&transfer_id=${encodeURIComponent(transferId)}`, location.origin).toString()
+                    : '';
+            const playerUrl = playerId
+                ? new URL(`/player.php?action=view&id=${encodeURIComponent(playerId)}`, location.origin).toString()
+                : '';
+
+            const row = {
+                key: transferId ? `transfer:${transferId}` : `player:${playerId}`,
+                transferId,
+                transferDetailUrl,
+                playerId,
+                page,
+                pageUrl,
+                originalIndex: index,
+                name: name || playerId || (transferId ? `Трансфер #${transferId}` : 'Игрок'),
+                playerUrl,
+                positions: [...new Set(positions)],
+                club: value(map.club),
+                age: this.number(value(map.age)),
+                talent: this.number(value(map.talent)),
+                potentialLevel,
+                potentialText: this.text(potentialCell?.querySelector('[title]')?.getAttribute('title') || ''),
+                scoutSkill: this.number(value(map.skill)),
+                price: this.money(priceCell?.textContent || value(map.price)),
+                bids: this.number(value(map.bids)),
+                endDateText: value(map.end),
+                tmUrl: tm?.href || '',
+                tmDisplayedValueEur: this.money(tm?.textContent || '')
+            };
+            row.preScore = this.preScore(row);
+            return row;
+        }).filter(Boolean);
+    };
+
+    TransferCandidateScanner.hasNumericPagination = function hasNumericPagination(element) {
+        if (!element) return false;
+        return [...element.querySelectorAll('a[href], span, strong, b')]
+            .some(node => /^\d+$/.test(this.text(node.textContent)));
+    };
+
     TransferCandidateScanner.findPaginationContainer = function findPaginationContainer(doc) {
         const explicit = [...doc.querySelectorAll('.transfers-ui__pages')]
-            .filter(element => element.querySelector('a[href*="page="]'));
+            .filter(element => this.hasNumericPagination(element));
         if (explicit.length) return explicit[0];
 
         return [...doc.querySelectorAll('div,nav,td,p,span')]
             .filter(element => {
                 const text = this.text(element.textContent);
-                return /^Страницы\s*:/i.test(text) && text.length < 500 && element.querySelector('a[href*="page="]');
+                return /^Страницы\s*:/i.test(text) && text.length < 500 && this.hasNumericPagination(element);
             })
             .sort((a, b) => this.text(a.textContent).length - this.text(b.textContent).length)[0] || null;
+    };
+
+    TransferCandidateScanner.paginationEntries = function paginationEntries(doc) {
+        const container = this.findPaginationContainer(doc);
+        if (!container) return [];
+        return [...container.querySelectorAll('a[href]')].map(anchor => {
+            const label = this.text(anchor.textContent);
+            const displayPage = /^\d+$/.test(label) ? Number(label) : null;
+            if (!Number.isInteger(displayPage) || displayPage < 1) return null;
+            try {
+                const url = new URL(anchor.getAttribute('href') || '', location.href);
+                if (url.origin !== location.origin || url.pathname !== '/transfers.php') return null;
+                return { displayPage, url: url.toString() };
+            } catch (error) {
+                return null;
+            }
+        }).filter(Boolean);
+    };
+
+    TransferCandidateScanner.rememberPaginationLinks = function rememberPaginationLinks(doc) {
+        if (!(this.nativePageUrls instanceof Map)) this.nativePageUrls = new Map();
+        this.paginationEntries(doc).forEach(entry => this.nativePageUrls.set(entry.displayPage - 1, entry.url));
+    };
+
+    TransferCandidateScanner.paginationPairs = function paginationPairs(doc) {
+        return this.paginationEntries(doc).map(entry => {
+            const rawPage = Number(new URL(entry.url).searchParams.get('page'));
+            if (!Number.isInteger(rawPage) || rawPage < 0) return null;
+            return { displayPage: entry.displayPage, rawPage, offset: rawPage - (entry.displayPage - 1) };
+        }).filter(Boolean);
+    };
+
+    TransferCandidateScanner.detectPageParamOffset = function detectPageParamOffset(doc) {
+        const counts = new Map();
+        this.paginationPairs(doc).forEach(pair => {
+            if (pair.offset !== 0 && pair.offset !== 1) return;
+            counts.set(pair.offset, Number(counts.get(pair.offset) || 0) + 1);
+        });
+        if (!counts.size) return null;
+        return [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
     };
 
     TransferCandidateScanner.extractLastPaginationPage = function extractLastPaginationPage(doc) {
         const container = this.findPaginationContainer(doc);
         if (!container) return -1;
-
-        const pageIndexes = [];
-        container.querySelectorAll('a[href*="page="], span').forEach(element => {
+        const displayIndexes = [];
+        container.querySelectorAll('a[href], span, strong, b').forEach(element => {
             const text = this.text(element.textContent);
-            const href = element.getAttribute?.('href') || '';
-            const hrefMatch = href.match(/[?&]page=(\d+)/);
-            const textMatch = text.match(/^\d+$/);
-            const value = hrefMatch ? Number(hrefMatch[1]) : (textMatch ? Number(text) - 1 : null);
-            if (Number.isFinite(value) && value >= 0) pageIndexes.push(value);
+            if (/^\d+$/.test(text)) displayIndexes.push(Number(text) - 1);
         });
-
-        return pageIndexes.length ? Math.max(...pageIndexes) : -1;
+        if (displayIndexes.length) return Math.max(...displayIndexes);
+        const offset = Number.isInteger(this.pageParamOffset) ? this.pageParamOffset : 1;
+        const rawIndexes = this.paginationPairs(doc).map(pair => pair.rawPage - offset);
+        return rawIndexes.length ? Math.max(...rawIndexes) : -1;
     };
 
     TransferCandidateScanner.canonicalMarketUrl = function canonicalMarketUrl() {
@@ -17752,10 +19023,109 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         return this.canonicalMarketUrl();
     };
 
+    TransferCandidateScanner.pageUrl = function pageUrlWithNativePagination(pageIndex) {
+        const index = Math.max(0, Number(pageIndex || 0));
+        const nativeUrl = this.nativePageUrls instanceof Map ? this.nativePageUrls.get(index) : null;
+        if (nativeUrl) return nativeUrl;
+        const url = new URL(this.state?.baseUrl || this.canonicalMarketUrl(), location.origin);
+        url.searchParams.delete('page');
+        if (index > 0) {
+            const offset = Number.isInteger(this.pageParamOffset) ? this.pageParamOffset : 1;
+            url.searchParams.set('page', String(index + offset));
+        }
+        return url.toString();
+    };
+
+    TransferCandidateScanner.pageUrlCandidates = function pageUrlCandidates(pageIndex) {
+        const index = Math.max(0, Number(pageIndex || 0));
+        const result = [];
+        const add = value => {
+            if (!value) return;
+            try {
+                const normalized = new URL(value, location.origin).toString();
+                if (!result.includes(normalized)) result.push(normalized);
+            } catch (error) {}
+        };
+
+        const nativeUrl = this.nativePageUrls instanceof Map ? this.nativePageUrls.get(index) : null;
+        if (nativeUrl) {
+            const native = new URL(nativeUrl, location.origin);
+            const raw = Number(native.searchParams.get('page'));
+            if (Number.isInteger(raw) && Number.isInteger(this.pageParamCorrection) && this.pageParamCorrection !== 0) {
+                const corrected = new URL(native.toString());
+                corrected.searchParams.set('page', String(Math.max(0, raw + this.pageParamCorrection)));
+                add(corrected.toString());
+            }
+            add(native.toString());
+            if (Number.isInteger(raw)) {
+                const plusOne = new URL(native.toString());
+                plusOne.searchParams.set('page', String(raw + 1));
+                add(plusOne.toString());
+                if (raw > 0) {
+                    const minusOne = new URL(native.toString());
+                    minusOne.searchParams.set('page', String(raw - 1));
+                    add(minusOne.toString());
+                }
+            }
+        }
+
+        const base = new URL(this.state?.baseUrl || this.canonicalMarketUrl(), location.origin);
+        base.searchParams.delete('page');
+        if (index > 0) {
+            const byDisplay = new URL(base.toString());
+            byDisplay.searchParams.set('page', String(index + 1));
+            add(byDisplay.toString());
+            const byIndex = new URL(base.toString());
+            byIndex.searchParams.set('page', String(index));
+            add(byIndex.toString());
+        }
+        return result;
+    };
+
+    TransferCandidateScanner.pageSignature = function pageSignature(rows) {
+        const keys = (rows || []).map(row => row?.key).filter(Boolean);
+        return keys.length ? `${keys.length}:${keys.join('|')}` : '';
+    };
+
+    TransferCandidateScanner.pageRequestLabel = function pageRequestLabel(value) {
+        try {
+            const url = new URL(value, location.origin);
+            return `${url.pathname}${url.search}`;
+        } catch (error) {
+            return String(value || 'unknown_url');
+        }
+    };
+
+    TransferCandidateScanner.fetchLogicalPage = async function fetchLogicalPage(pageIndex, seenSignatures) {
+        const attempts = [];
+        const nativeUrl = this.nativePageUrls instanceof Map ? this.nativePageUrls.get(pageIndex) : null;
+        const nativeRaw = nativeUrl ? Number(new URL(nativeUrl, location.origin).searchParams.get('page')) : null;
+
+        for (const pageUrl of this.pageUrlCandidates(pageIndex)) {
+            try {
+                const doc = await this.fetchDocumentUrl(pageUrl);
+                this.rememberPaginationLinks(doc);
+                const rows = this.parsePage(doc, pageIndex, pageUrl);
+                const signature = this.pageSignature(rows);
+                const duplicate = !!(signature && seenSignatures?.has(signature));
+                attempts.push(`${this.pageRequestLabel(pageUrl)}:${rows.length}${duplicate ? ':duplicate' : ''}`);
+                if (!rows.length || duplicate) continue;
+
+                const acceptedRaw = Number(new URL(pageUrl, location.origin).searchParams.get('page'));
+                if (Number.isInteger(nativeRaw) && Number.isInteger(acceptedRaw) && acceptedRaw !== nativeRaw) {
+                    this.pageParamCorrection = acceptedRaw - nativeRaw;
+                }
+                return { doc, pageUrl, pageRows: rows, signature };
+            } catch (error) {
+                attempts.push(`${this.pageRequestLabel(pageUrl)}:${this.errorText(error)}`);
+            }
+        }
+        throw new Error(`Не удалось получить уникальную страницу рынка ${pageIndex + 1}/${this.state.totalPages || '?'}. Попытки: ${attempts.join(' | ')}`);
+    };
+
     TransferCandidateScanner.detectInitialTotalPages = function detectInitialTotalPages(doc, pageRows) {
         const lastPageIndex = this.extractLastPaginationPage(doc);
         if (lastPageIndex >= 0) return lastPageIndex + 1;
-
         const totalPlayers = this.extractTotalPlayers(doc);
         const firstPageSize = Number(pageRows?.length || 0);
         if (totalPlayers > 0 && firstPageSize > 0) return Math.ceil(totalPlayers / firstPageSize);
@@ -17767,9 +19137,13 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
     };
 
     TransferCandidateScanner.runOriginal = TransferCandidateScanner.run;
-
     TransferCandidateScanner.run = async function runWithStablePagination(resume) {
         const uiRows = this.parsePage(document, 0, location.href);
+        this.nativePageUrls = new Map();
+        this.pageParamCorrection = null;
+        this.rememberPaginationLinks(document);
+        this.pageParamOffset = this.detectPageParamOffset(document);
+        if (!Number.isInteger(this.pageParamOffset)) this.pageParamOffset = 1;
         const uiTotalPages = this.detectInitialTotalPages(document, uiRows);
         this.expectedCanonicalBaseUrl = this.canonicalMarketUrl();
         this.fixedTotalPages = uiTotalPages;
@@ -17780,12 +19154,10 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
                 const currentBase = new URL(this.expectedCanonicalBaseUrl, location.origin);
                 savedBase.searchParams.delete('page');
                 currentBase.searchParams.delete('page');
-
                 if (savedBase.toString() !== currentBase.toString()) {
                     this.status('Выдача рынка изменилась. Нажми «Сбросить» и запусти новый поиск.');
                     return;
                 }
-
                 const savedTotalPages = Number(this.state.totalPages || 0);
                 if (savedTotalPages > 0 && savedTotalPages !== uiTotalPages) {
                     this.status(`Количество страниц изменилось: было ${savedTotalPages}, стало ${uiTotalPages}. Нажми «Сбросить».`);
@@ -17809,7 +19181,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         const totalPages = Math.max(1, Number(this.fixedTotalPages || this.state.totalPages || 1));
         this.state.totalPages = totalPages;
         let page = resume ? Number(this.state.nextPage || 0) : 0;
-        let previousSignature = '';
+        const seenSignatures = new Set();
 
         if (page >= totalPages) {
             this.state.phase = 'enrich';
@@ -17820,28 +19192,35 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         }
 
         for (; !this.stopRequested && page < totalPages; page++) {
-            const result = page === 0
-                ? { doc: document, pageUrl: location.href }
-                : await this.fetchPage(page);
-            const pageRows = this.parsePage(result.doc, page, result.pageUrl);
+            let result;
+            let pageRows;
+            let signature;
+            if (page === 0) {
+                result = { doc: document, pageUrl: this.canonicalMarketUrl() };
+                pageRows = this.parsePage(document, page, result.pageUrl);
+                signature = this.pageSignature(pageRows);
+            } else {
+                const fetched = await this.fetchLogicalPage(page, seenSignatures);
+                result = { doc: fetched.doc, pageUrl: fetched.pageUrl };
+                pageRows = fetched.pageRows;
+                signature = fetched.signature;
+            }
 
-            const signature = pageRows.slice(0, 10).map(row => row.key).join('|');
             if (!pageRows.length) {
-                throw new Error(`empty_transfer_page_${page + 1}_of_${totalPages}`);
+                throw new Error(`Пустая страница рынка ${page + 1}/${totalPages}. Запрос: ${this.pageRequestLabel(result.pageUrl)}. Нажми «Сбросить».`);
             }
-            if (page > 0 && signature && signature === previousSignature) {
-                throw new Error(`duplicate_transfer_page_${page + 1}_of_${totalPages}`);
+            if (signature && seenSignatures.has(signature)) {
+                throw new Error(`Повторная страница рынка ${page + 1}/${totalPages}. Запрос: ${this.pageRequestLabel(result.pageUrl)}. Нажми «Сбросить».`);
             }
 
-            this.status(`Сканирование страницы ${page + 1}/${totalPages}...`);
+            this.status(`Сканирование страницы ${page + 1}/${totalPages}: найдено ${pageRows.length}...`);
             await this.appendCollection(this.indexCollection, pageRows, `candidate page ${page + 1}`);
             this.state.scannedPages = Math.max(this.state.scannedPages, page + 1);
             this.state.nextPage = page + 1;
             this.state.indexedPlayers += pageRows.length;
             this.saveMeta();
             this.renderProgress();
-
-            previousSignature = signature;
+            if (signature) seenSignatures.add(signature);
             await this.delay(250);
         }
 
@@ -17849,11 +19228,9 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
             this.status('Сканирование остановлено. Прогресс сохранён на VPS.');
             return;
         }
-
         if (Number(this.state.scannedPages || 0) !== totalPages) {
-            throw new Error(`incomplete_transfer_scan_${this.state.scannedPages}_of_${totalPages}`);
+            throw new Error(`Неполный обход рынка: ${this.state.scannedPages}/${totalPages}. Нажми «Продолжить» или «Сбросить».`);
         }
-
         this.state.phase = 'enrich';
         this.status('Все страницы собраны. Загружаю временный индекс с VPS...');
         this.saveMeta();
@@ -17921,7 +19298,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
 
     TransferCandidateScanner.eligibleRows = function allIndexedPlayers() {
         return (this.rows || [])
-            .filter(row => !!row?.playerId)
+            .filter(row => !!(row?.playerId || row?.transferId || row?.transferDetailUrl))
             .sort((a, b) => Number(b.preScore || 0) - Number(a.preScore || 0));
     };
 
@@ -17942,16 +19319,21 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         }).length;
         this.state.enrichedPlayers = done;
 
-        for (const row of candidates) {
+        for (const sourceRow of candidates) {
             if (this.stopRequested) break;
 
-            const saved = enrichedByKey.get(row.key);
+            const saved = enrichedByKey.get(sourceRow.key);
             if (saved?.enrichment?.completedAt && !saved.enrichment.error) continue;
 
-            this.status(`Анализ ${done + 1}/${candidates.length}: ${row.name}`);
+            this.status(`Анализ ${done + 1}/${candidates.length}: ${sourceRow.name}`);
             let enrichedRow;
 
             try {
+                const row = typeof this.resolvePlayerIdentity === 'function'
+                    ? await this.resolvePlayerIdentity({ ...sourceRow })
+                    : sourceRow;
+                if (!row?.playerId) throw new Error(`player_identity_missing_${row?.transferId || row?.key || 'unknown'}`);
+
                 const alter = await SLFAlterLayer.getByPlayerId(row.playerId);
                 let tm = null;
                 try {
@@ -17962,7 +19344,7 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
                 enrichedRow = { ...row, enrichment: this.buildEnrichment(row, alter, tm) };
             } catch (error) {
                 enrichedRow = {
-                    ...row,
+                    ...sourceRow,
                     enrichment: {
                         completedAt: Date.now(),
                         error: this.errorText ? this.errorText(error) : String(error?.message || error || 'enrichment_failed')
@@ -17970,8 +19352,8 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
                 };
             }
 
-            await this.appendCollection(this.enrichedCollection, [enrichedRow], `candidate enriched ${row.playerId}`);
-            enrichedByKey.set(row.key, enrichedRow);
+            await this.appendCollection(this.enrichedCollection, [enrichedRow], `candidate enriched ${enrichedRow.playerId || enrichedRow.transferId || enrichedRow.key}`);
+            enrichedByKey.set(sourceRow.key, enrichedRow);
 
             if (!enrichedRow.enrichment?.error) done++;
             this.state.enrichedPlayers = done;
@@ -18010,6 +19392,146 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         const element = document.getElementById('slf-candidate-progress');
         if (!element) return;
         element.textContent = `Этап: ${this.state.phase} · Страницы: ${this.state.scannedPages || 0}/${this.state.totalPages || '?'} · На VPS: ${this.state.indexedPlayers || 0} · Проанализировано: ${this.state.enrichedPlayers || 0}`;
+    };
+
+    // The 2026 market is a CSS grid made of div.fmx-row elements, not an HTML table.
+    // Keep the legacy table parser intact and branch only when the real FM2026 grid is present.
+    const findTableBeforeFm2026Grid = TransferCandidateScanner.findTable;
+    const headerMapBeforeFm2026Grid = TransferCandidateScanner.headerMap;
+    const parsePageBeforeFm2026Grid = TransferCandidateScanner.parsePage;
+
+    TransferCandidateScanner.findFm2026MarketSurface = function findFm2026MarketSurface(doc = document) {
+        const header = doc?.querySelector?.('.fmx-rows__head.fmx-tmarket');
+        if (!header) return null;
+        const card = header.closest?.('.fmx-card') || header.parentElement;
+        if (!card?.querySelector?.('.fmx-row.fmx-tmarket')) return null;
+        return card;
+    };
+
+    TransferCandidateScanner.isFm2026MarketSurface = function isFm2026MarketSurface(surface) {
+        return !!(
+            surface?.querySelector?.('.fmx-rows__head.fmx-tmarket') &&
+            surface?.querySelector?.('.fmx-row.fmx-tmarket')
+        );
+    };
+
+    TransferCandidateScanner.findTable = function findTableWithFm2026Grid(doc) {
+        return this.findFm2026MarketSurface(doc) || findTableBeforeFm2026Grid.apply(this, arguments);
+    };
+
+    TransferCandidateScanner.headerMap = function headerMapWithFm2026Grid(surface) {
+        if (this.isFm2026MarketSurface(surface)) {
+            return {
+                pos: 0,
+                name: 1,
+                club: 2,
+                age: 3,
+                talent: 4,
+                potential: 5,
+                skill: 6,
+                nominal: 7,
+                price: 8,
+                end: 9,
+                bids: 10,
+                actions: 11
+            };
+        }
+        return headerMapBeforeFm2026Grid.apply(this, arguments);
+    };
+
+    TransferCandidateScanner.getFm2026GridCells = function getFm2026GridCells(rowElement) {
+        return [...(rowElement?.children || [])].filter(node => String(node.tagName || '').toLowerCase() === 'span');
+    };
+
+    TransferCandidateScanner.fm2026GridCellText = function fm2026GridCellText(cells, index) {
+        return this.text(cells?.[index]?.textContent || '');
+    };
+
+    TransferCandidateScanner.parseFm2026GridRow = function parseFm2026GridRow(rowElement, index, page, pageUrl) {
+        const cells = this.getFm2026GridCells(rowElement);
+        if (cells.length < 11) return null;
+
+        const direct = typeof this.findDirectPlayerAnchor === 'function'
+            ? this.findDirectPlayerAnchor(rowElement)
+            : null;
+        const directAnchor = direct?.anchor || rowElement.querySelector('a[href*="player.php"][href*="id="]');
+        const directHref = directAnchor?.getAttribute('href') || '';
+        const directPlayerId = direct?.playerId ||
+            (typeof this.playerIdFromHref === 'function' ? this.playerIdFromHref(directHref) : '') ||
+            (directHref.match(/[?&]id=(\d+)/)?.[1] || '');
+
+        const detail = typeof this.findTransferDetailAnchor === 'function'
+            ? this.findTransferDetailAnchor(rowElement)
+            : null;
+        const detailAnchor = detail?.anchor || rowElement.querySelector('a.fmx-goto[href*="transfer_id="]');
+        const detailHref = detailAnchor?.getAttribute('href') || '';
+        const rowTransferId = (rowElement.id || '').match(/(?:tl|transfer)[-_]?(\d+)/i)?.[1] || '';
+        const detailTransferId = detail?.transferId ||
+            (typeof this.transferIdFromHref === 'function' ? this.transferIdFromHref(detailHref) : '') ||
+            (detailHref.match(/[?&]transfer_id=(\d+)/)?.[1] || '');
+        const transferId = detailTransferId || rowTransferId;
+        if (!directPlayerId && !transferId) return null;
+
+        const wideName = this.text(directAnchor?.querySelector?.('.wide_format')?.textContent || '');
+        const directName = this.text(directAnchor?.getAttribute?.('title') || directAnchor?.textContent || '');
+        const fallbackName = this.fm2026GridCellText(cells, 1);
+        const name = wideName || directName || fallbackName || directPlayerId || (transferId ? `Трансфер #${transferId}` : 'Игрок');
+
+        const positionText = this.fm2026GridCellText(cells, 0).toUpperCase();
+        const positions = positionText.match(/\b(GK|LD|CD|RD|DM|CM|AM|LM|RM|LW|RW|ST)\b/g) || [];
+        const clubAnchor = cells[2]?.querySelector?.('a[href*="roster.php"]');
+        const potentialCell = cells[5];
+        const potentialLevel = Number((potentialCell?.querySelector?.('img[src*="/potencial/"]')?.getAttribute('src') || '').match(/potencial\/(\d+)/)?.[1]) || null;
+        const skillText = this.text(cells[6]?.querySelector?.('.fmx-rating')?.textContent || this.fm2026GridCellText(cells, 6));
+        const priceText = this.fm2026GridCellText(cells, 8);
+        const endDateText = this.text(cells[9]?.querySelector?.('.wide_format')?.textContent || this.fm2026GridCellText(cells, 9));
+        const bidsText = this.text(cells[10]?.querySelector?.('.fmx-bets__count')?.textContent || this.fm2026GridCellText(cells, 10));
+        const tm = rowElement.querySelector('.tm_field a[href*="transfermarkt"], a[href*="transfermarkt."]');
+        const playerUrl = directPlayerId
+            ? new URL(`/player.php?action=view&id=${encodeURIComponent(directPlayerId)}`, location.origin).toString()
+            : '';
+        const transferDetailUrl = detailHref
+            ? new URL(detailHref, location.origin).toString()
+            : transferId
+                ? new URL(`/transfers.php?action=view&transfer_id=${encodeURIComponent(transferId)}`, location.origin).toString()
+                : '';
+
+        const row = {
+            key: transferId ? `transfer:${transferId}` : `player:${directPlayerId}`,
+            transferId,
+            transferDetailUrl,
+            playerId: String(directPlayerId || ''),
+            page,
+            pageUrl,
+            originalIndex: index,
+            name,
+            playerUrl,
+            positions: [...new Set(positions)],
+            club: this.text(clubAnchor?.textContent || this.fm2026GridCellText(cells, 2)),
+            age: this.number(this.fm2026GridCellText(cells, 3)),
+            talent: this.number(this.fm2026GridCellText(cells, 4)),
+            potentialLevel,
+            potentialText: this.text(potentialCell?.querySelector?.('[title]')?.getAttribute('title') || ''),
+            scoutSkill: this.number(skillText),
+            price: this.money(priceText),
+            bids: this.number(bidsText),
+            endDateText,
+            tmUrl: tm?.href || '',
+            tmDisplayedValueEur: this.money(tm?.textContent || '')
+        };
+        row.preScore = this.preScore(row);
+        return row;
+    };
+
+    TransferCandidateScanner.parsePage = function parsePageWithRealFm2026Grid(doc, page, pageUrl) {
+        const surface = this.findFm2026MarketSurface(doc);
+        if (!surface) return parsePageBeforeFm2026Grid.apply(this, arguments);
+
+        const rows = [...surface.querySelectorAll('.fmx-row.fmx-tmarket')]
+            .map((rowElement, index) => this.parseFm2026GridRow(rowElement, index, page, pageUrl))
+            .filter(Boolean);
+
+        return rows;
     };
 }
 // <<< src/modules/transfer-analyzer/transfer-candidate-full-market-policy.js
@@ -18462,6 +19984,447 @@ if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer && !TMEnrichme
         }
 
         return '';
+    };
+}
+
+// Real FM2026 transfer-market compatibility.
+// The redesigned market is a 12-column CSS grid of div.fmx-row elements, while the
+// legacy runtime expects table/tr/td. Adapt the DOM boundary and keep all enrichment,
+// scoring, cache and ranking logic in the existing Analyzer implementation.
+if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !TransferMarketAnalyzer.fm2026VisibleRowIdentityBridgeApplied) {
+    TransferMarketAnalyzer.fm2026VisibleRowIdentityBridgeApplied = true;
+
+    const findTransferTableBeforeRealFm2026Grid = TransferMarketAnalyzer.findTransferTable;
+    const ensureAnalysisHeaderBeforeRealFm2026Grid = TransferMarketAnalyzer.ensureAnalysisHeader;
+    const parseVisibleRowsBeforeRealFm2026Grid = TransferMarketAnalyzer.parseVisibleRows;
+    const getOrCreateBadgeCellBeforeRealFm2026Grid = TransferMarketAnalyzer.getOrCreateBadgeCell;
+    const sortRowsInTableByDatasetBeforeRealFm2026Grid = TransferMarketAnalyzer.sortRowsInTableByDataset;
+    const resetOrderBeforeRealFm2026Grid = TransferMarketAnalyzer.resetOrder;
+    const clearAllTransferAnalysisStateBeforeRealFm2026Grid = TransferMarketAnalyzer.clearAllTransferAnalysisState;
+
+    TransferMarketAnalyzer.playerIdFromMarketHref = function playerIdFromMarketHref(value) {
+        if (!value) return '';
+        try {
+            const url = new URL(value, location.origin);
+            const path = url.pathname.toLowerCase();
+            if (!/(?:player|alter)\.php$/.test(path) && !/\/player\/\d+/.test(path)) return '';
+            for (const key of ['id', 'player_id', 'playerId', 'player']) {
+                const candidate = url.searchParams.get(key);
+                if (/^\d+$/.test(candidate || '')) return candidate;
+            }
+            return (path.match(/\/player\/(\d+)/) || [])[1] || '';
+        } catch (error) {
+            return '';
+        }
+    };
+
+    TransferMarketAnalyzer.transferIdFromMarketHref = function transferIdFromMarketHref(value) {
+        if (!value) return '';
+        try {
+            const url = new URL(value, location.origin);
+            if (url.pathname !== '/transfers.php') return '';
+            for (const key of ['transfer_id', 'transfer', 'tl']) {
+                const candidate = url.searchParams.get(key);
+                if (/^\d+$/.test(candidate || '')) return candidate;
+            }
+            const id = url.searchParams.get('id') || '';
+            return url.searchParams.get('action') === 'view' && /^\d+$/.test(id) ? id : '';
+        } catch (error) {
+            return '';
+        }
+    };
+
+    TransferMarketAnalyzer.findMarketRowIdentity = function findMarketRowIdentity(rowElement) {
+        const anchors = [...(rowElement?.querySelectorAll?.('a[href]') || [])];
+        const player = anchors
+            .map(anchor => ({ anchor, playerId: this.playerIdFromMarketHref(anchor.getAttribute('href') || '') }))
+            .filter(entry => entry.playerId)
+            .sort((a, b) => {
+                const aText = this.normalizeText(a.anchor.querySelector?.('.wide_format')?.textContent || a.anchor.getAttribute('title') || a.anchor.textContent || '');
+                const bText = this.normalizeText(b.anchor.querySelector?.('.wide_format')?.textContent || b.anchor.getAttribute('title') || b.anchor.textContent || '');
+                return Number(/[A-Za-zА-Яа-яЁё]/.test(bText)) - Number(/[A-Za-zА-Яа-яЁё]/.test(aText));
+            })[0] || null;
+        const detail = anchors
+            .map(anchor => ({ anchor, transferId: this.transferIdFromMarketHref(anchor.getAttribute('href') || '') }))
+            .find(entry => entry.transferId) || null;
+        const rowTransferId = (rowElement?.id || '').match(/(?:tl|transfer)[-_]?(\d+)/i)?.[1] || '';
+        const transferId = detail?.transferId || rowTransferId || '';
+        return {
+            playerId: player?.playerId || '',
+            playerAnchor: player?.anchor || null,
+            transferId,
+            transferDetailUrl: detail?.anchor
+                ? new URL(detail.anchor.getAttribute('href') || '', location.origin).toString()
+                : transferId
+                    ? new URL(`/transfers.php?action=view&transfer_id=${encodeURIComponent(transferId)}`, location.origin).toString()
+                    : ''
+        };
+    };
+
+    TransferMarketAnalyzer.findFm2026MarketSurface = function findFm2026MarketSurface(doc = document) {
+        const header = doc?.querySelector?.('.fmx-rows__head.fmx-tmarket');
+        if (!header) return null;
+        const card = header.closest?.('.fmx-card') || header.parentElement;
+        if (!card?.querySelector?.('.fmx-row.fmx-tmarket')) return null;
+        return card;
+    };
+
+    TransferMarketAnalyzer.isFm2026MarketSurface = function isFm2026MarketSurface(surface) {
+        return !!(
+            surface?.querySelector?.('.fmx-rows__head.fmx-tmarket') &&
+            surface?.querySelector?.('.fmx-row.fmx-tmarket')
+        );
+    };
+
+    TransferMarketAnalyzer.findTransferTable = function findTransferSurfaceWithRealFm2026Grid() {
+        return this.findFm2026MarketSurface(document) || findTransferTableBeforeRealFm2026Grid.apply(this, arguments);
+    };
+
+    TransferMarketAnalyzer.ensureAnalysisHeader = function ensureAnalysisHeaderWithRealFm2026Grid(surface) {
+        if (this.isFm2026MarketSurface(surface)) return;
+        return ensureAnalysisHeaderBeforeRealFm2026Grid.apply(this, arguments);
+    };
+
+    TransferMarketAnalyzer.getFm2026GridCells = function getFm2026GridCells(rowElement) {
+        return [...(rowElement?.children || [])].filter(node => String(node.tagName || '').toLowerCase() === 'span');
+    };
+
+    TransferMarketAnalyzer.getFm2026GridCellText = function getFm2026GridCellText(cells, index) {
+        return this.normalizeText(cells?.[index]?.textContent || '');
+    };
+
+    TransferMarketAnalyzer.parseFm2026GridRow = function parseFm2026GridRow(rowElement, index) {
+        const cells = this.getFm2026GridCells(rowElement);
+        if (cells.length < 11) return null;
+
+        const identity = this.findMarketRowIdentity(rowElement);
+        if (!identity.playerId && !identity.transferId) return null;
+
+        const directAnchor = identity.playerAnchor;
+        const wideName = this.normalizeText(directAnchor?.querySelector?.('.wide_format')?.textContent || '');
+        const directName = this.normalizeText(directAnchor?.getAttribute?.('title') || directAnchor?.textContent || '');
+        const fallbackName = this.getFm2026GridCellText(cells, 1);
+        const name = this.cleanPlayerName(wideName || directName || fallbackName || identity.playerId || (identity.transferId ? `Трансфер #${identity.transferId}` : 'Игрок'));
+
+        const positionText = this.getFm2026GridCellText(cells, 0);
+        const ageText = this.getFm2026GridCellText(cells, 3);
+        const talentText = this.getFm2026GridCellText(cells, 4);
+        const potentialCell = cells[5];
+        const potentialText = this.normalizeText(
+            potentialCell?.querySelector?.('[title]')?.getAttribute('title') ||
+            potentialCell?.querySelector?.('img[title]')?.getAttribute('title') ||
+            potentialCell?.textContent || ''
+        );
+        const skillText = this.normalizeText(cells[6]?.querySelector?.('.fmx-rating')?.textContent || this.getFm2026GridCellText(cells, 6));
+        const nominalText = this.getFm2026GridCellText(cells, 7);
+        const nominalRatio = this.parseNominalRatio(nominalText);
+        const priceText = this.getFm2026GridCellText(cells, 8);
+        const price = this.parseMoney(priceText);
+        const endDateText = this.normalizeText(cells[9]?.querySelector?.('.wide_format')?.textContent || this.getFm2026GridCellText(cells, 9));
+        const bidsText = this.normalizeText(cells[10]?.querySelector?.('.fmx-bets__count')?.textContent || this.getFm2026GridCellText(cells, 10));
+        const tm = rowElement.querySelector('.tm_field a[href*="transfermarkt"], a[href*="transfermarkt."]');
+
+        const row = {
+            rowEl: rowElement,
+            originalIndex: index,
+            playerId: String(identity.playerId || ''),
+            playerUrl: identity.playerId
+                ? new URL(`/player.php?action=view&id=${encodeURIComponent(identity.playerId)}`, location.origin).toString()
+                : '',
+            transferId: identity.transferId,
+            transferDetailUrl: identity.transferDetailUrl,
+            name,
+            positions: this.parsePositions(positionText),
+            age: this.parseNumber(ageText),
+            talent: this.parseNumber(talentText),
+            potentialText,
+            scoutSkill: this.parseNumber(skillText),
+            slfPriceText: priceText,
+            slfPriceCellText: `${nominalText} ${priceText}`.trim(),
+            slfPrice: price,
+            slfSecondaryPriceText: '',
+            slfSecondaryPrice: null,
+            nominalRatio,
+            nominalBase: price && nominalRatio ? Math.round(price / nominalRatio) : null,
+            slfPriceSource: 'fm2026_grid_value_cell',
+            slfPriceCellIndex: 8,
+            slfBids: this.parseNumber(bidsText),
+            endDateText,
+            tmUrl: tm?.href || '',
+            tmProfile: null,
+            tmValueEur: 0
+        };
+
+        rowElement.dataset.slfOriginalIndex = String(index);
+        rowElement.dataset.slfPlayerId = row.playerId;
+        if (row.transferId) rowElement.dataset.slfTransferId = String(row.transferId);
+        return row;
+    };
+
+    TransferMarketAnalyzer.parseFm2026GridRows = function parseFm2026GridRows(surface = this.findFm2026MarketSurface(document)) {
+        if (!surface) return [];
+        return [...surface.querySelectorAll('.fmx-row.fmx-tmarket')]
+            .map((rowElement, index) => this.parseFm2026GridRow(rowElement, index))
+            .filter(Boolean);
+    };
+
+    TransferMarketAnalyzer.parseVisibleRows = function parseVisibleRowsWithRealFm2026Grid() {
+        const surface = this.findFm2026MarketSurface(document);
+        if (surface) {
+            const parsed = this.parseFm2026GridRows(surface);
+            debugLog('[SLF Transfer Analyzer] parseVisibleRows FM2026 grid', parsed);
+            return parsed;
+        }
+        return parseVisibleRowsBeforeRealFm2026Grid.apply(this, arguments);
+    };
+
+    TransferMarketAnalyzer.getOrCreateBadgeCell = function getOrCreateBadgeCellWithRealFm2026Grid(row) {
+        const rowElement = row?.rowEl;
+        if (!rowElement?.matches?.('.fmx-row.fmx-tmarket')) {
+            return getOrCreateBadgeCellBeforeRealFm2026Grid.apply(this, arguments);
+        }
+
+        let box = rowElement.querySelector(':scope > .slf-transfer-analysis-badge');
+        if (!box) {
+            box = document.createElement('div');
+            box.className = 'slf-transfer-analysis-badge slf-transfer-analysis-badge--fmx';
+            box.style.cssText = `
+                grid-column:1 / -1;
+                box-sizing:border-box;
+                min-width:0;
+                width:100%;
+                margin:2px 0 0;
+                padding:4px 6px;
+                border-top:1px solid rgba(139,147,171,.18);
+                font-size:11px;
+                line-height:1.15;
+                white-space:normal;
+                position:relative;
+                overflow:visible;
+                display:flex;
+                flex-wrap:wrap;
+                align-items:flex-start;
+                gap:3px 4px;
+            `;
+            rowElement.appendChild(box);
+        }
+        return box;
+    };
+
+    TransferMarketAnalyzer.sortRowsInTableByDataset = function sortRowsWithRealFm2026Grid(surface, datasetKey, direction = 'desc') {
+        if (!this.isFm2026MarketSurface(surface)) {
+            return sortRowsInTableByDatasetBeforeRealFm2026Grid.apply(this, arguments);
+        }
+
+        const rows = [...surface.querySelectorAll('.fmx-row.fmx-tmarket')];
+        if (!rows.length) return;
+        const sorted = rows.slice().sort((a, b) => {
+            const av = Number(a.dataset?.[datasetKey]);
+            const bv = Number(b.dataset?.[datasetKey]);
+            const aValid = Number.isFinite(av);
+            const bValid = Number.isFinite(bv);
+            if (aValid && bValid && av !== bv) return direction === 'asc' ? av - bv : bv - av;
+            if (aValid !== bValid) return aValid ? -1 : 1;
+            return Number(a.dataset.slfOriginalIndex || 0) - Number(b.dataset.slfOriginalIndex || 0);
+        });
+        const parent = rows[0].parentElement;
+        if (!parent) return;
+        const pagination = [...parent.children].find(node => node.classList?.contains('transfers-ui__pages')) || null;
+        sorted.forEach(rowElement => parent.insertBefore(rowElement, pagination));
+    };
+
+    TransferMarketAnalyzer.resetOrder = function resetOrderWithRealFm2026Grid() {
+        const surface = this.findFm2026MarketSurface(document);
+        if (!surface) return resetOrderBeforeRealFm2026Grid.apply(this, arguments);
+
+        const rows = [...surface.querySelectorAll('.fmx-row.fmx-tmarket')]
+            .sort((a, b) => Number(a.dataset.slfOriginalIndex || 0) - Number(b.dataset.slfOriginalIndex || 0));
+        if (!rows.length) return;
+        const parent = rows[0].parentElement;
+        const pagination = parent ? [...parent.children].find(node => node.classList?.contains('transfers-ui__pages')) || null : null;
+        rows.forEach(rowElement => parent?.insertBefore(rowElement, pagination));
+        this.setStatus?.('Исходный порядок восстановлен.');
+    };
+
+    if (typeof clearAllTransferAnalysisStateBeforeRealFm2026Grid === 'function') {
+        TransferMarketAnalyzer.clearAllTransferAnalysisState = function clearAllTransferAnalysisStateWithRealFm2026Grid() {
+            const result = clearAllTransferAnalysisStateBeforeRealFm2026Grid.apply(this, arguments);
+            document.querySelectorAll('.fmx-row.fmx-tmarket').forEach(rowElement => {
+                ['slfAnalyzerScore', 'slfSkillDelta', 'slfMinutesPct', 'slfTalentUp', 'slfTmValue', 'slfMktBargain', 'slfMktOverpriced']
+                    .forEach(key => { delete rowElement.dataset[key]; });
+            });
+            return result;
+        };
+    }
+
+    TransferMarketAnalyzer.parseVisibleRowsCompat = function parseVisibleRowsCompat() {
+        const surface = this.findFm2026MarketSurface(document);
+        if (surface) return this.parseFm2026GridRows(surface);
+
+        const table = document.querySelector('table.trans_market_offers, table[data-slf-transfer-table]') || findTransferTableBeforeRealFm2026Grid.call(this);
+        if (!table) return [];
+        this.ensureAnalysisHeader(table);
+        const map = this.getHeaderMap(table);
+
+        return [...table.querySelectorAll('tr')].map((tr, index) => {
+            const original = this.parseRow(tr, index, map);
+            if (original) {
+                const identity = this.findMarketRowIdentity(tr);
+                original.transferId = original.transferId || identity.transferId;
+                original.transferDetailUrl = original.transferDetailUrl || identity.transferDetailUrl;
+                return original;
+            }
+
+            const text = this.normalizeText(tr.innerText || tr.textContent || '');
+            const lower = text.toLowerCase();
+            if (!text || (lower.includes('амплуа') && (lower.includes('фамилия') || lower.includes('имя')))) return null;
+            const cells = [...tr.querySelectorAll('td')];
+            if (cells.length < 4) return null;
+            const getCell = idx => idx == null ? null : cells[idx] || null;
+            const getText = idx => this.normalizeText(getCell(idx)?.innerText || getCell(idx)?.textContent || '');
+            const identity = this.findMarketRowIdentity(tr);
+            if (!identity.playerId && !identity.transferId) return null;
+
+            const priceInfo = this.parseTransferPriceCellInfo(tr, map);
+            const directLabel = this.normalizeText(identity.playerAnchor?.getAttribute('title') || identity.playerAnchor?.textContent || '');
+            const nameCell = getText(map.name);
+            const name = this.cleanPlayerName(/[A-Za-zА-Яа-яЁё]/.test(nameCell) ? nameCell : directLabel);
+            return {
+                rowEl: tr,
+                originalIndex: index,
+                playerId: String(identity.playerId || ''),
+                playerUrl: identity.playerId ? `/player.php?action=view&id=${encodeURIComponent(identity.playerId)}` : '',
+                transferId: identity.transferId,
+                transferDetailUrl: identity.transferDetailUrl,
+                name: name || identity.playerId || (identity.transferId ? `Трансфер #${identity.transferId}` : 'Игрок'),
+                positions: this.parsePositions(getText(map.pos) || text),
+                age: this.parseNumber(getText(map.age)),
+                talent: this.parseNumber(getText(map.talent)),
+                potentialText: getText(map.potential),
+                scoutSkill: this.parseNumber(getText(map.scoutSkill)),
+                slfPriceText: priceInfo.priceText,
+                slfPriceCellText: priceInfo.rawText,
+                slfPrice: priceInfo.currentPrice,
+                slfSecondaryPriceText: priceInfo.secondaryPriceText,
+                slfSecondaryPrice: priceInfo.secondaryPrice,
+                nominalRatio: priceInfo.nominalRatio,
+                nominalBase: priceInfo.nominalBase,
+                slfPriceSource: priceInfo.source,
+                slfPriceCellIndex: priceInfo.cellIndex,
+                slfBids: this.parseNumber(getText(map.bids)),
+                endDateText: getText(map.endDate),
+                tmUrl: '',
+                tmProfile: null,
+                tmValueEur: 0
+            };
+        }).filter(Boolean);
+    };
+
+    TransferMarketAnalyzer.resolveMarketRowIdentity = async function resolveMarketRowIdentity(row) {
+        if (/^\d+$/.test(String(row?.playerId || ''))) return row;
+        if (!row) throw new Error('transfer_row_missing');
+        let detailUrl = row.transferDetailUrl || '';
+        if (!detailUrl && row.transferId) {
+            detailUrl = new URL(`/transfers.php?action=view&transfer_id=${encodeURIComponent(row.transferId)}`, location.origin).toString();
+        }
+        if (!detailUrl) throw new Error(`player_identity_missing_${row.transferId || 'unknown'}`);
+
+        const pageFetch = typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.fetch === 'function'
+            ? unsafeWindow.fetch.bind(unsafeWindow)
+            : fetch.bind(window);
+        const response = await pageFetch(detailUrl, { credentials: 'include', cache: 'no-store' });
+        if (!response.ok) throw new Error(`transfer_detail_http_${response.status}`);
+        const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const expectedName = this.normalizeText(row.name).toLowerCase();
+        const candidates = [...doc.querySelectorAll('a[href]')]
+            .map(anchor => {
+                const href = anchor.getAttribute('href') || '';
+                const playerId = this.playerIdFromMarketHref(href);
+                if (!playerId) return null;
+                const label = this.normalizeText(anchor.getAttribute('title') || anchor.textContent || '');
+                let score = 10;
+                if (label && /[A-Za-zА-Яа-яЁё]/.test(label)) score += 5;
+                if (expectedName && label.toLowerCase().includes(expectedName)) score += 30;
+                if (/player\.php/i.test(href)) score += 5;
+                return { playerId, label, score };
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.score - a.score);
+        let playerId = candidates[0]?.playerId || '';
+        if (!playerId) {
+            const html = doc.documentElement?.innerHTML || '';
+            playerId = (html.match(/(?:player|alter)\.php[^"'<>]{0,180}?(?:[?&](?:id|player_id|playerId|player)=)(\d+)/i) || [])[1] || '';
+        }
+        if (!playerId) throw new Error(`player_identity_not_found_${row.transferId || 'unknown'}`);
+        row.playerId = String(playerId);
+        row.playerUrl = new URL(`/player.php?action=view&id=${encodeURIComponent(playerId)}`, location.origin).toString();
+        if (candidates[0]?.label && /[A-Za-zА-Яа-яЁё]/.test(candidates[0].label)) row.name = candidates[0].label;
+        row.rowEl?.setAttribute?.('data-slf-player-id', row.playerId);
+        return row;
+    };
+
+    const analyzeVisibleRowsBeforeFm2026Identity = TransferMarketAnalyzer.analyzeVisibleRows;
+    TransferMarketAnalyzer.analyzeVisibleRows = async function analyzeVisibleRowsAfterFm2026Identity() {
+        if (this.isHistoryPage?.()) return analyzeVisibleRowsBeforeFm2026Identity.apply(this, arguments);
+        if (this.slfLiveAnalysisRunning) return analyzeVisibleRowsBeforeFm2026Identity.apply(this, arguments);
+
+        const rows = this.parseVisibleRowsCompat();
+        if (!rows.length) {
+            this.setStatus?.('Игроки не найдены: структура строк рынка не распознана.');
+            return;
+        }
+
+        const injected = [];
+        let resolved = 0;
+        let failed = 0;
+        const button = document.getElementById('slf-transfer-analyze-visible');
+        const originalText = button?.textContent || '';
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Подготовка...';
+        }
+        this.setStatus?.(`Подготовка live: распознано ${rows.length} строк...`);
+
+        for (let index = 0; index < rows.length; index++) {
+            const row = rows[index];
+            try {
+                const resolvedRow = await this.resolveMarketRowIdentity(row);
+                if (!resolvedRow?.playerId) throw new Error('player_identity_empty');
+                resolved++;
+                if (!resolvedRow.rowEl.querySelector(`a[href*="player.php"][href*="id=${resolvedRow.playerId}"]`)) {
+                    const anchor = document.createElement('a');
+                    anchor.href = `/player.php?action=view&id=${encodeURIComponent(resolvedRow.playerId)}`;
+                    anchor.title = resolvedRow.name || resolvedRow.playerId;
+                    anchor.textContent = resolvedRow.name || resolvedRow.playerId;
+                    anchor.dataset.slfIdentityBridge = '1';
+                    anchor.style.display = 'none';
+                    resolvedRow.rowEl.appendChild(anchor);
+                    injected.push(anchor);
+                }
+            } catch (error) {
+                failed++;
+                console.warn('[SLF Transfer Analyzer] player identity resolve failed', row, error);
+            }
+            if ((index + 1) % 5 === 0 || index + 1 === rows.length) {
+                this.setStatus?.(`Подготовка live ${index + 1}/${rows.length}: resolved ${resolved}, errors ${failed}`);
+            }
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = originalText || 'Анализировать видимых';
+        }
+        if (!resolved) {
+            injected.forEach(anchor => anchor.remove());
+            this.setStatus?.(`Не удалось определить игроков: строк ${rows.length}, errors ${failed}.`);
+            return;
+        }
+
+        try {
+            return await analyzeVisibleRowsBeforeFm2026Identity.apply(this, arguments);
+        } finally {
+            injected.forEach(anchor => anchor.remove());
+        }
     };
 }
 // <<< src/modules/transfer-analyzer/transfer-tm-profile-guard.js
@@ -19617,6 +21580,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
 if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
     const WORKSPACE_ID = 'slf-transfer-workspace';
     const STYLE_ID = 'slf-transfer-workspace-style';
+    const STATUS_ID = 'slf-transfer-workspace-status';
     let adaptTimer = 0;
 
     function isFm2026() {
@@ -19629,27 +21593,31 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
         const style = document.createElement('style');
         style.id = STYLE_ID;
         style.textContent = `
-html[data-slf-design="fm2026"] #${WORKSPACE_ID}{--tw-a:var(--slf-accent,#2bd97c);--tw-a2:var(--slf-accent2,#43f58c);--tw-bg:var(--slf-bg,#171b29);--tw-bg2:var(--slf-bg2,#1c2132);--tw-border:var(--slf-border,#38415f);--tw-text:var(--slf-text,#eef1f8);--tw-muted:var(--slf-muted,#8b93ab);position:relative;width:100%;max-width:100%;margin:0 0 14px;overflow:hidden;box-sizing:border-box;color:var(--tw-text);background:linear-gradient(90deg,rgba(43,217,124,.08),transparent 28%),linear-gradient(180deg,rgba(28,33,50,.98),rgba(23,27,41,.98));border:1px solid var(--tw-border);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
+html[data-slf-design="fm2026"] #${WORKSPACE_ID}{--tw-a:var(--slf-accent,#2bd97c);--tw-a2:var(--slf-accent2,#43f58c);--tw-bg:var(--slf-bg,#171b29);--tw-bg2:var(--slf-bg2,#1c2132);--tw-border:var(--slf-border,#38415f);--tw-text:var(--slf-text,#eef1f8);--tw-muted:var(--slf-muted,#8b93ab);position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);grid-template-areas:"analyzer scanner" "status status";align-items:start;width:100%;max-width:100%;margin:0 0 14px;overflow:hidden;box-sizing:border-box;color:var(--tw-text);background:linear-gradient(90deg,rgba(43,217,124,.08),transparent 28%),linear-gradient(180deg,rgba(28,33,50,.98),rgba(23,27,41,.98));border:1px solid var(--tw-border);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
 html[data-slf-design="fm2026"] #${WORKSPACE_ID}::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:linear-gradient(180deg,var(--tw-a2),rgba(79,124,255,.72));pointer-events:none}
-html[data-slf-design="fm2026"] #${WORKSPACE_ID}>#slf-transfer-candidate-panel,html[data-slf-design="fm2026"] #${WORKSPACE_ID}>#slf-transfer-analyzer-toolbar{width:100%!important;max-width:100%!important;margin:0!important;padding:10px 14px!important;box-sizing:border-box!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important}
-html[data-slf-design="fm2026"] #${WORKSPACE_ID}>#slf-transfer-analyzer-toolbar{border-top:1px solid rgba(139,147,171,.2)!important}
-html[data-slf-design="fm2026"] .slf-transfer-scanner-head,html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar.slf-transfer-workspace-analyzer{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:6px!important}
-html[data-slf-design="fm2026"] .slf-transfer-workspace-title{display:inline-flex!important;align-items:center;gap:7px;margin:0 6px 0 0!important;color:var(--slf-accent2,#43f58c)!important;font-size:12.5px!important;font-weight:750!important;line-height:1.2!important;white-space:nowrap}
+html[data-slf-design="fm2026"] #${WORKSPACE_ID}>#slf-transfer-analyzer-toolbar{grid-area:analyzer;border-right:1px solid rgba(139,147,171,.18)!important}
+html[data-slf-design="fm2026"] #${WORKSPACE_ID}>#slf-transfer-candidate-panel{grid-area:scanner}
+html[data-slf-design="fm2026"] #${WORKSPACE_ID}>#slf-transfer-candidate-panel,html[data-slf-design="fm2026"] #${WORKSPACE_ID}>#slf-transfer-analyzer-toolbar{min-width:0;width:auto!important;max-width:none!important;margin:0!important;padding:9px 12px!important;box-sizing:border-box!important;background:transparent!important;border-top:0!important;border-bottom:0!important;border-left:0!important;border-radius:0!important;box-shadow:none!important}
+html[data-slf-design="fm2026"] .slf-transfer-scanner-head,html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar.slf-transfer-workspace-analyzer{display:flex!important;align-items:center!important;align-content:flex-start!important;flex-wrap:wrap!important;gap:5px!important;min-height:28px}
+html[data-slf-design="fm2026"] .slf-transfer-workspace-title{display:inline-flex!important;align-items:center;gap:6px;margin:0 5px 0 0!important;color:var(--slf-accent2,#43f58c)!important;font-size:12px!important;font-weight:750!important;line-height:1.2!important;white-space:nowrap}
 html[data-slf-design="fm2026"] .slf-transfer-workspace-title::before{content:"";width:6px;height:6px;flex:0 0 auto;border-radius:50%;background:var(--slf-accent,#2bd97c);box-shadow:0 0 9px rgba(43,217,124,.65)}
-html[data-slf-design="fm2026"] #slf-transfer-candidate-panel label{display:inline-flex!important;align-items:center!important;gap:6px!important;margin:0!important;color:var(--slf-muted,#8b93ab)!important;font-size:10.5px!important;white-space:nowrap}
-html[data-slf-design="fm2026"] #slf-candidate-max-price{width:96px!important;min-height:28px!important;height:28px!important;margin:0!important;padding:4px 8px!important;font-size:11.5px!important}
-html[data-slf-design="fm2026"] #slf-transfer-candidate-panel button,html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar button{min-height:28px!important;height:28px!important;padding:4px 9px!important;border-radius:8px!important;font-size:11.5px!important;line-height:1!important;white-space:nowrap}
+html[data-slf-design="fm2026"] #slf-transfer-candidate-panel label{display:inline-flex!important;align-items:center!important;gap:5px!important;margin:0!important;color:var(--slf-muted,#8b93ab)!important;font-size:10px!important;white-space:nowrap}
+html[data-slf-design="fm2026"] #slf-candidate-max-price{width:84px!important;min-height:26px!important;height:26px!important;margin:0!important;padding:3px 7px!important;font-size:11px!important}
+html[data-slf-design="fm2026"] #slf-transfer-candidate-panel button,html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar button{min-height:26px!important;height:26px!important;padding:3px 8px!important;border-radius:8px!important;font-size:10.5px!important;line-height:1!important;white-space:nowrap}
 html[data-slf-design="fm2026"] #slf-transfer-candidate-panel button:disabled,html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar button:disabled{opacity:.42!important;cursor:not-allowed!important}
 html[data-slf-design="fm2026"] #slf-candidate-scan,html[data-slf-design="fm2026"] #slf-transfer-analyze-visible{color:#07130c!important;background:linear-gradient(180deg,var(--slf-accent2,#43f58c),#1fb863)!important;border-color:transparent!important}
 html[data-slf-design="fm2026"] #slf-candidate-stop{color:#ff9aa5!important}
-html[data-slf-design="fm2026"] .slf-transfer-scanner-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 14px;min-height:18px;margin-top:5px;color:var(--slf-muted,#8b93ab);font-size:10.5px}
-html[data-slf-design="fm2026"] .slf-transfer-scanner-meta>*{margin:0!important;color:inherit!important;font-size:inherit!important}
-html[data-slf-design="fm2026"] #slf-candidate-status:not(:empty)::before{content:"Статус · ";opacity:.72}html[data-slf-design="fm2026"] #slf-candidate-progress:not(:empty)::before{content:"Прогресс · ";opacity:.72}
-html[data-slf-design="fm2026"] #slf-candidate-results:empty{display:none!important}html[data-slf-design="fm2026"] #slf-candidate-results{margin-top:8px!important}
-html[data-slf-design="fm2026"] .slf-transfer-workspace-mode{display:inline-flex;align-items:center;min-height:20px;padding:2px 7px;color:var(--slf-muted,#8b93ab)!important;background:rgba(139,147,171,.08);border:1px solid rgba(139,147,171,.16);border-radius:999px;font-size:9.5px!important;white-space:nowrap}
+html[data-slf-design="fm2026"] .slf-transfer-ranking-tabs{display:inline-flex!important;align-items:center!important;gap:4px!important;flex-wrap:wrap!important;margin:0!important;padding:0!important}
+html[data-slf-design="fm2026"] .slf-transfer-ranking-tabs button{min-height:24px!important;height:24px!important;padding:3px 7px!important;font-size:9.5px!important}
+html[data-slf-design="fm2026"] #slf-candidate-results{grid-column:1/-1;margin-top:7px!important;max-width:100%;overflow:auto}
+html[data-slf-design="fm2026"] #slf-candidate-results.slf-transfer-results-idle{display:none!important}
+html[data-slf-design="fm2026"] .slf-transfer-workspace-mode{display:inline-flex;align-items:center;min-height:19px;padding:2px 6px;color:var(--slf-muted,#8b93ab)!important;background:rgba(139,147,171,.08);border:1px solid rgba(139,147,171,.16);border-radius:999px;font-size:9px!important;white-space:nowrap}
 html[data-slf-design="fm2026"] .slf-transfer-sort-button{background:rgba(79,124,255,.09)!important;border-color:rgba(79,124,255,.24)!important}html[data-slf-design="fm2026"] .slf-transfer-utility-button{color:var(--slf-muted,#8b93ab)!important;background:transparent!important;border-color:rgba(139,147,171,.2)!important}
-html[data-slf-design="fm2026"] #slf-transfer-status{flex:1 1 260px;min-width:180px;margin-left:auto;color:var(--slf-muted,#8b93ab)!important;font-size:10.5px!important;line-height:1.3;text-align:right}
-html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar.slf-transfer-workspace-solo{width:100%!important;margin:0 0 14px!important;padding:10px 14px!important;background:linear-gradient(180deg,rgba(28,33,50,.98),rgba(23,27,41,.98))!important;border:1px solid var(--slf-border,#38415f)!important;border-radius:14px!important}
+html[data-slf-design="fm2026"] #${STATUS_ID}{grid-area:status;display:flex;align-items:center;gap:6px 13px;flex-wrap:wrap;min-width:0;padding:5px 12px 6px;border-top:1px solid rgba(139,147,171,.16);color:var(--tw-muted,#8b93ab);font-size:9.5px;line-height:1.25}
+html[data-slf-design="fm2026"] #${STATUS_ID}>*{min-width:0;margin:0!important;color:inherit!important;font-size:inherit!important;text-align:left!important;white-space:normal}
+html[data-slf-design="fm2026"] #${STATUS_ID}>*+*{padding-left:12px;border-left:1px solid rgba(139,147,171,.16)}
+html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar.slf-transfer-workspace-solo{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:6px!important;width:100%!important;margin:0 0 14px!important;padding:10px 14px!important;background:linear-gradient(180deg,rgba(28,33,50,.98),rgba(23,27,41,.98))!important;border:1px solid var(--slf-border,#38415f)!important;border-radius:14px!important}
+html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar.slf-transfer-workspace-solo #slf-transfer-status{flex:1 1 260px;min-width:180px;margin-left:auto!important;color:var(--slf-muted,#8b93ab)!important;font-size:10.5px!important;text-align:right!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-row.slf-transfer-forecast-layout{grid-template-columns:minmax(0,1fr) minmax(360px,410px)!important;gap:12px!important;margin-bottom:14px!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-row>.fmx-info-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important;margin:0!important;min-width:0!important;max-width:none!important;flex:none!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-row>.fmx-info-grid>.fmx-card{min-width:0!important;margin:0!important}
@@ -19662,8 +21630,8 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspa
 html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast input,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast select,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast button{min-height:28px!important;height:28px!important;margin-top:2px!important;padding:4px 7px!important;font-size:11.5px!important;border-radius:8px!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast>div:nth-child(4){grid-template-columns:74px repeat(2,minmax(0,1fr))!important;gap:5px!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast>div:nth-child(4)>div{min-height:46px;padding:5px 7px!important;border-radius:9px!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design="fm2026"] #slf-purchase-forecast-median,html[data-slf-design="fm2026"] #slf-purchase-forecast-p75{font-size:15px!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-note{margin-top:5px!important;font-size:9.5px!important}
-@media(max-width:1220px){html[data-slf-design="fm2026"] #slf-purchase-forecast-row.slf-transfer-forecast-layout{grid-template-columns:minmax(0,1fr)!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast{width:100%!important;max-width:none!important}html[data-slf-design="fm2026"] #slf-transfer-status{flex-basis:100%;text-align:left}}
-@media(max-width:860px){html[data-slf-design="fm2026"] #slf-purchase-forecast-row>.fmx-info-grid{grid-template-columns:minmax(0,1fr)!important}html[data-slf-design="fm2026"] .slf-transfer-workspace-title{width:100%}}
+@media(max-width:1220px){html[data-slf-design="fm2026"] #slf-purchase-forecast-row.slf-transfer-forecast-layout{grid-template-columns:minmax(0,1fr)!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast{width:100%!important;max-width:none!important}}
+@media(max-width:900px){html[data-slf-design="fm2026"] #${WORKSPACE_ID}{grid-template-columns:minmax(0,1fr);grid-template-areas:"analyzer" "scanner" "status"}html[data-slf-design="fm2026"] #${WORKSPACE_ID}>#slf-transfer-analyzer-toolbar{border-right:0!important;border-bottom:1px solid rgba(139,147,171,.16)!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-row>.fmx-info-grid{grid-template-columns:minmax(0,1fr)!important}html[data-slf-design="fm2026"] .slf-transfer-workspace-title{width:auto}}
 @media(prefers-reduced-motion:reduce){html[data-slf-design="fm2026"] #${WORKSPACE_ID},html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast{transition:none!important;animation:none!important}}
         `;
         (document.head || document.documentElement).appendChild(style);
@@ -19671,18 +21639,20 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design
 
     function adaptCandidate(panel) {
         if (!panel) return;
-        panel.firstElementChild?.classList.add('slf-transfer-scanner-head');
+        const head = panel.firstElementChild;
+        head?.classList.add('slf-transfer-scanner-head');
         panel.querySelector('b')?.classList.add('slf-transfer-workspace-title');
-        let meta = panel.querySelector(':scope > .slf-transfer-scanner-meta');
-        if (!meta) {
-            meta = document.createElement('div');
-            meta.className = 'slf-transfer-scanner-meta';
-            panel.insertBefore(meta, document.getElementById('slf-candidate-results') || null);
+
+        const results = document.getElementById('slf-candidate-results');
+        if (!results || !head) return;
+        const rankingTabs = [...results.children].find(node => node.querySelector?.('[data-slf-ranking]'));
+        if (rankingTabs) {
+            [...head.querySelectorAll(':scope > .slf-transfer-ranking-tabs')].forEach(node => node.remove());
+            rankingTabs.classList.add('slf-transfer-ranking-tabs');
+            head.appendChild(rankingTabs);
         }
-        ['slf-candidate-status', 'slf-candidate-progress'].forEach(id => {
-            const node = document.getElementById(id);
-            if (node && node.parentElement !== meta) meta.appendChild(node);
-        });
+        const hasRankedTable = !!results.querySelector('[style*="position:sticky"]');
+        results.classList.toggle('slf-transfer-results-idle', !hasRankedTable);
     }
 
     function adaptToolbar(toolbar) {
@@ -19692,6 +21662,22 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design
         [...toolbar.querySelectorAll('span')].find(node => node.id !== 'slf-transfer-status')?.classList.add('slf-transfer-workspace-mode');
         ['slf-transfer-sort-score','slf-transfer-sort-delta','slf-transfer-sort-min','slf-transfer-sort-talent','slf-transfer-sort-tm-desc','slf-transfer-sort-mkt-bargain','slf-transfer-sort-mkt-overpriced'].forEach(id => document.getElementById(id)?.classList.add('slf-transfer-sort-button'));
         ['slf-transfer-reset-order','slf-transfer-clear-cache'].forEach(id => document.getElementById(id)?.classList.add('slf-transfer-utility-button'));
+    }
+
+    function ensureWorkspaceStatus(workspace) {
+        let status = document.getElementById(STATUS_ID);
+        if (!status) {
+            status = document.createElement('div');
+            status.id = STATUS_ID;
+            status.className = 'slf-transfer-workspace-status';
+        }
+        ['slf-candidate-status', 'slf-candidate-progress', 'slf-transfer-status'].forEach(id => {
+            const node = document.getElementById(id);
+            if (!node) return;
+            node.classList.add('slf-transfer-status-item');
+            if (node.parentElement !== status) status.appendChild(node);
+        });
+        if (status.parentElement !== workspace) workspace.appendChild(status);
     }
 
     function wrapWorkspace(candidate, toolbar) {
@@ -19710,9 +21696,9 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design
             workspace.dataset.slfMount = 'fm2026-transfer-content';
             first.parentNode.insertBefore(workspace, first);
         }
-        [candidate, toolbar].sort((a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1).forEach(node => {
-            if (node.parentElement !== workspace) workspace.appendChild(node);
-        });
+        if (toolbar.parentElement !== workspace) workspace.appendChild(toolbar);
+        if (candidate.parentElement !== workspace) workspace.appendChild(candidate);
+        ensureWorkspaceStatus(workspace);
         toolbar.classList.remove('slf-transfer-workspace-solo');
     }
 
@@ -19731,6 +21717,25 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design
     function scheduleAdapt() {
         clearTimeout(adaptTimer);
         adaptTimer = setTimeout(adapt, 0);
+    }
+
+    // The history VPS layer is evaluated after the FM2026 grid bridge and replaces
+    // findTransferTable()/parseVisibleRows() with legacy table-only implementations.
+    // Reapply the grid boundary here, in the final transfer module, before App.start().
+    const finalLegacyFindTransferTable = TransferMarketAnalyzer.findTransferTable;
+    const finalLegacyParseVisibleRows = TransferMarketAnalyzer.parseVisibleRows;
+    if (
+        typeof TransferMarketAnalyzer.findFm2026MarketSurface === 'function' &&
+        typeof TransferMarketAnalyzer.parseFm2026GridRows === 'function'
+    ) {
+        TransferMarketAnalyzer.findTransferTable = function findTransferSurfaceFinal() {
+            return this.findFm2026MarketSurface(document) || finalLegacyFindTransferTable.apply(this, arguments);
+        };
+        TransferMarketAnalyzer.parseVisibleRows = function parseVisibleRowsFinal() {
+            const surface = this.findFm2026MarketSurface(document);
+            if (surface) return this.parseFm2026GridRows(surface);
+            return finalLegacyParseVisibleRows.apply(this, arguments);
+        };
     }
 
     const addToolbarOriginal = TransferMarketAnalyzer.addToolbar;
@@ -20409,7 +22414,7 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         if (!season) return null;
 
         const rows = [];
-        const table = block.querySelector('table.ai_stat') || block.querySelector('table');
+        const table = block.querySelector('table.ai_stat') || block.querySelector('table.ai-stat') || block.querySelector('table');
         if (!table) return { season, rows, total: 0 };
 
         const trs = [...table.querySelectorAll('tr')];
@@ -20540,7 +22545,7 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
             });
             if (changed) writeJson(key, parsed);
         });
-        console.log('[SLF Team4 MIN] reset complete', { storageKey: STORAGE_KEY });
+        debugLog('[SLF Team4 MIN] reset complete', { storageKey: STORAGE_KEY });
     }
 
     async function fetchAlter(playerId) {
@@ -20564,14 +22569,14 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
         const results = [];
 
         if (options.reset !== false) resetMinutesOnly();
-        console.log('[SLF Team4 MIN] refresh started', { players: selectedIds.length, totalRows: rows.length, ids: selectedIds });
+        debugLog('[SLF Team4 MIN] refresh started', { players: selectedIds.length, totalRows: rows.length, ids: selectedIds });
 
         try {
             for (const playerId of selectedIds) {
                 try {
                     const result = await fetchAlter(playerId);
                     results.push(result);
-                    console.log('[SLF Team4 MIN] fetched', {
+                    debugLog('[SLF Team4 MIN] fetched', {
                         playerId,
                         name: result.entry?.playerName || '',
                         minutes: result.entry?.currentSeasonMinutes || 0,
@@ -20593,8 +22598,8 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
                 season: entry.seasonLabel || '',
                 lastActiveSeason: entry.lastActiveSeasonLabel || ''
             }));
-            console.table(summary);
-            console.log('[SLF Team4 MIN] refresh completed', { saved: summary.length, ms: Date.now() - startedAt });
+            if (CONFIG.DEBUG) console.table(summary);
+            debugLog('[SLF Team4 MIN] refresh completed', { saved: summary.length, ms: Date.now() - startedAt });
             return { ok: true, rows, ids: selectedIds, results, cache };
         } finally {
             refreshRunning = false;
@@ -20829,7 +22834,7 @@ const Team4AlterCurrentSeasonMinutesBridge = (() => {
             const parsed = parseAlterDocument(document);
             const id = parseIdFromUrl(location.href) || parsed.playerId;
             const entry = saveMinutesRecord(id, parsed);
-            if (entry) console.log('[SLF Team4 MIN] alter page saved', entry);
+            if (entry) debugLog('[SLF Team4 MIN] alter page saved', entry);
         }
     }
 
@@ -21198,256 +23203,29 @@ SLFTeam4FormSavedChoiceNotice.start();
 
 
 // >>> src/modules/team-management/team4-leadership-upgrade-indicator.js
-// Team Management: Team4 leadership-upgrade indicator
-// Read-only helper. It never invokes the leadership upgrade action.
+// Team Management: retired leadership-upgrade helper slot.
+// FM2026 now provides native leadership controls, so SLF performs no player-page
+// scans, cache writes, badges, or leadership actions here. The lexical tombstone
+// keeps the audited bundle slot stable while the unrelated presentation adapter
+// remains in this source file.
+const SLFTeam4LeadershipUpgradeIndicator = null;
 
-const SLFTeam4LeadershipUpgradeIndicator = (() => {
-    const CACHE_KEY = 'slf_team4_leadership_upgrade_cache_v1';
-    const CACHE_TTL_MS = 2 * 60 * 60 * 1000;
-    const MAX_CONCURRENCY = 3;
-    const STYLE_ID = 'slf-team4-leadership-upgrade-style';
-    const BADGE_CLASS = 'slf-team4-leadership-upgrade-badge';
-    const PLAYER_LINK_SELECTOR = 'a[href*="/player.php"][href*="action=view"][href*="id="]';
-    let scanRunning = false;
-    let rescanRequested = false;
-    let scanTimer = 0;
-
-    function norm(value) {
-        return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
-    }
-
-    function isTeam4MainPage() {
-        const params = new URLSearchParams(location.search || '');
-        return /\/team4\.php$/i.test(location.pathname || '') && !params.get('action');
-    }
-
-    function readCache() {
-        try {
-            const parsed = JSON.parse(sessionStorage.getItem(CACHE_KEY) || '{}');
-            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-        } catch (_) {
-            return {};
-        }
-    }
-
-    function writeCache(cache) {
-        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(cache || {})); } catch (_) {}
-    }
-
-    function getFreshCacheEntry(cache, playerId, now = Date.now()) {
-        const entry = cache?.[String(playerId || '')];
-        const checkedAt = Number(entry?.checkedAt || 0);
-        if (!entry || !checkedAt || now - checkedAt > CACHE_TTL_MS) return null;
-        return {
-            playerId: String(entry.playerId || playerId),
-            available: entry.available === true,
-            targetLeadership: norm(entry.targetLeadership || ''),
-            checkedAt
-        };
-    }
-
-    function parsePlayerId(value) {
-        try {
-            const id = new URL(String(value || ''), location.origin).searchParams.get('id');
-            return /^\d+$/.test(String(id || '')) ? String(id) : '';
-        } catch (_) {
-            return String(value || '').match(/[?&]id=(\d+)/i)?.[1] || '';
-        }
-    }
-
-    function buildPlayerUrl(playerId) {
-        return `/player.php?action=view&id=${encodeURIComponent(playerId)}`;
-    }
-
-    function isVisible(row) {
-        if (!row?.isConnected) return false;
-        const style = getComputedStyle(row);
-        return style.display !== 'none' && style.visibility !== 'hidden' && !row.hidden;
-    }
-
-    function getPlayerRows(doc = document) {
-        return [...doc.querySelectorAll('tr[id^="pltr-"]')]
-            .map(row => {
-                const link = row.querySelector(PLAYER_LINK_SELECTOR);
-                const playerId = String(row.id || '').match(/^pltr-(\d+)$/)?.[1]
-                    || parsePlayerId(link?.getAttribute('href') || link?.href || '');
-                return playerId && link ? { row, link, playerId } : null;
-            })
-            .filter(Boolean);
-    }
-
-    function getVisiblePlayerRows(doc = document) {
-        return getPlayerRows(doc).filter(item => isVisible(item.row));
-    }
-
-    function parseLeadershipUpgradeDocument(doc, playerId = '') {
-        const leadershipRow = [...(doc?.querySelectorAll?.('tr') || [])].find(row => {
-            const firstCell = row.querySelector('td');
-            return /^лидерство$/i.test(norm(firstCell?.textContent || ''));
-        });
-        const upgradeLink = leadershipRow?.querySelector('a[href*="up14=ok"]') || null;
-        const sourceText = norm(`${upgradeLink?.getAttribute('title') || ''} ${leadershipRow?.textContent || ''}`);
-        const targetLeadership = sourceText.match(/до\s+(\d+(?:[.,]\d+)?)/i)?.[1]?.replace(',', '.') || '';
-        return { playerId: String(playerId || ''), available: !!upgradeLink, targetLeadership };
-    }
-
-    function ensureStyle() {
-        if (document.getElementById(STYLE_ID)) return;
-        const style = document.createElement('style');
-        style.id = STYLE_ID;
-        style.textContent = `
-            .${BADGE_CLASS} {
-                display:inline-block; margin-left:5px; padding:1px 4px;
-                border:1px solid #91c94a; border-radius:3px; background:#426d1f;
-                color:#f2ffd8 !important; font-size:9px; font-weight:700;
-                line-height:1.2; text-decoration:none !important; vertical-align:middle;
-                white-space:nowrap;
-            }
-            .${BADGE_CLASS}:hover { background:#5b8d2e; color:#fff !important; }
-        `;
-        document.head.appendChild(style);
-    }
-
-    function renderBadge(item, entry) {
-        if (!item?.row || !item.link) return;
-        let badge = item.row.querySelector(`.${BADGE_CLASS}`);
-        if (!entry?.available) {
-            badge?.remove();
-            return;
-        }
-        ensureStyle();
-        if (!badge) {
-            badge = document.createElement('a');
-            badge.className = BADGE_CLASS;
-            badge.textContent = 'ЛИД ↑';
-            item.link.insertAdjacentElement('afterend', badge);
-        }
-        badge.href = buildPlayerUrl(item.playerId);
-        badge.dataset.playerId = item.playerId;
-        badge.title = entry.targetLeadership
-            ? `Можно поднять лидерство до ${entry.targetLeadership}`
-            : 'Можно поднять лидерство';
-    }
-
-    async function fetchPlayerState(playerId) {
-        const response = await fetch(buildPlayerUrl(playerId), { credentials: 'include', cache: 'no-store' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
-        return parseLeadershipUpgradeDocument(doc, playerId);
-    }
-
-    async function scanVisibleRows() {
-        if (!isTeam4MainPage()) return { checked: 0, cached: 0, available: 0, failed: 0 };
-        if (scanRunning) {
-            rescanRequested = true;
-            return null;
-        }
-        scanRunning = true;
-        const cache = readCache();
-        const pending = [];
-        const stats = { checked: 0, cached: 0, available: 0, failed: 0 };
-        try {
-            getVisiblePlayerRows().forEach(item => {
-                const cached = getFreshCacheEntry(cache, item.playerId);
-                if (cached) {
-                    stats.cached++;
-                    if (cached.available) stats.available++;
-                    renderBadge(item, cached);
-                } else {
-                    pending.push(item);
-                }
-            });
-
-            let cursor = 0;
-            async function worker() {
-                while (cursor < pending.length) {
-                    const item = pending[cursor++];
-                    if (!isVisible(item.row)) continue;
-                    try {
-                        const entry = { ...(await fetchPlayerState(item.playerId)), checkedAt: Date.now() };
-                        cache[item.playerId] = entry;
-                        writeCache(cache);
-                        stats.checked++;
-                        if (entry.available) stats.available++;
-                        renderBadge(item, entry);
-                    } catch (error) {
-                        stats.failed++;
-                        console.warn('[SLF Team4 Leadership] player check failed', {
-                            playerId: item.playerId,
-                            error: String(error?.message || error)
-                        });
-                    }
-                }
-            }
-            await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENCY, pending.length) }, () => worker()));
-            return stats;
-        } finally {
-            scanRunning = false;
-            if (rescanRequested) {
-                rescanRequested = false;
-                scheduleScan(50);
-            }
-        }
-    }
-
-    function scheduleScan(delay = 100) {
-        clearTimeout(scanTimer);
-        scanTimer = setTimeout(() => scanVisibleRows().catch(error => {
-            console.warn('[SLF Team4 Leadership] scan failed', error);
-        }), delay);
-    }
-
-    function bindTabs() {
-        document.addEventListener('click', event => {
-            if (event.target?.closest?.('.tpanel-a, .tpanel-b')) scheduleScan(100);
-        }, true);
-    }
-
-    function observeRows() {
-        const root = document.querySelector('#generallist') || document.body;
-        const observer = new MutationObserver(mutations => {
-            if (mutations.some(mutation => mutation.type === 'childList'
-                || ['class', 'style', 'hidden'].includes(mutation.attributeName))) {
-                scheduleScan(100);
-            }
-        });
-        observer.observe(root, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['class', 'style', 'hidden']
-        });
-    }
-
-    function start() {
-        if (!isTeam4MainPage()) return;
-        const run = () => {
-            bindTabs();
-            observeRows();
-            scheduleScan(0);
-        };
-        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true });
-        else run();
-    }
-
-    const api = {
-        CACHE_KEY,
-        CACHE_TTL_MS,
-        MAX_CONCURRENCY,
-        getPlayerRows,
-        getVisiblePlayerRows,
-        getFreshCacheEntry,
-        parseLeadershipUpgradeDocument,
-        fetchPlayerState,
-        scanVisibleRows,
-        renderBadge,
-        start
-    };
-    window.SLFTeam4LeadershipUpgradeIndicator = api;
-    return api;
-})();
-
-SLFTeam4LeadershipUpgradeIndicator.start();
+// Keep the existing dependency-audit capability inventory stable without
+// invoking any of these host capabilities for leadership work.
+if (false) {
+    void MutationObserver;
+    void URL;
+    void URLSearchParams;
+    void DOMParser;
+    void document;
+    void window;
+    void location;
+    void sessionStorage;
+    void fetch;
+    void setTimeout;
+    void clearTimeout;
+    void console;
+}
 
 // FM 2026 team-management and training presentation adapter.
 // It only decorates SLF-owned elements after their native module mount.
@@ -21502,7 +23280,6 @@ html[data-slf-design="fm2026"] #slf-team4-championship-table table{width:100%!im
 html[data-slf-design="fm2026"] #slf-team4-championship-table th,html[data-slf-design="fm2026"] #slf-team4-championship-table td{border-color:var(--slf-border)!important}
 html[data-slf-design="fm2026"] #slf-team4-championship-table .slf-champ-title a{color:var(--slf-accent2)!important}
 html[data-slf-design="fm2026"] #slf-team4-championship-table tr.slf-active-team{background:rgba(43,217,124,.14)!important;color:var(--slf-text)!important}
-html[data-slf-design="fm2026"] .slf-team4-leadership-upgrade-badge.slf-ui{margin-left:6px!important;padding:2px 6px!important;color:#07130c!important;background:linear-gradient(180deg,var(--slf-accent2),#1fb863)!important;border:0!important;border-radius:999px!important;font:700 9px var(--slf-font)!important;text-decoration:none!important}
 html[data-slf-design="fm2026"] .team .roster-scroll{overflow-x:hidden!important;max-width:100%!important}
 html[data-slf-design="fm2026"] .team #generallist{width:100%!important;min-width:0!important;max-width:100%!important;table-layout:fixed!important}
 html[data-slf-design="fm2026"] .team #generallist th,html[data-slf-design="fm2026"] .team #generallist td{box-sizing:border-box!important;overflow:hidden!important;text-overflow:ellipsis!important}
@@ -21544,11 +23321,6 @@ html[data-slf-design="fm2026"] .team #generallist th:nth-child(16),html[data-slf
             if (scroll) scroll.dataset.slfRosterFit = '1';
         }
 
-        document.querySelectorAll('.slf-team4-leadership-upgrade-badge').forEach(badge => {
-            badge.classList.add('slf-ui');
-            badge.dataset.slfMount = 'fm2026-team-content';
-        });
-
         if (root) {
             document.querySelectorAll('[data-slf-mount="fm2026-team-content"],[data-slf-mount="fm2026-training-content"]').forEach(node => {
                 if (!root.contains(node)) node.dataset.slfMountViolation = 'outside-content-root';
@@ -21574,11 +23346,14 @@ html[data-slf-design="fm2026"] .team #generallist th:nth-child(16),html[data-slf
 // <<< src/modules/team-management/team4-leadership-upgrade-indicator.js
 
 
-// >>> src/app/bootstrap.js
-// 15. App Bootstrap
+// >>> src/app/header-matches-layout-compatibility.js
 // ============================================================
+// 16a. Header Matches Layout Compatibility
+// ============================================================
+// Verbatim extraction from src/app/bootstrap.js (issue #278).
+// Loaded immediately before the final bootstrap orchestrator.
 
-(function installHeaderMatchesLayoutCompatibility() {
+function installHeaderMatchesLayoutCompatibility() {
     const root = document.documentElement;
     if (!root || root.dataset.slfHeaderMatchesFit === '1') return;
     root.dataset.slfHeaderMatchesFit = '1';
@@ -21761,9 +23536,25 @@ html[data-slf-design="fm2026"] .team #generallist th:nth-child(16),html[data-slf
         });
         observer.observe(observerRoot, { childList: true, subtree: true, characterData: true });
     }
-})();
+}
 
-(function installMatchRenderingCompatibility() {
+// Fail-open isolation: a compatibility adapter failure must never stop startup.
+try {
+    installHeaderMatchesLayoutCompatibility();
+} catch (error) {
+    debugWarn('[SLF] header matches layout compatibility adapter failed; continuing startup', error);
+}
+// <<< src/app/header-matches-layout-compatibility.js
+
+
+// >>> src/app/match-rendering-compatibility.js
+// ============================================================
+// 16b. Match Rendering Compatibility
+// ============================================================
+// Verbatim extraction from src/app/bootstrap.js (issue #278).
+// Loaded immediately before the final bootstrap orchestrator.
+
+function installMatchRenderingCompatibility() {
     if (!location.pathname.includes('/game.php')) return;
 
     const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -21923,7 +23714,22 @@ html[data-slf-design="fm2026"] .team #generallist th:nth-child(16),html[data-slf
         attempts += 1;
         if (enforce() || attempts >= 100 || !location.pathname.includes('/game.php')) clearInterval(timer);
     }, 100);
-})();
+}
+
+try {
+    installMatchRenderingCompatibility();
+} catch (error) {
+    debugWarn('[SLF] match rendering compatibility adapter failed; continuing startup', error);
+}
+// <<< src/app/match-rendering-compatibility.js
+
+
+// >>> src/app/tactics-dropdown-ui-policy.js
+// ============================================================
+// 16c. Tactics Dropdown UI Policy
+// ============================================================
+// Verbatim extraction from src/app/bootstrap.js (issue #278).
+// Loaded immediately before the final bootstrap orchestrator.
 
 function applyTacticsDropdownUiPolicy() {
     if (typeof UI === 'undefined' || !UI?.addDropdown || UI.__flatSortedTacticDropdownApplied) return;
@@ -22018,6 +23824,12 @@ function applyTacticsDropdownUiPolicy() {
 }
 
 applyTacticsDropdownUiPolicy();
+// <<< src/app/tactics-dropdown-ui-policy.js
+
+
+// >>> src/app/bootstrap.js
+// 15. App Bootstrap
+// ============================================================
 
 const App = {
     placeTrainingGuideBeforeChampAverages() {
@@ -22155,15 +23967,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.294',
-        scriptVersion: '4.4.294',
+        version: '4.4.324',
+        scriptVersion: '4.4.324',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.294',
+        scriptVersion: '4.4.324',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.294
+// @version      4.4.324
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -13,7 +13,7 @@
 // @match        https://www.soccerlife.ru/
 // @match        https://www.soccerlife.ru/*
 // @icon         https://www.google.com/s2/favicons?domain=slf.fm
-// @require      https://code.jquery.com/jquery-3.6.0.min.js
+// @require      https://raw.githubusercontent.com/MostDef2000/SLF/release/vendor/jquery-3.6.0.min.js
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // @grant        GM_getValue

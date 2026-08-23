@@ -1,25 +1,22 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.294",
+  "scriptVersion": "4.4.324",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_294_published",
+  "status": "release_4_4_324_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
-    "bundleManifestSha256": "472f1e134f9ea14dddb440fcb87840e71a83009341081493584f66166006433b",
-    "bundleFileCount": 56,
-    "approvedBaseCommit": "7f7cb7c7a376a1e30a39b910017fa9ec6c186a23",
-    "approvedCommit": "2f18a83b255e306dcfd2ef1dbe6e01a05635d369",
+    "bundleManifestSha256": "cae2defff95daa4adb1510bfec0e959a37f797e194d01f4134aff1a1e060a6c4",
+    "bundleFileCount": 87,
+    "approvedBaseCommit": "a5fe22e0709d2cf3e0412e102e6eb3857591d29a",
+    "approvedCommit": "da7f04e7476fc7882ad8ea225da6fb6980113cae",
     "approvedFiles": [
-      ".github/workflows/build-latest-release.yml",
-      "src/app/userscript-header.js",
-      "tools/build-latest-userscript.mjs",
-      "tools/validate-release-provenance.mjs"
+      "src/modules/team-management/team4-alter-current-season-minutes-fix.js"
     ],
     "sourceBranch": "main",
     "releaseNotesProvided": false,
