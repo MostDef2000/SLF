@@ -358,7 +358,9 @@ const SLFAlterLayer = {
                 return;
             }
 
-            if (el.matches && el.matches('table.ai_stat')) {
+            // 2026 redesign renamed the stat table class from `ai_stat`
+            // (underscore) to `ai-stat` (hyphen); match both spellings.
+            if (el.matches && el.matches('table.ai_stat, table.ai-stat')) {
                 [...el.querySelectorAll('tr')]
                     .map(tr => this.parseAiStatRow(tr, currentSeason))
                     .filter(Boolean)
