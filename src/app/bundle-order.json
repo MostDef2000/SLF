@@ -87,12 +87,15 @@
     "src/modules/team-management/team4-alter-current-season-minutes-fix.js",
     "src/modules/team-management/team4-form-saved-choice-notice.js",
     "src/modules/team-management/team4-leadership-upgrade-indicator.js",
+    "src/app/header-matches-layout-compatibility.js",
+    "src/app/match-rendering-compatibility.js",
+    "src/app/tactics-dropdown-ui-policy.js",
     "src/app/bootstrap.js"
   ],
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 84,
+    "expectedModuleCount": 87,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -2528,12 +2531,80 @@
         ]
       },
       {
+        "file": "src/app/header-matches-layout-compatibility.js",
+        "declares": [
+          "installHeaderMatchesLayoutCompatibility"
+        ],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "debugWarn"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "MutationObserver",
+          "document",
+          "setTimeout"
+        ]
+      },
+      {
+        "file": "src/app/match-rendering-compatibility.js",
+        "declares": [
+          "installMatchRenderingCompatibility"
+        ],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "debugWarn"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document",
+          "location",
+          "setInterval",
+          "unsafeWindow"
+        ]
+      },
+      {
+        "file": "src/app/tactics-dropdown-ui-policy.js",
+        "declares": [
+          "applyTacticsDropdownUiPolicy"
+        ],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/app/ui-layer.js",
+            "symbols": [
+              "UI"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/preset-storage.js",
+            "symbols": [
+              "PresetStorage"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "MutationObserver",
+          "document",
+          "setTimeout"
+        ]
+      },
+      {
         "file": "src/app/bootstrap.js",
         "declares": [
-          "App",
-          "applyTacticsDropdownUiPolicy",
-          "installHeaderMatchesLayoutCompatibility",
-          "installMatchRenderingCompatibility"
+          "App"
         ],
         "public": [],
         "requires": [
@@ -2585,19 +2656,11 @@
               "LoanLimitPanel"
             ],
             "phase": "runtime"
-          },
-          {
-            "file": "src/core/config.js",
-            "symbols": [
-              "debugWarn"
-            ],
-            "phase": "runtime"
           }
         ],
         "hostCapabilities": [
-          "MutationObserver",
           "document",
-          "setTimeout"
+          "location"
         ]
       }
     ]

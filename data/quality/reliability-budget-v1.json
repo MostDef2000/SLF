@@ -6,7 +6,7 @@
     "maxParseMilliseconds": 1500
   },
   "bundle": {
-    "expectedModules": 84
+    "expectedModules": 87
   },
   "runtimeStaticInventory": {
     "maxSetIntervalCalls": 20,
