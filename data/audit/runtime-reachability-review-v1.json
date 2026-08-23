@@ -1,7 +1,7 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
   "reviewedAt": "2026-08-23",
-  "reviewCandidateCount": 41,
+  "reviewCandidateCount": 50,
   "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
@@ -375,6 +375,87 @@
         "Stage 3 verbatim extraction from tm-enrichment-layer.js (specs/002-refactoring-program); 37/37 method bodies verified identical programmatically.",
         "Methods assigned onto the TMEnrichmentLayer facade via Object.assign; invoked through unchanged this-binding call sites.",
         "Registered in src/app/bundle-order.json dependency audit immediately after the facade."
+      ]
+    },
+    {
+      "file": "src/modules/tactics-presets/tactic-control-bridge.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 4 verbatim extraction (specs/002-refactoring-program); method bodies verified identical programmatically.",
+        "Assigned onto the owning facade via Object.assign or split along an existing IIFE boundary; call sites unchanged.",
+        "Registered in src/app/bundle-order.json dependency audit adjacent to the facade."
+      ]
+    },
+    {
+      "file": "src/modules/tactics-presets/tactical-lab-v1.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 4 verbatim extraction (specs/002-refactoring-program); method bodies verified identical programmatically.",
+        "Assigned onto the owning facade via Object.assign or split along an existing IIFE boundary; call sites unchanged.",
+        "Registered in src/app/bundle-order.json dependency audit adjacent to the facade."
+      ]
+    },
+    {
+      "file": "src/modules/strategy-data-recommendations/re-html-utils.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 4 verbatim extraction (specs/002-refactoring-program); method bodies verified identical programmatically.",
+        "Assigned onto the owning facade via Object.assign or split along an existing IIFE boundary; call sites unchanged.",
+        "Registered in src/app/bundle-order.json dependency audit adjacent to the facade."
+      ]
+    },
+    {
+      "file": "src/modules/strategy-data-recommendations/re-snapshot-model.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 4 verbatim extraction (specs/002-refactoring-program); method bodies verified identical programmatically.",
+        "Assigned onto the owning facade via Object.assign or split along an existing IIFE boundary; call sites unchanged.",
+        "Registered in src/app/bundle-order.json dependency audit adjacent to the facade."
+      ]
+    },
+    {
+      "file": "src/modules/strategy-data-recommendations/re-preset-family.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 4 verbatim extraction (specs/002-refactoring-program); method bodies verified identical programmatically.",
+        "Assigned onto the owning facade via Object.assign or split along an existing IIFE boundary; call sites unchanged.",
+        "Registered in src/app/bundle-order.json dependency audit adjacent to the facade."
+      ]
+    },
+    {
+      "file": "src/modules/strategy-data-recommendations/re-plan-engine.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 4 verbatim extraction (specs/002-refactoring-program); method bodies verified identical programmatically.",
+        "Assigned onto the owning facade via Object.assign or split along an existing IIFE boundary; call sites unchanged.",
+        "Registered in src/app/bundle-order.json dependency audit adjacent to the facade."
+      ]
+    },
+    {
+      "file": "src/modules/strategy-data-recommendations/cah-value-utils.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 4 verbatim extraction (specs/002-refactoring-program); method bodies verified identical programmatically.",
+        "Assigned onto the owning facade via Object.assign or split along an existing IIFE boundary; call sites unchanged.",
+        "Registered in src/app/bundle-order.json dependency audit adjacent to the facade."
+      ]
+    },
+    {
+      "file": "src/modules/strategy-data-recommendations/cah-runtime-context.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 4 verbatim extraction (specs/002-refactoring-program); method bodies verified identical programmatically.",
+        "Assigned onto the owning facade via Object.assign or split along an existing IIFE boundary; call sites unchanged.",
+        "Registered in src/app/bundle-order.json dependency audit adjacent to the facade."
+      ]
+    },
+    {
+      "file": "src/modules/strategy-data-recommendations/cah-decision-core.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 4 verbatim extraction (specs/002-refactoring-program); method bodies verified identical programmatically.",
+        "Assigned onto the owning facade via Object.assign or split along an existing IIFE boundary; call sites unchanged.",
+        "Registered in src/app/bundle-order.json dependency audit adjacent to the facade."
       ]
     }
   ],
