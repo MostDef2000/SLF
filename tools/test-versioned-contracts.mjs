@@ -168,6 +168,7 @@ assert.ok(
 const snapshotSource = read('src/modules/manual-match-telemetry/snapshot-engine.js');
 const eventSource = read('src/modules/manual-match-telemetry/event-tracker.js');
 const runtimeSource = read('src/modules/manual-match-telemetry/manual-match-runtime.js');
+const integritySource = read('src/modules/manual-match-telemetry/manual-state-integrity.js');
 const serverSource = read('vps/api/server.py');
 
 for (const marker of [
@@ -193,11 +194,21 @@ for (const marker of [
 
 for (const marker of [
   "const manualStateSchema = 'slf_manual_match_state_v1'",
-  "const legacyStatePrefix = 'slf_live_parser_state_v2'",
-  "'preset_effect'",
-  'pending.eventKey'
+  "const legacyStatePrefix = 'slf_live_parser_state_v2'"
+]) {
+  assert.ok(integritySource.includes(marker), `manual state integrity is missing contract marker: ${marker}`);
+}
+
+for (const marker of [
+  "'preset_effect'"
 ]) {
   assert.ok(runtimeSource.includes(marker), `manual runtime is missing contract marker: ${marker}`);
+}
+
+for (const marker of [
+  'pending.eventKey'
+]) {
+  assert.ok(integritySource.includes(marker), `manual state integrity is missing contract marker: ${marker}`);
 }
 
 for (const [collection, spec] of Object.entries(policy.recordContracts || {})) {

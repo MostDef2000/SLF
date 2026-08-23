@@ -225,6 +225,8 @@ function expectKilled(label, test) {
 const budget = readJson(budgetPath);
 const snapshotSource = read(snapshotPath);
 const runtimeSource = read(runtimePath);
+const integrityPath = 'src/modules/manual-match-telemetry/manual-state-integrity.js';
+const integritySource = read(integrityPath);
 const artifactSource = read(artifactPath);
 const bundleOrder = readJson('src/app/bundle-order.json');
 const cases = budget.fuzz.javascriptCases;
@@ -239,14 +241,14 @@ assert.ok(parseMs <= budget.artifact.maxParseMilliseconds, `artifact parse ${par
 assert.equal(bundleOrder.files.length, budget.bundle.expectedModules);
 
 assertSnapshotProperties(loadSnapshotEngine(snapshotSource), cases, seed);
-assertEffectProperties(loadEffectKey(runtimeSource), cases, seed);
-assertMigrationProperties(loadLegacyNormalizer(runtimeSource), Math.min(cases, 500), seed);
+assertEffectProperties(loadEffectKey(integritySource), cases, seed);
+assertMigrationProperties(loadLegacyNormalizer(integritySource), Math.min(cases, 500), seed);
 
 const intervals = (artifactSource.match(/\bsetInterval\s*\(/g) || []).length;
 const observers = (artifactSource.match(/\bnew\s+MutationObserver\s*\(/g) || []).length;
 assert.ok(intervals <= budget.runtimeStaticInventory.maxSetIntervalCalls, `setInterval inventory ${intervals}`);
 assert.ok(observers <= budget.runtimeStaticInventory.maxMutationObservers, `MutationObserver inventory ${observers}`);
-const scheduleSource = extractNamedFunction(runtimeSource, 'scheduleManualWatcher');
+const scheduleSource = extractNamedFunction(integritySource, 'scheduleManualWatcher');
 assert.ok(
   scheduleSource.includes(`attempts >= ${budget.runtimeStaticInventory.manualWatcherMaxAttempts}`),
   'manual watcher attempt boundary changed'
@@ -282,13 +284,13 @@ killed += expectKilled('result score', () => {
   assertSnapshotProperties(loadSnapshotEngine(mutated), 10, seed);
 });
 killed += expectKilled('effect prefix', () => {
-  const source = extractNamedFunction(runtimeSource, 'getDeterministicEffectKey');
+  const source = extractNamedFunction(integritySource, 'getDeterministicEffectKey');
   const mutated = source.replace("'preset_effect'", "'preset_effect_mutated'");
   assert.notEqual(mutated, source);
   assertEffectProperties(vm.runInNewContext(`(${mutated})`, {}), 10, seed);
 });
 killed += expectKilled('migration schema', () => {
-  const source = extractNamedFunction(runtimeSource, 'normalizeLegacyManualState');
+  const source = extractNamedFunction(integritySource, 'normalizeLegacyManualState');
   const mutated = source.replace('schema: manualStateSchema', 'schema: legacy.schema');
   assert.notEqual(mutated, source);
   const normalize = vm.runInNewContext(`(() => {
