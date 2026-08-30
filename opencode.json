@@ -1,0 +1,70 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "slf-delivery-orchestrator",
+  "instructions": [
+    "AGENTS.md",
+    "contracts/SLF_GOVERNANCE.md",
+    "contracts/SLF_SCOPE_APPROVAL_POLICY.md"
+  ],
+  "mcp": {
+    "github": {
+      "type": "local",
+      "command": [
+        "sh",
+        "-c",
+        "unset GH_TOKEN; GITHUB_PERSONAL_ACCESS_TOKEN=$(env -u GH_TOKEN gh auth token) exec npx -y @modelcontextprotocol/server-github"
+      ],
+      "enabled": true
+    }
+  },
+  "lsp": {
+    "typescript": {
+      "command": [
+        "/home/agent/.local/share/opencode-lsp/node_modules/.bin/typescript-language-server",
+        "--stdio"
+      ],
+      "extensions": [
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+        ".ts",
+        ".tsx",
+        ".mts",
+        ".cts"
+      ]
+    },
+    "pyright": {
+      "command": [
+        "pyright-langserver",
+        "--stdio"
+      ],
+      "extensions": [
+        ".py",
+        ".pyi"
+      ]
+    },
+    "bash": {
+      "command": [
+        "bash-language-server",
+        "start"
+      ],
+      "extensions": [
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".ksh"
+      ]
+    },
+    "yaml": {
+      "command": [
+        "yaml-language-server",
+        "--stdio"
+      ],
+      "extensions": [
+        ".yaml",
+        ".yml"
+      ]
+    }
+  }
+}

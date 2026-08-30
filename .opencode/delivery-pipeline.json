@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "gates": [
+    {
+      "id": "bundle-order",
+      "argv": ["node", "tools/check-bundle-order.mjs"],
+      "cwd": ".",
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "versioned-contracts",
+      "argv": ["node", "tools/test-versioned-contracts.mjs"],
+      "cwd": ".",
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "security-boundaries",
+      "argv": ["node", "tools/test-security-boundaries.mjs"],
+      "cwd": ".",
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "quality-governance",
+      "argv": ["node", "tools/validate-quality-governance.mjs"],
+      "cwd": ".",
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "workflow-inventory",
+      "argv": ["node", "tools/validate-workflow-inventory.mjs"],
+      "cwd": ".",
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "deliberate-execution-contract",
+      "argv": ["node", "tools/test-deliberate-execution-contract.mjs"],
+      "cwd": ".",
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "tactical-situation-diversity",
+      "argv": ["node", "tools/test-tactical-situation-diversity.mjs"],
+      "cwd": ".",
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "alter-layer-parsing",
+      "argv": ["node", "tools/test-alter-layer-parsing.mjs"],
+      "cwd": ".",
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "telemetry-properties",
+      "argv": ["node", "tools/test-telemetry-properties-and-mutations.mjs"],
+      "cwd": ".",
+      "timeoutSeconds": 300
+    }
+  ]
+}
