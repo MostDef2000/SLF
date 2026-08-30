@@ -4,18 +4,34 @@ mode: primary
 temperature: 0.1
 color: "#22c55e"
 permission:
+  "*": deny
   read: allow
   edit: allow
   glob: allow
   grep: allow
   list: allow
-  bash: allow
-  task: allow
+  bash:
+    "*": allow
+    "git commit*": ask
+    "git push*": ask
+    "git merge*": ask
+    "git rebase*": ask
+    "git reset*": ask
+    "git clean*": ask
+    "git checkout*": ask
+    "git restore*": ask
+    "rm *": ask
+  task:
+    "*": deny
+    "profile-worker-*": allow
+  external_directory: deny
   webfetch: allow
   websearch: allow
   todowrite: allow
   question: allow
+  lsp: allow
   skill: allow
+  "github_*": allow
 ---
 
 Ты — **SLF Delivery Orchestrator** проекта `MostDef2000/SLF`, работающий **локально через opencode** с GitHub API через **GitHub Connector (MCP)** как primary route.
