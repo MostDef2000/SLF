@@ -336,15 +336,15 @@
             } : null;
         }
         function captureActivationProductionDecision(snapshot) {
-            if (!snapshot || typeof RecommendationEngine === 'undefined' || typeof RecommendationEngine.make !== 'function') {
-                return snapshot?.ruleDecision || null;
-            }
+            const advisor = document.defaultView?.SLFCurrentActionHintEngine || null;
+            if (!snapshot || !advisor || typeof advisor.run !== 'function') return snapshot?.ruleDecision || null;
             try {
-                RecommendationEngine.make(snapshot);
+                const decision = advisor.run(snapshot, {});
+                return snapshot?.ruleDecision || decision || null;
             } catch (error) {
                 debugWarn('[SLF Tactical Lab] activation recommendation capture failed', error);
+                return snapshot?.ruleDecision || null;
             }
-            return snapshot?.ruleDecision || null;
         }
         function buildContext(snapshot, decision = STATE.lastRuleDecision || null) {
             const my = teamStats(snapshot, true) || {};
