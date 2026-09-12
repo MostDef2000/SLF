@@ -299,22 +299,31 @@
                 ? Number(item?.teamId) === Number(snapshot.myTeam)
                 : Number(item?.teamId) !== Number(snapshot.myTeam))?.stats || null;
         }
+        function finiteMetric(value) {
+            if (value == null || value === '') return null;
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : null;
+        }
         function metrics(snapshot) {
-            const my = teamStats(snapshot, true) || {};
-            const opp = teamStats(snapshot, false) || {};
+            const my = teamStats(snapshot, true);
+            const opp = teamStats(snapshot, false);
             return {
-                myXG:Number(my.xG || 0),oppXG:Number(opp.xG || 0),myShots:Number(my.shots || 0),oppShots:Number(opp.shots || 0),
-                myBadActionsPct:Number(my.badActionsPct || 0),oppBadActionsPct:Number(opp.badActionsPct || 0),
-                myPower:Number(my.power || 0),oppPower:Number(opp.power || 0),
-                myDefVector:Number(my.defVector || 0),oppDefVector:Number(opp.defVector || 0),
-                myPressVector:Number(my.pressVector || 0),oppPressVector:Number(opp.pressVector || 0)
+                myXG:finiteMetric(my?.xG),oppXG:finiteMetric(opp?.xG),myShots:finiteMetric(my?.shots),oppShots:finiteMetric(opp?.shots),
+                myBadActionsPct:finiteMetric(my?.badActionsPct),oppBadActionsPct:finiteMetric(opp?.badActionsPct),
+                myPower:finiteMetric(my?.power),oppPower:finiteMetric(opp?.power),
+                myDefVector:finiteMetric(my?.defVector),oppDefVector:finiteMetric(opp?.defVector),
+                myPressVector:finiteMetric(my?.pressVector),oppPressVector:finiteMetric(opp?.pressVector)
             };
         }
         function metricDelta(before, after) {
-            return Object.fromEntries(Object.keys(before || {}).map(key => [key,Number((Number(after?.[key] || 0)-Number(before?.[key] || 0)).toFixed(4))]));
+            const keys = [...new Set([...Object.keys(before || {}), ...Object.keys(after || {})])];
+            return Object.fromEntries(keys.map(key => {
+                const start = finiteMetric(before?.[key]);
+                const end = finiteMetric(after?.[key]);
+                return [key,start == null || end == null ? null : Number((end-start).toFixed(4))];
+            }));
         }
-        function productionRecommendation() {
-            const decision = STATE.lastRuleDecision || null;
+        function productionRecommendation(decision = STATE.lastRuleDecision || null) {
             const compact = EventTracker.compactRuleDecision?.(decision) || null;
             const runnerUp = decision?.runnerUp || (decision?.candidates || []).find(item => !item?.vetoed && item?.preset !== decision?.action?.preset) || null;
             return compact ? {
@@ -326,12 +335,23 @@
                 riskAppetite:compact.riskAppetite || null
             } : null;
         }
-        function buildContext(snapshot) {
+        function captureActivationProductionDecision(snapshot) {
+            const advisor = document.defaultView?.SLFCurrentActionHintEngine || null;
+            if (!snapshot || !advisor || typeof advisor.run !== 'function') return snapshot?.ruleDecision || null;
+            try {
+                const decision = advisor.run(snapshot, {});
+                return snapshot?.ruleDecision || decision || null;
+            } catch (error) {
+                debugWarn('[SLF Tactical Lab] activation recommendation capture failed', error);
+                return snapshot?.ruleDecision || null;
+            }
+        }
+        function buildContext(snapshot, decision = STATE.lastRuleDecision || null) {
             const my = teamStats(snapshot, true) || {};
             const opp = teamStats(snapshot, false) || {};
             const score = scoreContext(snapshot);
             const gap = Number(my.power || 0) - Number(opp.power || 0);
-            const decisionContext = STATE.lastRuleDecision?.moment?.context || {};
+            const decisionContext = decision?.moment?.context || {};
             const transitions = Array.isArray(snapshot?.tacticTelemetry?.transitions) ? snapshot.tacticTelemetry.transitions : [];
             const latest = transitions[transitions.length - 1] || null;
             const minute = Number.isFinite(Number(snapshot?.minute)) ? Number(snapshot.minute) : null;
@@ -356,7 +376,7 @@
                     badActionsPct:Number(my.badActionsPct||0),
                     possession:Number(my.possession ?? my.pos ?? 0)
                 },
-                productionRecommendation:productionRecommendation()
+                productionRecommendation:productionRecommendation(decision)
             };
         }
         function publicState(state) {
@@ -481,7 +501,8 @@
             if (!experiment || !bridge) return {ok:false,reason:'Механизм применения тактики ещё не готов.'};
             if (!controlsAvailable(experiment.controls)) return {ok:false,reason:'Точные native controls эксперимента ещё недоступны на странице.'};
 
-            const entryContext = buildContext(snapshot);
+            const entryDecision = captureActivationProductionDecision(snapshot);
+            const entryContext = buildContext(snapshot, entryDecision);
             const baselineMetrics = metrics(snapshot);
             const beforeTactic = getCurrentTactic();
             const applied = await bridge.applyTacticObject(experiment.controls,{source:`tactical_lab:${experiment.experimentId}`,strict:true});
@@ -530,8 +551,10 @@
                 tacticSource:next?.nextTacticSource || 'unknown',
                 tacticFingerprint:next?.nextTacticFingerprint || exitContext.previous?.tacticFingerprint || null
             };
+            const completedAt = Date.now();
             const endMinute = Number.isFinite(Number(snapshot?.minute)) ? Number(snapshot.minute) : null;
             const duration = activation.startedAtMinute != null && endMinute != null ? Math.max(0,endMinute-activation.startedAtMinute) : null;
+            const elapsedWallClockMs = Number.isFinite(Number(activation.startedAtTs)) ? Math.max(0,completedAt - Number(activation.startedAtTs)) : null;
             const delta = metricDelta(activation.baselineMetrics || {},metrics(snapshot));
             state.completed = {
                 experimentId:experiment.experimentId,
@@ -539,15 +562,16 @@
                 fromMinute:activation.startedAtMinute,
                 toMinute:endMinute,
                 durationMinutes:duration,
+                elapsedWallClockMs,
                 exitReason:reason || 'tactic_changed',
                 entryContext:clone(activation.entryContext),
                 exitContext:clone(exitContext),
                 delta,
-                completedAt:Date.now()
+                completedAt
             };
             state.activation = null;
             persistState(state);
-            queueLifecycle(state,'exit',exitContext,{durationMinutes:duration,exitReason:state.completed.exitReason,delta,entryContext:activation.entryContext});
+            queueLifecycle(state,'exit',exitContext,{durationMinutes:duration,elapsedWallClockMs,exitReason:state.completed.exitReason,delta,entryContext:activation.entryContext});
             renderUI();
             return clone(state.completed);
         }
