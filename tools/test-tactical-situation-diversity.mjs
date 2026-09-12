@@ -172,6 +172,11 @@ assert.deepEqual(tacticalLabContract.checkpointing,{
   productionPresetSelection:true,
   manualControlChangesObservedAtNextCheckpoint:true
 });
+assert.equal(tacticalLabContract.telemetry.activationRecommendationPolicy,'score_exact_activation_snapshot_when_available');
+assert.equal(tacticalLabContract.telemetry.legacyDurationMinutesPreserved,true);
+assert.equal(tacticalLabContract.telemetry.highResolutionExposureField,'elapsedWallClockMs');
+assert.equal(tacticalLabContract.telemetry.missingMetricDeltaPolicy,'null_when_either_endpoint_unavailable');
+assert.ok(tacticalLabContract.telemetry.exitContext.includes('elapsedWallClockMs'));
 assert.equal(tacticalLabContract.ui.surface,'inside_parser_recommendation');
 assert.equal(tacticalLabContract.ui.separateLineupCard,false);
 assert.equal(tacticalLabContract.deferredIssue,252);
@@ -204,6 +209,12 @@ assert.match(tacticalLabRuntime,/queueLifecycle\(state,'exit'/);
 assert.match(tacticalLabRuntime,/STATE\.tacticalLabRuntime/);
 assert.match(tacticalLabRuntime,/\.tacticalLab\s*=/,'durable manual state envelope must retain Tactical Lab state');
 assert.match(tacticalLabRuntime,/startedAtMinute/,'entry minute must be retained');
+assert.match(tacticalLabRuntime,/captureActivationProductionDecision/,'activation must score the exact snapshot instead of relying on stale recommendation state');
+assert.match(tacticalLabRuntime,/RecommendationEngine\.make\(snapshot\)/,'activation baseline must use the existing Production Advisor scoring path');
+assert.match(tacticalLabRuntime,/elapsedWallClockMs/,'completed phases must retain high-resolution wall-clock exposure');
+assert.match(tacticalLabRuntime,/completedAt - Number\(activation\.startedAtTs\)/,'wall-clock exposure must be derived from the persisted activation timestamp');
+assert.match(tacticalLabRuntime,/start == null \|\| end == null \? null/,'metric deltas must remain unavailable when either endpoint is missing');
+assert.equal(/Number\(after\?\.\[key\] \|\| 0\)/.test(tacticalLabRuntime),false,'missing metric endpoints must not be coerced to zero');
 assert.match(tacticalLabRuntime,/productionRecommendation/,'production recommendation context must be retained');
 assert.match(tacticControlEngine,/STATE\.tacticControlBridge/);
 assert.match(tacticControlEngine,/applyTacticObject/);
@@ -212,4 +223,4 @@ assert.match(tacticControlEngine,/sendPlayerObservationsWithoutLabEventFanout/,'
 assert.equal(/\bApi\b/.test(tacticalLabRuntime),false,'Tactical Lab must reuse declared telemetry boundaries instead of adding a hidden API dependency');
 assert.equal(/EXP-561-P02-/.test(source('src/modules/tactics-presets/active-preset-registry.js')),false,'experimental identities must not enter production registry');
 
-console.log('tactical suite v7 + Tactical Lab v1 P02 explicit-checkpoint contracts: OK');
+console.log('tactical suite v7 + Tactical Lab v1 P02 evidence-quality contracts: OK');
