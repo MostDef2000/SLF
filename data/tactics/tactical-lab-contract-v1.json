@@ -92,6 +92,10 @@
     ],
     "assignmentRecorded": true,
     "activationRecorded": true,
+    "activationRecommendationPolicy": "score_exact_activation_snapshot_when_available",
+    "legacyDurationMinutesPreserved": true,
+    "highResolutionExposureField": "elapsedWallClockMs",
+    "missingMetricDeltaPolicy": "null_when_either_endpoint_unavailable",
     "entryContext": [
       "minute",
       "scoreState",
@@ -114,6 +118,7 @@
       "nextTacticSource",
       "productionRecommendationAtExit",
       "durationMinutes",
+      "elapsedWallClockMs",
       "phaseMetricDelta"
     ],
     "failedWritesUseDurableBoundedOutbox": true,

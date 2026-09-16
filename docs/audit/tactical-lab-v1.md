@@ -71,6 +71,8 @@ When the user activates the experiment, telemetry captures the actual entry cont
 - pressure/attack-need/fatigue-quality context exposed by the current recommendation decision;
 - the Production Advisor recommendation, runner-up, margin and confidence at entry.
 
+Immediately before the experimental controls are changed, Tactical Lab asks the existing Production Advisor scoring path to score that exact activation snapshot when the normal live-data gate allows a decision. The resulting rule decision is captured only as entry evidence; Tactical Lab does not render or apply the production preset. If the exact snapshot cannot produce a decision, the entry recommendation remains unavailable instead of reusing a stale earlier recommendation.
+
 This is intentionally context-first. Tactical Lab does not label a genome as an opener, chase tactic or protect-lead tactic in advance. Those roles may be discovered later from observed cohorts.
 
 ## Explicit checkpoints and exit attribution
@@ -84,6 +86,8 @@ The explicit checkpoints are:
 - `Спарсить завершённый`: use the user-requested finished snapshot as the terminal checkpoint. If the experimental controls still match, close with `match_finished`; if they no longer match, close as a control change observed at the finished checkpoint before sending the result.
 
 A manual tactical control change by itself does not start a Tactical Lab timer, polling loop or background snapshot. If the user changes controls and does nothing else, the Lab remains idle; that divergence is observed at the next explicit checkpoint. Consequently, for such a manual divergence the recorded exit minute is the checkpoint observation minute, not an inferred hidden change time. This is deliberate: v1 records only evidence it actually observes.
+
+Telemetry keeps the legacy integer `durationMinutes` for compatibility and also records `elapsedWallClockMs`, derived from the activation `startedAtTs` and the exact close timestamp. A phase may therefore have `durationMinutes = 0` while still carrying positive high-resolution wall-clock exposure. Phase metric deltas are numeric only when both endpoints were actually observed; if either endpoint is unavailable, the delta is stored as `null` rather than synthesizing a zero baseline.
 
 Telemetry stores the exit minute, duration, next tactic/source, production recommendation at exit and available phase metric deltas.
 
