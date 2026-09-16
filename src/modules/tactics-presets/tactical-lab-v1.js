@@ -4,10 +4,20 @@
     // Tactical Lab v1 is installed after the synchronous bundle has defined
     // match parsing, telemetry and the production recommendation stack.
     (function scheduleTacticalLabV1() {
-        const POPULATION_VERSION = 'slf_tactical_lab_561_p02';
-        const POPULATION_CODE = 'P02';
+        const LEGACY_P02_VERSION = 'slf_tactical_lab_561_p02';
+        const LEGACY_P02_CODE = 'P02';
+        const POPULATION_VERSION = 'slf_tactical_lab_561_p03';
+        const POPULATION_CODE = 'P03';
         const GENOME_VERSION = 'slf_tactical_genome_v1';
-        const POPULATION_SIZE = 64;
+        const POPULATION_SIZE = 6;
+        const P03_SELECTION = [
+            {parentExperimentId:'EXP-561-P02-0012',weight:35},
+            {parentExperimentId:'EXP-561-P02-0018',weight:35},
+            {parentExperimentId:'EXP-561-P02-0040',weight:10},
+            {parentExperimentId:'EXP-561-P02-0058',weight:10},
+            {parentExperimentId:'EXP-561-P02-0011',weight:5},
+            {parentExperimentId:'EXP-561-P02-0055',weight:5}
+        ];
         const PANEL_ID = 'slf-tactical-lab-panel';
         const BUTTON_ID = 'slf-tactical-lab-apply';
         const STATUS_ID = 'slf-tactical-lab-status';
@@ -40,6 +50,7 @@
         const priorityValues = new Set(['left','center','right']);
         const labControlKeys = Object.keys(ranges);
         let population = null;
+        let legacyP02Population = null;
         let cachedState = null;
         let cachedGameId = '';
         let flushPromise = null;
@@ -102,12 +113,16 @@
             const options = [[],['left'],['center'],['right'],['left','right'],['left','center'],['center','right']];
             return options[index % options.length].slice();
         };
-        const makeExperiment = (index, origin, controls, parentExperimentId = null, distance = null) => {
+        const makeExperiment = (index, origin, controls, parentExperimentId = null, distance = null, options = {}) => {
             const normalizedControls = normalizeLabControls(controls);
-            return {
-                experimentId: `EXP-561-${POPULATION_CODE}-${String(index + 1).padStart(4, '0')}`,
-                populationVersion: POPULATION_VERSION,
-                generation: 1,
+            const populationCode = String(options.populationCode || POPULATION_CODE);
+            const populationVersion = String(options.populationVersion || POPULATION_VERSION);
+            const generation = Number(options.generation ?? 2);
+            const selectionWeightPct = Number(options.selectionWeightPct || 0);
+            const experiment = {
+                experimentId: `EXP-561-${populationCode}-${String(index + 1).padStart(4, '0')}`,
+                populationVersion,
+                generation,
                 genomeVersion: GENOME_VERSION,
                 origin,
                 parentExperimentId,
@@ -116,10 +131,13 @@
                 tacticFingerprint: tacticFingerprint(normalizedControls),
                 genomeFingerprint: genomeFingerprint(normalizedControls)
             };
+            if (selectionWeightPct > 0) experiment.selectionWeightPct = selectionWeightPct;
+            return experiment;
         };
 
-        function buildPopulation() {
+        function buildP02Population() {
             const result = [];
+            const p02Options = {populationCode:LEGACY_P02_CODE,populationVersion:LEGACY_P02_VERSION,generation:1};
             const mutableKeys = labControlKeys.filter(key => key !== 'corner');
             for (let index = 0; index < 16; index += 1) {
                 const seedId = productionIds[index % productionIds.length];
@@ -133,7 +151,7 @@
                     controls[key] = values[(currentIndex + shift + values.length) % values.length];
                 }
                 if (index % 4 === 3) controls.priority = priorityFor(index);
-                result.push(makeExperiment(index, 'production_mutation', controls, seedId, mutationDistance(baseline, controls)));
+                result.push(makeExperiment(index, 'production_mutation', controls, seedId, mutationDistance(baseline, controls), p02Options));
             }
             for (let local = 0; local < 16; local += 1) {
                 const index = 16 + local;
@@ -143,18 +161,18 @@
                     controls[key] = values[(local * 2 + keyIndex * 3) % values.length];
                 });
                 controls.priority = priorityFor(local + 2);
-                result.push(makeExperiment(index, 'orthogonal', controls, null, 1));
+                result.push(makeExperiment(index, 'orthogonal', controls, null, 1, p02Options));
             }
             for (let local = 0; local < 16; local += 1) {
                 const index = 32 + local;
-                const rng = makeRng(`${POPULATION_VERSION}|random|${local}`);
+                const rng = makeRng(`${LEGACY_P02_VERSION}|random|${local}`);
                 const controls = {};
                 labControlKeys.forEach(key => {
                     const values = ranges[key];
                     controls[key] = values[Math.floor(rng() * values.length) % values.length];
                 });
                 controls.priority = priorityFor(Math.floor(rng() * 100));
-                result.push(makeExperiment(index, 'deterministic_random', controls, null, 1));
+                result.push(makeExperiment(index, 'deterministic_random', controls, null, 1, p02Options));
             }
             for (let local = 0; local < 16; local += 1) {
                 const index = 48 + local;
@@ -164,9 +182,21 @@
                     controls[key] = values.length === 1 ? values[0] : ((local + keyIndex) % 2 === 0 ? values[0] : values[values.length - 1]);
                 });
                 controls.priority = priorityFor(local + 4);
-                result.push(makeExperiment(index, 'extreme', controls, null, 1));
+                result.push(makeExperiment(index, 'extreme', controls, null, 1, p02Options));
             }
             return result;
+        }
+
+        function buildPopulation() {
+            const p02 = legacyP02Population || (legacyP02Population = buildP02Population());
+            return P03_SELECTION.map((selection, index) => {
+                const parent = p02.find(item => item.experimentId === selection.parentExperimentId);
+                if (!parent) throw new Error(`[SLF Tactical Lab] missing P03 validation parent ${selection.parentExperimentId}`);
+                return makeExperiment(index, 'validation_repeat', parent.controls, parent.experimentId, 0, {
+                    generation:2,
+                    selectionWeightPct:selection.weight
+                });
+            });
         }
 
         function storage() {
@@ -250,20 +280,33 @@
 
         function selectExperiment(gameId) {
             const items = population || (population = buildPopulation());
-            return items[hash32(`${POPULATION_VERSION}|${gameId}`) % items.length];
+            const bucket = hash32(`${POPULATION_VERSION}|${gameId}`) % 100;
+            let cumulative = 0;
+            for (const item of items) {
+                cumulative += Number(item.selectionWeightPct || 0);
+                if (bucket < cumulative) return item;
+            }
+            return items[items.length - 1];
+        }
+        function preserveLegacyP02Assignment(state) {
+            const version = String(state?.assignment?.populationVersion || state?.populationVersion || '');
+            return !!state?.assignment && version === LEGACY_P02_VERSION;
         }
         function ensureAssignment(snapshot) {
             const gameId = getGameId(snapshot);
             const state = loadState(gameId);
             if (!state) return null;
-            const selected = selectExperiment(gameId);
-            if (!state.assignment || state.assignment.populationVersion !== POPULATION_VERSION) {
+            const assignmentVersion = String(state.assignment?.populationVersion || state.populationVersion || '');
+            if (!state.assignment || (assignmentVersion !== POPULATION_VERSION && !preserveLegacyP02Assignment(state))) {
+                const selected = selectExperiment(gameId);
                 state.populationVersion = POPULATION_VERSION;
                 state.assignment = {
                     assignmentId:`tactical_lab_assignment|${gameId}|${selected.experimentId}`,
                     experimentId:selected.experimentId,
                     populationVersion:POPULATION_VERSION,
                     genomeFingerprint:selected.genomeFingerprint,
+                    parentExperimentId:selected.parentExperimentId || null,
+                    selectionWeightPct:selected.selectionWeightPct || null,
                     assignedAt:Date.now()
                 };
                 state.activation = null;
@@ -274,7 +317,10 @@
             return state;
         }
         function experimentFor(state) {
-            const items = population || (population = buildPopulation());
+            const assignmentVersion = String(state?.assignment?.populationVersion || state?.populationVersion || '');
+            const items = assignmentVersion === LEGACY_P02_VERSION
+                ? (legacyP02Population || (legacyP02Population = buildP02Population()))
+                : (population || (population = buildPopulation()));
             return items.find(item => item.experimentId === state?.assignment?.experimentId) || null;
         }
         function isOwnedLive(snapshot) {
@@ -383,7 +429,7 @@
             if (!state) return null;
             return {
                 schema:'slf_tactical_lab_match_v1',
-                populationVersion:POPULATION_VERSION,
+                populationVersion:state.assignment?.populationVersion || state.populationVersion || POPULATION_VERSION,
                 assignment:clone(state.assignment),
                 activation:clone(state.activation),
                 completed:clone(state.completed),
@@ -399,8 +445,8 @@
                 kind,
                 assignmentId:state.assignment?.assignmentId || null,
                 experimentId:experiment?.experimentId || null,
-                populationVersion:POPULATION_VERSION,
-                genomeVersion:GENOME_VERSION,
+                populationVersion:experiment?.populationVersion || state.assignment?.populationVersion || state.populationVersion || POPULATION_VERSION,
+                genomeVersion:experiment?.genomeVersion || GENOME_VERSION,
                 genomeFingerprint:experiment?.genomeFingerprint || null,
                 blind:true,
                 context:clone(context),
@@ -532,6 +578,7 @@
                 origin:experiment.origin,
                 parentExperimentId:experiment.parentExperimentId,
                 mutationDistance:experiment.mutationDistance,
+                selectionWeightPct:experiment.selectionWeightPct || null,
                 applicationScope:'tactical_controls_only'
             });
             renderUI();
@@ -617,9 +664,11 @@
             const detail = document.getElementById(DETAIL_ID);
             const button = document.getElementById(BUTTON_ID);
             if (!state || !experiment || !status || !detail || !button) return;
-            const shortId = experiment.experimentId.replace(`EXP-561-${POPULATION_CODE}-`,'EXP-');
+            const populationVersion = state.assignment?.populationVersion || experiment.populationVersion || POPULATION_VERSION;
+            const populationCode = experiment.experimentId.match(/^EXP-561-(P\d+)-/)?.[1] || POPULATION_CODE;
+            const shortId = experiment.experimentId.replace(/^EXP-561-P\d+-/,'EXP-');
             panel.dataset.experimentId = experiment.experimentId;
-            panel.dataset.populationVersion = POPULATION_VERSION;
+            panel.dataset.populationVersion = populationVersion;
             if (state.activation?.status === 'active') {
                 status.textContent = `● ${shortId} ACTIVE${state.activation.startedAtMinute!=null?` · применён на ${state.activation.startedAtMinute}'`:''}`;
                 status.style.color = '#43f58c';
@@ -633,7 +682,7 @@
                 button.disabled = true;
                 button.textContent = 'Тест завершён';
             } else {
-                status.textContent = `${shortId} · blind challenger · Population ${POPULATION_CODE}`;
+                status.textContent = `${shortId} · blind challenger · Population ${populationCode}`;
                 status.style.color = '#ffd76a';
                 detail.textContent = state.lastError || 'Параметры скрыты. Один клик применит только tactical controls; расстановка игроков не меняется.';
                 const ready = !!STATE.tacticControlBridge && controlsAvailable(experiment.controls);
@@ -696,7 +745,7 @@
                 populationSize:POPULATION_SIZE,
                 getPopulation(){return clone(population);},
                 getAssignment(gameId){return clone(loadState(String(gameId||MatchStateParser.getGameId()||''))?.assignment||null);},
-                assignForGame(gameId){const experiment=selectExperiment(String(gameId||''));return {experimentId:experiment.experimentId,genomeFingerprint:experiment.genomeFingerprint};},
+                assignForGame(gameId){const experiment=selectExperiment(String(gameId||''));return {experimentId:experiment.experimentId,genomeFingerprint:experiment.genomeFingerprint,parentExperimentId:experiment.parentExperimentId,selectionWeightPct:experiment.selectionWeightPct};},
                 activate,closeActive,checkpoint,isActive,mountUI,
                 flushOutbox(){return flushOutbox(loadState(String(MatchStateParser.getGameId()||'')));}
             };

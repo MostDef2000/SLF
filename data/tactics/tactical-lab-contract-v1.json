@@ -21,19 +21,25 @@
     "separateLineupCard": false
   },
   "population": {
-    "populationVersion": "slf_tactical_lab_561_p02",
-    "supersedesPopulationVersion": "slf_tactical_lab_561_p01",
-    "supersessionReason": "P01 could generate controls outside the current FM2026 native control domains and coupled experiments to lineup formation changes.",
+    "populationVersion": "slf_tactical_lab_561_p03",
+    "supersedesPopulationVersion": "slf_tactical_lab_561_p02",
+    "supersessionReason": "P02 provided enough exploratory evidence to move to targeted repeat validation of the most informative positive, replay and negative-control candidates.",
+    "parentPopulationVersion": "slf_tactical_lab_561_p02",
     "genomeVersion": "slf_tactical_genome_v1",
     "genomeScope": "tactical_controls_only",
-    "size": 64,
+    "size": 6,
     "deterministic": true,
     "immutableIds": true,
     "groups": {
-      "production_mutation": 16,
-      "orthogonal": 16,
-      "deterministic_random": 16,
-      "extreme": 16
+      "validation_repeat": 6
+    },
+    "selectionWeightsPct": {
+      "EXP-561-P02-0012": 35,
+      "EXP-561-P02-0018": 35,
+      "EXP-561-P02-0040": 10,
+      "EXP-561-P02-0058": 10,
+      "EXP-561-P02-0011": 5,
+      "EXP-561-P02-0055": 5
     },
     "nativeControlDomains": {
       "def_line": ["1", "2", "3"],
@@ -60,7 +66,10 @@
     "blindBeforeAndDuringUse": true,
     "activationMinuteRestricted": false,
     "oneSuccessfulActivationPerMatch": true,
-    "populationSupersessionMayReplaceOlderAssignment": true
+    "populationSupersessionMayReplaceOlderAssignment": true,
+    "preservedAssignmentPopulationVersions": [
+      "slf_tactical_lab_561_p02"
+    ]
   },
   "application": {
     "requiresExplicitUserClick": true,

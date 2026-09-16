@@ -274,8 +274,8 @@ def assert_owned_live(page: Page):
     assert page.locator("#slf-tactical-lab-panel").count() == 1
     assert page.locator("#slf-parser-recommendation > #slf-tactical-lab-panel").count() == 1
     experiment_id = page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id")
-    assert experiment_id and experiment_id.startswith("EXP-561-P02-"), experiment_id
-    assert page.locator("#slf-tactical-lab-panel").get_attribute("data-population-version") == "slf_tactical_lab_561_p02"
+    assert experiment_id and experiment_id.startswith("EXP-561-P03-"), experiment_id
+    assert page.locator("#slf-tactical-lab-panel").get_attribute("data-population-version") == "slf_tactical_lab_561_p03"
     assert "blind challenger" in page.locator("#slf-tactical-lab-status").text_content()
     assert "расстановка игроков не меняется" in page.locator("#slf-tactical-lab-detail").text_content()
 
@@ -342,7 +342,7 @@ def assert_owned_live(page: Page):
     assert record["snapshotKey"].startswith("match_snapshot|e2e-owned|")
     assert record["source"]["scriptVersion"] == EXPECTED_VERSION
     assert record["tacticalLab"]["assignment"]["experimentId"] == experiment_id
-    assert record["tacticalLab"]["populationVersion"] == "slf_tactical_lab_561_p02"
+    assert record["tacticalLab"]["populationVersion"] == "slf_tactical_lab_561_p03"
 
     page.evaluate("""
       const card = document.querySelector('.control_lineup[data-player="p-lw"]');
@@ -392,9 +392,9 @@ def assert_owned_live(page: Page):
     lab_state = page.evaluate(
         "JSON.parse(localStorage.getItem('slf_manual_match_state_v2:e2e-owned') || '{}').tacticalLab"
     )
-    assert lab_state["populationVersion"] == "slf_tactical_lab_561_p02"
+    assert lab_state["populationVersion"] == "slf_tactical_lab_561_p03"
     assert lab_state["assignment"]["experimentId"] == experiment_id
-    assert lab_state["assignment"]["populationVersion"] == "slf_tactical_lab_561_p02"
+    assert lab_state["assignment"]["populationVersion"] == "slf_tactical_lab_561_p03"
     assert lab_state["activation"]["status"] == "active"
     assert lab_state["activation"]["startedAtMinute"] is not None
     assert lab_state["activation"]["entryContext"]["productionRecommendation"] is not None
@@ -412,7 +412,7 @@ def assert_owned_live(page: Page):
     assert lab_snapshot_records, lab_snapshot_records
     assert len({item["snapshotKey"] for item in lab_snapshot_records}) == 1, lab_snapshot_records
     assert all(item["tacticalLabEvent"]["experimentId"] == experiment_id for item in lab_snapshot_records)
-    assert all(item["tacticalLabEvent"]["populationVersion"] == "slf_tactical_lab_561_p02" for item in lab_snapshot_records)
+    assert all(item["tacticalLabEvent"]["populationVersion"] == "slf_tactical_lab_561_p03" for item in lab_snapshot_records)
     assert all(item["tacticalLabEvent"]["extra"]["applicationScope"] == "tactical_controls_only" for item in lab_snapshot_records)
     assert "tactical_lab_activation" in lab_snapshot_records[0]["snapshotKey"]
 

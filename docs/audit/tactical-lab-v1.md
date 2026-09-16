@@ -25,18 +25,26 @@ There is no background experimental auto-apply and no Tactical Lab polling or mo
 
 Tactical Lab v1 permits one successful experimental activation per match. A control application that cannot be verified against the native page controls is reported as a failure and does not count as activation. After a successful experiment exits, the embedded Lab row records the tested interval instead of offering a second activation. A new challenger is assigned in the next match.
 
-## Population P02
+## Population P03 validation
 
-`slf_tactical_lab_561_p02` contains 64 deterministic immutable controls-only genomes:
+`slf_tactical_lab_561_p03` is a targeted validation population built from exact repeats of six P02 genomes. It does not mutate the selected controls and does not alter the 11 production presets.
 
-- 16 mutations around normalized current production tactics;
-- 16 orthogonal combinations intended to cover distant parameter regions;
-- 16 deterministic pseudo-random combinations;
-- 16 extreme combinations across the valid native control boundaries.
+The deterministic assignment weights are:
 
-P02 supersedes `slf_tactical_lab_561_p01`. P01 could generate values outside the current FM2026 native control domains and coupled the experiment identity/application to formation changes. Existing P01 telemetry remains historical evidence; an in-progress P01 assignment may be replaced by the deterministic P02 assignment for that match.
+- 35% exact repeat of `EXP-561-P02-0012`;
+- 35% exact repeat of `EXP-561-P02-0018`;
+- 10% exact replay of `EXP-561-P02-0040`;
+- 10% exact replay of `EXP-561-P02-0058`;
+- 5% negative-control repeat of `EXP-561-P02-0011`;
+- 5% negative-control repeat of `EXP-561-P02-0055`.
 
-P02 control domains are restricted to values that exist in the current FM2026 tactic UI:
+P03 uses six immutable experiment IDs, `EXP-561-P03-0001..0006`. Each P03 genome records the exact P02 experiment it repeats as `parentExperimentId`; the tactical controls and genome fingerprint remain the same as that parent.
+
+The purpose of P03 is repeat validation. P02 already provided broad exploration across production mutations, orthogonal combinations, deterministic pseudo-random combinations and extremes. P03 deliberately spends less match traffic on new random search and more on checking whether the strongest and weakest P02 signals repeat under new real-match contexts.
+
+P03 supersedes P02 for **new assignments only**. An existing P02 assignment stored for an already opened match is preserved across reload and remains testable/closable as P02; it is not silently rerolled into P03. P01 and other unsupported older assignments may still be superseded.
+
+P03 control domains remain restricted to values that exist in the current FM2026 tactic UI:
 
 - `def_line`, `press_line`, `def_width`: `1..3`;
 - `press_intense`: `1..5`;
@@ -47,11 +55,9 @@ P02 control domains are restricted to values that exist in the current FM2026 ta
 - `shot`: `1..3`;
 - `priority`: any subset of `left`, `center`, `right`.
 
-Production seeds are normalized into these domains before mutation so a seed cannot silently carry an unsupported legacy value into P02.
+The assignment is deterministic from match identity and population version. Reloading a match cannot reroll its assignment.
 
-The population is generated deterministically in the userscript. Experiment IDs and fingerprints are immutable for P02. Reloading a match cannot reroll its assignment while the population version remains P02.
-
-P02 is a data-collection population, not a claim that any experiment is good.
+P03 is a validation population, not a production promotion. Positive repeats remain experimental until a separate governed decision changes production tactics.
 
 ## Assignment
 
@@ -117,8 +123,8 @@ Tactical Lab v1 does not:
 - move players, apply an experimental formation or save a lineup;
 - let unsupported control values count as a successful activation;
 - automatically promote an experiment into production;
-- mutate or generate a next population from live results;
+- automatically mutate or generate a next population from live results;
 - infer that a football-plausible tactic is superior;
 - create a large experiment selector in the match UI.
 
-Evolution, confidence-aware ranking, engine-epoch drift detection, LAB/CHALLENGER/CHAMPION promotion and automatic next-generation creation are deferred to GitHub issue #252 after sufficient real evidence is collected.
+Evolution, confidence-aware ranking, engine-epoch drift detection, LAB/CHALLENGER/CHAMPION promotion and automatic next-generation creation remain deferred to GitHub issue #252 after sufficient repeat evidence is collected.
