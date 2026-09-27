@@ -216,6 +216,8 @@ def run_case(browser: Browser, base_url: str, name: str, path: str, api_mode: st
 
     try:
         page.goto(base_url + path, wait_until="domcontentloaded")
+        if name == "owned-live":
+            page.evaluate("document.querySelector('.score_board').innerHTML = '<div class=\"indarkbig\"><span>1</span><span>0</span></div>'")
         inject_exact_artifact(page)
         assertions(page)
         assert_clean_runtime(page, page_errors)
@@ -340,6 +342,8 @@ def assert_owned_live(page: Page):
     record = records[0]
     assert record["recordType"] == "match_snapshot"
     assert record["snapshotKey"].startswith("match_snapshot|e2e-owned|")
+    assert record["score"] == {"home": 1, "away": 0}
+    assert record["telemetryContext"]["scoreState"] == "winning"
     assert record["source"]["scriptVersion"] == EXPECTED_VERSION
     assert record["tacticalLab"]["assignment"]["experimentId"] == experiment_id
     assert record["tacticalLab"]["populationVersion"] == "slf_tactical_lab_561_p03"
@@ -365,6 +369,10 @@ def assert_owned_live(page: Page):
     assert save_payload["sub1"] == "p-sub1", save_payload
 
     add_tactical_lab_control_fixture_values(page)
+    page.locator("#slf-manual-recommendation-btn").click()
+    page.wait_for_function(
+        "() => document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
+    )
     page.wait_for_selector("#slf-parser-recommendation #slf-tactical-lab-panel")
     page.wait_for_function(
         "() => document.getElementById('slf-tactical-lab-apply') && !document.getElementById('slf-tactical-lab-apply').disabled"

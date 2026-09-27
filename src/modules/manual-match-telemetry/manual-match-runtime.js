@@ -205,10 +205,25 @@
         }).join('|');
     }
 
+    function exactProductionPresetId(snapshot) {
+        const currentFingerprint = tacticFingerprint(snapshot?.currentTactic);
+        if (!currentFingerprint || typeof BASE_PRESETS === 'undefined' || !BASE_PRESETS) return null;
+        const matches = Object.entries(BASE_PRESETS)
+            .filter(([name, tactic]) => name !== 'standard' && tactic && tacticFingerprint(tactic) === currentFingerprint)
+            .map(([name]) => String(name));
+        return matches.length === 1 ? matches[0] : null;
+    }
+
     function canonicalPresetId(snapshot, fallback = null) {
+        const exactProduction = exactProductionPresetId(snapshot);
+        if (exactProduction) return exactProduction;
+
+        const productionNames = typeof BASE_PRESETS !== 'undefined' && BASE_PRESETS
+            ? new Set(Object.keys(BASE_PRESETS).filter(name => name !== 'standard'))
+            : new Set();
         const observed = snapshot?.tacticTelemetry?.currentPreset;
-        if (observed) return String(observed);
-        if (fallback) return String(fallback);
+        if (observed && !productionNames.has(String(observed))) return String(observed);
+        if (fallback && !productionNames.has(String(fallback))) return String(fallback);
         return 'unknown';
     }
 
@@ -933,6 +948,7 @@
         schema: 'slf_tactical_telemetry_runtime_v2',
         stateSchema: STATE_SCHEMA,
         tacticFingerprint,
+        exactProductionPresetId,
         scoreState,
         telemetryContext,
         compactSnapshot,

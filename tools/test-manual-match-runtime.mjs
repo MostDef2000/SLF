@@ -59,6 +59,11 @@ function createHarness({
     localStorage, document,
     location: { pathname, href: `https://slf.fm${pathname}` },
     SLF_VERSION_INFO: { scriptVersion: '9.9.9-test' },
+    BASE_PRESETS: {
+      standard: { def_line: '2', press_line: '2', priority: [] },
+      Preset_A: { def_line: '1', press_line: '1', priority: [] },
+      Preset_B: { def_line: '2', press_line: '1', priority: [] }
+    },
     CONFIG: { COLLECTIONS: {
       MATCH_SNAPSHOTS: 'match_snapshots_v2', MATCH_RESULTS: 'match_results_v2',
       PRESET_EVENTS: 'preset_events_v2', PRESET_EFFECTS: 'preset_effects_v2'
@@ -162,6 +167,13 @@ function createHarness({
   const harness = createHarness();
   const snapshot = harness.context.SnapshotEngine.build();
   assert.equal(snapshot.tacticTelemetry.transitions[0].source, 'snapshot_observation');
+  assert.equal(harness.context.SnapshotEngine.telemetryV2.exactProductionPresetId(snapshot), 'Preset_A');
+  assert.equal(harness.context.SnapshotEngine.telemetryV2.telemetryContext(snapshot).presetId, 'Preset_A');
+  harness.setTactic({ def_line: '3', press_line: '1', priority: [] });
+  const unmatched = harness.context.SnapshotEngine.build();
+  assert.equal(harness.context.SnapshotEngine.telemetryV2.exactProductionPresetId(unmatched), null);
+  assert.equal(harness.context.SnapshotEngine.telemetryV2.telemetryContext(unmatched).presetId, 'unknown');
+  harness.setTactic({ def_line: '1', press_line: '1', priority: [] });
   await assert.rejects(
     harness.context.SnapshotEngine.sendMatchResult({ status: 'live' }),
     error => error?.kind === 'invalid_match_state'

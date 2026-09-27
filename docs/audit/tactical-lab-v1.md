@@ -113,6 +113,20 @@ Failed activation/exit lifecycle writes are retained in a small bounded per-matc
 
 The existing manual-match storage schema name is not migrated by Tactical Lab v1. `tacticalLab` is an additive field in that existing state, and the runtime preserves that field when normal manual-match persistence runs.
 
+## Data-quality linkage hardening
+
+The telemetry/export path now treats evidence quality as a first-class output rather than silently collapsing missing information.
+
+- Live/final score parsing accepts the legacy score cells and a conservative score-board-only structural fallback. Empty or malformed score cells remain unavailable; they are not converted to synthetic zeroes.
+- Tactical phase telemetry may attribute one of the eleven active production presets only when the observed full tactical-control fingerprint exactly matches that preset. There is no fuzzy or nearest-preset matching.
+- Tactical Lab derived reports preserve legacy `exposureMinutes` and also publish `exposureWallClockSeconds` from the recorded `elapsedWallClockMs` when available.
+- A finished result being attached to a Tactical Lab assignment is distinct from being resolvable into win/draw/loss. Derived reports expose linked, resolved and unresolved counts plus privacy-safe unresolved reasons.
+- Match-outcome/quality exports expose privacy-safe invalid-result reason counts instead of one opaque invalid-row total.
+
+Historical telemetry is not rewritten. These improvements primarily increase the value of records collected after the corresponding runtime/exporter code is active.
+
+Repository integration does not deploy the VPS exporter. Exporter deployment/rebuild and Drive synchronization remain separate operational actions.
+
 ## Safety boundary
 
 Tactical Lab v1 does not:

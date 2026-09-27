@@ -454,23 +454,33 @@ def build_events_summary(events: Sequence[Mapping[str, Any]], effects: Sequence[
     }
 
 
-def result_score(record: Mapping[str, Any]) -> dict[str, Any] | None:
+def result_score_diagnostic(record: Mapping[str, Any]) -> tuple[dict[str, Any] | None, str]:
     teams = record.get("teams") if isinstance(record.get("teams"), list) else []
+    if len(teams) < 2:
+        return None, "missing_teams"
     my_team = safe_int(record.get("myTeam"))
+    if my_team is None:
+        return None, "missing_my_team"
     score = record.get("score") if isinstance(record.get("score"), Mapping) else None
-    if len(teams) < 2 or my_team is None or not score:
-        return None
+    if not score:
+        return None, "missing_score"
     home = safe_int(score.get("home"))
     away = safe_int(score.get("away"))
     if home is None or away is None:
-        return None
+        return None, "invalid_score"
     home_id = safe_int(teams[0])
     away_id = safe_int(teams[1])
+    if home_id is None or away_id is None:
+        return None, "invalid_team_ids"
     if my_team == home_id:
-        return {"myGoals": home, "opponentGoals": away, "homeAway": "home"}
+        return {"myGoals": home, "opponentGoals": away, "homeAway": "home"}, "resolved"
     if my_team == away_id:
-        return {"myGoals": away, "opponentGoals": home, "homeAway": "away"}
-    return None
+        return {"myGoals": away, "opponentGoals": home, "homeAway": "away"}, "resolved"
+    return None, "owned_team_not_in_teams"
+
+
+def result_score(record: Mapping[str, Any]) -> dict[str, Any] | None:
+    return result_score_diagnostic(record)[0]
 
 
 def result_vs_expected(record: Mapping[str, Any]) -> float | None:
@@ -498,12 +508,18 @@ def build_match_outcomes_summary(
         game_id(row) for row in effects if is_phase_effect(row) and game_id(row)
     )
     latest_by_game: dict[str, Mapping[str, Any]] = {}
-    invalid_results = 0
+    invalid_result_reasons: collections.Counter[str] = collections.Counter()
+    valid_result_rows = 0
     for row in results:
         gid = game_id(row)
-        if not gid or result_score(row) is None:
-            invalid_results += 1
+        if not gid:
+            invalid_result_reasons["missing_game_id"] += 1
             continue
+        score, reason = result_score_diagnostic(row)
+        if score is None:
+            invalid_result_reasons[reason] += 1
+            continue
+        valid_result_rows += 1
         current = latest_by_game.get(gid)
         if current is None or (record_datetime(row) or dt.datetime.min.replace(tzinfo=dt.timezone.utc)) >= (record_datetime(current) or dt.datetime.min.replace(tzinfo=dt.timezone.utc)):
             latest_by_game[gid] = row
@@ -583,9 +599,13 @@ def build_match_outcomes_summary(
         },
         "counts": {
             "sourceRows": len(results),
+            "validRows": valid_result_rows,
             "validUniqueMatches": len(rows),
-            "invalidOrUnjoinableRows": invalid_results,
+            "invalidRows": sum(invalid_result_reasons.values()),
+            "duplicateValidRows": max(0, valid_result_rows - len(rows)),
+            "invalidOrUnjoinableRows": max(0, len(results) - len(rows)),
         },
+        "invalidResultReasons": dict(sorted(invalid_result_reasons.items())),
         "overall": aggregate(rows),
         "home": aggregate(home),
         "away": aggregate(away),
@@ -612,7 +632,21 @@ def build_telemetry_quality_summary(
     phase_start_ids = {str(row.get("phaseId") or "") for row in phase_events if row.get("phaseId")}
     phase_effect_ids = {str(row.get("phaseId") or "") for row in phase_effects if row.get("phaseId")}
     snapshot_games = {game_id(row) for row in snapshots if game_id(row)}
-    result_games = {game_id(row) for row in results if game_id(row) and result_score(row) is not None}
+    result_invalid_reasons: collections.Counter[str] = collections.Counter()
+    valid_result_rows = 0
+    valid_result_game_rows: list[str] = []
+    for row in results:
+        gid = game_id(row)
+        if not gid:
+            result_invalid_reasons["missing_game_id"] += 1
+            continue
+        score, reason = result_score_diagnostic(row)
+        if score is None:
+            result_invalid_reasons[reason] += 1
+            continue
+        valid_result_rows += 1
+        valid_result_game_rows.append(gid)
+    result_games = set(valid_result_game_rows)
     analysis_events, analysis_effects, cohort = select_analysis_cohort(events, effects)
     tactical_rows = [*analysis_events, *analysis_effects]
 
@@ -640,6 +674,7 @@ def build_telemetry_quality_summary(
             "uniqueSnapshotGames": len(snapshot_games),
             "uniqueResultGames": len(result_games),
             "resultCoverageVsObservedGames": round(len(result_games & snapshot_games) / len(snapshot_games), 3) if snapshot_games else None,
+            "resultValidRowRate": round(valid_result_rows / len(results), 3) if results else None,
             "snapshotsPerObservedGame": snapshots_per_game,
             "knownPresetRate": coverage(tactical_rows, lambda row: preset_name(row) not in {"", "unknown", "manual_change"}),
             "knownScoreStateRate": coverage(analysis_effects, lambda row: score_state(row) in VALID_SCORE_STATES),
@@ -647,6 +682,13 @@ def build_telemetry_quality_summary(
             "generatorVersionCoverage": coverage(tactical_rows, lambda row: generator_version(row) != "unknown"),
             "phaseClosureRate": round(len(phase_start_ids & phase_effect_ids) / len(phase_start_ids), 3) if phase_start_ids else None,
             "eligiblePhaseRate": round(eligible_count / len(eligible), 3) if eligible else None,
+        },
+        "resultIntegrity": {
+            "validRows": valid_result_rows,
+            "validUniqueMatches": len(result_games),
+            "invalidRows": sum(result_invalid_reasons.values()),
+            "duplicateValidRows": max(0, valid_result_rows - len(result_games)),
+            "invalidReasons": dict(sorted(result_invalid_reasons.items())),
         },
         "phaseIntegrity": {
             "phaseStartRecords": len(phase_events),
