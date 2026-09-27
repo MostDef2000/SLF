@@ -321,6 +321,12 @@ def assert_owned_live(page: Page):
     )
     assert stored_custom_keys == ["Henta abuse"], stored_custom_keys
 
+    page.evaluate("document.querySelector('.score_board').innerHTML = '<div class=\"indarkbig\"><span>1</span><span>0</span></div>'")
+    assert page.evaluate("() => MatchStateParser.readScore()") == {"home": 1, "away": 0}
+    page.evaluate("document.querySelector('.score_board').innerHTML = '<div class=\"indarkbig\"><span></span><span></span></div>'")
+    assert page.evaluate("() => MatchStateParser.readScore()") is None
+    page.evaluate("document.querySelector('.score_board').innerHTML = '<div class=\"indarkbig\"><span>1</span><span>0</span></div>'")
+
     page.locator("#slf-manual-recommendation-btn").click()
     page.wait_for_function(
         "() => document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
