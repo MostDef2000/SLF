@@ -123,13 +123,34 @@
         },
 
         readScore() {
-            const scoreCells = [...document.querySelectorAll('.score_board .indarkbig div')];
+            const board = document.querySelector('.score_board');
+            if (!board) return null;
 
-            if (scoreCells.length >= 2) {
-                return {
-                    home: toNum(scoreCells[0].innerText.trim() || 0),
-                    away: toNum(scoreCells[1].innerText.trim() || 0)
-                };
+            const parseScoreValue = value => {
+                const text = String(value ?? '').trim();
+                if (!/^\d{1,2}$/.test(text)) return null;
+                const parsed = Number(text);
+                return Number.isFinite(parsed) ? parsed : null;
+            };
+
+            const legacyCells = [...board.querySelectorAll('.indarkbig div')];
+            if (legacyCells.length >= 2) {
+                const home = parseScoreValue(legacyCells[0].textContent);
+                const away = parseScoreValue(legacyCells[1].textContent);
+                if (home != null && away != null) return { home, away };
+            }
+
+            const scoreRoot = board.querySelector('.indarkbig') || board;
+            const childScores = [...scoreRoot.children]
+                .map(node => parseScoreValue(node.textContent))
+                .filter(value => value != null);
+            if (childScores.length === 2) {
+                return { home: childScores[0], away: childScores[1] };
+            }
+
+            const textScores = String(scoreRoot.textContent || '').match(/\b\d{1,2}\b/g) || [];
+            if (textScores.length === 2) {
+                return { home: Number(textScores[0]), away: Number(textScores[1]) };
             }
 
             return null;
