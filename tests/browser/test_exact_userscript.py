@@ -216,6 +216,8 @@ def run_case(browser: Browser, base_url: str, name: str, path: str, api_mode: st
 
     try:
         page.goto(base_url + path, wait_until="domcontentloaded")
+        if name == "owned-live":
+            page.evaluate("document.querySelector('.score_board').innerHTML = '<div class=\"indarkbig\"><span>1</span><span>0</span></div>'")
         inject_exact_artifact(page)
         assertions(page)
         assert_clean_runtime(page, page_errors)
@@ -320,8 +322,6 @@ def assert_owned_live(page: Page):
         "Object.keys(JSON.parse(localStorage.getItem('slf_custom_presets') || '{}')).sort()"
     )
     assert stored_custom_keys == ["Henta abuse"], stored_custom_keys
-
-    page.evaluate("document.querySelector('.score_board').innerHTML = '<div class=\"indarkbig\"><span>1</span><span>0</span></div>'")
 
     page.locator("#slf-manual-recommendation-btn").click()
     page.wait_for_function(
