@@ -1513,6 +1513,7 @@
           {
             "file": "src/core/config.js",
             "symbols": [
+              "BASE_PRESETS",
               "CONFIG",
               "STATE",
               "debugWarn"
