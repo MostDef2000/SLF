@@ -83,6 +83,7 @@ completed = {
     "fromMinute": 48,
     "toMinute": 67,
     "durationMinutes": 19,
+    "elapsedWallClockMs": 90500,
     "exitReason": "user_selected_production",
     "entryContext": entry,
     "exitContext": exit_context,
@@ -107,6 +108,7 @@ snapshots = [
     snapshot("s1-duplicate-http", "game-secret-1", experiment, assignment, "activation", entry, {"origin": "extreme"}),
     snapshot("s2", "game-secret-1", experiment, assignment, "exit", exit_context, {
         "durationMinutes": 19,
+        "elapsedWallClockMs": 90500,
         "exitReason": "user_selected_production",
         "delta": {"myXG": 0.7, "oppXG": 0.2, "myShots": 4, "oppShots": 1},
         "entryContext": entry,
@@ -136,8 +138,51 @@ assert row["experimentId"] == experiment
 assert row["entryContext"]["previousPreset"]["Arteta_Control433_bal3"] == 1
 assert row["entryContext"]["minuteBuckets"]["45-59"] == 1
 assert row["phaseEffect"]["averageDelta"]["myXG"] == 0.7
+assert row["exposureMinutes"]["total"] == 19
+assert row["exposureWallClockSeconds"]["total"] == 90.5
+assert row["exposureWallClockSeconds"]["samples"] == 1
+assert row["outcomeAssociation"]["linkedFinishedResults"] == 1
+assert row["outcomeAssociation"]["resolvedFinishedResults"] == 1
 assert row["outcomeAssociation"]["wins"] == 1
 assert row["outcomeAssociation"]["pointsPerMatch"] == 3
+assert quality["coverage"]["finishedOutcomeResolution"] == 1
+
+broken_assignment = "tactical_lab_assignment|game-secret-2|EXP-561-P03-0001"
+broken_state = {
+    "schema": "slf_tactical_lab_match_v1",
+    "populationVersion": "slf_tactical_lab_561_p03",
+    "assignment": {
+        "assignmentId": broken_assignment,
+        "experimentId": "EXP-561-P03-0001",
+        "populationVersion": "slf_tactical_lab_561_p03",
+        "genomeFingerprint": "tlab-broken-result",
+    },
+    "activation": {"entryContext": entry},
+    "completed": {
+        "durationMinutes": 0,
+        "elapsedWallClockMs": 12000,
+        "entryContext": entry,
+        "exitContext": exit_context,
+        "delta": {"myXG": 0.1, "oppXG": 0.2},
+    },
+}
+broken_snapshots = [snapshot("broken-s0", "game-secret-2", "EXP-561-P03-0001", broken_assignment, state=broken_state)]
+broken_results = [{
+    "resultKey": "broken-result-secret",
+    "gameId": "game-secret-2",
+    "status": "finished",
+    "teams": [1, 2],
+    "myTeam": 1,
+    "score": None,
+    "tacticalLab": broken_state,
+}]
+broken_summary, broken_quality = lab.build_outputs(broken_snapshots, broken_results)
+broken_outcome = broken_summary["experiments"][0]["outcomeAssociation"]
+assert broken_outcome["linkedFinishedResults"] == 1
+assert broken_outcome["resolvedFinishedResults"] == 0
+assert broken_outcome["unresolvedResultReasons"] == {"missing_or_invalid_score": 1}
+assert broken_quality["counts"]["unresolvedResultReasons"] == {"missing_or_invalid_score": 1}
+assert broken_quality["coverage"]["finishedOutcomeResolution"] == 0
 
 serialized = json.dumps({"summary": summary, "quality": quality}, ensure_ascii=False)
 for secret in ("game-secret-1", assignment, "result-secret", "event-activation"):
