@@ -116,22 +116,39 @@ def lifecycle(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return event
 
 
-def owned_result(record: Dict[str, Any]) -> Optional[str]:
+def owned_result_diagnostic(record: Dict[str, Any]) -> Tuple[Optional[str], str]:
+    if not isinstance(record, dict) or not record:
+        return None, "missing_result_record"
     score = record.get("score") if isinstance(record.get("score"), dict) else {}
     teams = record.get("teams") if isinstance(record.get("teams"), list) else []
     my_team = record.get("myTeam")
-    if len(teams) < 2 or my_team is None:
-        return None
+    if len(teams) < 2:
+        return None, "missing_teams"
+    if my_team is None:
+        return None, "missing_my_team"
     home = integer(score.get("home"))
     away = integer(score.get("away"))
     if home is None or away is None:
-        return None
+        return None, "missing_or_invalid_score"
     try:
-        is_home = int(teams[0]) == int(my_team)
+        home_team = int(teams[0])
+        away_team = int(teams[1])
+        owned_team = int(my_team)
     except (TypeError, ValueError):
-        is_home = str(teams[0]) == str(my_team)
-    mine, theirs = (home, away) if is_home else (away, home)
-    return "win" if mine > theirs else "loss" if mine < theirs else "draw"
+        home_team = str(teams[0])
+        away_team = str(teams[1])
+        owned_team = str(my_team)
+    if owned_team == home_team:
+        mine, theirs = home, away
+    elif owned_team == away_team:
+        mine, theirs = away, home
+    else:
+        return None, "owned_team_not_in_teams"
+    return ("win" if mine > theirs else "loss" if mine < theirs else "draw"), "resolved"
+
+
+def owned_result(record: Dict[str, Any]) -> Optional[str]:
+    return owned_result_diagnostic(record)[0]
 
 
 def safe_previous(context: Dict[str, Any]) -> str:
@@ -258,20 +275,28 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
         duration = exit_extra.get("durationMinutes")
         if duration is None and completed_state:
             duration = completed_state.get("durationMinutes")
+        elapsed_ms = exit_extra.get("elapsedWallClockMs")
+        if elapsed_ms is None and completed_state:
+            elapsed_ms = completed_state.get("elapsedWallClockMs")
+        elapsed_ms_number = number(elapsed_ms)
+        wall_clock_seconds = rounded(max(0.0, elapsed_ms_number) / 1000.0, 3) if elapsed_ms_number is not None else None
         delta = exit_extra.get("delta") if isinstance(exit_extra.get("delta"), dict) else None
         if delta is None and completed_state and isinstance(completed_state.get("delta"), dict):
             delta = completed_state.get("delta")
 
-        result = owned_result(result_by_assignment.get(assignment_id, {})) if assignment_id in result_by_assignment else None
+        result_record = result_by_assignment.get(assignment_id) if assignment_id in result_by_assignment else None
+        result, result_reason = owned_result_diagnostic(result_record or {})
         buckets[experiment_id].append({
             "activated": bool(entry or activation_state or completed_state),
             "completed": bool(exit_context or completed_state),
             "entry": entry,
             "exit": exit_context,
             "duration": duration,
+            "wallClockSeconds": wall_clock_seconds,
             "delta": delta,
             "result": result,
-            "resultLinked": assignment_id in result_by_assignment,
+            "resultLinked": result_record is not None,
+            "resultReason": result_reason,
             "populationVersion": population,
         })
 
@@ -283,8 +308,14 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
         entry_rows = [row["entry"] for row in activated if isinstance(row.get("entry"), dict)]
         exit_rows = [row["exit"] for row in completed if isinstance(row.get("exit"), dict)]
         deltas = [row["delta"] for row in completed if isinstance(row.get("delta"), dict)]
-        result_rows = [row["result"] for row in activated if row.get("result") in {"win", "draw", "loss"}]
+        linked_result_rows = [row for row in activated if row.get("resultLinked")]
+        result_rows = [row["result"] for row in linked_result_rows if row.get("result") in {"win", "draw", "loss"}]
         result_counts = Counter(result_rows)
+        unresolved_result_reasons = Counter(
+            str(row.get("resultReason") or "unknown")
+            for row in linked_result_rows
+            if row.get("result") not in {"win", "draw", "loss"}
+        )
         numeric_delta_keys = sorted({key for delta in deltas for key, value in delta.items() if number(value) is not None})
         avg_delta = {key: average(delta.get(key) for delta in deltas) for key in numeric_delta_keys}
         avg_delta = {key: value for key, value in avg_delta.items() if value is not None}
@@ -302,6 +333,12 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
                 "average": average(row.get("duration") for row in completed),
                 "median": median(row.get("duration") for row in completed),
             },
+            "exposureWallClockSeconds": {
+                "total": rounded(sum(number(row.get("wallClockSeconds")) or 0 for row in completed), 3),
+                "average": average(row.get("wallClockSeconds") for row in completed),
+                "median": median(row.get("wallClockSeconds") for row in completed),
+                "samples": sum(number(row.get("wallClockSeconds")) is not None for row in completed),
+            },
             "entryContext": {
                 "minuteBuckets": counter_dict(minute_bucket(row.get("minute")) for row in entry_rows),
                 "previousPreset": counter_dict(safe_previous(row) for row in entry_rows),
@@ -314,7 +351,10 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
                 "averageDelta": avg_delta,
             },
             "outcomeAssociation": {
-                "linkedFinishedResults": len(result_rows),
+                "linkedFinishedResults": len(linked_result_rows),
+                "resolvedFinishedResults": len(result_rows),
+                "unresolvedFinishedResults": len(linked_result_rows) - len(result_rows),
+                "unresolvedResultReasons": dict(sorted(unresolved_result_reasons.items())),
                 "wins": result_counts["win"],
                 "draws": result_counts["draw"],
                 "losses": result_counts["loss"],
@@ -331,6 +371,13 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
     activated_count = sum(1 for rows in buckets.values() for row in rows if row["activated"])
     completed_count = sum(1 for rows in buckets.values() for row in rows if row["completed"])
     linked_count = sum(1 for rows in buckets.values() for row in rows if row["activated"] and row["resultLinked"])
+    resolved_count = sum(1 for rows in buckets.values() for row in rows if row["activated"] and row.get("result") in {"win", "draw", "loss"})
+    unresolved_reasons = Counter(
+        str(row.get("resultReason") or "unknown")
+        for rows in buckets.values()
+        for row in rows
+        if row["activated"] and row["resultLinked"] and row.get("result") not in {"win", "draw", "loss"}
+    )
     entry_contexts = [row["entry"] for rows in buckets.values() for row in rows if row["activated"] and isinstance(row.get("entry"), dict)]
     exit_contexts = [row["exit"] for rows in buckets.values() for row in rows if row["completed"] and isinstance(row.get("exit"), dict)]
     entry_complete = sum(completeness(row, ("minute", "scoreState", "homeAway", "strengthBucket", "previous.tacticFingerprint", "productionRecommendation.presetId")) for row in entry_contexts)
@@ -350,6 +397,9 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
             "experimentsAssigned": len(per_experiment),
             "experimentsActivated": sum(1 for row in per_experiment if row["activations"] > 0),
             "linkedFinishedResults": linked_count,
+            "resolvedFinishedResults": resolved_count,
+            "unresolvedFinishedResults": linked_count - resolved_count,
+            "unresolvedResultReasons": dict(sorted(unresolved_reasons.items())),
         },
         "experiments": per_experiment,
         "privacy": {
@@ -371,11 +421,15 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
             "exitLifecycleEvents": evidence["exitEventCount"],
             "duplicateLifecycleEventsDropped": evidence["duplicateLifecycleDropped"],
             "linkedFinishedResults": linked_count,
+            "resolvedFinishedResults": resolved_count,
+            "unresolvedFinishedResults": linked_count - resolved_count,
+            "unresolvedResultReasons": dict(sorted(unresolved_reasons.items())),
         },
         "coverage": {
             "activation": ratio(activated_count, assignment_count),
             "completedPhase": ratio(completed_count, activated_count),
             "finishedResultLinkage": ratio(linked_count, activated_count),
+            "finishedOutcomeResolution": ratio(resolved_count, linked_count),
             "entryContextComplete": ratio(entry_complete, len(entry_contexts)),
             "exitContextComplete": ratio(exit_complete, len(exit_contexts)),
             "knownPreviousTactic": ratio(len(entry_contexts) - unknown_previous, len(entry_contexts)),
