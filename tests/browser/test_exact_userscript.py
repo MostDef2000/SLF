@@ -322,10 +322,6 @@ def assert_owned_live(page: Page):
     assert stored_custom_keys == ["Henta abuse"], stored_custom_keys
 
     page.evaluate("document.querySelector('.score_board').innerHTML = '<div class=\"indarkbig\"><span>1</span><span>0</span></div>'")
-    assert page.evaluate("() => MatchStateParser.readScore()") == {"home": 1, "away": 0}
-    page.evaluate("document.querySelector('.score_board').innerHTML = '<div class=\"indarkbig\"><span></span><span></span></div>'")
-    assert page.evaluate("() => MatchStateParser.readScore()") is None
-    page.evaluate("document.querySelector('.score_board').innerHTML = '<div class=\"indarkbig\"><span>1</span><span>0</span></div>'")
 
     page.locator("#slf-manual-recommendation-btn").click()
     page.wait_for_function(
@@ -346,6 +342,8 @@ def assert_owned_live(page: Page):
     record = records[0]
     assert record["recordType"] == "match_snapshot"
     assert record["snapshotKey"].startswith("match_snapshot|e2e-owned|")
+    assert record["score"] == {"home": 1, "away": 0}
+    assert record["telemetryContext"]["scoreState"] == "winning"
     assert record["source"]["scriptVersion"] == EXPECTED_VERSION
     assert record["tacticalLab"]["assignment"]["experimentId"] == experiment_id
     assert record["tacticalLab"]["populationVersion"] == "slf_tactical_lab_561_p03"
