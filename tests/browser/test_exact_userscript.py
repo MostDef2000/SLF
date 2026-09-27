@@ -369,6 +369,10 @@ def assert_owned_live(page: Page):
     assert save_payload["sub1"] == "p-sub1", save_payload
 
     add_tactical_lab_control_fixture_values(page)
+    page.locator("#slf-manual-recommendation-btn").click()
+    page.wait_for_function(
+        "() => document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
+    )
     page.wait_for_selector("#slf-parser-recommendation #slf-tactical-lab-panel")
     page.wait_for_function(
         "() => document.getElementById('slf-tactical-lab-apply') && !document.getElementById('slf-tactical-lab-apply').disabled"
