@@ -480,15 +480,7 @@
           "MatchTimingModel",
           "MatchStateParser"
         ],
-        "requires": [
-          {
-            "file": "src/core/config.js",
-            "symbols": [
-              "toNum"
-            ],
-            "phase": "runtime"
-          }
-        ],
+        "requires": [],
         "hostCapabilities": [
           "URLSearchParams",
           "document",
