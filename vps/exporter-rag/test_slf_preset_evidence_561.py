@@ -198,6 +198,36 @@ class TelemetryAnalyticsTest(unittest.TestCase):
             self.assertNotIn("gameId", row)
             self.assertRegex(row["matchRef"], r"^[0-9a-f]{12}$")
 
+    def test_match_outcome_diagnostics_explain_invalid_rows(self):
+        missing_score = result("g-missing-score", score=(1, 0))
+        missing_score["score"] = None
+        missing_team = result("g-missing-team", score=(1, 0))
+        missing_team["myTeam"] = None
+        results = [
+            result("g-valid", score=(2, 1)),
+            missing_score,
+            missing_team,
+        ]
+        summary = module.build_match_outcomes_summary(results, [])
+        self.assertEqual(summary["counts"]["sourceRows"], 3)
+        self.assertEqual(summary["counts"]["validRows"], 1)
+        self.assertEqual(summary["counts"]["validUniqueMatches"], 1)
+        self.assertEqual(summary["counts"]["invalidRows"], 2)
+        self.assertEqual(summary["counts"]["invalidOrUnjoinableRows"], 2)
+        self.assertEqual(summary["invalidResultReasons"], {
+            "missing_my_team": 1,
+            "missing_score": 1,
+        })
+
+        quality = module.build_telemetry_quality_summary([], results, [], [])
+        self.assertEqual(quality["resultIntegrity"]["validRows"], 1)
+        self.assertEqual(quality["resultIntegrity"]["invalidRows"], 2)
+        self.assertEqual(quality["resultIntegrity"]["invalidReasons"], {
+            "missing_my_team": 1,
+            "missing_score": 1,
+        })
+        self.assertEqual(quality["coverage"]["resultValidRowRate"], 0.333)
+
     def test_quality_report_measures_phase_closure_provenance_and_unknowns(self):
         events = [phase_event("g1", "p1"), phase_event("g2", "p2")]
         effects = [phase_effect("g1", "p1"), phase_effect("g3", "orphan")]
@@ -205,6 +235,8 @@ class TelemetryAnalyticsTest(unittest.TestCase):
         results = [result("g1", score=(1, 0))]
         quality = module.build_telemetry_quality_summary(snapshots, results, events, effects)
         self.assertEqual(quality["coverage"]["resultCoverageVsObservedGames"], 0.5)
+        self.assertEqual(quality["coverage"]["resultValidRowRate"], 1.0)
+        self.assertEqual(quality["resultIntegrity"]["invalidRows"], 0)
         self.assertEqual(quality["coverage"]["phaseClosureRate"], 0.5)
         self.assertEqual(quality["phaseIntegrity"]["orphanPhaseEffects"], 1)
         self.assertEqual(quality["phaseIntegrity"]["unclosedPhaseStarts"], 1)
