@@ -173,53 +173,67 @@
     }
 
     function fetchCanonicalApiStatus() {
-        const specs = [
-            { key: 'snapshots', label: 'Snapshots v2', collection: CONFIG.COLLECTIONS.MATCH_SNAPSHOTS },
-            { key: 'results', label: 'Match results v2', collection: CONFIG.COLLECTIONS.MATCH_RESULTS },
-            { key: 'events', label: 'Preset events v2', collection: CONFIG.COLLECTIONS.PRESET_EVENTS },
-            { key: 'effects', label: 'Preset effects v2', collection: CONFIG.COLLECTIONS.PRESET_EFFECTS },
-            { key: 'players', label: 'Player observations', collection: CONFIG.COLLECTIONS.PLAYER_OBSERVATIONS },
-            { key: 'transfers', label: 'Transfer history', collection: CONFIG.COLLECTIONS.TRANSFER_HISTORY },
-            { key: 'tactics', label: 'Tactics', collection: CONFIG.COLLECTIONS.TACTICS }
-        ];
+        const keyToCollection = {
+            snapshots: CONFIG.COLLECTIONS.MATCH_SNAPSHOTS,
+            results: CONFIG.COLLECTIONS.MATCH_RESULTS,
+            events: CONFIG.COLLECTIONS.PRESET_EVENTS,
+            effects: CONFIG.COLLECTIONS.PRESET_EFFECTS,
+            players: CONFIG.COLLECTIONS.PLAYER_OBSERVATIONS,
+            transfers: CONFIG.COLLECTIONS.TRANSFER_HISTORY,
+            tactics: CONFIG.COLLECTIONS.TACTICS
+        };
 
-        return Promise.all(specs.map(spec => {
-            return Api.getPromise(spec.collection)
-                .then(({ data }) => {
-                    const rows = normalizeServerRows(data);
-                    return Object.assign({}, spec, {
-                        ok: true,
-                        count: rows.length,
-                        rows,
-                        payloadType: payloadType(data)
-                    });
-                })
-                .catch(error => Object.assign({}, spec, {
-                    ok: false,
-                    count: 0,
-                    rows: [],
-                    error
-                }));
-        })).then(items => {
-            const collections = {};
-            const gameIds = new Set();
+        return Api.getPromise('analysis')
+            .then(({ data }) => {
+                const health = (data && data.collections) || {};
+                const collections = {};
+                let degraded = false;
 
-            items.forEach(item => {
-                collections[item.key] = item;
-                if (['snapshots', 'results', 'events', 'effects'].includes(item.key)) {
-                    item.rows.forEach(row => {
-                        if (row && row.gameId) gameIds.add(String(row.gameId));
-                    });
-                }
+                Object.keys(keyToCollection).forEach(key => {
+                    const name = keyToCollection[key];
+                    const entry = health[name];
+                    if (!entry || entry.exists === false) {
+                        collections[key] = {
+                            ok: false,
+                            missing: !entry,
+                            exists: entry ? entry.exists : false,
+                            valid: entry ? entry.valid : false,
+                            count: 0
+                        };
+                        degraded = true;
+                        return;
+                    }
+                    const ok = entry.valid !== false;
+                    if (!ok) degraded = true;
+                    collections[key] = {
+                        ok,
+                        count: Number.isFinite(entry.count) ? entry.count : 0,
+                        exists: entry.exists,
+                        valid: entry.valid,
+                        corrupt: entry.valid === false,
+                        type: entry.type,
+                        fileSize: entry.fileSize,
+                        duplicateKeys: entry.duplicateKeys,
+                        missingUniqueKeys: entry.missingUniqueKeys
+                    };
+                });
+
+                return {
+                    generatedAt: new Date().toISOString(),
+                    schema: 'slf_canonical_api_status_v2',
+                    status: (data && data.status) ? data.status : (degraded ? 'degraded' : 'ok'),
+                    games: (data && Number.isFinite(data.games)) ? data.games : 0,
+                    collections
+                };
+            })
+            .catch(error => {
+                // Surface the failure instead of masking it as zeros.
+                const wrapped = new Error(`SLF API analysis request failed: ${error && error.message ? error.message : 'unknown'}`);
+                wrapped.name = 'SLFApiStatusError';
+                wrapped.kind = error && error.kind ? error.kind : 'network';
+                wrapped.cause = error;
+                throw wrapped;
             });
-
-            return {
-                generatedAt: new Date().toISOString(),
-                schema: 'slf_canonical_api_status_v1',
-                games: gameIds.size,
-                collections
-            };
-        });
     }
 
     function legacyCollectionNames() {

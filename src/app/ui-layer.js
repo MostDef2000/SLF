@@ -78,14 +78,23 @@
                 fetchCanonicalApiStatus()
                     .then(status => {
                         const c = status.collections || {};
+                        const fmt = key => {
+                            const col = c[key];
+                            if (!col) return '?';
+                            if (col.missing) return 'missing';
+                            if (col.corrupt) return 'corrupt';
+                            if (!col.ok) return 'error';
+                            return col.count;
+                        };
+                        const prefix = status.status === 'ok' ? 'API OK v2' : 'API WARN';
                         this.addParserLog(
-                            `API OK v2 | games:${status.games} snapshots:${c.snapshots?.count ?? 0} results:${c.results?.count ?? 0} events:${c.events?.count ?? 0} effects:${c.effects?.count ?? 0} players:${c.players?.count ?? 0}`
+                            `${prefix} | games:${status.games} snapshots:${fmt('snapshots')} results:${fmt('results')} events:${fmt('events')} effects:${fmt('effects')} players:${fmt('players')} transfers:${fmt('transfers')} tactics:${fmt('tactics')}`
                         );
 
                         debugLog('[SLF API v2 canonical]', status);
                     })
                     .catch(error => {
-                        this.addParserLog(`API v2 error: ${error?.kind || 'unknown'}`);
+                        this.addParserLog(`API ERROR: ${error?.kind || 'unknown'}`);
                         console.warn('[SLF API v2 canonical error]', error);
                     });
             };
