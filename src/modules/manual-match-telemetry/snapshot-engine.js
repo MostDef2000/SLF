@@ -376,7 +376,25 @@ const SnapshotEngine = {
         );
     },
 
+    isValidFinishedScore(score) {
+        if (!score || typeof score !== 'object' || Array.isArray(score)) return false;
+        const isNumericScore = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+        return isNumericScore(score.home) && isNumericScore(score.away);
+    },
+
     sendMatchResult(snapshot) {
+        // QR-010: a finished match result must carry a resolvable score.  The
+        // server used to accept a null score verbatim, so a client-side
+        // readScore() failure silently lost the finished outcome.  Reject at
+        // entry, before dedup/pending bookkeeping, so the invalid key is not
+        // cached in _sentMatchResultKeys.
+        if (snapshot && snapshot.status === 'finished' && !this.isValidFinishedScore(snapshot.score)) {
+            return Promise.reject(Object.assign(new Error('Finished match result requires a valid score'), {
+                kind: 'missing_score',
+                gameId: snapshot.gameId || null
+            }));
+        }
+
         const result = Object.assign({}, snapshot, {
             recordType: 'match_result',
             resultType: 'finished_match',

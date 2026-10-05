@@ -189,3 +189,25 @@ The Production Advisor remains manual-only (`autoApply: false`). Progression gua
 ### Unchanged boundaries
 
 No tactical slider/formation value, no P03 population or weights, no Tactical Lab v2+/survivor selection/evolution/champion-challenger promotion/P04, no VPS/API/storage/schema, no historical telemetry rewrite and no manual generated-artifact edit are part of v8.
+
+## Finished-result score contract — issue #309 (2026-10-05)
+
+Finished results were being accepted and persisted with `score: null`, so `match_results_v2` accumulated rows that the exporter must later report as `missing_or_invalid_score`.
+
+### Root cause
+
+- `MatchStateParser.readScore()` is fail-closed: unrecognized or ambiguous score markup returns `null` rather than guessing a value.
+- `snapshot-engine.js#sendMatchResult` sent the whole snapshot plus `resultKey`; `buildResultKey`/`getScoreKey` collapse an invalid score to `?:?`, so a finished result with `score: null` still carried a unique key.
+- `vps/api/server.py` append mode persisted payloads verbatim and validated only the unique key, so a finished result with `score: null` returned 2xx and the UI showed `Финальный результат отправлен` on HTTP success.
+- Prior audit (2026-10-04 export): 329 `match_results_v2` rows, only 44 valid outcomes; 285 report `missing_score`; all 85 linked Tactical Lab results unresolved. The earlier follow-up only widened `readScore()` to the FM2026 `.fm-score` markup; it added no contract.
+
+### New contract (issue #309)
+
+- Client: when `snapshot.status === 'finished'` and the score is not a plain object with numeric (non-bool, finite) `home`/`away` `>= 0`, `sendMatchResult` rejects at entry with `Error.kind = 'missing_score'` and neither posts nor caches the result key. The UI logs `Ошибка отправки результата: missing_score`.
+- Server: append mode for collection `match_results_v2` rejects the whole request with HTTP 422 and `{"error": "Finished match result requires a valid score", "kind": "invalid_finished_score", "collection", "invalidFinishedScore", "received"}` before any persistence. `score` must be a dict with integer `home`/`away` in `0..99` (bool excluded). Only finished `match_results_v2` records are subject to the contract; `match_snapshots_v2` and non-finished match results are unchanged.
+- Decision tag: `QR-010`.
+
+### Legacy data boundary
+
+- Historical `match_results_v2` rows already persisted with `score: null` / `|?:?|` keys remain unresolved. This change prevents new bad rows only; it does not rewrite history.
+- Backfilling legacy scores is a separate decision. Any backfill source must be limited to `match_snapshots_v2` (joining on `snapshotKey`/`gameId` and teams), because finished match snapshots are not subject to the strict finish contract and may still carry the last readable score. No historical rewrite is part of issue #309.
