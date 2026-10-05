@@ -3,8 +3,8 @@ set -euo pipefail
 
 BASE_DIR="/opt/slf_ai_exporter_v2/slf_ai_exporter_v2"
 OUT_DIR="/var/www/html/slf_ai"
-FORUM_DIR="/root/slf-server/forum_faq"
-ENV_FILE="/root/slf-server/slf_api.env"
+FORUM_DIR="/opt/slf/slf-server/forum_faq"
+ENV_FILE="/opt/slf/slf-server/slf_api.env"
 FILTER_FILE="${BASE_DIR}/slf_drive_filter.txt"
 GENERATOR_UPDATES_FILE="${BASE_DIR}/generator_updates.json"
 

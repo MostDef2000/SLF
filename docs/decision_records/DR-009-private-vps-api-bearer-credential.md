@@ -28,13 +28,15 @@ need to be embedded in source or generated userscript artifacts.
 `SLF_API_TOKEN` is a private shared bearer credential:
 
 - the server reads it only from the process environment;
-- systemd loads `/root/slf-server/slf_api.env`;
+- systemd loads `/opt/slf/slf-server/slf_api.env`;
 - the service fails closed when the value is absent or empty;
 - the value must not appear in Git, generated artifacts, logs, chat, issues,
   pull requests, or deployment command history;
 - clients store the value locally through the existing Tampermonkey menu;
 - rotation generates a new value directly on the VPS and revokes the old value
   only after the server and intended clients have been verified.
+
+Update 2026-10-05: slf-server runs as the dedicated system user slf with its working directory at /opt/slf/slf-server (issue #301; server migration verified 7/7).
 
 The published old value remains in Git history. Rewriting repository history is
 not required once rotation makes that value invalid.

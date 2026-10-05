@@ -24,17 +24,17 @@ vps/ops/README.md
 Current VPS paths:
 
 ```text
-/root/slf-server/server.py
-/root/slf-server/venv/
-/root/slf-server/slf_api.env
-/root/slf-server/data/
-/root/slf-server/forum_faq/
+/opt/slf/slf-server/server.py
+/opt/slf/slf-server/venv/
+/opt/slf/slf-server/slf_api.env
+/opt/slf/slf-server/data/
+/opt/slf/slf-server/forum_faq/
 /etc/systemd/system/slf-server.service
 ```
 
 The repository owns code, dependency declarations, the service-unit baseline, and deployment tooling. The VPS remains authoritative for live data and environment values. `slf_api.env`, JSON data, forum content, virtual environments, logs, and backups must not be committed.
 
-`SLF_API_TOKEN` is a credential. The server must read it from `/root/slf-server/slf_api.env` through the systemd `EnvironmentFile` directive and must fail to start when it is absent or empty. The value must never appear in repository source, generated artifacts, logs, chat, deployment command history, Issues, or pull requests.
+`SLF_API_TOKEN` is a credential. The server must read it from `/opt/slf/slf-server/slf_api.env` through the systemd `EnvironmentFile` directive and must fail to start when it is absent or empty. The value must never appear in repository source, generated artifacts, logs, chat, deployment command history, Issues, or pull requests.
 
 ## Deployment and rollback
 
