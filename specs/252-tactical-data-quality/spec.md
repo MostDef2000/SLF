@@ -27,3 +27,30 @@ Current tactical telemetry contains useful volume but too many records lose scor
 - No automatic experiment promotion.
 - Backward-compatible report fields remain present.
 - Runtime and exporter regressions cover new behavior.
+
+## Follow-up: finished-result score recovery (2026-10-05)
+
+Status: Approved implementation
+Base: 67755f2a576130a3c5156e67297acb1f8f4d684d
+Target release: 4.4.330
+
+### Evidence
+
+The current 2026-10-04 RAG export contains 329 `match_results_v2` rows, but only 44 are outcome-resolvable; 285 are invalid because the score is missing. Tactical Lab links 85 finished results to activated experiments, yet resolves 0 outcomes because all linked results have `missing_or_invalid_score`. Fresh result rows exist from 4.4.328 and 4.4.329, so this is an active evidence blocker rather than a historical-only defect.
+
+### Required behavior
+
+- Preserve the legacy `.score_board` parser.
+- Support the FM2026 host score representation used by current design surfaces: a compact `.fm-score` value such as `2-1`.
+- Restrict the FM2026 fallback to the match surface.
+- Accept only one unambiguous score pair and fail closed when multiple score-looking nodes exist.
+- Never synthesize a zero score from missing or malformed content.
+- Finished `match_results_v2` records must carry the parsed final score and a result key containing that score.
+
+### Non-functional requirements
+
+- No P03 population or weights change.
+- No production preset or Production Advisor change.
+- No API, VPS, storage, schema, or historical-data rewrite.
+- No automatic Tactical Lab promotion/evolution.
+- Exact-artifact browser regression must exercise FM2026 finished-score parsing and ambiguity rejection.
