@@ -142,3 +142,18 @@ Tactical Lab v1 does not:
 - create a large experiment selector in the match UI.
 
 Evolution, confidence-aware ranking, engine-epoch drift detection, LAB/CHALLENGER/CHAMPION promotion and automatic next-generation creation remain deferred to GitHub issue #252 after sufficient repeat evidence is collected.
+
+## Readiness audit update — 2026-10-04 export
+
+Current exported evidence is not sufficient for Tactical Lab v2+ outcome ranking even though experiment repetition has improved.
+
+- 160 assignments, 92 activations, 89 completed phases.
+- 85 activated experiments have a linked finished-result record (92.39% linkage).
+- 0 of those 85 linked results resolve to win/draw/loss.
+- All 85 unresolved Tactical Lab results report `missing_or_invalid_score`.
+- Globally, 329 `match_results_v2` rows contain only 44 valid outcome rows; 285 rows report `missing_score`.
+- Fresh result rows include 4.4.328 and 4.4.329, so the defect is active after the data-quality hardening release.
+
+Repository FM2026 browser fixtures use the host class `.fm-score` for compact score text such as `1-0`, while `MatchStateParser.readScore()` previously recognized only the legacy `.score_board` family. The bounded follow-up therefore preserves legacy parsing and adds a match-surface-only FM2026 fallback. It accepts exactly one explicit score pair and fails closed on ambiguity; it does not scrape arbitrary page numbers and does not invent `0:0`.
+
+Until newly collected results demonstrate actual outcome resolution, evolutionary ranking, survivor selection, champion/challenger promotion, P04 generation and production promotion remain deferred under issue #252.

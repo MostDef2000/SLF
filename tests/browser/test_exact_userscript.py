@@ -218,6 +218,13 @@ def run_case(browser: Browser, base_url: str, name: str, path: str, api_mode: st
         page.goto(base_url + path, wait_until="domcontentloaded")
         if name == "owned-live":
             page.evaluate("document.querySelector('.score_board').innerHTML = '<div class=\"indarkbig\"><span>1</span><span>0</span></div>'")
+        if name == "finished-ambiguous":
+            page.evaluate("""() => {
+                const extra = document.createElement('span');
+                extra.className = 'fm-score';
+                extra.textContent = '4-4';
+                document.querySelector('.match_content').appendChild(extra);
+            }""")
         inject_exact_artifact(page)
         assertions(page)
         assert_clean_runtime(page, page_errors)
@@ -519,7 +526,26 @@ def assert_finished_match(page: Page):
     records = payload if isinstance(payload, list) else [payload]
     assert records[0]["recordType"] == "match_result"
     assert records[0]["status"] == "finished"
+    assert records[0]["score"] == {"home": 2, "away": 1}
+    assert "|2:1|" in records[0]["resultKey"]
     assert not any("/api/match_snapshots_v2?mode=append" in row["url"] for row in rows), rows
+
+
+def assert_finished_ambiguous(page: Page):
+    page.wait_for_selector("#slf-match-parser-panel")
+    page.get_by_role("button", name="Спарсить завершённый").click()
+    page.wait_for_function(
+        "() => window.__slfRequests.some(item => item.url.includes('/api/match_results_v2?mode=append'))"
+    )
+    rows = request_rows(page)
+    result_rows = [row for row in rows if "/api/match_results_v2?mode=append" in row["url"]]
+    assert len(result_rows) == 1, result_rows
+    payload = json.loads(result_rows[0]["data"])
+    records = payload if isinstance(payload, list) else [payload]
+    assert records[0]["recordType"] == "match_result"
+    assert records[0]["status"] == "finished"
+    assert records[0]["score"] is None
+    assert "|?:?|" in records[0]["resultKey"]
 
 
 def assert_incomplete_match(page: Page):
@@ -554,6 +580,7 @@ def main():
         ("owned-api-offline", "/game.php?id=e2e-offline&fixture=owned", "offline", assert_offline_bootstrap),
         ("foreign-live", "/game.php?id=e2e-foreign&fixture=foreign", "success", assert_foreign_live),
         ("finished-match", "/game.php?id=e2e-finished&fixture=finished", "success", assert_finished_match),
+        ("finished-ambiguous", "/game.php?id=e2e-finished-ambiguous&fixture=finished", "success", assert_finished_ambiguous),
         ("incomplete-match", "/game.php?id=e2e-incomplete&fixture=incomplete", "success", assert_incomplete_match),
         ("team-tactic", "/team4.php?action=tactic", "success", assert_tactic_page),
         ("transfer-page", "/transfers.php", "success", assert_transfer_page),

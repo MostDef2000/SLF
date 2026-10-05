@@ -26,3 +26,16 @@ Issue: #252
 - Canonical `SLF CI / ci` on final PR head.
 - Fresh base/head/scope comparison before merge.
 - Release provenance verification after merge because runtime source changes.
+
+## Follow-up plan: finished-result score recovery
+
+1. Extend `MatchStateParser.readScore()` after the existing legacy parser with one FM2026 fallback scoped to `.match_content .fm-score`.
+2. Parse only a complete `N-N`, `N:N`, en-dash, or em-dash score pair with one- or two-digit sides.
+3. Return a score only when exactly one FM2026 candidate is valid; multiple candidates remain unresolved.
+4. Replace the finished-match browser fixture's legacy score board with the FM2026 compact score representation.
+5. Require the finished-result payload and `resultKey` to retain the parsed score.
+6. Verify branch scope, canonical `SLF CI / ci`, exact-green-head merge, and automatic userscript publication.
+
+### Correct-course / risk check
+
+The production evidence proves missing final scores but does not expose raw production DOM. Repository FM2026 fixtures establish `.fm-score` as a current host score class. The implementation therefore adds only that evidenced compatibility path and does not introduce broad `[class*=score]` or page-wide numeric scraping. If canonical/browser evidence contradicts this assumption, the task returns to implementation rather than widening selectors speculatively.
