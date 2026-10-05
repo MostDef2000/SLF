@@ -123,9 +123,6 @@
         },
 
         readScore() {
-            const board = document.querySelector('.score_board');
-            if (!board) return null;
-
             const parseScoreValue = value => {
                 const text = String(value ?? '').trim();
                 if (!/^\d{1,2}$/.test(text)) return null;
@@ -133,27 +130,48 @@
                 return Number.isFinite(parsed) ? parsed : null;
             };
 
-            const legacyCells = [...board.querySelectorAll('.indarkbig div')];
-            if (legacyCells.length >= 2) {
-                const home = parseScoreValue(legacyCells[0].textContent);
-                const away = parseScoreValue(legacyCells[1].textContent);
-                if (home != null && away != null) return { home, away };
+            const parseScorePair = value => {
+                const text = String(value ?? '').trim();
+                const match = text.match(/^(\d{1,2})\s*[-:–—]\s*(\d{1,2})$/);
+                if (!match) return null;
+                const home = parseScoreValue(match[1]);
+                const away = parseScoreValue(match[2]);
+                return home != null && away != null ? { home, away } : null;
+            };
+
+            const board = document.querySelector('.score_board');
+            if (board) {
+                const legacyCells = [...board.querySelectorAll('.indarkbig div')];
+                if (legacyCells.length >= 2) {
+                    const home = parseScoreValue(legacyCells[0].textContent);
+                    const away = parseScoreValue(legacyCells[1].textContent);
+                    if (home != null && away != null) return { home, away };
+                }
+
+                const scoreRoot = board.querySelector('.indarkbig') || board;
+                const childScores = [...scoreRoot.children]
+                    .map(node => parseScoreValue(node.textContent))
+                    .filter(value => value != null);
+                if (childScores.length === 2) {
+                    return { home: childScores[0], away: childScores[1] };
+                }
+
+                const textPair = parseScorePair(scoreRoot.textContent);
+                if (textPair) return textPair;
+
+                const textScores = String(scoreRoot.textContent || '').match(/\b\d{1,2}\b/g) || [];
+                if (textScores.length === 2) {
+                    return { home: Number(textScores[0]), away: Number(textScores[1]) };
+                }
             }
 
-            const scoreRoot = board.querySelector('.indarkbig') || board;
-            const childScores = [...scoreRoot.children]
-                .map(node => parseScoreValue(node.textContent))
-                .filter(value => value != null);
-            if (childScores.length === 2) {
-                return { home: childScores[0], away: childScores[1] };
-            }
-
-            const textScores = String(scoreRoot.textContent || '').match(/\b\d{1,2}\b/g) || [];
-            if (textScores.length === 2) {
-                return { home: Number(textScores[0]), away: Number(textScores[1]) };
-            }
-
-            return null;
+            // FM2026 host markup uses compact .fm-score nodes (for example "1-0").
+            // Keep this fallback inside the match surface and fail closed if more than
+            // one score-looking node is present.
+            const fmScores = [...document.querySelectorAll('.match_content .fm-score')]
+                .map(node => parseScorePair(node.textContent))
+                .filter(Boolean);
+            return fmScores.length === 1 ? fmScores[0] : null;
         }
     };
 
