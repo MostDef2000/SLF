@@ -67,7 +67,7 @@ Canonical source mapping:
 
 | Repository path | Current VPS path |
 |---|---|
-| `vps/api/server.py` | `/root/slf-server/server.py` |
+| `vps/api/server.py` | `/opt/slf/slf-server/server.py` |
 | `vps/api/requirements.txt` | API virtual environment dependencies |
 | `vps/exporter-rag/slf_ai_export.py` | `/opt/slf_ai_exporter_v2/slf_ai_exporter_v2/slf_ai_export.py` |
 | `vps/exporter-rag/slf_rag_build.py` | `/opt/slf_ai_exporter_v2/slf_ai_exporter_v2/slf_rag_build.py` |
@@ -79,10 +79,10 @@ Canonical source mapping:
 Known active paths:
 
 ```text
-/root/slf-server/server.py
-/root/slf-server/data/*.json
-/root/slf-server/forum_faq/
-/root/slf-server/slf_api.env
+/opt/slf/slf-server/server.py
+/opt/slf/slf-server/data/*.json
+/opt/slf/slf-server/forum_faq/
+/opt/slf/slf-server/slf_api.env
 /opt/slf_ai_exporter_v2/slf_ai_exporter_v2/slf_ai_export.py
 /opt/slf_ai_exporter_v2/slf_ai_exporter_v2/slf_rag_build.py
 /opt/slf_ai_exporter_v2/slf_ai_exporter_v2/run_daily_export.sh
@@ -102,14 +102,14 @@ Current model:
 
 ```text
 Flask API server:
-  /root/slf-server/server.py
+  /opt/slf/slf-server/server.py
 
 Data storage:
-  /root/slf-server/data/{collection}.json
+  /opt/slf/slf-server/data/{collection}.json
 
 Forum FAQ storage:
-  /root/slf-server/forum_faq/index.json
-  /root/slf-server/forum_faq/active/*.md
+  /opt/slf/slf-server/forum_faq/index.json
+  /opt/slf/slf-server/forum_faq/active/*.md
 ```
 
 Known collections:
@@ -140,7 +140,7 @@ The exporter should read from `http://127.0.0.1:5000/api` when running on the VP
 
 `SLF_API_TOKEN` is a **private shared bearer credential** for the current API.
 
-The server must read it from the process environment loaded from `/root/slf-server/slf_api.env` and must fail closed when the value is absent or empty. The value must not appear in repository source, generated artifacts, logs, chat, issues, pull requests, or deployment command history. Intended userscript installations store it only in Tampermonkey-local storage through `SLF: Set API token`.
+The server must read it from the process environment loaded from `/opt/slf/slf-server/slf_api.env` and must fail closed when the value is absent or empty. The value must not appear in repository source, generated artifacts, logs, chat, issues, pull requests, or deployment command history. Intended userscript installations store it only in Tampermonkey-local storage through `SLF: Set API token`.
 
 Possession grants the same access to every bearer, including write access. The credential therefore provides only a shared access boundary and must not be represented as per-user identity, fine-grained authorization, or sufficient protection for higher-risk capabilities.
 
@@ -265,7 +265,7 @@ rule_extracts:
 
 forum_notes:
   authority: soft_heuristic
-  source: /root/slf-server/forum_faq
+  source: /opt/slf/slf-server/forum_faq
 
 match_evidence:
   authority: observed_data
@@ -389,7 +389,7 @@ The daily wrapper is:
 Expected steps:
 
 ```text
-1. load /root/slf-server/slf_api.env
+1. load /opt/slf/slf-server/slf_api.env
 2. export from API via slf_ai_export.py
 3. build RAG via slf_rag_build.py
 4. sync current mirror to Google Drive via rclone --filter-from

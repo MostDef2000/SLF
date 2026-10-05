@@ -39,7 +39,7 @@ class ApiServiceContractTest(unittest.TestCase):
 
     def test_service_uses_gunicorn_module(self):
         self.assertEqual(self.command[:3], [
-            "/root/slf-server/venv/bin/python",
+            "/opt/slf/slf-server/venv/bin/python",
             "-m",
             "gunicorn",
         ])
