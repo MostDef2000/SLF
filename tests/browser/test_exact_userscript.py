@@ -534,18 +534,18 @@ def assert_finished_match(page: Page):
 def assert_finished_ambiguous(page: Page):
     page.wait_for_selector("#slf-match-parser-panel")
     page.get_by_role("button", name="Спарсить завершённый").click()
+    # #309 guard contract: a finished match whose score cannot be resolved
+    # (ambiguous markup) must NOT be posted.  The parser log surfaces the
+    # client-side kind=missing_score rejection instead of the success line.
     page.wait_for_function(
-        "() => window.__slfRequests.some(item => item.url.includes('/api/match_results_v2?mode=append'))"
+        "() => document.getElementById('slf-parser-log')?.textContent.includes('Ошибка отправки результата: missing_score')"
     )
+    page.wait_for_timeout(150)
+    log_text = page.locator("#slf-parser-log").text_content()
+    assert "Ошибка отправки результата: missing_score" in log_text, log_text
+    assert "Финальный результат отправлен" not in log_text, log_text
     rows = request_rows(page)
-    result_rows = [row for row in rows if "/api/match_results_v2?mode=append" in row["url"]]
-    assert len(result_rows) == 1, result_rows
-    payload = json.loads(result_rows[0]["data"])
-    records = payload if isinstance(payload, list) else [payload]
-    assert records[0]["recordType"] == "match_result"
-    assert records[0]["status"] == "finished"
-    assert records[0]["score"] is None
-    assert "|?:?|" in records[0]["resultKey"]
+    assert not any("/api/match_results_v2?mode=append" in row["url"] for row in rows), rows
 
 
 def assert_incomplete_match(page: Page):

@@ -159,6 +159,21 @@ def unique_keys_for_item(collection, item):
     return [f"{field}:{item[field]}"]
 
 
+def valid_finished_score(score):
+    # QR-010: a finished match result must carry a resolvable score.  The
+    # append path used to persist payloads verbatim, so a client-side
+    # MatchStateParser.readScore() failure wrote score:null and the finished
+    # outcome was silently lost.  Fail closed on any missing or malformed
+    # score before persistence; ints only (bool is excluded).
+    if not isinstance(score, dict):
+        return False
+    home = score.get("home")
+    away = score.get("away")
+    if type(home) is not int or type(away) is not int:
+        return False
+    return 0 <= home <= 99 and 0 <= away <= 99
+
+
 def filter_append_duplicates(collection, existing, incoming):
     existing_keys = set()
     for item in existing:
@@ -333,6 +348,26 @@ def api_post(collection):
                         "missingUniqueKey": missing_unique_key,
                         "received": received
                     }), 400
+            # QR-010: finished match results must carry a valid score.  Reject
+            # the whole request fail-closed before any persistence, mirroring
+            # the missing_unique_key 400 path.  Only match_results_v2 finished
+            # records are subject to this contract; snapshots and non-finished
+            # match_results stay untouched.
+            if collection == "match_results_v2":
+                invalid_finished_score = sum(
+                    1 for item in incoming
+                    if isinstance(item, dict)
+                    and item.get("status") == "finished"
+                    and not valid_finished_score(item.get("score"))
+                )
+                if invalid_finished_score:
+                    return jsonify({
+                        "error": "Finished match result requires a valid score",
+                        "kind": "invalid_finished_score",
+                        "collection": collection,
+                        "invalidFinishedScore": invalid_finished_score,
+                        "received": received
+                    }), 422
             accepted, skipped_duplicates, missing_unique_key = filter_append_duplicates(collection, existing, incoming)
             existing.extend(accepted)
             save_collection(collection, existing)
