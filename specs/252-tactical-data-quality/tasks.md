@@ -45,7 +45,7 @@ The parser compatibility change is merged to protected `main`, exact-head canoni
 
 - [ ] Introduce suite/schema v8 identity (`slf_tactic_suite_561_v8`, `slf_rule_decision_v8_tactical_suite`).
 - [ ] Reduce active production presets from 11 to 10 by retiring `Compact_Counter_def3`.
-- [ ] Remove the dedicated `pressure_counter` situation; route non-emergency pressure through `pressure_escape`.
+- [ ] Remove the dedicated `pressure_counter` situation; route the under-pressure branch through `pressure_escape`; higher-priority preserved roles (`final_all_in`, `emergency_lock`, `press_cooldown`, `protect_lead`) keep their existing precedence over the pressure branch.
 - [ ] Preserve all other preset roles and the manual-only Production Advisor (`autoApply: false`).
 - [ ] Keep `Compact_Counter_def3` only as an unchanged module-local historical definition.
 - [ ] Assert 10 active presets and Compact Counter absence in node regression and the browser dropdown.

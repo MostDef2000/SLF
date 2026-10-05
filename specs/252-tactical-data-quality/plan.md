@@ -44,7 +44,7 @@ The production evidence proves missing final scores but does not expose raw prod
 
 1. Bump the registry identity to `slf_tactic_suite_561_v8` / `slf_rule_decision_v8_tactical_suite` and reduce `ACTIVE_PRESET_NAMES` to the ten retained presets.
 2. Move `Compact_Counter_def3` out of every active registry map (controls, label, formation, meta, traits, scheme state, display meta, ladders, audit tiers) into a module-local unchanged historical definition, and add it to the removed/retired identity so `BASE_PRESETS`/`BASE_LABELS` and the dropdown exclude it.
-3. In the direction policy, remove the `pressure_counter` situation, drop the Compact Counter veto/evidence guard, and route all non-emergency opponent-pressure cases through conservative `pressure_escape`.
+3. In the direction policy, remove the `pressure_counter` situation, drop the Compact Counter veto/evidence guard, and route the under-pressure classification branch through conservative `pressure_escape` (both confirmed-outlet and blocked-outlet cases); the higher-priority preserved roles (`final_all_in`, `emergency_lock`, `press_cooldown`, `protect_lead`) keep their existing precedence over the pressure branch, per issue #303 point 5.
 4. Keep `autoApply: false` and the Production Advisor manual-only; keep the v7 compatibility install marker for the downstream passive layers while adding the v8 marker.
 5. Update node selector-scenario regression coverage and the exact-userscript dropdown expectation for the 10-active set.
 6. Verify exact-head `SLF CI / ci`, exact branch scope, and automatic userscript release provenance.

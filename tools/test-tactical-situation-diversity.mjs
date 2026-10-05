@@ -184,6 +184,14 @@ assert.deepEqual([...escapeRank.eligible.slice(0,3)].map(item=>item.preset),['Pe
 assert.ok(escapeRank.eligible[0].score>escapeRank.eligible[1].score&&escapeRank.eligible[1].score>escapeRank.eligible[2].score,'pressure_escape scores must be meaningful');
 assert.equal(decide(confirmedOutlet).candidates.some(item=>item.preset==='Compact_Counter_def3'),false,'Compact Counter absent from selector candidates');
 
+// Preservation: the higher-priority roles keep their precedence over the
+// under-pressure branch; only the under-pressure branch itself routes to
+// pressure_escape (issue #303 point 5).
+const pressureWhileLeading={underPressure:true,counterExitAvailable:true,minute:72,scoreState:'winning',score:{state:'winning'},pressureRisk:0,attackNeed:20};
+assert.equal(policy.classifySituation(pressureWhileLeading),'protect_lead','preserved protect_lead role must win over pressure_escape');
+const fatiguedUnderPressure={underPressure:true,counterExitAvailable:false,counterExitBlocked:true,pressFatigueRisk:true,myPowerDropPct:4,minute:40,scoreState:'level',score:{state:'level'},pressureRisk:0,attackNeed:20};
+assert.equal(policy.classifySituation(fatiguedUnderPressure),'press_cooldown','preserved press_cooldown role must win over pressure_escape');
+
 const noOutlet={underPressure:true,counterExitAvailable:false,signals:['under_pressure','counter_exit_blocked'],strengthGap:-100};
 assert.equal(policy.hardVeto('Compact_Counter_def3',noOutlet).vetoed,true);
 assert.equal(decide(noOutlet).action.preset,'Pep_BoxControl_bal2');
