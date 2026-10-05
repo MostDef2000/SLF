@@ -508,6 +508,21 @@ def assert_foreign_live(page: Page):
 
 def assert_finished_match(page: Page):
     page.wait_for_selector("#slf-match-parser-panel")
+    assert page.evaluate("() => MatchStateParser.readScore()") == {"home": 2, "away": 1}
+
+    page.evaluate(
+        """() => {
+            const extra = document.createElement('span');
+            extra.id = 'slf-score-ambiguity-fixture';
+            extra.className = 'fm-score';
+            extra.textContent = '4-4';
+            document.querySelector('.match_content').appendChild(extra);
+        }"""
+    )
+    assert page.evaluate("() => MatchStateParser.readScore()") is None
+    page.evaluate("document.getElementById('slf-score-ambiguity-fixture').remove()")
+    assert page.evaluate("() => MatchStateParser.readScore()") == {"home": 2, "away": 1}
+
     page.get_by_role("button", name="Спарсить завершённый").click()
     page.wait_for_function(
         "() => window.__slfRequests.some(item => item.url.includes('/api/match_results_v2?mode=append'))"
@@ -519,6 +534,8 @@ def assert_finished_match(page: Page):
     records = payload if isinstance(payload, list) else [payload]
     assert records[0]["recordType"] == "match_result"
     assert records[0]["status"] == "finished"
+    assert records[0]["score"] == {"home": 2, "away": 1}
+    assert "|2:1|" in records[0]["resultKey"]
     assert not any("/api/match_snapshots_v2?mode=append" in row["url"] for row in rows), rows
 
 
