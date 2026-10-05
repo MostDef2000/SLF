@@ -297,7 +297,6 @@ def assert_owned_live(page: Page):
         "Pep_ControlledPush_att3",
         "Arteta_Control433_bal3",
         "Pep_BoxControl_bal2",
-        "Compact_Counter_def3",
         "Henta abuse",
         "Pep_PressCooldown_bal2",
         "Simeone_Compact442_def4",
@@ -316,6 +315,7 @@ def assert_owned_live(page: Page):
     ) == ["5", "4", "3", "2", "1"]
 
     retired_ids = {
+        "Compact_Counter_def3",
         "DeZerbi_BaitPress_bal3",
         "DeZerbi_Release_att4",
         "Henta_LeftTrap_att3",
