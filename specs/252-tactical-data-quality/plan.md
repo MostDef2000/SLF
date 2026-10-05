@@ -39,3 +39,20 @@ Issue: #252
 ### Correct-course / risk check
 
 The production evidence proves missing final scores but does not expose raw production DOM. Repository FM2026 fixtures establish `.fm-score` as a current host score class. The implementation therefore adds only that evidenced compatibility path and does not introduce broad `[class*=score]` or page-wide numeric scraping. If canonical/browser evidence contradicts this assumption, the task returns to implementation rather than widening selectors speculatively.
+
+## Follow-up plan: Tactical Selector v8 active preset retirement
+
+1. Bump the registry identity to `slf_tactic_suite_561_v8` / `slf_rule_decision_v8_tactical_suite` and reduce `ACTIVE_PRESET_NAMES` to the ten retained presets.
+2. Move `Compact_Counter_def3` out of every active registry map (controls, label, formation, meta, traits, scheme state, display meta, ladders, audit tiers) into a module-local unchanged historical definition, and add it to the removed/retired identity so `BASE_PRESETS`/`BASE_LABELS` and the dropdown exclude it.
+3. In the direction policy, remove the `pressure_counter` situation, drop the Compact Counter veto/evidence guard, and route all non-emergency opponent-pressure cases through conservative `pressure_escape`.
+4. Keep `autoApply: false` and the Production Advisor manual-only; keep the v7 compatibility install marker for the downstream passive layers while adding the v8 marker.
+5. Update node selector-scenario regression coverage and the exact-userscript dropdown expectation for the 10-active set.
+6. Verify exact-head `SLF CI / ci`, exact branch scope, and automatic userscript release provenance.
+
+### Risk controls
+
+- No slider/control/formation value is edited for any retained active preset; a hardcoded base snapshot in the node regression fails if any value drifts.
+- Compact Counter's original controls are retained byte-for-byte in module-local source and asserted unchanged by source-text regression.
+- `Compact_Counter_def3` can never be recommended because it is absent from the direction policy's active set; `hardVeto` rejects it explicitly.
+- Tactical Lab P03 population/assignment identity is not touched; only the manual dropdown expectation changes in the browser test.
+- The `browser-e2e` dropdown assertion is re-derived from `ui-layer.js` + `preset-storage.js`, not guessed.
