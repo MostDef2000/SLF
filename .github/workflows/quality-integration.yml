@@ -298,6 +298,65 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  secret-dependency-scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks (pinned)
+        run: |
+          set -euo pipefail
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o /tmp/gitleaks.tgz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /tmp
+          /tmp/gitleaks version
+
+      # gitleaks-action@v2 is PR-diff-only (src/gitleaks.js:108-115), so the full
+      # git history scan is performed by the pinned official binary instead.
+      - name: Scan full git history for leaked secrets
+        env:
+          GITLEAKS_CONFIG_TOML: |
+            [extend]
+            useDefault = true
+
+            # Historical baseline suppression — bounded by COMMIT+PATH (condition = "AND").
+            # Only the commits that introduced the 16 adjudicated historical findings are
+            # exempt. New commits — including any commit touching these paths — remain
+            # fully scanned. No secret values are embedded. Adjudication 2026-10-05:
+            # specs/302-security-ci-gates/plan.md and issue #302.
+            [[allowlists]]
+            condition = "AND"
+            commits = [
+              '59a9fbe6237ea7752528f3de0f746c42ba115ceb', # evidence-script collection id FP (vps/exporter-rag)
+              'f22f66bc5e027eefc35181f2772d4c8c5b1d88b8', # server.py SECRET_TOKEN (vps/api)
+              'cfa391c177866fe32ebcd2ef1aaa02c4566db63c', # releases artifact TOKEN baseline
+              'b96736be4fa2dee62aa726de437d5c558cc134c1', # releases artifact TOKEN baseline
+              'bb6357f456fc7aed1683e51ca3bc1ae3dc0143d6', # config.js TOKEN + youth-external-monitor cacheKey FP
+              '8eb728c61b4b2c5f7962767d518ff98e3db6e951', # releases artifact TOKEN baseline
+              '1d7fc45f1b1d802c7e8f4ce7e3a30b625a4bb5f8', # releases artifact TOKEN baseline
+              '33c7ac1bdd01cccb1a4908ffb1408012dc5a8e86', # releases artifact TOKEN baseline
+              'fb891ebb730d8d1018cb528403b525171a9c46ea', # releases artifact TOKEN baseline
+              '400d10983508f5572b94db14c17cf9efd7e688e7', # releases artifact TOKEN baseline
+            ]
+            paths = [
+              '''(^|/)releases/''',                                           # generated artifacts; legacy TOKEN literal removed from sources
+              '''^src/core/config\.js$''',                                    # legacy TOKEN literal removed at HEAD
+              '''^src/modules/team-management/youth-external-monitor\.js$''', # deleted at HEAD; historical cacheKey flags = name-based false positives
+              '''^vps/api/server\.py$''',                                     # hardcoded SECRET_TOKEN removed by f468eb1 (env-based fail-closed now)
+              '''^vps/exporter-rag/slf_preset_evidence_561\.py$''',           # false positive: flagged literal is a collection identifier
+            ]
+        run: /tmp/gitleaks detect --source . --no-banner --redact --exit-code 1 --verbose
+
+      - name: Audit Python dependencies (fail on any known advisory)
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check pip-audit==2.10.1
+          pip-audit -r vps/api/requirements.txt -r vps/exporter-rag/requirements.txt
+
   ci:
     if: always()
     needs:
@@ -306,6 +365,7 @@ jobs:
       - property-fuzz-reliability
       - browser-e2e
       - release-deployment-evidence
+      - secret-dependency-scan
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -316,6 +376,7 @@ jobs:
           RELIABILITY_RESULT: ${{ needs.property-fuzz-reliability.result }}
           BROWSER_RESULT: ${{ needs.browser-e2e.result }}
           EVIDENCE_RESULT: ${{ needs.release-deployment-evidence.result }}
+          SECRET_SCAN_RESULT: ${{ needs.secret-dependency-scan.result }}
         run: |
           set -euo pipefail
           printf 'static-contract-security=%s\n' "$STATIC_RESULT"
@@ -323,7 +384,8 @@ jobs:
           printf 'property-fuzz-reliability=%s\n' "$RELIABILITY_RESULT"
           printf 'browser-e2e=%s\n' "$BROWSER_RESULT"
           printf 'release-deployment-evidence=%s\n' "$EVIDENCE_RESULT"
-          for result in "$STATIC_RESULT" "$RUNTIME_RESULT" "$RELIABILITY_RESULT" "$BROWSER_RESULT" "$EVIDENCE_RESULT"; do
+          printf 'secret-dependency-scan=%s\n' "$SECRET_SCAN_RESULT"
+          for result in "$STATIC_RESULT" "$RUNTIME_RESULT" "$RELIABILITY_RESULT" "$BROWSER_RESULT" "$EVIDENCE_RESULT" "$SECRET_SCAN_RESULT"; do
             test "$result" = 'success'
           done
           echo 'SLF CI passed.'

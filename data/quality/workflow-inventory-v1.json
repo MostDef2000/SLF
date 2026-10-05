@@ -13,7 +13,7 @@
       "owner": "MostDef2000",
       "triggers": ["pull_request", "workflow_dispatch"],
       "requiredContext": "SLF CI / ci",
-      "purpose": "Single pull-request quality gate covering static/contracts/security, runtime/tactics, reliability, browser and release evidence."
+      "purpose": "Single pull-request quality gate covering static/contracts/security, full-git-history secret scanning (gitleaks), Python dependency audit (pip-audit), runtime/tactics, reliability, browser and release evidence."
     },
     {
       "path": ".github/workflows/build-latest-release.yml",
