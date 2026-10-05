@@ -1,27 +1,28 @@
-// Generator 5.61 Tactical Suite v7 Recommendation Policy
+// Generator 5.61 Tactical Suite v8 Recommendation Policy
 // ============================================================
 // The active registry owns tactic data/UI identity. This layer makes the
 // registry decision canonical for Coach Mode, progression and telemetry.
+// v8 retires Compact_Counter_def3 from production selection and drops the
+// dedicated pressure_counter situation in favour of conservative pressure_escape.
 
 (function tacticPresetDirectionPolicy() {
     'use strict';
 
-    const VERSION = '5.61-tactical-suite-v7.1';
+    const VERSION = '5.61-tactical-suite-v8.1';
     const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
     const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
     if (!registry || !engine || window.SLFTacticDirectionPolicy?.version === VERSION) return;
 
-    const SUITE = registry.suiteVersion || 'slf_tactic_suite_561_v7';
-    const SCHEMA = registry.recommendationSchema || 'slf_rule_decision_v7_tactical_suite';
+    const SUITE = registry.suiteVersion || 'slf_tactic_suite_561_v8';
+    const SCHEMA = registry.recommendationSchema || 'slf_rule_decision_v8_tactical_suite';
     const ACTIVE = Array.isArray(registry.active) ? registry.active.slice() : [];
     const ACTIVE_SET = new Set(ACTIVE);
     const DEFAULT_RISK = registry.defaultRiskAppetite || 'standard';
 
     const STEP = {
         Arteta_Control433_bal3:['Pep_BoxControl_bal2','Pep_ControlledPush_att3','Simeone_Compact442_def4','Conte_WingbackWidth_bal4'],
-        Pep_BoxControl_bal2:['Arteta_Control433_bal3','Pep_PressCooldown_bal2','Compact_Counter_def3'],
+        Pep_BoxControl_bal2:['Arteta_Control433_bal3','Pep_PressCooldown_bal2'],
         Pep_PressCooldown_bal2:['Pep_BoxControl_bal2','Arteta_Control433_bal3'],
-        Compact_Counter_def3:['Pep_BoxControl_bal2','Arteta_Control433_bal3'],
         Pep_ControlledPush_att3:['Arteta_Control433_bal3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4'],
         Pep_TwoThreeFive_att3:['Pep_ControlledPush_att3','Klopp_Gegenpress_att4','Conte_WingbackWidth_bal4'],
         Conte_WingbackWidth_bal4:['Arteta_Control433_bal3','Pep_ControlledPush_att3','Pep_TwoThreeFive_att3'],
@@ -34,7 +35,6 @@
     const SCORE_BY_SITUATION = {
         stable_control:{Arteta_Control433_bal3:68,Pep_BoxControl_bal2:34,Pep_ControlledPush_att3:14},
         pressure_escape:{Pep_BoxControl_bal2:74,Arteta_Control433_bal3:36,Pep_PressCooldown_bal2:28},
-        pressure_counter:{Compact_Counter_def3:70,Pep_BoxControl_bal2:46,Arteta_Control433_bal3:24},
         press_cooldown:{Pep_PressCooldown_bal2:76,Pep_BoxControl_bal2:38,Arteta_Control433_bal3:26},
         controlled_chase:{Pep_ControlledPush_att3:72,Pep_TwoThreeFive_att3:38,Arteta_Control433_bal3:18},
         positional_siege:{Pep_TwoThreeFive_att3:74,Pep_ControlledPush_att3:48,Conte_WingbackWidth_bal4:24},
@@ -85,7 +85,7 @@
         if (c.emergencyLockRequired || (c.scoreState === 'winning' && c.minute >= 84 && c.underPressure && c.pressureRisk >= 55)) return 'emergency_lock';
         if (c.pressFatigueRisk && !(c.scoreState === 'losing' && c.minute >= 70)) return 'press_cooldown';
         if (c.scoreState === 'winning' && c.minute >= 65) return 'protect_lead';
-        if (c.underPressure) return c.counterExitAvailable && !c.counterExitBlocked ? 'pressure_counter' : 'pressure_escape';
+        if (c.underPressure) return 'pressure_escape';
         if (c.centerClosed && c.wideQuality && !c.ownCrossesBad && !c.opponentCrossesDangerous) return 'width_attack';
         if (c.scoreState === 'losing' && c.minute >= 72 && c.attackNeed >= 65 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat) return 'late_high_pressure';
         if ((c.attackingMomentum || c.attackNeed >= 58) && c.minute >= 55 && !c.transitionThreat && !c.highBadActions && !c.pressFatigueRisk) return 'positional_siege';
@@ -107,7 +107,6 @@
         const situation = classify(c);
         const reasons = [];
         if (!ACTIVE_SET.has(name)) reasons.push('preset отсутствует в active registry');
-        if (name === 'Compact_Counter_def3' && !(c.counterExitAvailable && !c.counterExitBlocked)) reasons.push('Compact Counter требует подтверждённый outlet; слабость команды не является основанием');
         if (name === 'Simeone_LowBlock_def5' && situation !== 'emergency_lock') reasons.push('Low Block только временный emergency lock');
         if (name === 'Simeone_Compact442_def4' && c.scoreState === 'losing') reasons.push('защитный 4-4-2 запрещён при проигрыше');
         if (name === 'Pep_PressCooldown_bal2' && c.scoreState === 'losing' && c.minute >= 70 && c.attackNeed >= 55) reasons.push('поздний проигрыш требует продвижения, а не cooldown');
@@ -138,12 +137,11 @@
         const situationFit = Number(SCORE_BY_SITUATION[situation]?.[name] || 0);
         const appetite = currentRisk();
         const riskAppetite = riskDelta(name, appetite);
-        const evidenceGuard = name === 'Compact_Counter_def3' ? -6 : 0;
+        const evidenceGuard = 0;
         const score = situationFit + riskAppetite + evidenceGuard;
         const reasons = [];
         if (situationFit) reasons.push({ key:'situationFit', delta:situationFit, reason:`роль совпадает с ситуацией ${situation}` });
         if (riskAppetite) reasons.push({ key:'riskAppetite', delta:riskAppetite, reason:`профиль риска ${appetite}` });
-        if (evidenceGuard) reasons.push({ key:'evidenceGuard', delta:evidenceGuard, reason:'Compact Counter остаётся осторожным до достаточной phase-v4 выборки' });
         return {
             preset:name,
             score,
@@ -171,7 +169,7 @@
         return {
             name:selected.preset,
             situation:ranked.situation,
-            reason:`${ranked.situation}: ${registry.meta?.[selected.preset]?.use || 'tactical suite v7'}`,
+            reason:`${ranked.situation}: ${registry.meta?.[selected.preset]?.use || 'tactical suite v8'}`,
             selected,
             runnerUp,
             margin,
@@ -210,7 +208,7 @@
     }
 
     const originalRun = engine.run.bind(engine);
-    engine.run = function runTacticalSuiteV7(snapshot, context = {}) {
+    engine.run = function runTacticalSuiteV8(snapshot, context = {}) {
         const result = originalRun(snapshot, context) || {};
         const mergedContext = Object.assign({}, result?.moment?.context || {}, context);
         const selected = choose(mergedContext);
@@ -226,13 +224,13 @@
             rawPreset:selected.name,
             score:selected.selected.score,
             decision:selected.situation,
-            ruleId:`suite_v7_${selected.situation}`,
+            ruleId:`suite_v8_${selected.situation}`,
             reason:selected.reason,
             riskAppetite:result.riskAppetite,
             libraryVersion:SUITE,
             recommendationSchema:SCHEMA,
-            guardType:'suite_v7_selection',
-            guardReason:'central tactical suite v7 ranking'
+            guardType:'suite_v8_selection',
+            guardReason:'central tactical suite v8 ranking'
         });
         result.candidates = selected.candidates.slice().sort((a, b) => {
             if (a.vetoed !== b.vetoed) return a.vetoed ? 1 : -1;
@@ -252,6 +250,7 @@
     engine.schema = SCHEMA;
     engine.ACTIVE_PRESETS = ACTIVE.slice();
     engine.__tacticSuiteV7Installed = true;
+    engine.__tacticSuiteV8Installed = true;
     engine.__generator561RuleScorerApplied = true;
     engine.__generator561PressureResponseApplied = true;
 
@@ -262,13 +261,13 @@
             const step = shortestStep(current, desired);
             return ACTIVE_SET.has(step) ? step : desired;
         };
-        RecommendationEngine.selectRawPreset = function selectSuiteV7(snapshot, state = {}) {
+        RecommendationEngine.selectRawPreset = function selectSuiteV8(snapshot, state = {}) {
             const decision = window.SLFCurrentActionHintEngine?.run ? window.SLFCurrentActionHintEngine.run(snapshot || {}, state || {}) : null;
             const name = ACTIVE_SET.has(decision?.action?.preset) ? decision.action.preset : 'Arteta_Control433_bal3';
             stamp(snapshot, decision, name);
-            return { name, reason:decision?.action?.reason || 'tactical suite v7 fallback', ruleDecision:decision, progressionAction:'suite_v7_scored' };
+            return { name, reason:decision?.action?.reason || 'tactical suite v8 fallback', ruleDecision:decision, progressionAction:'suite_v8_scored' };
         };
-        if (originalGuard) RecommendationEngine.applyProgressionGuard = function applySuiteV7Guard(candidate, snapshot, context = {}) {
+        if (originalGuard) RecommendationEngine.applyProgressionGuard = function applySuiteV8Guard(candidate, snapshot, context = {}) {
             if (!candidate?.name || !ACTIVE_SET.has(candidate.name) || !snapshot || snapshot.status === 'finished') return candidate;
             const targetPreset = candidate.name;
             let guarded = ['Simeone_LowBlock_def5','Bielsa_ChaosPress_att5'].includes(candidate.name) || context?.urgency?.overrideProgressionGuard === true
@@ -293,6 +292,7 @@
         RecommendationEngine.__generator561RuleScorerApplied = true;
         RecommendationEngine.__generator561PressureResponseApplied = true;
         RecommendationEngine.__tacticSuiteV7Installed = true;
+        RecommendationEngine.__tacticSuiteV8Installed = true;
     }
 
     if (typeof BASE_PRESETS !== 'undefined' && BASE_PRESETS) {
