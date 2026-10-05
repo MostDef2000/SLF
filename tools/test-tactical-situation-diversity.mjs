@@ -2,12 +2,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
+// Tactical Suite v8 active production set (Compact_Counter_def3 retired).
 const active = [
-  'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2','Compact_Counter_def3',
+  'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2',
   'Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4',
   'Simeone_Compact442_def4','Simeone_LowBlock_def5','Bielsa_ChaosPress_att5'
 ];
+// v8 retirement: definition must stay unchanged but must not be active.
+const retiredActive = ['Compact_Counter_def3'];
+// Pre-v7 legacy retirements (definition already removed from source maps).
 const retired = ['Mourinho_WeakSide_def3','Xabi_BoxMidfield_bal3','DeZerbi_BaitPress_bal3'];
+// Seed the legacy globals with the full v7 active set + Compound_Counter so the
+// registry's removeInactive() must actively drop it (regression, not a no-op).
+const seededSystem = [...active, ...retiredActive, ...retired];
+
 const root = new URL('../', import.meta.url);
 const source = path => fs.readFileSync(new URL(path, root), 'utf8');
 
@@ -15,8 +23,8 @@ const context = {
   console,
   window: { localStorage:{ getItem(){ return null; } } },
   localStorage: { getItem(){ return null; }, setItem(){} },
-  BASE_PRESETS:Object.assign({standard:{style:'4',priority:[]}},Object.fromEntries([...active,...retired].map(name=>[name,{style:'3',priority:[]}]))),
-  BASE_LABELS:Object.assign({standard:'standard'},Object.fromEntries([...active,...retired].map(name=>[name,name]))),
+  BASE_PRESETS:Object.assign({standard:{style:'4',priority:[]}},Object.fromEntries(seededSystem.map(name=>[name,{style:'3',priority:[]}]))),
+  BASE_LABELS:Object.assign({standard:'standard'},Object.fromEntries(seededSystem.map(name=>[name,name]))),
   TacticPresetLibrary:{meta:{},traits:{},schemeStates:{},presetSchemeState:{},getGroup(name){return this.meta[name]?.group||'custom';},getRank(name){return Number(this.meta[name]?.rank||0);}},
   RecommendationEngine:{
     getPresetLadder(){return[];}, getAdjacentPresetInFamily(_current,desired){return desired;},
@@ -44,15 +52,20 @@ const registry=context.window.SLFActivePresetRegistry;
 const policy=context.window.SLFTacticDirectionPolicy;
 const engine=context.window.SLFCurrentActionHintEngine;
 
-assert.equal(registry.suiteVersion,'slf_tactic_suite_561_v7');
-assert.equal(registry.recommendationSchema,'slf_rule_decision_v7_tactical_suite');
+// --- Tactical Suite v8 identity -------------------------------------------
+assert.equal(registry.suiteVersion,'slf_tactic_suite_561_v8');
+assert.equal(registry.recommendationSchema,'slf_rule_decision_v8_tactical_suite');
 assert.equal(registry.defaultRiskAppetite,'standard');
+assert.equal(registry.fallbackPolicy,'5.61-tactical-suite-v8');
 assert.deepEqual(Array.from(registry.active),active);
-assert.equal(new Set(registry.active).size,11);
-assert.equal(Object.keys(registry.presets).length,11);
-assert.equal(Object.keys(registry.formations).length,11);
-assert.equal(Object.keys(registry.meta).length,11);
-assert.equal(Object.keys(registry.traits).length,11);
+assert.equal(new Set(registry.active).size,10,'active production presets must be exactly 10');
+assert.equal(Object.keys(registry.presets).length,10);
+assert.equal(Object.keys(registry.formations).length,10);
+assert.equal(Object.keys(registry.meta).length,10);
+assert.equal(Object.keys(registry.traits).length,10);
+assert.equal(Object.keys(registry.labels).length,11,'standard + 10 active');
+assert.equal(Object.keys(registry.displayMeta).length,11,'standard + 10 active');
+
 for(const name of active){
   assert.ok(context.BASE_PRESETS[name],`${name}: controls`);
   assert.ok(context.BASE_LABELS[name],`${name}: label`);
@@ -63,35 +76,92 @@ for(const name of active){
   assert.ok(registry.displayOrder.includes(name),`${name}: visible display order`);
 }
 for(const name of retired){assert.equal(context.BASE_PRESETS[name],undefined);assert.equal(context.BASE_LABELS[name],undefined);assert.ok(registry.removed.includes(name));}
-assert.equal(context.BASE_PRESETS.Compact_Counter_def3.build_long,'4');
-assert.equal(context.BASE_PRESETS.Compact_Counter_def3.build_fast,'4');
-assert.equal(context.BASE_PRESETS.Compact_Counter_def3.pass_risk,'2');
-assert.equal(policy.version,'5.61-tactical-suite-v7.1');
+
+// --- Compact_Counter_def3 v8 retirement -----------------------------------
+assert.equal(context.BASE_PRESETS.Compact_Counter_def3,undefined,'Compact Counter must be removed from BASE_PRESETS');
+assert.equal(context.BASE_LABELS.Compact_Counter_def3,undefined,'Compact Counter must be removed from BASE_LABELS');
+assert.equal(registry.active.includes('Compact_Counter_def3'),false,'not active');
+assert.ok(registry.removed.includes('Compact_Counter_def3'),'listed as removed for UI filtering/audit');
+assert.deepEqual([...registry.retiredActive],['Compact_Counter_def3'],'v8 retirement identity is explicit');
+for(const map of ['presets','labels','meta','traits','formations','displayMeta','presetSchemeState']){
+  assert.equal(Object.prototype.hasOwnProperty.call(registry[map],'Compact_Counter_def3'),false,`Compact Counter absent from registry.${map}`);
+}
+assert.equal(registry.displayOrder.includes('Compact_Counter_def3'),false,'absent from display order/active UI');
+assert.equal(registry.ladders.balance.includes('Compact_Counter_def3'),false,'absent from ladders');
+assert.equal(registry.auditTier.conditional.includes('Compact_Counter_def3'),false,'absent from conditional audit tier');
+assert.equal(policy.activePresets.includes('Compact_Counter_def3'),false,'absent from direction policy active set');
+assert.equal(policy.hardVeto('Compact_Counter_def3',{}).vetoed,true,'retired preset is hard-vetoed');
+
+// The historical definition must remain in module-local source, unchanged.
+const registrySource=source('src/modules/tactics-presets/active-preset-registry.js');
+assert.match(registrySource,/HISTORICAL_COMPACT_COUNTER/,'historical definition retained for audit only');
+assert.match(
+  registrySource,
+  /preset:\{def_line:'1',press_line:'1',def_width:'2',press_intense:'2',build_type:'1',build_temp:'3',build_long:'4',build_fast:'4',style:'3',pass_risk:'2',dribble:'3',cross:'2',corner:'1',shot:'3',priority:\[\]\}/,
+  'Compact Counter controls must not be retuned'
+);
+
+// --- No tactic control / formation retune of remaining active presets ------
+const EXPECTED_CONTROLS={
+  Arteta_Control433_bal3:{def_line:'2',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'2',build_long:'1',build_fast:'2',style:'3',pass_risk:'3',dribble:'2',cross:'2',corner:'1',shot:'2',priority:[]},
+  Pep_BoxControl_bal2:{def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'1',build_long:'1',build_fast:'2',style:'3',pass_risk:'2',dribble:'2',cross:'1',corner:'1',shot:'2',priority:[]},
+  Pep_PressCooldown_bal2:{def_line:'1',press_line:'2',def_width:'3',press_intense:'1',build_type:'1',build_temp:'2',build_long:'4',build_fast:'2',style:'2',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[]},
+  Pep_ControlledPush_att3:{def_line:'3',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'3',build_long:'1',build_fast:'4',style:'4',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[]},
+  Pep_TwoThreeFive_att3:{def_line:'4',press_line:'4',def_width:'4',press_intense:'4',build_type:'2',build_temp:'2',build_long:'1',build_fast:'3',style:'5',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'4',priority:[]},
+  Conte_WingbackWidth_bal4:{def_line:'2',press_line:'2',def_width:'5',press_intense:'3',build_type:'3',build_temp:'2',build_long:'3',build_fast:'3',style:'4',pass_risk:'3',dribble:'4',cross:'5',corner:'1',shot:'2',priority:['left','right']},
+  Klopp_Gegenpress_att4:{def_line:'4',press_line:'5',def_width:'3',press_intense:'5',build_type:'3',build_temp:'3',build_long:'2',build_fast:'5',style:'5',pass_risk:'4',dribble:'4',cross:'3',corner:'1',shot:'4',priority:[]},
+  Simeone_Compact442_def4:{def_line:'1',press_line:'2',def_width:'1',press_intense:'4',build_type:'1',build_temp:'1',build_long:'3',build_fast:'2',style:'1',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[]},
+  Simeone_LowBlock_def5:{def_line:'1',press_line:'1',def_width:'1',press_intense:'1',build_type:'1',build_temp:'1',build_long:'5',build_fast:'2',style:'1',pass_risk:'1',dribble:'1',cross:'1',corner:'1',shot:'1',priority:[]},
+  Bielsa_ChaosPress_att5:{def_line:'5',press_line:'5',def_width:'5',press_intense:'5',build_type:'3',build_temp:'3',build_long:'4',build_fast:'5',style:'5',pass_risk:'5',dribble:'5',cross:'5',corner:'1',shot:'5',priority:[]}
+};
+const EXPECTED_FORMATIONS={
+  Arteta_Control433_bal3:['gk','ld','cd1','cd3','rd','cm1','dm2','cm3','lw','st2','rw'],
+  Pep_BoxControl_bal2:['gk','ld','cd1','cd3','rd','dm2','cm1','cm3','am1','am2','st2'],
+  Pep_PressCooldown_bal2:['gk','ld','cd1','cd3','rd','dm2','lm','cm2','cm3','rm','st2'],
+  Pep_ControlledPush_att3:['gk','ld','cd1','cd3','rd','dm2','cm2','lw','am2','rw','st2'],
+  Pep_TwoThreeFive_att3:['gk','cd1','cd2','cd3','dm2','cm2','lw','am1','st1','am2','rw'],
+  Conte_WingbackWidth_bal4:['gk','cd1','cd2','cd3','lb','dm2','cm2','rb','lw','st2','rw'],
+  Klopp_Gegenpress_att4:['gk','ld','cd1','cd3','rd','dm2','cm2','lw','st1','st2','rw'],
+  Simeone_Compact442_def4:['gk','ld','cd1','cd3','rd','lm','cm2','dm2','rm','st1','st2'],
+  Simeone_LowBlock_def5:['gk','lb','cd1','cd2','cd3','rb','lm','dm2','cm2','rm','st2'],
+  Bielsa_ChaosPress_att5:['gk','cd1','cd2','cd3','lm','dm2','rm','lw','st1','st2','rw']
+};
+assert.deepEqual(Object.keys(registry.presets).sort(),active.slice().sort(),'only the 10 active presets define controls');
+for(const [name,controls] of Object.entries(EXPECTED_CONTROLS)){
+  assert.deepEqual(JSON.parse(JSON.stringify(registry.presets[name])),Object.assign({},controls,{priority:controls.priority.slice()}),`${name}: controls unchanged vs base 44f14bf2`);
+  assert.deepEqual([...registry.formations[name]],EXPECTED_FORMATIONS[name],`${name}: formation unchanged vs base 44f14bf2`);
+}
+
+// --- Policy identity and v8 pressure_escape --------------------------------
+assert.equal(policy.version,'5.61-tactical-suite-v8.1');
 assert.equal(policy.defaultRiskAppetite,'standard');
-assert.equal(policy.autoApply,false);
-assert.equal(engine.schema,'slf_rule_decision_v7_tactical_suite');
-assert.equal(engine.__tacticSuiteV7Installed,true);
+assert.equal(policy.autoApply,false,'Production Advisor stays manual-only');
+assert.equal(engine.schema,'slf_rule_decision_v8_tactical_suite');
+assert.equal(engine.__tacticSuiteV7Installed,true,'v7 compat marker retained for downstream passive layers');
+assert.equal(engine.__tacticSuiteV8Installed,true);
+assert.equal(context.RecommendationEngine.__tacticSuiteV8Installed,true);
 
 function decide(input={}){
   const snapshot={gameId:'scenario',status:'live',tacticTelemetry:{}};
   const decision=engine.run(snapshot,Object.assign({minute:30,scoreState:'draw',score:{state:'draw'},attackNeed:20,myBad:10,lowBadActions:true,signals:[]},input));
   assert.ok(active.includes(decision.action.preset),'recommendation must exist in active UI set');
-  assert.equal(snapshot.tacticTelemetry.libraryVersion,'slf_tactic_suite_561_v7');
-  assert.equal(snapshot.tacticTelemetry.recommendationSchema,'slf_rule_decision_v7_tactical_suite');
+  assert.notEqual(decision.action.preset,'Compact_Counter_def3','retired preset must never be recommended');
+  assert.equal(snapshot.tacticTelemetry.libraryVersion,'slf_tactic_suite_561_v8');
+  assert.equal(snapshot.tacticTelemetry.recommendationSchema,'slf_rule_decision_v8_tactical_suite');
   assert.equal(decision.telemetry.recommendedPreset,decision.action.preset);
   const eligible=decision.candidates.filter(item=>!item.vetoed);
   assert.ok(eligible.length>=2,'diagnostics must keep ranked eligible alternatives');
   assert.ok(new Set(eligible.map(item=>item.score)).size>=2,'candidate scores must be meaningful, not selected=100/rest=0 placeholders');
   assert.ok(decision.runnerUp?.preset,'runner-up must be explicit');
   assert.equal(decision.margin,decision.action.score-decision.runnerUp.score,'margin must match final raw ranking');
-  assert.equal(decision.confidence.gap,decision.margin,'confidence gap must match v7 margin');
+  assert.equal(decision.confidence.gap,decision.margin,'confidence gap must match v8 margin');
   return decision;
 }
 
 const scenarios=[
   ['stable',{},'Arteta_Control433_bal3','stable_control'],
-  ['pressure escape',{underPressure:true,counterExitAvailable:false,signals:['under_pressure','counter_exit_blocked']},'Pep_BoxControl_bal2','pressure_escape'],
-  ['counter',{underPressure:true,counterExitAvailable:true,signals:['under_pressure','counter_exit_available']},'Compact_Counter_def3','pressure_counter'],
+  ['pressure escape blocked outlet',{underPressure:true,counterExitAvailable:false,signals:['under_pressure','counter_exit_blocked']},'Pep_BoxControl_bal2','pressure_escape'],
+  ['pressure escape confirmed outlet',{underPressure:true,counterExitAvailable:true,signals:['under_pressure','counter_exit_available']},'Pep_BoxControl_bal2','pressure_escape'],
   ['cooldown',{pressFatigueRisk:true,myPowerDropPct:5},'Pep_PressCooldown_bal2','press_cooldown'],
   ['width',{centerClosed:true,wideQuality:true,signals:['center_closed','wide_quality']},'Conte_WingbackWidth_bal4','width_attack'],
   ['protect',{minute:72,scoreState:'winning',score:{state:'winning'}},'Simeone_Compact442_def4','protect_lead'],
@@ -102,6 +172,17 @@ const scenarios=[
   ['bielsa',{minute:86,scoreState:'losing',score:{state:'losing'},attackNeed:92,myBad:10,lowBadActions:true},'Bielsa_ChaosPress_att5','final_all_in']
 ];
 for(const [label,input,preset,situation] of scenarios){const d=decide(input);assert.equal(d.situationKey,situation,`${label}: situation`);assert.equal(d.action.preset,preset,`${label}: preset`);}
+
+// Under pressure with a confirmed outlet resolves through conservative
+// pressure_escape, no dedicated pressure_counter situation exists.
+const confirmedOutlet={underPressure:true,counterExitAvailable:true,signals:['under_pressure','counter_exit_available']};
+assert.equal(policy.classifySituation(confirmedOutlet),'pressure_escape');
+assert.equal(policy.preferredPreset('pressure_counter'),'Arteta_Control433_bal3','dedicated pressure_counter situation must not exist');
+const escapeRank=policy.rank(confirmedOutlet);
+assert.equal(escapeRank.situation,'pressure_escape');
+assert.deepEqual([...escapeRank.eligible.slice(0,3)].map(item=>item.preset),['Pep_BoxControl_bal2','Arteta_Control433_bal3','Pep_PressCooldown_bal2'],'conservative pressure_escape ranking');
+assert.ok(escapeRank.eligible[0].score>escapeRank.eligible[1].score&&escapeRank.eligible[1].score>escapeRank.eligible[2].score,'pressure_escape scores must be meaningful');
+assert.equal(decide(confirmedOutlet).candidates.some(item=>item.preset==='Compact_Counter_def3'),false,'Compact Counter absent from selector candidates');
 
 const noOutlet={underPressure:true,counterExitAvailable:false,signals:['under_pressure','counter_exit_blocked'],strengthGap:-100};
 assert.equal(policy.hardVeto('Compact_Counter_def3',noOutlet).vetoed,true);
@@ -238,8 +319,7 @@ assert.match(tacticControlEngine,/applyTacticObject/);
 assert.match(tacticControlEngine,/tacticalLabEvent/,'lab lifecycle events must travel in tagged tactical snapshots');
 assert.match(tacticControlEngine,/sendPlayerObservationsWithoutLabEventFanout/,'lab lifecycle snapshots must not fan out player observations');
 assert.equal(/\bApi\b/.test(tacticalLabRuntime),false,'Tactical Lab must reuse declared telemetry boundaries instead of adding a hidden API dependency');
-const activeRegistrySource=source('src/modules/tactics-presets/active-preset-registry.js');
-assert.equal(/EXP-561-P02-/.test(activeRegistrySource),false,'P02 experimental identities must not enter production registry');
-assert.equal(/EXP-561-P03-/.test(activeRegistrySource),false,'P03 experimental identities must not enter production registry');
+assert.equal(/EXP-561-P02-/.test(registrySource),false,'P02 experimental identities must not enter production registry');
+assert.equal(/EXP-561-P03-/.test(registrySource),false,'P03 experimental identities must not enter production registry');
 
-console.log('tactical suite v7 + Tactical Lab v1 P03 validation contracts: OK');
+console.log('tactical suite v8 retirement + Tactical Lab v1 P03 validation contracts: OK');
