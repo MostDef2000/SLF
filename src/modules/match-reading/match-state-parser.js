@@ -60,8 +60,6 @@
         }
     };
 
-    const MatchStateScoreCache = new Map();
-
     const MatchStateParser = {
         getGameId() {
             return new URLSearchParams(location.search).get('id');
@@ -125,30 +123,29 @@
         },
 
         readScore() {
-            const gameId = String(this.getGameId() || '');
             const parseScoreValue = value => {
                 const text = String(value ?? '').trim();
                 if (!/^\d{1,2}$/.test(text)) return null;
                 const parsed = Number(text);
                 return Number.isFinite(parsed) ? parsed : null;
             };
-            const acceptScore = (home, away) => {
-                if (home == null || away == null) return null;
-                const score = { home: Number(home), away: Number(away) };
-                if (!Number.isFinite(score.home) || !Number.isFinite(score.away)) return null;
-                if (gameId) MatchStateScoreCache.set(gameId, score);
-                return score;
+
+            const parseScorePair = value => {
+                const text = String(value ?? '').trim();
+                const match = text.match(/^(\d{1,2})\s*[-:–—]\s*(\d{1,2})$/);
+                if (!match) return null;
+                const home = parseScoreValue(match[1]);
+                const away = parseScoreValue(match[2]);
+                return home != null && away != null ? { home, away } : null;
             };
 
             const board = document.querySelector('.score_board');
             if (board) {
                 const legacyCells = [...board.querySelectorAll('.indarkbig div')];
                 if (legacyCells.length >= 2) {
-                    const score = acceptScore(
-                        parseScoreValue(legacyCells[0].textContent),
-                        parseScoreValue(legacyCells[1].textContent)
-                    );
-                    if (score) return score;
+                    const home = parseScoreValue(legacyCells[0].textContent);
+                    const away = parseScoreValue(legacyCells[1].textContent);
+                    if (home != null && away != null) return { home, away };
                 }
 
                 const scoreRoot = board.querySelector('.indarkbig') || board;
@@ -156,35 +153,25 @@
                     .map(node => parseScoreValue(node.textContent))
                     .filter(value => value != null);
                 if (childScores.length === 2) {
-                    return acceptScore(childScores[0], childScores[1]);
+                    return { home: childScores[0], away: childScores[1] };
                 }
 
-                // FM2026 finished boards may retain minute/status metadata next to an explicit score pair.
-                // Accept only an unambiguous delimited pair inside the score board; never scan the page.
-                const scoreText = String(scoreRoot.textContent || '');
-                const delimitedPairs = [...scoreText.matchAll(/(?:^|[^\d])(\d{1,2})\s*[:\u2013\u2014-]\s*(\d{1,2})(?!\d)/g)]
-                    .map(match => ({ home: Number(match[1]), away: Number(match[2]) }));
-                const uniquePairs = delimitedPairs.filter((pair, index, rows) =>
-                    rows.findIndex(row => row.home === pair.home && row.away === pair.away) === index
-                );
-                if (uniquePairs.length === 1) {
-                    return acceptScore(uniquePairs[0].home, uniquePairs[0].away);
-                }
+                const textPair = parseScorePair(scoreRoot.textContent);
+                if (textPair) return textPair;
 
-                const textScores = scoreText.match(/\b\d{1,2}\b/g) || [];
+                const textScores = String(scoreRoot.textContent || '').match(/\b\d{1,2}\b/g) || [];
                 if (textScores.length === 2) {
-                    return acceptScore(Number(textScores[0]), Number(textScores[1]));
+                    return { home: Number(textScores[0]), away: Number(textScores[1]) };
                 }
             }
 
-            // Some finished layouts remove or replace the live score nodes at the final transition.
-            // Reuse only the last valid score observed for this exact game during the current page lifetime.
-            if (gameId && this.getStatus() === 'finished') {
-                const cached = MatchStateScoreCache.get(gameId);
-                if (cached) return { home: cached.home, away: cached.away };
-            }
-
-            return null;
+            // FM2026 host markup uses compact .fm-score nodes (for example "1-0").
+            // Keep this fallback inside the match surface and fail closed if more than
+            // one score-looking node is present.
+            const fmScores = [...document.querySelectorAll('.match_content .fm-score')]
+                .map(node => parseScorePair(node.textContent))
+                .filter(Boolean);
+            return fmScores.length === 1 ? fmScores[0] : null;
         }
     };
 
