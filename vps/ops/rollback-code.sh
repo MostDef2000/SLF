@@ -30,7 +30,7 @@ done
 component=$(sed -n 's/^component=//p' "$BACKUP_DIR/deployment.env")
 case "$component" in
   api)
-    API_DIR='/root/slf-server'
+    API_DIR='/opt/slf/slf-server'
     UNIT_PATH='/etc/systemd/system/slf-server.service'
     [ -f "$BACKUP_DIR/server.py" ] || { echo 'server.py is missing from backup.' >&2; exit 1; }
     [ -f "$BACKUP_DIR/slf-server.service" ] || { echo 'service unit is missing from backup.' >&2; exit 1; }

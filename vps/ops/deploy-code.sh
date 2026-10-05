@@ -54,7 +54,7 @@ write_checksums() {
 
 case "$COMPONENT" in
   api)
-    API_DIR='/root/slf-server'
+    API_DIR='/opt/slf/slf-server'
     UNIT_PATH='/etc/systemd/system/slf-server.service'
     VENV_PY="$API_DIR/venv/bin/python"
     VENV_PIP="$API_DIR/venv/bin/pip"
