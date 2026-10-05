@@ -157,3 +157,35 @@ Current exported evidence is not sufficient for Tactical Lab v2+ outcome ranking
 Repository FM2026 browser fixtures use the host class `.fm-score` for compact score text such as `1-0`, while `MatchStateParser.readScore()` previously recognized only the legacy `.score_board` family. The bounded follow-up therefore preserves legacy parsing and adds a match-surface-only FM2026 fallback. It accepts exactly one explicit score pair and fails closed on ambiguity; it does not scrape arbitrary page numbers and does not invent `0:0`.
 
 Until newly collected results demonstrate actual outcome resolution, evolutionary ranking, survivor selection, champion/challenger promotion, P04 generation and production promotion remain deferred under issue #252.
+
+## Production selection update — Tactical Selector v8 (2026-10-05)
+
+Tactical Selector v8 makes a conservative production-policy change only. It does not retune any tactic control and does not change any formation.
+
+### Evidence basis
+
+Current 2026-10-04 RAG export:
+
+- stable named effects: 55;
+- `readyForRetune: false`; `minimumStableNamedEffects: 60`;
+- `Compact_Counter_def3`: n=6, xgBalance=-0.3517, shotsBalance=-3.0, effectScoreV1=-3.6668;
+- `Pep_BoxControl_bal2`: n=19, effectScoreV1=+0.7512;
+- `Arteta_Control433_bal3`: n=12, effectScoreV1=+0.4167;
+- 285 historical `match_results_v2` rows still lack a resolvable score, so finished-outcome evidence remains incomplete.
+
+The export is therefore evidence that Compact Counter's production selection is weak on a small sample, not evidence that its underlying sliders are intrinsically bad. v8 changes selection policy only; no numeric tactic control is modified.
+
+### Production selection change
+
+- Active production preset set: 11 -> 10.
+- `Compact_Counter_def3` is retired from active production selection, `BASE_PRESETS`, `BASE_LABELS`, labels, ladders, recommendation candidates and the manual dropdown.
+- Its original control/formation/meta/traits definition is retained unchanged in module-local source for audit/compatibility only and is never exported as an active preset.
+- The dedicated `pressure_counter` recommendation situation is removed. Under opponent pressure, when `emergency_lock` is not required, selection uses conservative `pressure_escape` ranking: `Pep_BoxControl_bal2`, `Arteta_Control433_bal3`, `Pep_PressCooldown_bal2`.
+- Retained roles: `Arteta_Control433_bal3` stable_control, `Pep_ControlledPush_att3` controlled_chase, `Pep_TwoThreeFive_att3` positional_siege, `Conte_WingbackWidth_bal4` width_attack, `Klopp_Gegenpress_att4` late_high_pressure, `Simeone_Compact442_def4` protect_lead, `Simeone_LowBlock_def5` emergency_lock, `Bielsa_ChaosPress_att5` final_all_in.
+- Suite/schema identity is bumped to `slf_tactic_suite_561_v8` / `slf_rule_decision_v8_tactical_suite` so telemetry collected after the change can be segmented as v8.
+
+The Production Advisor remains manual-only (`autoApply: false`). Progression guards and emergency overrides remain deterministic.
+
+### Unchanged boundaries
+
+No tactical slider/formation value, no P03 population or weights, no Tactical Lab v2+/survivor selection/evolution/champion-challenger promotion/P04, no VPS/API/storage/schema, no historical telemetry rewrite and no manual generated-artifact edit are part of v8.

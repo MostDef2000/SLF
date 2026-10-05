@@ -40,3 +40,21 @@ Repository source is merged to `main`, exact-head canonical CI is green, require
 ### Follow-up Definition of Done
 
 The parser compatibility change is merged to protected `main`, exact-head canonical CI is green, 4.4.330 is verified on `release`, and no generated source artifact or production data was edited manually. Tactical Lab v2+ remains deferred until post-release evidence demonstrates non-zero finished-outcome resolution.
+
+## Follow-up: Tactical Selector v8 active preset retirement
+
+- [ ] Introduce suite/schema v8 identity (`slf_tactic_suite_561_v8`, `slf_rule_decision_v8_tactical_suite`).
+- [ ] Reduce active production presets from 11 to 10 by retiring `Compact_Counter_def3`.
+- [ ] Remove the dedicated `pressure_counter` situation; route the under-pressure branch through `pressure_escape`; higher-priority preserved roles (`final_all_in`, `emergency_lock`, `press_cooldown`, `protect_lead`) keep their existing precedence over the pressure branch.
+- [ ] Preserve all other preset roles and the manual-only Production Advisor (`autoApply: false`).
+- [ ] Keep `Compact_Counter_def3` only as an unchanged module-local historical definition.
+- [ ] Assert 10 active presets and Compact Counter absence in node regression and the browser dropdown.
+- [ ] Prove retained active slider/formation values unchanged vs base `44f14bf2`.
+- [ ] Keep P03/populations, API/VPS/storage, historical data and generated artifacts untouched.
+- [ ] Verify exact branch scope against the approved scope.
+- [ ] Require exact-head `SLF CI / ci = SUCCESS`.
+- [ ] Merge the exact green head and verify automatic userscript release provenance.
+
+### Follow-up Definition of Done (v8)
+
+Tactical Selector v8 source is merged to `main` with exactly 10 active production presets and no Compact Counter in active selection/UI; no tactical slider/formation value changed for retained presets; P03 and Tactical Lab v2+ remain untouched; exact-head canonical CI is green; and userscript release provenance is verified. Post-change telemetry is segmentable as v8.
