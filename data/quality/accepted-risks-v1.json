@@ -134,8 +134,10 @@
         "Failures and skipped checks cannot be silently reclassified as successful review"
       ],
       "target": "Use an independent qualified reviewer when one becomes available and reassess whether approval requirements can be increased.",
-      "acceptance": "Repository owner explicitly accepted this single-maintainer risk on 2026-08-04.",
-      "reviewBy": "2026-10-01"
+      "acceptance": "Repository owner explicitly re-accepted this single-maintainer risk on 2026-10-05 after confirming that no independent qualified reviewer is currently available and reviewing the active main-branch CI and ownership compensating controls.",
+      "reviewBy": "2026-11-30",
+      "lastReviewed": "2026-10-05",
+      "reviewEvidence": "protect-main ruleset 20537936 is active with no bypass actors, pull-request integration, conversation resolution, deletion/non-fast-forward protection and required GitHub Actions context ci; CODEOWNERS assigns critical paths to @MostDef2000; recent reviewed governance/task pull requests inspected for this reassessment contain no independent approving review."
     },
     {
       "id": "QR-008",
@@ -153,8 +155,10 @@
         "QR-007 records the single-maintainer acceptance model"
       ],
       "target": "Increase required approving reviews when an independent reviewer becomes available; until then keep the aggregate status check and release-gate revalidation as compensating controls.",
-      "acceptance": "Repository owner explicitly accepted this single-maintainer CI self-modification risk on 2026-08-17.",
-      "reviewBy": "2026-10-01"
+      "acceptance": "Repository owner explicitly re-accepted this single-maintainer CI self-modification risk on 2026-10-05 after re-validating the active protected-main CI, CODEOWNERS routing, and release-gate exact-main revalidation controls.",
+      "reviewBy": "2026-11-30",
+      "lastReviewed": "2026-10-05",
+      "reviewEvidence": "protect-main ruleset 20537936 remains active and requires GitHub Actions context ci; .github/CODEOWNERS still routes workflow changes to @MostDef2000; SLF Release still validates the exact current main source before publication and deterministic release evidence remains part of CI/release validation."
     },
     {
       "id": "QR-009",
@@ -172,8 +176,10 @@
         "Only the repository owner has write access (single maintainer, QR-007)"
       ],
       "target": "Re-evaluate when GitHub supports the Actions application as a bypass actor for user-owned repositories, or when an independent reviewer and stricter approval model become available.",
-      "acceptance": "Repository owner explicitly accepted this platform limitation on 2026-08-17.",
-      "reviewBy": "2026-10-01"
+      "acceptance": "Repository owner explicitly re-accepted this release-branch platform limitation on 2026-10-05 after re-validating the active release ruleset, force-with-lease publication path, and weekly release-drift checks.",
+      "reviewBy": "2026-11-30",
+      "lastReviewed": "2026-10-05",
+      "reviewEvidence": "protect-release ruleset 20919671 remains active with deletion protection; SLF Release publishes only after exact-main provenance checks and uses force-with-lease against the observed release ref; SLF Maintenance still performs weekly release-tip, approvedCommit ancestry, and version-drift validation."
     }
   ]
 }
