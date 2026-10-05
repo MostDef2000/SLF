@@ -4,7 +4,7 @@ This operation is intentionally destructive and creates no data backup.
 
 ## Scope
 
-The purge touches only these API collections under `/root/slf-server/data`:
+The purge touches only these API collections under `/opt/slf/slf-server/data`:
 
 - `match_snapshots_v2`
 - `match_results_v2`

@@ -42,7 +42,7 @@ The script:
 6. installs dependencies and files;
 7. restarts the service;
 8. verifies that the service is active and the protected endpoint returns `401` without credentials;
-9. writes `/root/slf-server/DEPLOYED_GIT_COMMIT` only after verification succeeds.
+9. writes `/opt/slf/slf-server/DEPLOYED_GIT_COMMIT` only after verification succeeds.
 
 The systemd unit serves `server:app` through Gunicorn rather than Flask's development server. It intentionally uses one worker with multiple threads. Collection locks are process-local, so increasing the worker count would permit cross-process read-modify-write races even though each worker is internally locked. Do not raise `--workers` above `1` until storage uses an OS-level or external cross-process lock. Thread concurrency is supported by the existing per-collection `RLock` implementation.
 
@@ -58,12 +58,12 @@ Read-only verification:
 export SLF_API_TOKEN='...'
 python vps/ops/verify_api_deployment.py \
   --expected-commit <full-approved-commit-sha> \
-  --evidence /root/slf-server/api-verification.json
+  --evidence /opt/slf/slf-server/api-verification.json
 ```
 
 The utility verifies:
 
-- `/root/slf-server/DEPLOYED_GIT_COMMIT` exactly matches the approved SHA;
+- `/opt/slf/slf-server/DEPLOYED_GIT_COMMIT` exactly matches the approved SHA;
 - the protected analysis endpoint returns `401` without credentials;
 - authenticated `/api/analysis` reports `status: ok`;
 - all four canonical tactical collections exist, are valid, and return JSON arrays;
@@ -74,7 +74,7 @@ Optional write/read verification uses one dedicated operations collection and ne
 ```bash
 python vps/ops/verify_api_deployment.py \
   --expected-commit <full-approved-commit-sha> \
-  --evidence /root/slf-server/api-verification.json \
+  --evidence /opt/slf/slf-server/api-verification.json \
   --write-canary
 ```
 

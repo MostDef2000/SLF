@@ -46,7 +46,7 @@ DATE_PATHS = (
     "event.ts",
 )
 
-DEFAULT_DATA_DIR = Path("/root/slf-server/data")
+DEFAULT_DATA_DIR = Path("/opt/slf/slf-server/data")
 DEFAULT_BACKUP_ROOT = Path("/var/backups/slf-code")
 DEFAULT_EXPORT_COMMAND = Path("/opt/slf_ai_exporter_v2/slf_ai_exporter_v2/run_daily_export.sh")
 DEFAULT_SERVICE = "slf-server.service"

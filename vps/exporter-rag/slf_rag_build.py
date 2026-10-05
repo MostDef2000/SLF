@@ -125,7 +125,7 @@ def infer_use_for(text):
     return use or ["tactical_reasoning"]
 
 def build_forum_notes():
-    source_dir = Path(os.environ.get("SLF_FORUM_FAQ_DIR", "/root/slf-server/forum_faq"))
+    source_dir = Path(os.environ.get("SLF_FORUM_FAQ_DIR", "/opt/slf/slf-server/forum_faq"))
     index_path = source_dir / "index.json"
 
     forum_dir = OUT / "forum_faq"

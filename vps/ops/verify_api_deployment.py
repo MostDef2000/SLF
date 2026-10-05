@@ -258,7 +258,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--deployed-commit-file",
         type=Path,
-        default=Path("/root/slf-server/DEPLOYED_GIT_COMMIT"),
+        default=Path("/opt/slf/slf-server/DEPLOYED_GIT_COMMIT"),
     )
     parser.add_argument("--timeout", type=float, default=15.0)
     parser.add_argument("--write-canary", action="store_true")
