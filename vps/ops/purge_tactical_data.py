@@ -72,12 +72,10 @@ def parse_datetime(value: Any) -> dt.datetime | None:
             return None
         absolute = abs(number)
         if absolute > 10_000_000_000_000_000:
-            number /= 1_000_000_000_000_000
+            number /= 1_000_000_000
         elif absolute > 10_000_000_000_000:
-            number /= 1_000_000_000_000
-        elif absolute > 10_000_000_000:
             number /= 1_000_000
-        else:
+        elif absolute > 10_000_000_000:
             number /= 1_000
         try:
             return dt.datetime.fromtimestamp(number, tz=dt.timezone.utc)
