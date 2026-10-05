@@ -7,14 +7,14 @@ Base: 735d869a9b504f7034b9c942f6838cabb119bf63
 
 1. Add a `secret-dependency-scan` job to `.github/workflows/quality-integration.yml` following existing job conventions (`runs-on: ubuntu-24.04`, bounded timeout, pinned `actions/checkout` with `fetch-depth: 0`, no elevated permissions, no uploads/caching).
 2. Install the pinned gitleaks v8.30.1 binary from the official release URL and verify it against the published SHA-256 (`551f6fc8…470eb`) before use.
-3. Scan the full git history with `/tmp/gitleaks detect --source . --no-banner --redact --exit-code 1 --verbose`, configured by inline `GITLEAKS_CONFIG_TOML` (`[extend] useDefault = true` + path-only `[[allowlists]]`).
+3. Scan the full git history with `/tmp/gitleaks detect --source . --no-banner --redact --exit-code 1 --verbose`, configured by inline `GITLEAKS_CONFIG_TOML` (`[extend] useDefault = true` + commit+path-bounded `[[allowlists]]` with `condition = "AND"`).
 4. Audit Python dependencies with pinned `pip-audit==2.10.1` over `vps/api/requirements.txt` and `vps/exporter-rag/requirements.txt`.
 5. Register `secret-dependency-scan` in the aggregate `ci` job's `needs`, result env, stdout assertion list and pass/fail loop while preserving `if: always()`.
 6. Extend the `CI` entry `purpose` in `data/quality/workflow-inventory-v1.json` to mention full-history secret scanning and dependency audit.
 
 ## Baseline triage
 
-Scanning the repository history produced **16 findings** that collapse to **4 distinct literal shapes** across **5 paths**. Every path is covered by the path-only allowlist. HEAD is clean.
+Scanning the repository history produced **16 findings** that collapse to **4 distinct literal shapes** across **5 paths**, introduced by **10 distinct commits**. The global allowlist requires `condition = "AND"` on both the finding's commit SHA and its path, so only those 10 historical commits are exempt and every path is otherwise fully scanned. HEAD is clean.
 
 | Allowlisted path | Finding class | Distinct literal | Adjudication | Status at HEAD |
 |---|---|---|---|---|
@@ -24,21 +24,23 @@ Scanning the repository history produced **16 findings** that collapse to **4 di
 | `^vps/api/server\.py$` | hardcoded `SECRET_TOKEN` | legacy `SECRET_TOKEN` literal | historical-only | removed by `f468eb1`; env-based fail-closed |
 | `^vps/exporter-rag/slf_preset_evidence_561\.py$` | flagged literal is a collection identifier | identifier-shaped false positive | false positive | not a secret |
 
-The allowlist is by path only. No secret value, hash, or finding detail is embedded in the repository.
+The suppression is commit+path bounded: the `commits` list holds exactly the 10 distinct SHAs from the baseline JSON that introduced the 16 historical findings, and `condition = "AND"` requires a finding's commit SHA and path regex to match simultaneously. No secret value, hash, or finding detail is embedded in the repository. A new commit touching any allowlisted path has an unlisted SHA and therefore remains fully scanned.
 
 ## Risk controls
 
-- **Allowlist by path only.** `[[allowlists]].paths` contains regexes matching changed paths; no `regexes`, `stopwords`, or value-level entries are used.
+- **Commit+path-bounded suppression.** `[[allowlists]]` sets `condition = "AND"` with both `commits` (the 10 distinct baseline SHAs) and `paths` (5 path regexes). gitleaks suppresses a finding only when *both* the commit SHA and the path regex match (`config/config.go:319-327`, `detect/detect.go:849-866`); the default `OR` condition would suppress by path alone and create permanent blind spots, so `AND` is load-bearing. No `regexes`, `stopwords`, or value-level entries are used.
 - **No secret values in repo.** The scan runs with `--redact`, so any finding text is redacted in CI logs; the config embeds no literal.
-- **Negative-control proof.** A throwaway fixture repository containing a runtime-built fake token on a non-allowlisted path must be flagged (exit 1), proving the allowlist does not mask new leaks.
-- **Positive proof.** The same inline TOML applied to the frozen worktree must yield zero leaks / exit 0.
+- **Negative control A — new commit on an allowlisted path.** A throwaway fresh `git init` fixture introduces a runtime-built fake high-entropy token at `src/core/config.js` (an allowlisted path) in a commit whose SHA is not in the allowlist; it must be flagged (exit 1). This proves commit-bounding blocks future leaks on otherwise-exempt paths.
+- **Negative control B — non-allowlisted path.** The same fixture puts a fake token at `src/other/leak.js` (matching no path regex) in another commit; it must be flagged (exit 1).
+- **AND+commits load-bearing sanity check.** In the fixture only, removing the `commits` list while keeping `paths` and `condition = "AND"` suppresses control A (exit 0); this isolates the commit list as the deciding factor. No paths-only variant exists in the committed YAML.
+- **Positive proof.** The same inline TOML applied to the frozen worktree must yield zero leaks / exit 0 (the 16 historical findings stay suppressed).
 - **Fail-closed aggregate.** A non-`success` `secret-dependency-scan` result makes the `ci` job fail its `test "$result" = 'success'` loop, blocking the required context `SLF CI / ci`.
 
 ## Verification plan
 
-- `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/quality-integration.yml'))"` parses.
-- Extract the exact `GITLEAKS_CONFIG_TOML` from the merged YAML and run gitleaks over the worktree: expect exit 0, zero leaks.
-- Negative-control fixture: expect exit 1 with a flagged finding.
+- `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/quality-integration.yml'))"` parses; extract the exact `GITLEAKS_CONFIG_TOML` from the parsed YAML and `tomllib`-parse it.
+- Extract the exact `GITLEAKS_CONFIG_TOML` from the merged YAML and run gitleaks over the worktree: expect exit 0, zero leaks (16 historical findings remain suppressed).
+- Negative-control fixture (fresh `git init`): fake token at allowlisted path `src/core/config.js` in an unlisted commit → expect exit 1; fake token at non-allowlisted path `src/other/leak.js` → expect exit 1; paths+`AND` without the `commits` list on the allowlisted-path commit → expect exit 0.
 - `node tools/validate-workflow-inventory.mjs`, `node tools/validate-quality-governance.mjs`, `node tools/check-bundle-order.mjs` all pass.
 - `git diff --stat` / `git status --porcelain` limited to the five approved paths.
 - Exact-head canonical `SLF CI / ci = SUCCESS` on the PR.
@@ -46,7 +48,7 @@ The allowlist is by path only. No secret value, hash, or finding detail is embed
 ## Correct-course
 
 - If the CI baseline shows advisories from `pip-audit`: fix by bumping the affected requirement where compatible, or document the advisory as an accepted risk in issue #302. Per-ID `--ignore-vuln` suppression is permitted only with written justification and only in a future explicitly approved change.
-- If a future pull request legitimately introduces a new false-positive path, extend the path allowlist in a separately approved change with adjudication evidence; never add value-level exemptions.
+- If a future pull request legitimately introduces a new false-positive, extend the commit+path allowlist in a separately approved change with adjudication evidence (add the specific commit SHA and path together; never a path-only or value-level exemption).
 
 ## Deviation note
 

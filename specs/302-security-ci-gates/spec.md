@@ -12,7 +12,7 @@ The canonical `SLF CI / ci` gate enforced static analysis, contracts, security b
 
 - Run a full git history secret scan on every pull request as a mandatory `secret-dependency-scan` job inside the canonical `SLF CI` workflow.
 - Use the pinned official gitleaks v8.30.1 binary, verified against its published SHA-256 checksum, because `gitleaks-action@v2` is PR-diff-only and does not scan history.
-- Configure gitleaks through inline `GITLEAKS_CONFIG_TOML` with `[extend] useDefault = true` and a baseline allowlist by repository path only. No secret value is ever embedded in the repository configuration.
+- Configure gitleaks through inline `GITLEAKS_CONFIG_TOML` with `[extend] useDefault = true` and a baseline allowlist bounded by **both** commit SHA and repository path (`condition = "AND"`). Only the 10 commits that introduced the 16 adjudicated historical findings are exempt; new commits on any path remain fully scanned, so there are no future blind spots. No secret value is ever embedded in the repository configuration.
 - Fail the job (and therefore the aggregate `ci` job) on any gitleaks leak (`--exit-code 1`) and on any pip-audit advisory.
 - Audit both `vps/api/requirements.txt` and `vps/exporter-rag/requirements.txt` with pinned `pip-audit==2.10.1`.
 - Add the new job to the aggregate `ci` job's `needs` list while preserving `if: always()` so a failing scan blocks the single required context `SLF CI / ci`.
@@ -23,7 +23,7 @@ The canonical `SLF CI / ci` gate enforced static analysis, contracts, security b
 - The workflow remains least-privilege: workflow-level `permissions: contents: read`; the new job requests no elevated permissions.
 - The new job uses `runs-on: ubuntu-24.04`, a bounded `timeout-minutes`, and the repository-pinned `actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5` with `fetch-depth: 0`.
 - No artifact uploads, no dependency caching, no secret values in repository files.
-- The allowlist matches paths only; values are never written to the repository.
+- The allowlist matches commit SHA **and** path together (`condition = "AND"`), so suppression cannot extend to future commits; values are never written to the repository.
 
 ## Documented deviations
 

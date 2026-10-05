@@ -323,10 +323,25 @@ jobs:
             [extend]
             useDefault = true
 
-            # Baseline allowlist — BY PATH ONLY, no secret values embedded. All flagged
-            # findings are historical-only or false positives (adjudicated 2026-10-05,
-            # see specs/302-security-ci-gates/plan.md and issue #302):
+            # Historical baseline suppression — bounded by COMMIT+PATH (condition = "AND").
+            # Only the commits that introduced the 16 adjudicated historical findings are
+            # exempt. New commits — including any commit touching these paths — remain
+            # fully scanned. No secret values are embedded. Adjudication 2026-10-05:
+            # specs/302-security-ci-gates/plan.md and issue #302.
             [[allowlists]]
+            condition = "AND"
+            commits = [
+              '59a9fbe6237ea7752528f3de0f746c42ba115ceb', # evidence-script collection id FP (vps/exporter-rag)
+              'f22f66bc5e027eefc35181f2772d4c8c5b1d88b8', # server.py SECRET_TOKEN (vps/api)
+              'cfa391c177866fe32ebcd2ef1aaa02c4566db63c', # releases artifact TOKEN baseline
+              'b96736be4fa2dee62aa726de437d5c558cc134c1', # releases artifact TOKEN baseline
+              'bb6357f456fc7aed1683e51ca3bc1ae3dc0143d6', # config.js TOKEN + youth-external-monitor cacheKey FP
+              '8eb728c61b4b2c5f7962767d518ff98e3db6e951', # releases artifact TOKEN baseline
+              '1d7fc45f1b1d802c7e8f4ce7e3a30b625a4bb5f8', # releases artifact TOKEN baseline
+              '33c7ac1bdd01cccb1a4908ffb1408012dc5a8e86', # releases artifact TOKEN baseline
+              'fb891ebb730d8d1018cb528403b525171a9c46ea', # releases artifact TOKEN baseline
+              '400d10983508f5572b94db14c17cf9efd7e688e7', # releases artifact TOKEN baseline
+            ]
             paths = [
               '''(^|/)releases/''',                                           # generated artifacts; legacy TOKEN literal removed from sources
               '''^src/core/config\.js$''',                                    # legacy TOKEN literal removed at HEAD
