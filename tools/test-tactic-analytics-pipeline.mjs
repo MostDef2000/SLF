@@ -75,6 +75,59 @@ assert.equal(performance.rankings[0].tacticFingerprint, 'fixture-fingerprint');
 assert.ok(Number.isFinite(performance.rankings[0].metrics.riskAdjustedEffectScore));
 assert.match(fs.readFileSync(path.join(output, 'performance.md'), 'utf8'), /Klopp_Gegenpress_att4/);
 
+// Cohort isolation regression (SLF#325, validator finding 2): phase rows that differ
+// only by libraryVersion/recommendationSchema must never merge into one aggregate
+// (aggregate() labels each group from its first row), while fully identical
+// same-cohort rows must still aggregate together.
+const cohortBefore = {
+  gameId: 'cohort-fixture', myTeam: 1, teams: [1, 2], minute: 60,
+  score: { home: 1, away: 1 },
+  stats: [
+    { teamId: 1, stats: { power: 1800 } },
+    { teamId: 2, stats: { power: 1800 } }
+  ]
+};
+const cohortAfter = { ...cohortBefore, minute: 75 };
+function cohortEffect(libraryVersion, recommendationSchema, delta) {
+  return {
+    gameId: 'cohort-fixture', ts: Date.parse('2026-08-01T00:00:00Z'), presetName: 'Arteta_Control433_bal3',
+    fromMinute: 60, toMinute: 75, before: cohortBefore, after: cohortAfter,
+    effectKey: `cohort-${libraryVersion}`,
+    delta,
+    decisionContext: { schema: recommendationSchema, riskAppetite: 'balanced', action: { preset: 'Arteta_Control433_bal3' }, exploration: { applied: false } },
+    tacticTelemetry: { libraryVersion, recommendationSchema, riskAppetite: 'balanced', currentPreset: 'Arteta_Control433_bal3', currentTacticFingerprint: 'cohort-fingerprint' }
+  };
+}
+const v8CohortEffect = cohortEffect('slf_tactic_suite_561_v8', 'slf_rule_decision_v8_tactical_suite', { myXG: 1.0, oppXG: 0.5 });
+const v9CohortEffect = cohortEffect('slf_tactic_suite_561_v9', 'slf_rule_decision_v9_tactical_suite', { myXG: 0.5, oppXG: 1.0 });
+
+const cohortDir = path.join(temp, 'cohorts');
+canonicalCollections(cohortDir, [v8CohortEffect, v9CohortEffect]);
+run('aggregate-tactic-performance.mjs', ['--input', cohortDir, '--contract', path.join(root, 'data/tactics/tactic-evaluation-contract-v1.json'), '--output', path.join(output, 'performance-cohorts.json'), '--markdown', path.join(output, 'performance-cohorts.md'), '--now', '2026-08-02T00:00:00.000Z']);
+const cohortPerformance = JSON.parse(fs.readFileSync(path.join(output, 'performance-cohorts.json'), 'utf8'));
+assert.equal(cohortPerformance.summary.eligiblePhases, 2, 'both cohort rows must stay eligible');
+assert.equal(cohortPerformance.rankings.length, 2, 'v8 and v9 rows with otherwise-identical group dimensions must not merge into one aggregate');
+const v8Aggregate = cohortPerformance.rankings.find(row => row.libraryVersion === 'slf_tactic_suite_561_v8');
+const v9Aggregate = cohortPerformance.rankings.find(row => row.libraryVersion === 'slf_tactic_suite_561_v9');
+assert.ok(v8Aggregate && v9Aggregate, 'each aggregate must be labeled with its own libraryVersion, not the first row\'s cohort');
+assert.equal(v8Aggregate.recommendationSchema, 'slf_rule_decision_v8_tactical_suite', 'v8 aggregate must keep its own recommendationSchema');
+assert.equal(v9Aggregate.recommendationSchema, 'slf_rule_decision_v9_tactical_suite', 'v9 aggregate must keep its own recommendationSchema');
+assert.equal(v8Aggregate.samples, 1, 'a merged cohort-blended aggregate would report samples 2, not 1');
+assert.equal(v9Aggregate.samples, 1, 'a merged cohort-blended aggregate would report samples 2, not 1');
+assert.equal(v8Aggregate.metrics.riskAdjustedEffectScore, 0.5, 'v8 aggregate metrics must not blend v9 rows');
+assert.equal(v9Aggregate.metrics.riskAdjustedEffectScore, -0.5, 'v9 aggregate metrics must not blend v8 rows');
+assert.notEqual(v8Aggregate.metrics.riskAdjustedEffectScore, v9Aggregate.metrics.riskAdjustedEffectScore, 'cohort metrics must not collapse into the weighted mix');
+
+const sameCohortDir = path.join(temp, 'same-cohort');
+canonicalCollections(sameCohortDir, [v8CohortEffect, { ...v8CohortEffect }]);
+run('aggregate-tactic-performance.mjs', ['--input', sameCohortDir, '--contract', path.join(root, 'data/tactics/tactic-evaluation-contract-v1.json'), '--output', path.join(output, 'performance-same-cohort.json'), '--markdown', path.join(output, 'performance-same-cohort.md'), '--now', '2026-08-02T00:00:00.000Z']);
+const sameCohortPerformance = JSON.parse(fs.readFileSync(path.join(output, 'performance-same-cohort.json'), 'utf8'));
+assert.equal(sameCohortPerformance.rankings.length, 1, 'fully identical same-cohort rows must still aggregate into ONE group');
+assert.equal(sameCohortPerformance.rankings[0].samples, 2, 'identical same-cohort rows must produce samples 2');
+assert.equal(sameCohortPerformance.rankings[0].libraryVersion, 'slf_tactic_suite_561_v8');
+assert.equal(sameCohortPerformance.rankings[0].recommendationSchema, 'slf_rule_decision_v8_tactical_suite');
+assert.equal(sameCohortPerformance.rankings[0].metrics.riskAdjustedEffectScore, 0.5);
+
 const emptyDir = path.join(temp, 'empty');
 canonicalCollections(emptyDir, []);
 const emptyFailure = runFailure('validate-tactic-data-quality.mjs', ['--input', emptyDir, '--output', path.join(temp, 'empty-quality.json')]);
@@ -104,4 +157,4 @@ const python = process.env.PYTHON || 'python3';
 execFileSync(python, [path.join(root, 'vps', 'exporter-rag', 'test_slf_preset_evidence_561.py')], { stdio: 'inherit' });
 execFileSync(python, [path.join(root, 'vps', 'exporter-rag', 'test_slf_tactical_lab_v1.py')], { stdio: 'inherit' });
 
-console.log('[tactic-pipeline-test] passed canonical, empty, missing, corrupt, duplicate, exporter telemetry and Tactical Lab scenarios');
+console.log('[tactic-pipeline-test] passed canonical, cohort isolation, empty, missing, corrupt, duplicate, exporter telemetry and Tactical Lab scenarios');

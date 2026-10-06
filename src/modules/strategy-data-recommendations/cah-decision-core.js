@@ -104,7 +104,8 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
         const confidence = result.confidence?.level || 'low';
         return [
             `Режим: ${result.action?.decision || result.moment?.context?.gameMode || 'active_control'}`,
-            `Рекомендация: ${result.action?.preset || 'Arteta_Control433_bal3'} (${result.action?.score ?? 0})`,
+            // v9: no implicit preset fallback — без пресета это текст hold_current, а не имя пресета.
+            result.action?.preset ? `Рекомендация: ${result.action.preset} (${result.action.score ?? 0})` : 'Рекомендация отсутствует — оставить текущую тактику',
             `Уверенность: ${confidence}; разрыв ${result.margin ?? 0}`,
             `Причина: ${result.action?.reason || 'экспертный score'}`,
             candidateText ? `Кандидаты: ${candidateText}` : ''

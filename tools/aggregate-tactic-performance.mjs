@@ -147,7 +147,7 @@ function derivePhaseRow(effect, contract) {
   };
 }
 function groupKey(row) {
-  return [row.presetId, row.tacticFingerprint, row.riskAppetite, row.strengthGapBucket, row.scoreStateAtStart, row.minuteBucket, row.explorationApplied ? 'explore' : 'normal'].join('|');
+  return [row.presetId, row.tacticFingerprint, row.riskAppetite, row.strengthGapBucket, row.scoreStateAtStart, row.minuteBucket, row.explorationApplied ? 'explore' : 'normal', row.libraryVersion || 'unknown', row.recommendationSchema || 'unknown'].join('|');
 }
 function confidenceStatus(samples, effectiveSamples, contract) {
   const effective = contract.confidence.effectiveSamples || {};

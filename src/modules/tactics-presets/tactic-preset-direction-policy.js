@@ -1,35 +1,40 @@
-// Generator 5.61 Tactical Suite v8 Recommendation Policy
+// Generator 5.61 Tactical Suite v9 Recommendation Policy
 // ============================================================
 // The active registry owns tactic data/UI identity. This layer makes the
 // registry decision canonical for Coach Mode, progression and telemetry.
-// v8 retires Compact_Counter_def3 from production selection and drops the
-// dedicated pressure_counter situation in favour of conservative pressure_escape.
+// v9 eliminates all implicit preset fallbacks: when no eligible candidate
+// exists the decision is hold_current — a hardcoded preset is never injected.
 
 (function tacticPresetDirectionPolicy() {
     'use strict';
 
-    const VERSION = '5.61-tactical-suite-v8.1';
+    const VERSION = '5.61-tactical-suite-v9.0';
     const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
     const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
     if (!registry || !engine || window.SLFTacticDirectionPolicy?.version === VERSION) return;
 
-    const SUITE = registry.suiteVersion || 'slf_tactic_suite_561_v8';
-    const SCHEMA = registry.recommendationSchema || 'slf_rule_decision_v8_tactical_suite';
+    // v9 install guard: the policy only installs on a registry that carries the v9 suite
+    // identity. SUITE must NOT be derived before this check, otherwise a stale v8 registry
+    // would satisfy a self-referential comparison and silently install a mixed stack.
+    const EXPECTED_SUITE = 'slf_tactic_suite_561_v9';
+    if (registry.suiteVersion !== EXPECTED_SUITE) return;
+    const SUITE = registry.suiteVersion;
+    const SCHEMA = registry.recommendationSchema;
     const ACTIVE = Array.isArray(registry.active) ? registry.active.slice() : [];
     const ACTIVE_SET = new Set(ACTIVE);
     const DEFAULT_RISK = registry.defaultRiskAppetite || 'standard';
 
     const STEP = {
-        Arteta_Control433_bal3:['Pep_BoxControl_bal2','Pep_ControlledPush_att3','Simeone_Compact442_def4','Conte_WingbackWidth_bal4'],
+        Arteta_Control433_bal3:['Pep_BoxControl_bal2','Pep_ControlledPush_att3','Conte_WingbackWidth_bal4','Simeone_Compact442_def4'],
         Pep_BoxControl_bal2:['Arteta_Control433_bal3','Pep_PressCooldown_bal2'],
-        Pep_PressCooldown_bal2:['Pep_BoxControl_bal2','Arteta_Control433_bal3'],
+        Pep_PressCooldown_bal2:['Pep_BoxControl_bal2','Arteta_Control433_bal3','Simeone_Compact442_def4'],
         Pep_ControlledPush_att3:['Arteta_Control433_bal3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4'],
-        Pep_TwoThreeFive_att3:['Pep_ControlledPush_att3','Klopp_Gegenpress_att4','Conte_WingbackWidth_bal4'],
+        Pep_TwoThreeFive_att3:['Pep_ControlledPush_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4'],
         Conte_WingbackWidth_bal4:['Arteta_Control433_bal3','Pep_ControlledPush_att3','Pep_TwoThreeFive_att3'],
-        Klopp_Gegenpress_att4:['Pep_TwoThreeFive_att3','Bielsa_ChaosPress_att5'],
-        Bielsa_ChaosPress_att5:['Klopp_Gegenpress_att4'],
-        Simeone_Compact442_def4:['Arteta_Control433_bal3','Simeone_LowBlock_def5'],
-        Simeone_LowBlock_def5:['Simeone_Compact442_def4']
+        Simeone_Compact442_def4:['Arteta_Control433_bal3','Simeone_LowBlock_def5','Pep_PressCooldown_bal2'],
+        Simeone_LowBlock_def5:['Simeone_Compact442_def4','Pep_BoxControl_bal2'],
+        Klopp_Gegenpress_att4:['Pep_TwoThreeFive_att3','Pep_ControlledPush_att3','Bielsa_ChaosPress_att5'],
+        Bielsa_ChaosPress_att5:['Klopp_Gegenpress_att4']
     };
 
     const SCORE_BY_SITUATION = {
@@ -131,17 +136,18 @@
         const c = normalizedContext(context);
         const veto = hardVeto(name, c);
         if (veto.vetoed) {
-            return { preset:name, score:-999, rawScore:-999, vetoed:true, vetoReasons:veto.reasons, reasons:[], parts:{situationFit:0,riskAppetite:0,evidenceGuard:0} };
+            return { preset:name, score:-999, rawScore:-999, vetoed:true, vetoReasons:veto.reasons, reasons:[], parts:{rulePrior:0,contextFit:0,riskAdjustment:0,boundedEvidenceAdjustment:0} };
         }
 
         const situationFit = Number(SCORE_BY_SITUATION[situation]?.[name] || 0);
         const appetite = currentRisk();
         const riskAppetite = riskDelta(name, appetite);
-        const evidenceGuard = 0;
-        const score = situationFit + riskAppetite + evidenceGuard;
+        const boundedEvidenceAdjustment = Number(registry.evidenceAdjustment?.({ preset:name, situation, context:c }) || 0);
+        const score = situationFit + riskAppetite + boundedEvidenceAdjustment;
         const reasons = [];
-        if (situationFit) reasons.push({ key:'situationFit', delta:situationFit, reason:`роль совпадает с ситуацией ${situation}` });
-        if (riskAppetite) reasons.push({ key:'riskAppetite', delta:riskAppetite, reason:`профиль риска ${appetite}` });
+        if (situationFit) reasons.push({ key:'rulePrior', delta:situationFit, reason:`роль совпадает с ситуацией ${situation}` });
+        if (riskAppetite) reasons.push({ key:'riskAdjustment', delta:riskAppetite, reason:`профиль риска ${appetite}` });
+        if (boundedEvidenceAdjustment) reasons.push({ key:'boundedEvidenceAdjustment', delta:boundedEvidenceAdjustment, reason:'ограниченная evidence-поправка (issue #325)' });
         return {
             preset:name,
             score,
@@ -149,7 +155,7 @@
             vetoed:false,
             vetoReasons:[],
             reasons,
-            parts:{ situationFit, riskAppetite, evidenceGuard }
+            parts:{ rulePrior:situationFit, contextFit:0, riskAdjustment:riskAppetite, boundedEvidenceAdjustment }
         };
     }
 
@@ -163,13 +169,28 @@
 
     function choose(context = {}) {
         const ranked = rank(context);
-        const selected = ranked.eligible[0] || { preset:'Arteta_Control433_bal3', score:0, reasons:[] };
+        // v9: no implicit preset fallback — без безопасного кандидата решение hold_current.
+        if (!ranked.eligible[0]) {
+            return {
+                name:null,
+                situation:ranked.situation,
+                reason:'Нет безопасной рекомендации — оставить текущую тактику',
+                selected:null,
+                runnerUp:ranked.eligible[0]||null,
+                margin:0,
+                confidence:'low',
+                hold:true,
+                fallbackReason:'no_eligible_candidate',
+                candidates:ranked.all
+            };
+        }
+        const selected = ranked.eligible[0];
         const runnerUp = ranked.eligible[1] || null;
         const margin = runnerUp ? selected.score - runnerUp.score : selected.score;
         return {
             name:selected.preset,
             situation:ranked.situation,
-            reason:`${ranked.situation}: ${registry.meta?.[selected.preset]?.use || 'tactical suite v8'}`,
+            reason:`${ranked.situation}: ${registry.meta?.[selected.preset]?.use || 'tactical suite v9'}`,
             selected,
             runnerUp,
             margin,
@@ -203,12 +224,12 @@
             libraryVersion:SUITE,
             recommendationSchema:SCHEMA,
             riskAppetite:currentRisk(),
-            recommendedPreset:name || decision?.action?.preset || null
+            recommendedPreset:name || (decision?.action?.preset && ACTIVE_SET.has(decision.action.preset) ? decision.action.preset : null)
         });
     }
 
     const originalRun = engine.run.bind(engine);
-    engine.run = function runTacticalSuiteV8(snapshot, context = {}) {
+    engine.run = function runTacticalSuiteV9(snapshot, context = {}) {
         const result = originalRun(snapshot, context) || {};
         const mergedContext = Object.assign({}, result?.moment?.context || {}, context);
         const selected = choose(mergedContext);
@@ -219,31 +240,50 @@
         result.margin = selected.margin;
         result.confidence = Object.assign({}, result.confidence || {}, { level:selected.confidence, gap:selected.margin });
         result.runnerUp = selected.runnerUp ? { preset:selected.runnerUp.preset, score:selected.runnerUp.score } : null;
-        result.action = Object.assign({}, result.action || {}, {
-            preset:selected.name,
-            rawPreset:selected.name,
-            score:selected.selected.score,
-            decision:selected.situation,
-            ruleId:`suite_v8_${selected.situation}`,
-            reason:selected.reason,
-            riskAppetite:result.riskAppetite,
-            libraryVersion:SUITE,
-            recommendationSchema:SCHEMA,
-            guardType:'suite_v8_selection',
-            guardReason:'central tactical suite v8 ranking'
-        });
+        if (selected.hold) {
+            // v9: без production fallback — держим текущую тактику, пресет не подставляем.
+            result.action = {
+                preset:null,
+                rawPreset:null,
+                decision:'hold_current',
+                ruleId:'suite_v9_hold_current',
+                reason:selected.reason,
+                fallbackReason:'no_eligible_candidate',
+                guardType:'hold_current',
+                guardReason:'no production preset fallback is allowed',
+                score:0,
+                riskAppetite:result.riskAppetite,
+                libraryVersion:SUITE,
+                recommendationSchema:SCHEMA
+            };
+        } else {
+            result.action = Object.assign({}, result.action || {}, {
+                preset:selected.name,
+                rawPreset:selected.name,
+                score:selected.selected.score,
+                decision:selected.situation,
+                ruleId:`suite_v9_${selected.situation}`,
+                reason:selected.reason,
+                riskAppetite:result.riskAppetite,
+                libraryVersion:SUITE,
+                recommendationSchema:SCHEMA,
+                guardType:'suite_v9_selection',
+                guardReason:'central tactical suite v9 ranking'
+            });
+        }
         result.candidates = selected.candidates.slice().sort((a, b) => {
             if (a.vetoed !== b.vetoed) return a.vetoed ? 1 : -1;
             return b.score - a.score || a.preset.localeCompare(b.preset);
         });
         result.vetoedPresets = Object.fromEntries(result.candidates.filter(item => item.vetoed).map(item => [item.preset, item.vetoReasons]));
         result.telemetry = Object.assign({}, result.telemetry || {}, {
-            recommendedPreset:selected.name,
+            recommendedPreset:selected.hold ? null : selected.name,
             libraryVersion:SUITE,
             recommendationSchema:SCHEMA,
             riskAppetite:result.riskAppetite
         });
-        stamp(snapshot, result, selected.name);
+        if (selected.hold) result.telemetry.recommendationState = 'fallback_hold';
+        stamp(snapshot, result, selected.hold ? null : selected.name);
         return result;
     };
 
@@ -251,6 +291,7 @@
     engine.ACTIVE_PRESETS = ACTIVE.slice();
     engine.__tacticSuiteV7Installed = true;
     engine.__tacticSuiteV8Installed = true;
+    engine.__tacticSuiteV9Installed = true;
     engine.__generator561RuleScorerApplied = true;
     engine.__generator561PressureResponseApplied = true;
 
@@ -261,13 +302,18 @@
             const step = shortestStep(current, desired);
             return ACTIVE_SET.has(step) ? step : desired;
         };
-        RecommendationEngine.selectRawPreset = function selectSuiteV8(snapshot, state = {}) {
+        RecommendationEngine.selectRawPreset = function selectSuiteV9(snapshot, state = {}) {
             const decision = window.SLFCurrentActionHintEngine?.run ? window.SLFCurrentActionHintEngine.run(snapshot || {}, state || {}) : null;
-            const name = ACTIVE_SET.has(decision?.action?.preset) ? decision.action.preset : 'Arteta_Control433_bal3';
-            stamp(snapshot, decision, name);
-            return { name, reason:decision?.action?.reason || 'tactical suite v8 fallback', ruleDecision:decision, progressionAction:'suite_v8_scored' };
+            // v9: no implicit preset fallback — невалидное/отсутствующее решение означает hold_current.
+            const preset = decision?.action?.preset;
+            if (!decision || !ACTIVE_SET.has(preset)) {
+                stamp(snapshot, decision, null);
+                return { name:null, reason:'hold_current: no valid suite decision', ruleDecision:decision, progressionAction:'hold_current', fallbackReason:decision ? 'invalid_preset' : 'no_decision' };
+            }
+            stamp(snapshot, decision, preset);
+            return { name:preset, reason:decision.action.reason || 'tactical suite v9', ruleDecision:decision, progressionAction:'suite_v9_scored' };
         };
-        if (originalGuard) RecommendationEngine.applyProgressionGuard = function applySuiteV8Guard(candidate, snapshot, context = {}) {
+        if (originalGuard) RecommendationEngine.applyProgressionGuard = function applySuiteV9Guard(candidate, snapshot, context = {}) {
             if (!candidate?.name || !ACTIVE_SET.has(candidate.name) || !snapshot || snapshot.status === 'finished') return candidate;
             const targetPreset = candidate.name;
             let guarded = ['Simeone_LowBlock_def5','Bielsa_ChaosPress_att5'].includes(candidate.name) || context?.urgency?.overrideProgressionGuard === true
@@ -293,6 +339,7 @@
         RecommendationEngine.__generator561PressureResponseApplied = true;
         RecommendationEngine.__tacticSuiteV7Installed = true;
         RecommendationEngine.__tacticSuiteV8Installed = true;
+        RecommendationEngine.__tacticSuiteV9Installed = true;
     }
 
     if (typeof BASE_PRESETS !== 'undefined' && BASE_PRESETS) {
@@ -325,7 +372,8 @@
         shortestStep,
         preferredPreset:situation => {
             const scores = SCORE_BY_SITUATION[situation] || {};
-            return Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Arteta_Control433_bal3';
+            // v9: no implicit preset fallback — пустая таблица означает null.
+            return Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
         },
         evaluate:(snapshot={}, context={}) => window.SLFCurrentActionHintEngine?.run ? window.SLFCurrentActionHintEngine.run(snapshot, context) : null
     };

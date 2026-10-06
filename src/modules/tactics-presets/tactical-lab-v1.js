@@ -23,11 +23,15 @@
         const STATUS_ID = 'slf-tactical-lab-status';
         const DETAIL_ID = 'slf-tactical-lab-detail';
         const MAX_OUTBOX = 6;
-        const productionIds = [
-            'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2','Compact_Counter_def3',
-            'Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4',
-            'Simeone_Compact442_def4','Simeone_LowBlock_def5','Bielsa_ChaosPress_att5'
-        ];
+        // v9: production ids derive from the active registry when it is already loaded,
+        // otherwise the static v9 list (same 10 presets, registry.active order).
+        const productionIds = (typeof window !== 'undefined' && Array.isArray(window.SLFActivePresetRegistry?.active) && window.SLFActivePresetRegistry.active.length
+            ? window.SLFActivePresetRegistry.active.slice()
+            : [
+                'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2','Pep_ControlledPush_att3',
+                'Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4',
+                'Simeone_Compact442_def4','Simeone_LowBlock_def5','Bielsa_ChaosPress_att5'
+            ]);
         const seedPresets = {
             Arteta_Control433_bal3:{def_line:'2',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'2',build_long:'1',build_fast:'2',style:'3',pass_risk:'3',dribble:'2',cross:'2',corner:'1',shot:'2',priority:[]},
             Pep_BoxControl_bal2:{def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'1',build_long:'1',build_fast:'2',style:'3',pass_risk:'2',dribble:'2',cross:'1',corner:'1',shot:'2',priority:[]},
