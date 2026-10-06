@@ -165,6 +165,21 @@
                 }
             }
 
+            // FM2026 "g3" layout (issue #311) renders the finished score in a
+            // .g3-score block whose .indarkbig children are e.g. "3", ":" and "0".
+            // Only return when exactly two numeric children resolve; if the score
+            // has not been populated yet (0 or 1 numeric nodes), fall through to
+            // the fail-closed .fm-score fallback below.
+            const g3 = document.querySelector('.g3-score');
+            if (g3) {
+                const g3Scores = [...g3.querySelectorAll('.indarkbig')]
+                    .map(node => parseScoreValue(node.textContent))
+                    .filter(value => value != null);
+                if (g3Scores.length === 2) {
+                    return { home: g3Scores[0], away: g3Scores[1] };
+                }
+            }
+
             // FM2026 host markup uses compact .fm-score nodes (for example "1-0").
             // Keep this fallback inside the match surface and fail closed if more than
             // one score-looking node is present.

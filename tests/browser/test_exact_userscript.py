@@ -20,6 +20,8 @@ ROUTES = {
     "owned": FIXTURES / "owned-live-match.html",
     "foreign": FIXTURES / "foreign-live-match.html",
     "finished": FIXTURES / "finished-match.html",
+    "finished-g3": FIXTURES / "finished-match-g3.html",
+    "finished-g3-pending": FIXTURES / "finished-match-g3-pending.html",
     "incomplete": FIXTURES / "incomplete-match.html",
     "tactic": FIXTURES / "team-tactic.html",
     "transfer": FIXTURES / "transfer-page.html",
@@ -548,6 +550,41 @@ def assert_finished_ambiguous(page: Page):
     assert not any("/api/match_results_v2?mode=append" in row["url"] for row in rows), rows
 
 
+def assert_finished_g3(page: Page):
+    page.wait_for_selector("#slf-match-parser-panel")
+    page.get_by_role("button", name="Спарсить завершённый").click()
+    page.wait_for_function(
+        "() => window.__slfRequests.some(item => item.url.includes('/api/match_results_v2?mode=append'))"
+    )
+    rows = request_rows(page)
+    result_rows = [row for row in rows if "/api/match_results_v2?mode=append" in row["url"]]
+    assert len(result_rows) == 1, result_rows
+    payload = json.loads(result_rows[0]["data"])
+    records = payload if isinstance(payload, list) else [payload]
+    assert records[0]["recordType"] == "match_result"
+    assert records[0]["status"] == "finished"
+    assert records[0]["score"] == {"home": 3, "away": 0}
+    assert "|3:0|" in records[0]["resultKey"]
+    assert not any("/api/match_snapshots_v2?mode=append" in row["url"] for row in rows), rows
+
+
+def assert_finished_g3_pending(page: Page):
+    page.wait_for_selector("#slf-match-parser-panel")
+    page.get_by_role("button", name="Спарсить завершённый").click()
+    # #311 guard contract: a g3-layout finished match whose dynamic score nodes
+    # are not populated yet must NOT be posted.  The parser log surfaces the
+    # client-side kind=missing_score rejection instead of the success line.
+    page.wait_for_function(
+        "() => document.getElementById('slf-parser-log')?.textContent.includes('Ошибка отправки результата: missing_score')"
+    )
+    page.wait_for_timeout(150)
+    log_text = page.locator("#slf-parser-log").text_content()
+    assert "Ошибка отправки результата: missing_score" in log_text, log_text
+    assert "Финальный результат отправлен" not in log_text, log_text
+    rows = request_rows(page)
+    assert not any("/api/match_results_v2?mode=append" in row["url"] for row in rows), rows
+
+
 def assert_incomplete_match(page: Page):
     page.wait_for_selector("#slf-match-parser-panel")
     page.wait_for_selector("#slf-manual-recommendation-btn")
@@ -581,6 +618,8 @@ def main():
         ("foreign-live", "/game.php?id=e2e-foreign&fixture=foreign", "success", assert_foreign_live),
         ("finished-match", "/game.php?id=e2e-finished&fixture=finished", "success", assert_finished_match),
         ("finished-ambiguous", "/game.php?id=e2e-finished-ambiguous&fixture=finished", "success", assert_finished_ambiguous),
+        ("finished-g3", "/game.php?id=e2e-finished-g3&fixture=finished-g3", "success", assert_finished_g3),
+        ("finished-g3-pending", "/game.php?id=e2e-finished-g3p&fixture=finished-g3-pending", "success", assert_finished_g3_pending),
         ("incomplete-match", "/game.php?id=e2e-incomplete&fixture=incomplete", "success", assert_incomplete_match),
         ("team-tactic", "/team4.php?action=tactic", "success", assert_tactic_page),
         ("transfer-page", "/transfers.php", "success", assert_transfer_page),
