@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -9,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 MODULE_PATH = Path(__file__).resolve().with_name("quarantine_duplicate_results.py")
 SPEC = importlib.util.spec_from_file_location("quarantine_duplicate_results", MODULE_PATH)
@@ -397,6 +400,250 @@ class QuarantineDuplicateResultsTest(unittest.TestCase):
                 self.assertEqual(self.results_path.read_bytes(), original)
                 self.assertEqual(self.backup_files(), [])
                 self.assertEqual(self.quarantine_files(), [])
+
+    # ---- issue #321: @keep modifier for exact-score specs -------------------
+
+    def duplicate_triple(self):
+        """Three 33723318-style rows: same resultKey, same 2:1, parsedAt t1<t2<t3."""
+        return (
+            self.result_row(33723318, {"home": 2, "away": 1}, parsed_at=1770000001000),
+            self.result_row(33723318, {"home": 2, "away": 1}, parsed_at=1770000002000),
+            self.result_row(33723318, {"home": 2, "away": 1}, parsed_at=1770000003000),
+        )
+
+    def test_keep_modifier_quarantines_all_but_oldest_or_latest_row(self):
+        for keep, kept_index, quarantined in (
+            ("oldest", 0, (1, 2)),
+            ("latest", 2, (0, 1)),
+        ):
+            with self.subTest(keep=keep):
+                rows = self.duplicate_triple()
+                self.reset_fixtures(rows)
+
+                proc = self.run_cli("--quarantine", f"33723318:2:1@keep={keep}", "--apply")
+
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                plan = json.loads(proc.stdout)
+                self.assertEqual(plan["mode"], "apply")
+                self.assertEqual(plan["unmatchedRules"], [])
+                self.assertEqual(len(plan["rules"]), 1)
+                rule = plan["rules"][0]
+                self.assertEqual(rule["gameId"], "33723318")
+                self.assertEqual(rule["spec"], f"2:1@keep={keep}")
+                self.assertEqual(rule["keep"], keep)
+                # keptRow is the FULL surviving row dict (the t1 / t3 row)
+                self.assertEqual(rule["keptRow"], rows[kept_index])
+                self.assertEqual(rule["matchedIndices"], [0, 1, 2])
+                self.assertEqual(rule["quarantinedIndices"], list(quarantined))
+                self.assertEqual(plan["quarantinedCount"], 2)
+
+                # results file holds only the survivor, the rest are quarantined
+                self.assertEqual(self.read(self.results_path), [rows[kept_index]])
+                quarantine_files = self.quarantine_files()
+                self.assertEqual(len(quarantine_files), 1)
+                self.assertEqual(
+                    self.read(quarantine_files[0]), [rows[index] for index in quarantined]
+                )
+                self.assertEqual(plan["quarantineFile"], str(quarantine_files[0]))
+
+    def test_keep_without_resolvable_parsed_at_fails_closed(self):
+        # parsedAt true/None/"x" are all non-numeric -> the keep rule cannot
+        # pick a survivor and is refused like an unmatched rule
+        unresolvable = []
+        for parsed_at in (True, None, "x"):
+            row = self.result_row(33723318, {"home": 2, "away": 1})
+            row["parsedAt"] = parsed_at
+            unresolvable.append(row)
+        unresolvable = tuple(unresolvable)
+        # a second, matching rule makes the run PARTIALLY unmatched: that is
+        # the existing fail-closed path on --apply (a lone refused rule takes
+        # the existing all-unmatched "nothing to do" path, asserted below)
+        other_row = self.result_row("game-2", {"home": 1, "away": 0})
+        self.reset_fixtures([*unresolvable, other_row])
+        original = self.results_path.read_bytes()
+
+        # dry run: exit 0, refused rule listed in unmatchedRules with reason
+        dry = self.run_cli("--quarantine", "33723318:2:1@keep=oldest", "--quarantine", "game-2:1:0")
+        self.assertEqual(dry.returncode, 0, dry.stderr)
+        plan = json.loads(dry.stdout)
+        self.assertEqual(len(plan["rules"]), 1)
+        self.assertEqual(plan["rules"][0]["spec"], "1:0")
+        self.assertEqual(len(plan["unmatchedRules"]), 1)
+        unmatched = plan["unmatchedRules"][0]
+        self.assertEqual(unmatched["gameId"], "33723318")
+        self.assertEqual(unmatched["spec"], "2:1@keep=oldest")
+        self.assertEqual(unmatched["reason"], "no_resolvable_parsed_at")
+        self.assertEqual(unmatched["matchedRows"], list(unresolvable))
+        self.assertEqual(plan["quarantinedCount"], 1)
+
+        # --apply: fail-closed, byte-identical results file, no artifacts
+        proc = self.run_cli(
+            "--quarantine", "33723318:2:1@keep=oldest", "--quarantine", "game-2:1:0", "--apply"
+        )
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("ERROR", proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["unmatchedRules"][0]["reason"], "no_resolvable_parsed_at")
+        self.assertEqual(self.results_path.read_bytes(), original)
+        self.assertEqual(self.backup_files(), [])
+        self.assertEqual(self.quarantine_files(), [])
+        self.assertEqual(self.temp_files(), [])
+
+        # a LONE refused keep rule behaves exactly like an unmatched rule:
+        # --apply is the existing idempotent "nothing to do" (exit 0, no mutation)
+        self.reset_fixtures(unresolvable)
+        original = self.results_path.read_bytes()
+        lone = self.run_cli("--quarantine", "33723318:2:1@keep=latest", "--apply")
+        self.assertEqual(lone.returncode, 0, lone.stderr)
+        self.assertIn("nothing to do", lone.stdout)
+        self.assertEqual(
+            json.loads(lone.stdout.strip().rsplit("\n", 1)[0])["unmatchedRules"][0]["reason"],
+            "no_resolvable_parsed_at",
+        )
+        self.assertEqual(self.results_path.read_bytes(), original)
+        self.assertEqual(self.backup_files(), [])
+        self.assertEqual(self.quarantine_files(), [])
+
+    def test_keep_single_match_preserves_the_row(self):
+        # keep semantics are "quarantine all except one": with exactly one
+        # matched row the kept row IS that row and nothing is quarantined —
+        # the rule still counts as matched (the match record is preserved)
+        solo = self.result_row(33723318, {"home": 2, "away": 1}, parsed_at=1770000001000)
+        self.reset_fixtures([solo])
+        original = self.results_path.read_bytes()
+
+        dry = self.run_cli("--quarantine", "33723318:2:1@keep=oldest")
+        self.assertEqual(dry.returncode, 0, dry.stderr)
+        self.assertIn("nothing to do", dry.stdout)
+        plan = json.loads(dry.stdout.strip().rsplit("\n", 1)[0])
+        self.assertEqual(plan["unmatchedRules"], [])
+        self.assertEqual(plan["quarantinedCount"], 0)
+        self.assertEqual(len(plan["rules"]), 1)
+        self.assertEqual(plan["rules"][0]["keep"], "oldest")
+        self.assertEqual(plan["rules"][0]["keptRow"], solo)
+        self.assertEqual(plan["rules"][0]["quarantinedIndices"], [])
+
+        # --apply is an idempotent no-op: byte-identical results, no artifacts
+        proc = self.run_cli("--quarantine", "33723318:2:1@keep=oldest", "--apply")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("nothing to do", proc.stdout)
+        self.assertEqual(self.results_path.read_bytes(), original)
+        self.assertEqual(self.backup_files(), [])
+        self.assertEqual(self.quarantine_files(), [])
+        self.assertEqual(self.temp_files(), [])
+
+    def test_keep_suffix_grammar_rejections(self):
+        self.write(self.results_path, [self.result_row("game-1", None)])
+        for spec in ("game-1:?@keep=latest", "game-1:?@keep=oldest"):
+            with self.subTest(spec=spec):
+                # the '?' spec must REJECT a @keep suffix with an argparse error
+                proc = self.run_cli("--quarantine", spec)
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                self.assertIn("invalid quarantine rule", proc.stderr)
+                self.assertIn("must not carry a @keep suffix", proc.stderr)
+        for spec in ("game-1:2:1@keep=nope", "game-1:2:1@keep"):
+            with self.subTest(spec=spec):
+                # malformed keep values are argparse errors too
+                proc = self.run_cli("--quarantine", spec)
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                self.assertIn("invalid quarantine rule", proc.stderr)
+
+        # base (non-keep) rule reports stay additive-free
+        self.reset_fixtures(list(self.duplicate_triple()))
+        plan = json.loads(self.run_cli("--quarantine", "33723318:2:1").stdout)
+        self.assertEqual(plan["rules"][0]["spec"], "2:1")
+        self.assertNotIn("keep", plan["rules"][0])
+        self.assertNotIn("keptRow", plan["rules"][0])
+        self.assertNotIn("quarantinedIndices", plan["rules"][0])
+
+    def test_apply_chowns_artifacts_to_original_owner(self):
+        # prod incident (issue #321): os.replace re-created match_results_v2.json
+        # as root:root while gunicorn runs as slf.  All three apply artifacts
+        # must be chowned to the ORIGINAL results file's uid/gid, and the temp
+        # file must be chowned BEFORE os.replace.
+        invalid_row = self.result_row("game-1", None)
+        kept_row = self.result_row("game-1", {"home": 2, "away": 1})
+        self.reset_fixtures([invalid_row, kept_row])
+        stat_before = os.stat(self.results_path)
+        original_uid, original_gid = stat_before.st_uid, stat_before.st_gid
+        temp_path = f"{self.results_path}.{os.getpid()}.quarantine-tmp"
+
+        events = []
+        real_replace = os.replace
+
+        def record_chown(path, chown_uid, chown_gid, *args, **kwargs):
+            events.append(("chown", os.fspath(path), chown_uid, chown_gid))
+
+        def record_replace(src, dst):
+            events.append(("replace", os.fspath(src), os.fspath(dst)))
+            return real_replace(src, dst)
+
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            with mock.patch("os.chown") as mock_os_chown:
+                with mock.patch("shutil.chown") as mock_shutil_chown:
+                    with mock.patch("os.replace", record_replace):
+                        # the tool uses os.chown; shutil.chown is patched too so
+                        # the test catches whichever mechanism is used
+                        mock_os_chown.side_effect = record_chown
+                        mock_shutil_chown.side_effect = record_chown
+                        code = quarantine.main(
+                            [
+                                "--results",
+                                str(self.results_path),
+                                "--quarantine",
+                                "game-1:?",
+                                "--apply",
+                            ]
+                        )
+
+        self.assertEqual(code, 0, stderr.getvalue())
+        chown_events = [event for event in events if event[0] == "chown"]
+        # exactly three artifacts chowned: backup, quarantine file, temp file
+        self.assertEqual(len(chown_events), 3)
+        backup_path = self.backup_files()[0]
+        quarantine_path = self.quarantine_files()[0]
+        self.assertEqual(
+            {os.path.basename(event[1]) for event in chown_events},
+            {backup_path.name, quarantine_path.name, os.path.basename(temp_path)},
+        )
+        for _, path, chown_uid, chown_gid in chown_events:
+            self.assertEqual(
+                (chown_uid, chown_gid),
+                (original_uid, original_gid),
+                f"chown({path}) must reuse the original file's owner",
+            )
+        # the temp file is chowned BEFORE os.replace lands it on the final inode
+        temp_chown_index = events.index(("chown", temp_path, original_uid, original_gid))
+        replace_index = events.index(("replace", temp_path, str(self.results_path)))
+        self.assertLess(temp_chown_index, replace_index)
+
+        # the rewrite actually happened, no temp left behind
+        self.assertEqual(self.read(self.results_path), [kept_row])
+        self.assertEqual(self.temp_files(), [])
+
+        # PermissionError path (non-root run): warn to stderr, run succeeds
+        self.reset_fixtures([invalid_row, kept_row])
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            with mock.patch(
+                "os.chown", side_effect=PermissionError(1, "Operation not permitted")
+            ):
+                code = quarantine.main(
+                    [
+                        "--results",
+                        str(self.results_path),
+                        "--quarantine",
+                        "game-1:?",
+                        "--apply",
+                    ]
+                )
+        self.assertEqual(code, 0, stderr.getvalue())
+        warnings = [line for line in stderr.getvalue().splitlines() if "WARNING" in line]
+        self.assertEqual(len(warnings), 3)  # backup, quarantine file, temp file
+        self.assertIn("chown", stderr.getvalue())
+        self.assertEqual(self.read(self.results_path), [kept_row])
+        self.assertEqual(len(self.backup_files()), 1)
+        self.assertEqual(len(self.quarantine_files()), 1)
 
 
 if __name__ == "__main__":
