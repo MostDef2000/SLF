@@ -317,6 +317,55 @@ class BackfillFinishedScoresTest(unittest.TestCase):
                 self.assertEqual(plan["skippedCount"], 1)
                 self.assertEqual(plan["skipped"][0]["reason"], "teams_missing")
 
+    def test_ts_only_snapshots_pick_latest_ts(self):
+        self.write(self.results_path, [self.finished_result("game-ts", None)])
+
+        early = self.snapshot("game-ts", {"home": 1, "away": 0}, 2000)
+        early.pop("parsedAt")
+        early["ts"] = 2000
+        late = self.snapshot("game-ts", {"home": 2, "away": 1}, 3000)
+        late.pop("parsedAt")
+        late["ts"] = 3000
+        self.write(self.snapshots_path, [early, late])
+
+        proc = self.run_cli()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        plan = json.loads(proc.stdout)
+
+        candidate = plan["candidates"][0]
+        self.assertEqual(candidate["snapshotKey"], late["snapshotKey"])
+        self.assertEqual(candidate["resolvedScore"], {"home": 2, "away": 1})
+        self.assertEqual(candidate["snapshotParsedAt"], late["ts"])
+
+    def test_no_timestamp_and_bool_ts_resolve_to_lowest(self):
+        # A snapshot with no timestamp fields ties at 0 and loses to one with ts.
+        self.write(self.results_path, [self.finished_result("game-ts0", None)])
+        no_ts = self.snapshot("game-ts0", {"home": 1, "away": 0}, 1000)
+        no_ts.pop("parsedAt")
+        with_ts = self.snapshot("game-ts0", {"home": 2, "away": 1}, 2000)
+        with_ts.pop("parsedAt")
+        with_ts["ts"] = 2000
+        self.write(self.snapshots_path, [no_ts, with_ts])
+
+        plan = json.loads(self.run_cli().stdout)
+        candidate = plan["candidates"][0]
+        self.assertEqual(candidate["snapshotKey"], with_ts["snapshotKey"])
+        self.assertEqual(candidate["snapshotParsedAt"], 2000)
+
+        # A bool ts is not numeric and resolves to 0, so it loses to a real ts=1.
+        bool_ts = self.snapshot("game-ts0", {"home": 3, "away": 2}, 3000)
+        bool_ts.pop("parsedAt")
+        bool_ts["ts"] = True
+        numeric_ts = self.snapshot("game-ts0", {"home": 4, "away": 3}, 4000)
+        numeric_ts.pop("parsedAt")
+        numeric_ts["ts"] = 1
+        self.write(self.snapshots_path, [bool_ts, numeric_ts])
+
+        plan = json.loads(self.run_cli().stdout)
+        candidate = plan["candidates"][0]
+        self.assertEqual(candidate["snapshotKey"], numeric_ts["snapshotKey"])
+        self.assertEqual(candidate["snapshotParsedAt"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
