@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import sys
@@ -83,12 +84,23 @@ def load_collection(path):
 
 
 def parsed_at_key(snapshot):
-    """Comparable parsedAt value (int epoch ms), non-numeric treated as lowest."""
-    value = snapshot.get("parsedAt")
-    if isinstance(value, bool):
-        return 0
-    if isinstance(value, (int, float)):
-        return value
+    """Comparable timestamp key (int epoch ms); non-numeric resolves to lowest.
+
+    Issue #317: match_snapshots_v2 records store their timestamp under ``ts``,
+    not ``parsedAt``, so the previous parsedAt-only lookup keyed every such
+    snapshot to 0 and ``max()`` returned the first valid-score snapshot in list
+    order instead of the latest.  Resolve the first numeric non-bool value among
+    parsedAt -> ts -> collectedAt; when none resolves, return 0 (lowest priority,
+    unchanged behavior for missing timestamps).
+    """
+    for field in ("parsedAt", "ts", "collectedAt"):
+        value = snapshot.get(field)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and math.isfinite(value):
+            return value
     return 0
 
 
@@ -183,7 +195,7 @@ def build_plan(results, snapshots, tool_version, mode):
                 "currentResultKey": current_key,
                 "resolvedScore": score,
                 "snapshotKey": best.get("snapshotKey"),
-                "snapshotParsedAt": best.get("parsedAt"),
+                "snapshotParsedAt": parsed_at_key(best),  # provenance must reflect the resolved timestamp (issue #317)
                 "newResultKey": build_result_key(game_id, score, teams),
             }
         )
