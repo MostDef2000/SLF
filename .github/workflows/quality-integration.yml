@@ -37,6 +37,9 @@ jobs:
           node --check tools/validate-workflow-inventory.mjs
           node --check tools/test-deliberate-execution-contract.mjs
           node --check tools/test-tactical-situation-diversity.mjs
+          node --check tools/test-tactic-fallback-hold-current.mjs
+          node --check tools/test-tactic-transition-graph.mjs
+          node --check tools/sync-active-preset-inventory.mjs
           node --check tools/test-alter-layer-parsing.mjs
           python3 -m py_compile tools/test-api-contract-compatibility.py
           python3 -m py_compile tools/test-api-adversarial.py
@@ -60,6 +63,7 @@ jobs:
           node tools/validate-workflow-inventory.mjs
           node tools/test-deliberate-execution-contract.mjs
           node tools/test-tactical-situation-diversity.mjs
+          node tools/sync-active-preset-inventory.mjs --check
           node tools/test-alter-layer-parsing.mjs
 
       - name: Install pinned VPS API dependencies
@@ -105,6 +109,9 @@ jobs:
           node --check tools/test-manual-telemetry-final-boundary.mjs
           node --check tools/audit-runtime-reachability.mjs
           node --check tools/test-tactic-telemetry-envelope.mjs
+          node --check tools/test-tactic-fallback-hold-current.mjs
+          node --check tools/test-tactic-transition-graph.mjs
+          node --check tools/sync-active-preset-inventory.mjs
           node --check tools/test-tactical-record-keys.mjs
           node --check tools/aggregate-tactic-performance.mjs
           node --check tools/enrich-tactic-match-outcomes.mjs
@@ -149,6 +156,9 @@ jobs:
           node tools/test-tactical-situation-diversity.mjs
           node tools/test-tactic-analytics-pipeline.mjs
           node tools/test-tactic-match-outcomes.mjs
+          node tools/test-tactic-fallback-hold-current.mjs
+          node tools/test-tactic-transition-graph.mjs
+          node tools/sync-active-preset-inventory.mjs --check
 
       - name: Run VPS API and deployment contract tests
         run: |

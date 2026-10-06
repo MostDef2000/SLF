@@ -479,7 +479,8 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
                 .sort((a, b) => b.score - a.score || a.preset.localeCompare(b.preset));
             const emergency = this.emergencyOverride(signals, candidates);
             const guard = this.applyHysteresis(engine, ranked, signals, runtime, detectedPreset, emergency);
-            const selected = guard.selected || ranked[0] || candidates.find(item => item.preset === 'Arteta_Control433_bal3');
+            // v9: no implicit preset fallback — без кандидата selected остаётся null.
+            const selected = guard.selected || ranked[0] || null;
             const second = ranked.find(item => item.preset !== selected?.preset) || null;
             const confidence = this.confidence(engine, selected, second, signals);
             const positiveReasons = (selected?.reasons || []).filter(item => item.delta > 0).slice(0, 3);
@@ -490,7 +491,7 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
             return {
                 schema: 'slf_preset_rule_score_v1',
                 action: {
-                    preset: selected?.preset || 'Arteta_Control433_bal3',
+                    preset: selected?.preset || null,
                     presetStatus: engine.getPresetStatus(selected?.preset),
                     decision: signals.gameMode,
                     risk: ['Klopp_Gegenpress_att4', 'Bielsa_ChaosPress_att5', 'Simeone_LowBlock_def5'].includes(selected?.preset) ? 'high' : 'medium',

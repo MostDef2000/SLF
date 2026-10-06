@@ -9,7 +9,9 @@
         compactRuleDecision(decision) {
             if (!decision?.action) return null;
             return {
-                schema: decision.schema || 'slf_rule_decision_v3',
+                // v9: схема рекомендации читается из активного реестра; на момент загрузки бандла
+                // event-tracker стоит раньше реестра, поэтому до его инициализации остаётся v3 — это ожидаемо.
+                schema: decision.schema || (typeof window !== 'undefined' && window.SLFActivePresetRegistry?.recommendationSchema) || 'slf_rule_decision_v3',
                 generatedAt: decision.generatedAt || Date.now(),
                 mode: decision.mode || null,
                 riskAppetite: decision.riskAppetite || decision.action.riskAppetite || null,
@@ -40,11 +42,29 @@
             };
         },
 
+        // v9: единые правила классификации применения рекомендации (#252, single-writer contract).
+        // 'unknown_legacy' клиентом никогда не пишется — это read-time классификация пре-v9 строк.
+        resolveRecommendationState(applySource, action, priorRecommendationState, recommended, actual) {
+            const source = String(applySource || '');
+            if (source.startsWith('tactical_lab:') || source.startsWith('tactical_lab_rollback:')) return 'lab_override';
+            if (priorRecommendationState === 'fallback_hold' || (action && action.preset == null)) return 'fallback_hold';
+            if (recommended && actual) return recommended === actual ? 'recommended_and_applied' : 'recommended_not_applied';
+            if (!recommended && actual) return 'manual_override';
+            return null;
+        },
+
         savePresetEvent(name, preset, beforeSnapshot) {
             const ts = Date.now();
             const generationWindow = beforeSnapshot?.generationWindow || MatchStateParser.getGenerationWindow(beforeSnapshot?.minute);
             const targetGenerationWindow = MatchTimingModel.getTargetWindowAfterChange(beforeSnapshot?.minute);
             const ruleDecision = this.compactRuleDecision(beforeSnapshot?.ruleDecision || STATE.lastRuleDecision || null);
+            // v9: строка события сама несёт стороны рекомендации и источник применения (#252).
+            const action = ruleDecision?.action || null;
+            const priorTelemetry = beforeSnapshot?.tacticTelemetry || null;
+            const recommendedPreset = action?.preset ?? priorTelemetry?.recommendedPreset ?? null;
+            const actualPreset = name || null;
+            const applicationSource = 'preset_apply'; // через savePresetEvent проходят только пресет-применения; manual-change watcher пишет свои строки напрямую
+            const recommendationState = this.resolveRecommendationState(applicationSource, action, priorTelemetry?.recommendationState, recommendedPreset, actualPreset);
             const event = {
                 ts,
                 recordType: 'preset_event',
@@ -61,6 +81,10 @@
                 timingModel: 'generation_windows_v1_last_change_before_next_window',
                 presetName: name,
                 tactic: preset,
+                applicationSource,
+                recommendedPreset,
+                actualPreset,
+                recommendationState,
                 ruleDecision,
                 tacticTelemetry: beforeSnapshot?.tacticTelemetry || null,
                 beforeSnapshot
@@ -114,6 +138,25 @@
             const oppPowerDropPct = beforeOppPower > 0 ? ((beforeOppPower - afterOppPower) / beforeOppPower) * 100 : 0;
             const ts = Date.now();
             const ruleDecision = pending.ruleDecision || this.compactRuleDecision(before.ruleDecision || STATE.lastRuleDecision || null);
+            // v9: явное состояние применения рекомендации, единые правила с savePresetEvent (#252).
+            const pendingAction = ruleDecision?.action || null;
+            const pendingTelemetry = pending.tacticTelemetry || null;
+            const recommendedPreset = pendingAction?.preset ?? pendingTelemetry?.recommendedPreset ?? null;
+            const actualPreset = pending.presetName || afterSnapshot.tacticTelemetry?.currentPreset || null;
+            const applicationSource = pending.applicationSource || (pending.type === 'manual_change' ? 'manual_change' : null);
+            const recommendationState = this.resolveRecommendationState(applicationSource, pendingAction, pendingTelemetry?.recommendationState, recommendedPreset, actualPreset);
+            const recommendationContext = {
+                recommendedPreset,
+                rawRecommendedPreset: pendingAction?.rawPreset ?? pendingTelemetry?.rawRecommendedPreset ?? null,
+                actualPreset,
+                decisionSituation: pendingAction?.decision ?? pendingTelemetry?.decisionSituation ?? null,
+                ruleId: pendingAction?.ruleId ?? pendingTelemetry?.ruleId ?? null,
+                guardType: pendingAction?.guardType ?? pendingTelemetry?.guardType ?? null,
+                guardReason: pendingAction?.guardReason ?? pendingTelemetry?.guardReason ?? null,
+                applicationSource: applicationSource || null,
+                fallbackReason: pendingAction?.fallbackReason ?? pendingTelemetry?.fallbackReason ?? null,
+                recommendationState
+            };
             const effect = {
                 ts,
                 recordType: 'preset_effect',
@@ -133,11 +176,21 @@
                 timingModel: 'generation_windows_v1_last_change_before_next_window',
                 before,
                 after: afterSnapshot,
-                tacticContext: {
+                tacticContext: Object.assign({
                     appliedPreset: pending.presetName || pending.type || 'manual_change',
                     appliedTactic: pending.tactic || before.currentTactic || null,
                     currentTacticAfter: afterSnapshot.currentTactic || null
-                },
+                }, recommendationContext),
+                recommendedPreset: recommendationContext.recommendedPreset,
+                rawRecommendedPreset: recommendationContext.rawRecommendedPreset,
+                actualPreset: recommendationContext.actualPreset,
+                decisionSituation: recommendationContext.decisionSituation,
+                ruleId: recommendationContext.ruleId,
+                guardType: recommendationContext.guardType,
+                guardReason: recommendationContext.guardReason,
+                applicationSource: recommendationContext.applicationSource,
+                fallbackReason: recommendationContext.fallbackReason,
+                recommendationState: recommendationContext.recommendationState,
                 tacticTelemetry: afterSnapshot.tacticTelemetry || pending.tacticTelemetry || null,
                 decisionContext: ruleDecision,
                 delta: {
@@ -315,11 +368,15 @@
             const decision = EventTracker.compactRuleDecision(snapshot.ruleDecision || STATE.lastRuleDecision || null);
             let riskAppetite = decision?.riskAppetite || decision?.action?.riskAppetite || null;
             try { riskAppetite = riskAppetite || localStorage.getItem('slf:tactics:risk-appetite'); } catch (_) {}
-            snapshot.tacticTelemetry = {
+            // v9: single-writer contract (#252) — enrich дополняет прежний tacticTelemetry (MERGE),
+            // а не заменяет его: recommendedPreset и актуальный libraryVersion больше не теряются.
+            const prior = snapshot.tacticTelemetry || {};
+            const action = snapshot.ruleDecision?.action || null;
+            snapshot.tacticTelemetry = Object.assign({}, prior, {
                 schema: 'slf_tactic_telemetry_v1',
-                libraryVersion: 'active_presets_v2_bold_policy_v3',
-                recommendationSchema: decision?.schema || null,
-                riskAppetite: riskAppetite || 'bold',
+                libraryVersion: prior.libraryVersion || window.SLFActivePresetRegistry?.suiteVersion || 'slf_tactic_suite_561_v9',
+                recommendationSchema: prior.recommendationSchema || window.SLFActivePresetRegistry?.recommendationSchema || null,
+                riskAppetite: riskAppetite || (typeof window !== 'undefined' && window.SLFActivePresetRegistry?.defaultRiskAppetite) || 'standard',
                 currentPreset,
                 currentTactic: clone(snapshot.currentTactic),
                 currentTacticFingerprint: currentFingerprint,
@@ -329,8 +386,20 @@
                 transitions: clone(session.transitions) || [],
                 latestDecision: decision,
                 activePresetIds: Array.isArray(window.SLFActivePresetRegistry?.active) ? window.SLFActivePresetRegistry.active.slice() : [],
-                capturedAt: Date.now()
-            };
+                capturedAt: Date.now(),
+                // v9: passthrough рекомендации — prior выигрывает при наличии, непустое prior-значение не затирается null.
+                recommendedPreset: prior.recommendedPreset != null ? prior.recommendedPreset : (action?.preset ?? null),
+                rawRecommendedPreset: prior.rawRecommendedPreset != null ? prior.rawRecommendedPreset : (action?.rawPreset ?? null),
+                decisionSituation: prior.decisionSituation != null ? prior.decisionSituation : (action?.decision ?? null),
+                ruleId: prior.ruleId != null ? prior.ruleId : (action?.ruleId ?? null),
+                guardType: prior.guardType != null ? prior.guardType : (action?.guardType ?? null),
+                guardReason: prior.guardReason != null ? prior.guardReason : (action?.guardReason ?? null),
+                fallbackReason: prior.fallbackReason != null ? prior.fallbackReason : (action?.fallbackReason ?? null),
+                recommendationState: action?.recommendationState || prior.recommendationState || null,
+                ruleDecision: prior.ruleDecision || snapshot.ruleDecision || null,
+                actualPreset: currentPreset,
+                applicationSource: prior.applicationSource || snapshot.recommendationSource || null
+            });
             return snapshot;
         };
 

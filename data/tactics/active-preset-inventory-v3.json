@@ -1,0 +1,1423 @@
+{
+  "schema": "slf_active_preset_inventory_v3",
+  "suiteVersion": "slf_tactic_suite_561_v9",
+  "recommendationSchema": "slf_rule_decision_v9_tactical_suite",
+  "generatorVersion": "5.61",
+  "generatedFrom": "src/modules/tactics-presets/active-preset-registry.js",
+  "fallbackPolicy": "5.61-tactical-suite-v9-hold-current",
+  "inventorySchema": "slf_active_preset_inventory_v3",
+  "presetCount": 10,
+  "controlFields": [
+    "def_line",
+    "press_line",
+    "def_width",
+    "press_intense",
+    "build_type",
+    "build_temp",
+    "build_long",
+    "build_fast",
+    "style",
+    "pass_risk",
+    "dribble",
+    "cross",
+    "corner",
+    "shot"
+  ],
+  "situations": [
+    "stable_control",
+    "pressure_escape",
+    "press_cooldown",
+    "controlled_chase",
+    "positional_siege",
+    "width_attack",
+    "protect_lead",
+    "emergency_lock",
+    "late_high_pressure",
+    "final_all_in"
+  ],
+  "retiredActive": [
+    "Compact_Counter_def3"
+  ],
+  "presets": {
+    "Arteta_Control433_bal3": {
+      "controls": {
+        "def_line": "2",
+        "press_line": "3",
+        "def_width": "2",
+        "press_intense": "3",
+        "build_type": "2",
+        "build_temp": "2",
+        "build_long": "1",
+        "build_fast": "2",
+        "style": "3",
+        "pass_risk": "3",
+        "dribble": "2",
+        "cross": "2",
+        "corner": "1",
+        "shot": "2",
+        "priority": []
+      },
+      "role": "stable_control",
+      "riskClass": "medium",
+      "primarySituation": "stable_control",
+      "allowedSituations": [],
+      "fallbackEligible": false
+    },
+    "Pep_BoxControl_bal2": {
+      "controls": {
+        "def_line": "2",
+        "press_line": "2",
+        "def_width": "2",
+        "press_intense": "2",
+        "build_type": "2",
+        "build_temp": "1",
+        "build_long": "1",
+        "build_fast": "1",
+        "style": "3",
+        "pass_risk": "2",
+        "dribble": "1",
+        "cross": "1",
+        "corner": "1",
+        "shot": "1",
+        "priority": []
+      },
+      "role": "pressure_escape",
+      "riskClass": "low",
+      "primarySituation": "pressure_escape",
+      "allowedSituations": [
+        "stable_control"
+      ],
+      "fallbackEligible": false
+    },
+    "Pep_PressCooldown_bal2": {
+      "controls": {
+        "def_line": "1",
+        "press_line": "2",
+        "def_width": "3",
+        "press_intense": "1",
+        "build_type": "1",
+        "build_temp": "2",
+        "build_long": "4",
+        "build_fast": "2",
+        "style": "2",
+        "pass_risk": "2",
+        "dribble": "1",
+        "cross": "2",
+        "corner": "1",
+        "shot": "1",
+        "priority": []
+      },
+      "role": "press_cooldown",
+      "riskClass": "low",
+      "primarySituation": "press_cooldown",
+      "allowedSituations": [
+        "pressure_escape",
+        "stable_control"
+      ],
+      "fallbackEligible": false
+    },
+    "Pep_ControlledPush_att3": {
+      "controls": {
+        "def_line": "3",
+        "press_line": "3",
+        "def_width": "2",
+        "press_intense": "3",
+        "build_type": "2",
+        "build_temp": "3",
+        "build_long": "1",
+        "build_fast": "4",
+        "style": "4",
+        "pass_risk": "4",
+        "dribble": "3",
+        "cross": "2",
+        "corner": "1",
+        "shot": "3",
+        "priority": []
+      },
+      "role": "controlled_chase",
+      "riskClass": "high",
+      "primarySituation": "controlled_chase",
+      "allowedSituations": [
+        "positional_siege",
+        "stable_control"
+      ],
+      "fallbackEligible": false
+    },
+    "Pep_TwoThreeFive_att3": {
+      "controls": {
+        "def_line": "4",
+        "press_line": "4",
+        "def_width": "4",
+        "press_intense": "4",
+        "build_type": "2",
+        "build_temp": "2",
+        "build_long": "1",
+        "build_fast": "3",
+        "style": "5",
+        "pass_risk": "4",
+        "dribble": "3",
+        "cross": "2",
+        "corner": "1",
+        "shot": "4",
+        "priority": []
+      },
+      "role": "positional_siege",
+      "riskClass": "very_high",
+      "primarySituation": "positional_siege",
+      "allowedSituations": [
+        "controlled_chase",
+        "late_high_pressure"
+      ],
+      "fallbackEligible": false
+    },
+    "Conte_WingbackWidth_bal4": {
+      "controls": {
+        "def_line": "2",
+        "press_line": "2",
+        "def_width": "5",
+        "press_intense": "3",
+        "build_type": "3",
+        "build_temp": "2",
+        "build_long": "3",
+        "build_fast": "3",
+        "style": "4",
+        "pass_risk": "3",
+        "dribble": "4",
+        "cross": "4",
+        "corner": "1",
+        "shot": "2",
+        "priority": [
+          "left",
+          "right"
+        ]
+      },
+      "role": "width_attack",
+      "riskClass": "high",
+      "primarySituation": "width_attack",
+      "allowedSituations": [
+        "positional_siege"
+      ],
+      "fallbackEligible": false
+    },
+    "Klopp_Gegenpress_att4": {
+      "controls": {
+        "def_line": "4",
+        "press_line": "5",
+        "def_width": "3",
+        "press_intense": "5",
+        "build_type": "3",
+        "build_temp": "3",
+        "build_long": "2",
+        "build_fast": "5",
+        "style": "5",
+        "pass_risk": "4",
+        "dribble": "4",
+        "cross": "3",
+        "corner": "1",
+        "shot": "4",
+        "priority": []
+      },
+      "role": "late_high_pressure",
+      "riskClass": "very_high",
+      "primarySituation": "late_high_pressure",
+      "allowedSituations": [
+        "final_all_in",
+        "positional_siege"
+      ],
+      "fallbackEligible": false
+    },
+    "Simeone_Compact442_def4": {
+      "controls": {
+        "def_line": "1",
+        "press_line": "2",
+        "def_width": "1",
+        "press_intense": "4",
+        "build_type": "1",
+        "build_temp": "1",
+        "build_long": "3",
+        "build_fast": "2",
+        "style": "1",
+        "pass_risk": "2",
+        "dribble": "1",
+        "cross": "2",
+        "corner": "1",
+        "shot": "1",
+        "priority": []
+      },
+      "role": "protect_lead",
+      "riskClass": "low",
+      "primarySituation": "protect_lead",
+      "allowedSituations": [
+        "emergency_lock",
+        "stable_control"
+      ],
+      "fallbackEligible": false
+    },
+    "Simeone_LowBlock_def5": {
+      "controls": {
+        "def_line": "1",
+        "press_line": "1",
+        "def_width": "1",
+        "press_intense": "1",
+        "build_type": "1",
+        "build_temp": "1",
+        "build_long": "5",
+        "build_fast": "1",
+        "style": "1",
+        "pass_risk": "1",
+        "dribble": "1",
+        "cross": "1",
+        "corner": "1",
+        "shot": "1",
+        "priority": []
+      },
+      "role": "emergency_lock",
+      "riskClass": "very_low",
+      "primarySituation": "emergency_lock",
+      "allowedSituations": [
+        "protect_lead"
+      ],
+      "fallbackEligible": false
+    },
+    "Bielsa_ChaosPress_att5": {
+      "controls": {
+        "def_line": "5",
+        "press_line": "5",
+        "def_width": "5",
+        "press_intense": "5",
+        "build_type": "3",
+        "build_temp": "3",
+        "build_long": "4",
+        "build_fast": "5",
+        "style": "5",
+        "pass_risk": "5",
+        "dribble": "5",
+        "cross": "4",
+        "corner": "1",
+        "shot": "5",
+        "priority": []
+      },
+      "role": "final_all_in",
+      "riskClass": "maximum",
+      "primarySituation": "final_all_in",
+      "allowedSituations": [
+        "late_high_pressure"
+      ],
+      "fallbackEligible": false
+    }
+  },
+  "formations": {
+    "Arteta_Control433_bal3": [
+      "gk",
+      "ld",
+      "cd1",
+      "cd3",
+      "rd",
+      "cm1",
+      "dm2",
+      "cm3",
+      "lw",
+      "st2",
+      "rw"
+    ],
+    "Pep_BoxControl_bal2": [
+      "gk",
+      "ld",
+      "cd1",
+      "cd3",
+      "rd",
+      "dm2",
+      "cm1",
+      "cm3",
+      "am1",
+      "am2",
+      "st2"
+    ],
+    "Pep_PressCooldown_bal2": [
+      "gk",
+      "ld",
+      "cd1",
+      "cd3",
+      "rd",
+      "dm2",
+      "lm",
+      "cm2",
+      "cm3",
+      "rm",
+      "st2"
+    ],
+    "Pep_ControlledPush_att3": [
+      "gk",
+      "ld",
+      "cd1",
+      "cd3",
+      "rd",
+      "dm2",
+      "cm2",
+      "lw",
+      "am2",
+      "rw",
+      "st2"
+    ],
+    "Pep_TwoThreeFive_att3": [
+      "gk",
+      "cd1",
+      "cd2",
+      "cd3",
+      "dm2",
+      "cm2",
+      "lw",
+      "am1",
+      "st1",
+      "am2",
+      "rw"
+    ],
+    "Conte_WingbackWidth_bal4": [
+      "gk",
+      "cd1",
+      "cd2",
+      "cd3",
+      "lb",
+      "dm2",
+      "cm2",
+      "rb",
+      "lw",
+      "st2",
+      "rw"
+    ],
+    "Klopp_Gegenpress_att4": [
+      "gk",
+      "ld",
+      "cd1",
+      "cd3",
+      "rd",
+      "dm2",
+      "cm2",
+      "lw",
+      "st1",
+      "st2",
+      "rw"
+    ],
+    "Simeone_Compact442_def4": [
+      "gk",
+      "ld",
+      "cd1",
+      "cd3",
+      "rd",
+      "lm",
+      "cm2",
+      "dm2",
+      "rm",
+      "st1",
+      "st2"
+    ],
+    "Simeone_LowBlock_def5": [
+      "gk",
+      "lb",
+      "cd1",
+      "cd2",
+      "cd3",
+      "rb",
+      "lm",
+      "dm2",
+      "cm2",
+      "rm",
+      "st2"
+    ],
+    "Bielsa_ChaosPress_att5": [
+      "gk",
+      "cd1",
+      "cd2",
+      "cd3",
+      "lm",
+      "dm2",
+      "rm",
+      "lw",
+      "st1",
+      "st2",
+      "rw"
+    ]
+  },
+  "roleContracts": {
+    "Arteta_Control433_bal3": {
+      "presetId": "Arteta_Control433_bal3",
+      "role": "stable_control",
+      "primarySituation": "stable_control",
+      "allowedSituations": [],
+      "entryConditions": [
+        "базовый план равного матча"
+      ],
+      "exitConditions": [
+        "давление без контрвыхода → Pep_BoxControl_bal2",
+        "нужен гол → Pep_ControlledPush_att3",
+        "ширина открыта → Conte_WingbackWidth_bal4",
+        "защита преимущества → Simeone_Compact442_def4"
+      ],
+      "hardVetoes": [],
+      "riskClass": "medium",
+      "fallbackEligible": false,
+      "formation": [
+        "gk",
+        "ld",
+        "cd1",
+        "cd3",
+        "rd",
+        "cm1",
+        "dm2",
+        "cm3",
+        "lw",
+        "st2",
+        "rw"
+      ],
+      "controls": {
+        "def_line": "2",
+        "press_line": "3",
+        "def_width": "2",
+        "press_intense": "3",
+        "build_type": "2",
+        "build_temp": "2",
+        "build_long": "1",
+        "build_fast": "2",
+        "style": "3",
+        "pass_risk": "3",
+        "dribble": "2",
+        "cross": "2",
+        "corner": "1",
+        "shot": "2",
+        "priority": []
+      }
+    },
+    "Pep_BoxControl_bal2": {
+      "presetId": "Pep_BoxControl_bal2",
+      "role": "pressure_escape",
+      "primarySituation": "pressure_escape",
+      "allowedSituations": [
+        "stable_control"
+      ],
+      "entryConditions": [
+        "pressure_without_counter_exit",
+        "выход из давления без прямой контратаки и reset после брака"
+      ],
+      "exitConditions": [
+        "стабилизация → Arteta_Control433_bal3",
+        "fatigue/рост брака → Pep_PressCooldown_bal2"
+      ],
+      "hardVetoes": [],
+      "riskClass": "low",
+      "fallbackEligible": false,
+      "formation": [
+        "gk",
+        "ld",
+        "cd1",
+        "cd3",
+        "rd",
+        "dm2",
+        "cm1",
+        "cm3",
+        "am1",
+        "am2",
+        "st2"
+      ],
+      "controls": {
+        "def_line": "2",
+        "press_line": "2",
+        "def_width": "2",
+        "press_intense": "2",
+        "build_type": "2",
+        "build_temp": "1",
+        "build_long": "1",
+        "build_fast": "1",
+        "style": "3",
+        "pass_risk": "2",
+        "dribble": "1",
+        "cross": "1",
+        "corner": "1",
+        "shot": "1",
+        "priority": []
+      }
+    },
+    "Pep_PressCooldown_bal2": {
+      "presetId": "Pep_PressCooldown_bal2",
+      "role": "press_cooldown",
+      "primarySituation": "press_cooldown",
+      "allowedSituations": [
+        "pressure_escape",
+        "stable_control"
+      ],
+      "entryConditions": [
+        "press_fatigue",
+        "fatigue, рост брака/фолов или падение силы"
+      ],
+      "exitConditions": [
+        "восстановление → Pep_BoxControl_bal2",
+        "структура готова → Arteta_Control433_bal3",
+        "защита преимущества → Simeone_Compact442_def4"
+      ],
+      "hardVetoes": [
+        "поздний проигрыш требует продвижения, а не cooldown"
+      ],
+      "riskClass": "low",
+      "fallbackEligible": false,
+      "formation": [
+        "gk",
+        "ld",
+        "cd1",
+        "cd3",
+        "rd",
+        "dm2",
+        "lm",
+        "cm2",
+        "cm3",
+        "rm",
+        "st2"
+      ],
+      "controls": {
+        "def_line": "1",
+        "press_line": "2",
+        "def_width": "3",
+        "press_intense": "1",
+        "build_type": "1",
+        "build_temp": "2",
+        "build_long": "4",
+        "build_fast": "2",
+        "style": "2",
+        "pass_risk": "2",
+        "dribble": "1",
+        "cross": "2",
+        "corner": "1",
+        "shot": "1",
+        "priority": []
+      }
+    },
+    "Pep_ControlledPush_att3": {
+      "presetId": "Pep_ControlledPush_att3",
+      "role": "controlled_chase",
+      "primarySituation": "controlled_chase",
+      "allowedSituations": [
+        "positional_siege",
+        "stable_control"
+      ],
+      "entryConditions": [
+        "need_goal_or_attack_need",
+        "нужен гол при сохранённой структуре"
+      ],
+      "exitConditions": [
+        "структура восстановлена → Arteta_Control433_bal3",
+        "атакующий momentum → Pep_TwoThreeFive_att3",
+        "ширина открыта → Conte_WingbackWidth_bal4"
+      ],
+      "hardVetoes": [],
+      "riskClass": "high",
+      "fallbackEligible": false,
+      "formation": [
+        "gk",
+        "ld",
+        "cd1",
+        "cd3",
+        "rd",
+        "dm2",
+        "cm2",
+        "lw",
+        "am2",
+        "rw",
+        "st2"
+      ],
+      "controls": {
+        "def_line": "3",
+        "press_line": "3",
+        "def_width": "2",
+        "press_intense": "3",
+        "build_type": "2",
+        "build_temp": "3",
+        "build_long": "1",
+        "build_fast": "4",
+        "style": "4",
+        "pass_risk": "4",
+        "dribble": "3",
+        "cross": "2",
+        "corner": "1",
+        "shot": "3",
+        "priority": []
+      }
+    },
+    "Pep_TwoThreeFive_att3": {
+      "presetId": "Pep_TwoThreeFive_att3",
+      "role": "positional_siege",
+      "primarySituation": "positional_siege",
+      "allowedSituations": [
+        "controlled_chase",
+        "late_high_pressure"
+      ],
+      "entryConditions": [
+        "attacking_momentum",
+        "transition_control",
+        "атакующий momentum и контролируемые переходы"
+      ],
+      "exitConditions": [
+        "momentum потерян → Pep_ControlledPush_att3",
+        "нужна ширина → Conte_WingbackWidth_bal4",
+        "поздняя погоня → Klopp_Gegenpress_att4"
+      ],
+      "hardVetoes": [
+        "3-2-5 запрещён при transition threat/fatigue/браке",
+        "позднее преимущество не требует high/all-in риска"
+      ],
+      "riskClass": "very_high",
+      "fallbackEligible": false,
+      "formation": [
+        "gk",
+        "cd1",
+        "cd2",
+        "cd3",
+        "dm2",
+        "cm2",
+        "lw",
+        "am1",
+        "st1",
+        "am2",
+        "rw"
+      ],
+      "controls": {
+        "def_line": "4",
+        "press_line": "4",
+        "def_width": "4",
+        "press_intense": "4",
+        "build_type": "2",
+        "build_temp": "2",
+        "build_long": "1",
+        "build_fast": "3",
+        "style": "5",
+        "pass_risk": "4",
+        "dribble": "3",
+        "cross": "2",
+        "corner": "1",
+        "shot": "4",
+        "priority": []
+      }
+    },
+    "Conte_WingbackWidth_bal4": {
+      "presetId": "Conte_WingbackWidth_bal4",
+      "role": "width_attack",
+      "primarySituation": "width_attack",
+      "allowedSituations": [
+        "positional_siege"
+      ],
+      "entryConditions": [
+        "wide_quality",
+        "center_closed",
+        "центр закрыт, фланги дают качество"
+      ],
+      "exitConditions": [
+        "ширина исчерпана → Arteta_Control433_bal3",
+        "нужен гол через центр → Pep_ControlledPush_att3",
+        "позиционный дожим → Pep_TwoThreeFive_att3"
+      ],
+      "hardVetoes": [],
+      "riskClass": "high",
+      "fallbackEligible": false,
+      "formation": [
+        "gk",
+        "cd1",
+        "cd2",
+        "cd3",
+        "lb",
+        "dm2",
+        "cm2",
+        "rb",
+        "lw",
+        "st2",
+        "rw"
+      ],
+      "controls": {
+        "def_line": "2",
+        "press_line": "2",
+        "def_width": "5",
+        "press_intense": "3",
+        "build_type": "3",
+        "build_temp": "2",
+        "build_long": "3",
+        "build_fast": "3",
+        "style": "4",
+        "pass_risk": "3",
+        "dribble": "4",
+        "cross": "4",
+        "corner": "1",
+        "shot": "2",
+        "priority": [
+          "left",
+          "right"
+        ]
+      }
+    },
+    "Klopp_Gegenpress_att4": {
+      "presetId": "Klopp_Gegenpress_att4",
+      "role": "late_high_pressure",
+      "primarySituation": "late_high_pressure",
+      "allowedSituations": [
+        "final_all_in",
+        "positional_siege"
+      ],
+      "entryConditions": [
+        "late_need_goal",
+        "fitness",
+        "проигрываем поздно при приемлемой физике и браке"
+      ],
+      "exitConditions": [
+        "погоня стабилизирована → Pep_TwoThreeFive_att3",
+        "нужен контролируемый push → Pep_ControlledPush_att3",
+        "финальное окно → Bielsa_ChaosPress_att5"
+      ],
+      "hardVetoes": [
+        "Klopp только поздняя погоня",
+        "дорогой прессинг запрещён по fatigue/браку/удалению",
+        "позднее преимущество не требует high/all-in риска"
+      ],
+      "riskClass": "very_high",
+      "fallbackEligible": false,
+      "formation": [
+        "gk",
+        "ld",
+        "cd1",
+        "cd3",
+        "rd",
+        "dm2",
+        "cm2",
+        "lw",
+        "st1",
+        "st2",
+        "rw"
+      ],
+      "controls": {
+        "def_line": "4",
+        "press_line": "5",
+        "def_width": "3",
+        "press_intense": "5",
+        "build_type": "3",
+        "build_temp": "3",
+        "build_long": "2",
+        "build_fast": "5",
+        "style": "5",
+        "pass_risk": "4",
+        "dribble": "4",
+        "cross": "3",
+        "corner": "1",
+        "shot": "4",
+        "priority": []
+      }
+    },
+    "Simeone_Compact442_def4": {
+      "presetId": "Simeone_Compact442_def4",
+      "role": "protect_lead",
+      "primarySituation": "protect_lead",
+      "allowedSituations": [
+        "emergency_lock",
+        "stable_control"
+      ],
+      "entryConditions": [
+        "protect_lead",
+        "защита позднего преимущества"
+      ],
+      "exitConditions": [
+        "угроза снята → Arteta_Control433_bal3",
+        "критическая осада → Simeone_LowBlock_def5",
+        "fatigue прессинга → Pep_PressCooldown_bal2"
+      ],
+      "hardVetoes": [
+        "защитный 4-4-2 запрещён при проигрыше"
+      ],
+      "riskClass": "low",
+      "fallbackEligible": false,
+      "formation": [
+        "gk",
+        "ld",
+        "cd1",
+        "cd3",
+        "rd",
+        "lm",
+        "cm2",
+        "dm2",
+        "rm",
+        "st1",
+        "st2"
+      ],
+      "controls": {
+        "def_line": "1",
+        "press_line": "2",
+        "def_width": "1",
+        "press_intense": "4",
+        "build_type": "1",
+        "build_temp": "1",
+        "build_long": "3",
+        "build_fast": "2",
+        "style": "1",
+        "pass_risk": "2",
+        "dribble": "1",
+        "cross": "2",
+        "corner": "1",
+        "shot": "1",
+        "priority": []
+      }
+    },
+    "Simeone_LowBlock_def5": {
+      "presetId": "Simeone_LowBlock_def5",
+      "role": "emergency_lock",
+      "primarySituation": "emergency_lock",
+      "allowedSituations": [
+        "protect_lead"
+      ],
+      "entryConditions": [
+        "mandatory_reassessment_next_window",
+        "критическая осада без выхода или очень поздняя защита"
+      ],
+      "exitConditions": [
+        "угроза снята → Simeone_Compact442_def4",
+        "выход из lock → Pep_BoxControl_bal2"
+      ],
+      "hardVetoes": [
+        "Low Block только временный emergency lock"
+      ],
+      "riskClass": "very_low",
+      "fallbackEligible": false,
+      "formation": [
+        "gk",
+        "lb",
+        "cd1",
+        "cd2",
+        "cd3",
+        "rb",
+        "lm",
+        "dm2",
+        "cm2",
+        "rm",
+        "st2"
+      ],
+      "controls": {
+        "def_line": "1",
+        "press_line": "1",
+        "def_width": "1",
+        "press_intense": "1",
+        "build_type": "1",
+        "build_temp": "1",
+        "build_long": "5",
+        "build_fast": "1",
+        "style": "1",
+        "pass_risk": "1",
+        "dribble": "1",
+        "cross": "1",
+        "corner": "1",
+        "shot": "1",
+        "priority": []
+      }
+    },
+    "Bielsa_ChaosPress_att5": {
+      "presetId": "Bielsa_ChaosPress_att5",
+      "role": "final_all_in",
+      "primarySituation": "final_all_in",
+      "allowedSituations": [
+        "late_high_pressure"
+      ],
+      "entryConditions": [
+        "emergency_need_goal",
+        "последнее окно проигрываемого матча"
+      ],
+      "exitConditions": [
+        "матч не решён → Klopp_Gegenpress_att4"
+      ],
+      "hardVetoes": [
+        "Bielsa только финальный all-in",
+        "дорогой прессинг запрещён по fatigue/браку/удалению",
+        "позднее преимущество не требует high/all-in риска"
+      ],
+      "riskClass": "maximum",
+      "fallbackEligible": false,
+      "formation": [
+        "gk",
+        "cd1",
+        "cd2",
+        "cd3",
+        "lm",
+        "dm2",
+        "rm",
+        "lw",
+        "st1",
+        "st2",
+        "rw"
+      ],
+      "controls": {
+        "def_line": "5",
+        "press_line": "5",
+        "def_width": "5",
+        "press_intense": "5",
+        "build_type": "3",
+        "build_temp": "3",
+        "build_long": "4",
+        "build_fast": "5",
+        "style": "5",
+        "pass_risk": "5",
+        "dribble": "5",
+        "cross": "4",
+        "corner": "1",
+        "shot": "5",
+        "priority": []
+      }
+    }
+  },
+  "distanceMetric": {
+    "name": "unweighted_manhattan",
+    "fields": [
+      "def_line",
+      "press_line",
+      "def_width",
+      "press_intense",
+      "build_type",
+      "build_temp",
+      "build_long",
+      "build_fast",
+      "style",
+      "pass_risk",
+      "dribble",
+      "cross",
+      "corner",
+      "shot"
+    ]
+  },
+  "pairwiseDistances": {
+    "Arteta_Control433_bal3": {
+      "Arteta_Control433_bal3": 0,
+      "Pep_BoxControl_bal2": 8,
+      "Pep_PressCooldown_bal2": 13,
+      "Pep_ControlledPush_att3": 8,
+      "Pep_TwoThreeFive_att3": 13,
+      "Conte_WingbackWidth_bal4": 13,
+      "Klopp_Gegenpress_att4": 21,
+      "Simeone_Compact442_def4": 13,
+      "Simeone_LowBlock_def5": 20,
+      "Bielsa_ChaosPress_att5": 30
+    },
+    "Pep_BoxControl_bal2": {
+      "Arteta_Control433_bal3": 8,
+      "Pep_BoxControl_bal2": 0,
+      "Pep_PressCooldown_bal2": 11,
+      "Pep_ControlledPush_att3": 16,
+      "Pep_TwoThreeFive_att3": 21,
+      "Conte_WingbackWidth_bal4": 19,
+      "Klopp_Gegenpress_att4": 29,
+      "Simeone_Compact442_def4": 11,
+      "Simeone_LowBlock_def5": 12,
+      "Bielsa_ChaosPress_att5": 38
+    },
+    "Pep_PressCooldown_bal2": {
+      "Arteta_Control433_bal3": 13,
+      "Pep_BoxControl_bal2": 11,
+      "Pep_PressCooldown_bal2": 0,
+      "Pep_ControlledPush_att3": 21,
+      "Pep_TwoThreeFive_att3": 24,
+      "Conte_WingbackWidth_bal4": 18,
+      "Klopp_Gegenpress_att4": 30,
+      "Simeone_Compact442_def4": 8,
+      "Simeone_LowBlock_def5": 9,
+      "Bielsa_ChaosPress_att5": 35
+    },
+    "Pep_ControlledPush_att3": {
+      "Arteta_Control433_bal3": 8,
+      "Pep_BoxControl_bal2": 16,
+      "Pep_PressCooldown_bal2": 21,
+      "Pep_ControlledPush_att3": 0,
+      "Pep_TwoThreeFive_att3": 9,
+      "Conte_WingbackWidth_bal4": 15,
+      "Klopp_Gegenpress_att4": 13,
+      "Simeone_Compact442_def4": 21,
+      "Simeone_LowBlock_def5": 28,
+      "Bielsa_ChaosPress_att5": 22
+    },
+    "Pep_TwoThreeFive_att3": {
+      "Arteta_Control433_bal3": 13,
+      "Pep_BoxControl_bal2": 21,
+      "Pep_PressCooldown_bal2": 24,
+      "Pep_ControlledPush_att3": 9,
+      "Pep_TwoThreeFive_att3": 0,
+      "Conte_WingbackWidth_bal4": 16,
+      "Klopp_Gegenpress_att4": 10,
+      "Simeone_Compact442_def4": 24,
+      "Simeone_LowBlock_def5": 33,
+      "Bielsa_ChaosPress_att5": 17
+    },
+    "Conte_WingbackWidth_bal4": {
+      "Arteta_Control433_bal3": 13,
+      "Pep_BoxControl_bal2": 19,
+      "Pep_PressCooldown_bal2": 18,
+      "Pep_ControlledPush_att3": 15,
+      "Pep_TwoThreeFive_att3": 16,
+      "Conte_WingbackWidth_bal4": 0,
+      "Klopp_Gegenpress_att4": 18,
+      "Simeone_Compact442_def4": 20,
+      "Simeone_LowBlock_def5": 27,
+      "Bielsa_ChaosPress_att5": 19
+    },
+    "Klopp_Gegenpress_att4": {
+      "Arteta_Control433_bal3": 21,
+      "Pep_BoxControl_bal2": 29,
+      "Pep_PressCooldown_bal2": 30,
+      "Pep_ControlledPush_att3": 13,
+      "Pep_TwoThreeFive_att3": 10,
+      "Conte_WingbackWidth_bal4": 18,
+      "Klopp_Gegenpress_att4": 0,
+      "Simeone_Compact442_def4": 30,
+      "Simeone_LowBlock_def5": 39,
+      "Bielsa_ChaosPress_att5": 9
+    },
+    "Simeone_Compact442_def4": {
+      "Arteta_Control433_bal3": 13,
+      "Pep_BoxControl_bal2": 11,
+      "Pep_PressCooldown_bal2": 8,
+      "Pep_ControlledPush_att3": 21,
+      "Pep_TwoThreeFive_att3": 24,
+      "Conte_WingbackWidth_bal4": 20,
+      "Klopp_Gegenpress_att4": 30,
+      "Simeone_Compact442_def4": 0,
+      "Simeone_LowBlock_def5": 9,
+      "Bielsa_ChaosPress_att5": 37
+    },
+    "Simeone_LowBlock_def5": {
+      "Arteta_Control433_bal3": 20,
+      "Pep_BoxControl_bal2": 12,
+      "Pep_PressCooldown_bal2": 9,
+      "Pep_ControlledPush_att3": 28,
+      "Pep_TwoThreeFive_att3": 33,
+      "Conte_WingbackWidth_bal4": 27,
+      "Klopp_Gegenpress_att4": 39,
+      "Simeone_Compact442_def4": 9,
+      "Simeone_LowBlock_def5": 0,
+      "Bielsa_ChaosPress_att5": 44
+    },
+    "Bielsa_ChaosPress_att5": {
+      "Arteta_Control433_bal3": 30,
+      "Pep_BoxControl_bal2": 38,
+      "Pep_PressCooldown_bal2": 35,
+      "Pep_ControlledPush_att3": 22,
+      "Pep_TwoThreeFive_att3": 17,
+      "Conte_WingbackWidth_bal4": 19,
+      "Klopp_Gegenpress_att4": 9,
+      "Simeone_Compact442_def4": 37,
+      "Simeone_LowBlock_def5": 44,
+      "Bielsa_ChaosPress_att5": 0
+    }
+  },
+  "nearestPairs": [
+    {
+      "pair": [
+        "Arteta_Control433_bal3",
+        "Pep_BoxControl_bal2"
+      ],
+      "distance": 8
+    },
+    {
+      "pair": [
+        "Arteta_Control433_bal3",
+        "Pep_ControlledPush_att3"
+      ],
+      "distance": 8
+    },
+    {
+      "pair": [
+        "Pep_PressCooldown_bal2",
+        "Simeone_Compact442_def4"
+      ],
+      "distance": 8
+    },
+    {
+      "pair": [
+        "Bielsa_ChaosPress_att5",
+        "Klopp_Gegenpress_att4"
+      ],
+      "distance": 9
+    },
+    {
+      "pair": [
+        "Pep_ControlledPush_att3",
+        "Pep_TwoThreeFive_att3"
+      ],
+      "distance": 9
+    },
+    {
+      "pair": [
+        "Pep_PressCooldown_bal2",
+        "Simeone_LowBlock_def5"
+      ],
+      "distance": 9
+    },
+    {
+      "pair": [
+        "Simeone_Compact442_def4",
+        "Simeone_LowBlock_def5"
+      ],
+      "distance": 9
+    },
+    {
+      "pair": [
+        "Klopp_Gegenpress_att4",
+        "Pep_TwoThreeFive_att3"
+      ],
+      "distance": 10
+    },
+    {
+      "pair": [
+        "Pep_BoxControl_bal2",
+        "Pep_PressCooldown_bal2"
+      ],
+      "distance": 11
+    },
+    {
+      "pair": [
+        "Pep_BoxControl_bal2",
+        "Simeone_Compact442_def4"
+      ],
+      "distance": 11
+    },
+    {
+      "pair": [
+        "Pep_BoxControl_bal2",
+        "Simeone_LowBlock_def5"
+      ],
+      "distance": 12
+    },
+    {
+      "pair": [
+        "Arteta_Control433_bal3",
+        "Conte_WingbackWidth_bal4"
+      ],
+      "distance": 13
+    },
+    {
+      "pair": [
+        "Arteta_Control433_bal3",
+        "Pep_PressCooldown_bal2"
+      ],
+      "distance": 13
+    },
+    {
+      "pair": [
+        "Arteta_Control433_bal3",
+        "Pep_TwoThreeFive_att3"
+      ],
+      "distance": 13
+    },
+    {
+      "pair": [
+        "Arteta_Control433_bal3",
+        "Simeone_Compact442_def4"
+      ],
+      "distance": 13
+    },
+    {
+      "pair": [
+        "Klopp_Gegenpress_att4",
+        "Pep_ControlledPush_att3"
+      ],
+      "distance": 13
+    },
+    {
+      "pair": [
+        "Conte_WingbackWidth_bal4",
+        "Pep_ControlledPush_att3"
+      ],
+      "distance": 15
+    },
+    {
+      "pair": [
+        "Conte_WingbackWidth_bal4",
+        "Pep_TwoThreeFive_att3"
+      ],
+      "distance": 16
+    },
+    {
+      "pair": [
+        "Pep_BoxControl_bal2",
+        "Pep_ControlledPush_att3"
+      ],
+      "distance": 16
+    },
+    {
+      "pair": [
+        "Bielsa_ChaosPress_att5",
+        "Pep_TwoThreeFive_att3"
+      ],
+      "distance": 17
+    },
+    {
+      "pair": [
+        "Conte_WingbackWidth_bal4",
+        "Klopp_Gegenpress_att4"
+      ],
+      "distance": 18
+    },
+    {
+      "pair": [
+        "Conte_WingbackWidth_bal4",
+        "Pep_PressCooldown_bal2"
+      ],
+      "distance": 18
+    },
+    {
+      "pair": [
+        "Bielsa_ChaosPress_att5",
+        "Conte_WingbackWidth_bal4"
+      ],
+      "distance": 19
+    },
+    {
+      "pair": [
+        "Conte_WingbackWidth_bal4",
+        "Pep_BoxControl_bal2"
+      ],
+      "distance": 19
+    },
+    {
+      "pair": [
+        "Arteta_Control433_bal3",
+        "Simeone_LowBlock_def5"
+      ],
+      "distance": 20
+    },
+    {
+      "pair": [
+        "Conte_WingbackWidth_bal4",
+        "Simeone_Compact442_def4"
+      ],
+      "distance": 20
+    },
+    {
+      "pair": [
+        "Arteta_Control433_bal3",
+        "Klopp_Gegenpress_att4"
+      ],
+      "distance": 21
+    },
+    {
+      "pair": [
+        "Pep_BoxControl_bal2",
+        "Pep_TwoThreeFive_att3"
+      ],
+      "distance": 21
+    },
+    {
+      "pair": [
+        "Pep_ControlledPush_att3",
+        "Pep_PressCooldown_bal2"
+      ],
+      "distance": 21
+    },
+    {
+      "pair": [
+        "Pep_ControlledPush_att3",
+        "Simeone_Compact442_def4"
+      ],
+      "distance": 21
+    },
+    {
+      "pair": [
+        "Bielsa_ChaosPress_att5",
+        "Pep_ControlledPush_att3"
+      ],
+      "distance": 22
+    },
+    {
+      "pair": [
+        "Pep_PressCooldown_bal2",
+        "Pep_TwoThreeFive_att3"
+      ],
+      "distance": 24
+    },
+    {
+      "pair": [
+        "Pep_TwoThreeFive_att3",
+        "Simeone_Compact442_def4"
+      ],
+      "distance": 24
+    },
+    {
+      "pair": [
+        "Conte_WingbackWidth_bal4",
+        "Simeone_LowBlock_def5"
+      ],
+      "distance": 27
+    },
+    {
+      "pair": [
+        "Pep_ControlledPush_att3",
+        "Simeone_LowBlock_def5"
+      ],
+      "distance": 28
+    },
+    {
+      "pair": [
+        "Klopp_Gegenpress_att4",
+        "Pep_BoxControl_bal2"
+      ],
+      "distance": 29
+    },
+    {
+      "pair": [
+        "Arteta_Control433_bal3",
+        "Bielsa_ChaosPress_att5"
+      ],
+      "distance": 30
+    },
+    {
+      "pair": [
+        "Klopp_Gegenpress_att4",
+        "Pep_PressCooldown_bal2"
+      ],
+      "distance": 30
+    },
+    {
+      "pair": [
+        "Klopp_Gegenpress_att4",
+        "Simeone_Compact442_def4"
+      ],
+      "distance": 30
+    },
+    {
+      "pair": [
+        "Pep_TwoThreeFive_att3",
+        "Simeone_LowBlock_def5"
+      ],
+      "distance": 33
+    },
+    {
+      "pair": [
+        "Bielsa_ChaosPress_att5",
+        "Pep_PressCooldown_bal2"
+      ],
+      "distance": 35
+    },
+    {
+      "pair": [
+        "Bielsa_ChaosPress_att5",
+        "Simeone_Compact442_def4"
+      ],
+      "distance": 37
+    },
+    {
+      "pair": [
+        "Bielsa_ChaosPress_att5",
+        "Pep_BoxControl_bal2"
+      ],
+      "distance": 38
+    },
+    {
+      "pair": [
+        "Klopp_Gegenpress_att4",
+        "Simeone_LowBlock_def5"
+      ],
+      "distance": 39
+    },
+    {
+      "pair": [
+        "Bielsa_ChaosPress_att5",
+        "Simeone_LowBlock_def5"
+      ],
+      "distance": 44
+    }
+  ]
+}

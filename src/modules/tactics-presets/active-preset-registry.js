@@ -1,15 +1,17 @@
 // Active Tactical Preset Registry
 // ============================================================
-// Canonical source of truth for the generator 5.61 tactical suite v8.
-// v8 retires Compact_Counter_def3 from active production selection. Its
-// original controls are intentionally NOT retuned and are retained
+// Canonical source of truth for the generator 5.61 tactical suite v9.
+// v9 keeps Compact_Counter_def3 retired (v8) and eliminates all implicit
+// preset fallbacks: production decisions either pick an active preset or
+// hold current tactics (fallbackPolicy '5.61-tactical-suite-v9-hold-current').
+// Its original controls are intentionally NOT retuned and are retained
 // module-local (HISTORICAL_COMPACT_COUNTER) for compatibility/audit only.
 
 (function activeTacticalPresetRegistry() {
     'use strict';
 
-    const SUITE_VERSION='slf_tactic_suite_561_v8';
-    const RECOMMENDATION_SCHEMA='slf_rule_decision_v8_tactical_suite';
+    const SUITE_VERSION='slf_tactic_suite_561_v9';
+    const RECOMMENDATION_SCHEMA='slf_rule_decision_v9_tactical_suite';
     const DEFAULT_RISK_APPETITE='standard';
     const ACTIVE_PRESET_NAMES=[
         'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2',
@@ -29,15 +31,15 @@
 
     const PRESETS={
         Arteta_Control433_bal3:{def_line:'2',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'2',build_long:'1',build_fast:'2',style:'3',pass_risk:'3',dribble:'2',cross:'2',corner:'1',shot:'2',priority:[]},
-        Pep_BoxControl_bal2:{def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'1',build_long:'1',build_fast:'2',style:'3',pass_risk:'2',dribble:'2',cross:'1',corner:'1',shot:'2',priority:[]},
+        Pep_BoxControl_bal2:{def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'1',build_long:'1',build_fast:'1',style:'3',pass_risk:'2',dribble:'1',cross:'1',corner:'1',shot:'1',priority:[]},
         Pep_PressCooldown_bal2:{def_line:'1',press_line:'2',def_width:'3',press_intense:'1',build_type:'1',build_temp:'2',build_long:'4',build_fast:'2',style:'2',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[]},
         Pep_ControlledPush_att3:{def_line:'3',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'3',build_long:'1',build_fast:'4',style:'4',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[]},
         Pep_TwoThreeFive_att3:{def_line:'4',press_line:'4',def_width:'4',press_intense:'4',build_type:'2',build_temp:'2',build_long:'1',build_fast:'3',style:'5',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'4',priority:[]},
-        Conte_WingbackWidth_bal4:{def_line:'2',press_line:'2',def_width:'5',press_intense:'3',build_type:'3',build_temp:'2',build_long:'3',build_fast:'3',style:'4',pass_risk:'3',dribble:'4',cross:'5',corner:'1',shot:'2',priority:['left','right']},
+        Conte_WingbackWidth_bal4:{def_line:'2',press_line:'2',def_width:'5',press_intense:'3',build_type:'3',build_temp:'2',build_long:'3',build_fast:'3',style:'4',pass_risk:'3',dribble:'4',cross:'4',corner:'1',shot:'2',priority:['left','right']},
         Klopp_Gegenpress_att4:{def_line:'4',press_line:'5',def_width:'3',press_intense:'5',build_type:'3',build_temp:'3',build_long:'2',build_fast:'5',style:'5',pass_risk:'4',dribble:'4',cross:'3',corner:'1',shot:'4',priority:[]},
         Simeone_Compact442_def4:{def_line:'1',press_line:'2',def_width:'1',press_intense:'4',build_type:'1',build_temp:'1',build_long:'3',build_fast:'2',style:'1',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[]},
-        Simeone_LowBlock_def5:{def_line:'1',press_line:'1',def_width:'1',press_intense:'1',build_type:'1',build_temp:'1',build_long:'5',build_fast:'2',style:'1',pass_risk:'1',dribble:'1',cross:'1',corner:'1',shot:'1',priority:[]},
-        Bielsa_ChaosPress_att5:{def_line:'5',press_line:'5',def_width:'5',press_intense:'5',build_type:'3',build_temp:'3',build_long:'4',build_fast:'5',style:'5',pass_risk:'5',dribble:'5',cross:'5',corner:'1',shot:'5',priority:[]}
+        Simeone_LowBlock_def5:{def_line:'1',press_line:'1',def_width:'1',press_intense:'1',build_type:'1',build_temp:'1',build_long:'5',build_fast:'1',style:'1',pass_risk:'1',dribble:'1',cross:'1',corner:'1',shot:'1',priority:[]},
+        Bielsa_ChaosPress_att5:{def_line:'5',press_line:'5',def_width:'5',press_intense:'5',build_type:'3',build_temp:'3',build_long:'4',build_fast:'5',style:'5',pass_risk:'5',dribble:'5',cross:'4',corner:'1',shot:'5',priority:[]}
     };
     const LABELS={
         standard:'Стандартная 4-2-3-1_att1', Arteta_Control433_bal3:'Arteta Structural Control 4-3-3_neutr',
@@ -70,7 +72,7 @@
     const STYLE_GROUPS=[{style:'5',label:'Атака+ · _att2',suffix:'_att2'},{style:'4',label:'Атака · _att1',suffix:'_att1'},{style:'3',label:'Обычный · _neutr',suffix:'_neutr'},{style:'2',label:'Защита · _def1',suffix:'_def1'},{style:'1',label:'Защ+ · _def2',suffix:'_def2'}];
     const DISPLAY_ORDER=Object.keys(DISPLAY_META).sort((a,b)=>Number(DISPLAY_META[b].style)-Number(DISPLAY_META[a].style)||(a==='standard'?-1:b==='standard'?1:String(DISPLAY_META[a].trainer).localeCompare(String(DISPLAY_META[b].trainer),'en')||String(LABELS[a]).localeCompare(String(LABELS[b]),'en')));
     const META={
-        Arteta_Control433_bal3:{group:'balance',rank:3,role:'stable_control',title:LABELS.Arteta_Control433_bal3,idea:'структурный контроль 4-3-3',use:'базовый план равного матча и возврат к устойчивой структуре',risk:'не для позднего форсирования'},
+        Arteta_Control433_bal3:{group:'balance',rank:3,role:'stable_control',title:LABELS.Arteta_Control433_bal3,idea:'структурный контроль 4-3-3',use:'базовый план равного матча',risk:'не для позднего форсирования'},
         Pep_BoxControl_bal2:{group:'balance',rank:2,role:'pressure_escape',title:LABELS.Pep_BoxControl_bal2,idea:'press-resistant контроль',use:'выход из давления без прямой контратаки и reset после брака',risk:'медленный для поздней погони'},
         Pep_PressCooldown_bal2:{group:'balance',rank:2,role:'press_cooldown',title:LABELS.Pep_PressCooldown_bal2,idea:'снизить цену прессинга',use:'fatigue, рост брака/фолов или падение силы',risk:'не для позднего проигрыша'},
         Pep_ControlledPush_att3:{group:'attack',rank:3,role:'controlled_chase',title:LABELS.Pep_ControlledPush_att3,idea:'первая ступень усиления атаки',use:'нужен гол при сохранённой структуре',risk:'высокий брак увеличит потери'},
@@ -92,6 +94,21 @@
         Simeone_Compact442_def4:{attackLanes:['left','right'],build:'compact442',tempo:'low',press:'high_local',risk:'low',requires:['protect_lead'],avoids:['urgent_chase']},
         Simeone_LowBlock_def5:{attackLanes:[],build:'temporary_emergency_lock',tempo:'very_low',press:'very_low',risk:'very_low',requires:['mandatory_reassessment_next_window'],avoids:['permanent_losing_state']},
         Bielsa_ChaosPress_att5:{attackLanes:['left','center','right'],build:'final_all_in',tempo:'maximum',press:'maximum',risk:'maximum',requires:['emergency_need_goal'],avoids:['early_match','press_fatigue','high_bad_actions']}
+    };
+    // v9 role contracts: per-preset situation windows, entry/exit and veto contract.
+    // exitConditions mirror the v9 STEP transition targets owned by the direction policy.
+    // v9: production fallback target eliminated — fallbackEligible is false for every preset.
+    const ROLE_CONTRACTS={
+        Arteta_Control433_bal3:{presetId:'Arteta_Control433_bal3',role:META.Arteta_Control433_bal3.role,primarySituation:'stable_control',allowedSituations:[],entryConditions:[...TRAITS.Arteta_Control433_bal3.requires,META.Arteta_Control433_bal3.use],exitConditions:['давление без контрвыхода → Pep_BoxControl_bal2','нужен гол → Pep_ControlledPush_att3','ширина открыта → Conte_WingbackWidth_bal4','защита преимущества → Simeone_Compact442_def4'],hardVetoes:[],riskClass:TRAITS.Arteta_Control433_bal3.risk,fallbackEligible:false},
+        Pep_BoxControl_bal2:{presetId:'Pep_BoxControl_bal2',role:META.Pep_BoxControl_bal2.role,primarySituation:'pressure_escape',allowedSituations:['stable_control'],entryConditions:[...TRAITS.Pep_BoxControl_bal2.requires,META.Pep_BoxControl_bal2.use],exitConditions:['стабилизация → Arteta_Control433_bal3','fatigue/рост брака → Pep_PressCooldown_bal2'],hardVetoes:[],riskClass:TRAITS.Pep_BoxControl_bal2.risk,fallbackEligible:false},
+        Pep_PressCooldown_bal2:{presetId:'Pep_PressCooldown_bal2',role:META.Pep_PressCooldown_bal2.role,primarySituation:'press_cooldown',allowedSituations:['pressure_escape','stable_control'],entryConditions:[...TRAITS.Pep_PressCooldown_bal2.requires,META.Pep_PressCooldown_bal2.use],exitConditions:['восстановление → Pep_BoxControl_bal2','структура готова → Arteta_Control433_bal3','защита преимущества → Simeone_Compact442_def4'],hardVetoes:['поздний проигрыш требует продвижения, а не cooldown'],riskClass:TRAITS.Pep_PressCooldown_bal2.risk,fallbackEligible:false},
+        Pep_ControlledPush_att3:{presetId:'Pep_ControlledPush_att3',role:META.Pep_ControlledPush_att3.role,primarySituation:'controlled_chase',allowedSituations:['positional_siege','stable_control'],entryConditions:[...TRAITS.Pep_ControlledPush_att3.requires,META.Pep_ControlledPush_att3.use],exitConditions:['структура восстановлена → Arteta_Control433_bal3','атакующий momentum → Pep_TwoThreeFive_att3','ширина открыта → Conte_WingbackWidth_bal4'],hardVetoes:[],riskClass:TRAITS.Pep_ControlledPush_att3.risk,fallbackEligible:false},
+        Pep_TwoThreeFive_att3:{presetId:'Pep_TwoThreeFive_att3',role:META.Pep_TwoThreeFive_att3.role,primarySituation:'positional_siege',allowedSituations:['controlled_chase','late_high_pressure'],entryConditions:[...TRAITS.Pep_TwoThreeFive_att3.requires,META.Pep_TwoThreeFive_att3.use],exitConditions:['momentum потерян → Pep_ControlledPush_att3','нужна ширина → Conte_WingbackWidth_bal4','поздняя погоня → Klopp_Gegenpress_att4'],hardVetoes:['3-2-5 запрещён при transition threat/fatigue/браке','позднее преимущество не требует high/all-in риска'],riskClass:TRAITS.Pep_TwoThreeFive_att3.risk,fallbackEligible:false},
+        Conte_WingbackWidth_bal4:{presetId:'Conte_WingbackWidth_bal4',role:META.Conte_WingbackWidth_bal4.role,primarySituation:'width_attack',allowedSituations:['positional_siege'],entryConditions:[...TRAITS.Conte_WingbackWidth_bal4.requires,META.Conte_WingbackWidth_bal4.use],exitConditions:['ширина исчерпана → Arteta_Control433_bal3','нужен гол через центр → Pep_ControlledPush_att3','позиционный дожим → Pep_TwoThreeFive_att3'],hardVetoes:[],riskClass:TRAITS.Conte_WingbackWidth_bal4.risk,fallbackEligible:false},
+        Klopp_Gegenpress_att4:{presetId:'Klopp_Gegenpress_att4',role:META.Klopp_Gegenpress_att4.role,primarySituation:'late_high_pressure',allowedSituations:['final_all_in','positional_siege'],entryConditions:[...TRAITS.Klopp_Gegenpress_att4.requires,META.Klopp_Gegenpress_att4.use],exitConditions:['погоня стабилизирована → Pep_TwoThreeFive_att3','нужен контролируемый push → Pep_ControlledPush_att3','финальное окно → Bielsa_ChaosPress_att5'],hardVetoes:['Klopp только поздняя погоня','дорогой прессинг запрещён по fatigue/браку/удалению','позднее преимущество не требует high/all-in риска'],riskClass:TRAITS.Klopp_Gegenpress_att4.risk,fallbackEligible:false},
+        Simeone_Compact442_def4:{presetId:'Simeone_Compact442_def4',role:META.Simeone_Compact442_def4.role,primarySituation:'protect_lead',allowedSituations:['emergency_lock','stable_control'],entryConditions:[...TRAITS.Simeone_Compact442_def4.requires,META.Simeone_Compact442_def4.use],exitConditions:['угроза снята → Arteta_Control433_bal3','критическая осада → Simeone_LowBlock_def5','fatigue прессинга → Pep_PressCooldown_bal2'],hardVetoes:['защитный 4-4-2 запрещён при проигрыше'],riskClass:TRAITS.Simeone_Compact442_def4.risk,fallbackEligible:false},
+        Simeone_LowBlock_def5:{presetId:'Simeone_LowBlock_def5',role:META.Simeone_LowBlock_def5.role,primarySituation:'emergency_lock',allowedSituations:['protect_lead'],entryConditions:[...TRAITS.Simeone_LowBlock_def5.requires,META.Simeone_LowBlock_def5.use],exitConditions:['угроза снята → Simeone_Compact442_def4','выход из lock → Pep_BoxControl_bal2'],hardVetoes:['Low Block только временный emergency lock'],riskClass:TRAITS.Simeone_LowBlock_def5.risk,fallbackEligible:false},
+        Bielsa_ChaosPress_att5:{presetId:'Bielsa_ChaosPress_att5',role:META.Bielsa_ChaosPress_att5.role,primarySituation:'final_all_in',allowedSituations:['late_high_pressure'],entryConditions:[...TRAITS.Bielsa_ChaosPress_att5.requires,META.Bielsa_ChaosPress_att5.use],exitConditions:['матч не решён → Klopp_Gegenpress_att4'],hardVetoes:['Bielsa только финальный all-in','дорогой прессинг запрещён по fatigue/браку/удалению','позднее преимущество не требует high/all-in риска'],riskClass:TRAITS.Bielsa_ChaosPress_att5.risk,fallbackEligible:false}
     };
     const SCHEME_STATES={arteta_control:'4-3-3 structural control',box_control:'4-1-2-2-1 press-resistant control',press_cooldown:'4-1-4-1 cooldown outlet',controlled_push:'4-2-3-1 controlled push',positional_325:'3-2-5 positional siege',wingback_width:'3-4-3 wingback width',gegenpress_424:'4-2-4 gegenpress',compact_442:'4-4-2 compact',low_block_541:'5-4-1 emergency lock',chaos_334:'3-3-4 final all-in'};
     const PRESET_SCHEME_STATE={Arteta_Control433_bal3:'arteta_control',Pep_BoxControl_bal2:'box_control',Pep_PressCooldown_bal2:'press_cooldown',Pep_ControlledPush_att3:'controlled_push',Pep_TwoThreeFive_att3:'positional_325',Conte_WingbackWidth_bal4:'wingback_width',Klopp_Gegenpress_att4:'gegenpress_424',Simeone_Compact442_def4:'compact_442',Simeone_LowBlock_def5:'low_block_541',Bielsa_ChaosPress_att5:'chaos_334'};
@@ -122,5 +139,12 @@
     if(typeof RecommendationEngine!=='undefined'&&RecommendationEngine)RecommendationEngine.getPresetLadder=group=>(LADDERS[group]||[]).slice();
     if(typeof CurrentActionHintEngine!=='undefined'&&CurrentActionHintEngine)CurrentActionHintEngine.PRESET_AUDIT_TIER=Object.fromEntries(Object.entries(AUDIT).map(([k,v])=>[k,Array.isArray(v)?v.slice():v]));
 
-    window.SLFActivePresetRegistry={suiteVersion:SUITE_VERSION,recommendationSchema:RECOMMENDATION_SCHEMA,generatorVersion:'5.61',defaultRiskAppetite:DEFAULT_RISK_APPETITE,active:ACTIVE_PRESET_NAMES.slice(),removed:REMOVED_PRESET_NAMES.slice(),retiredActive:V8_RETIRED_PRESET_NAMES.slice(),presets:clonePresets(PRESETS),labels:Object.assign({},LABELS),meta:Object.assign({},META),traits:cloneTraits(TRAITS),formations:Object.fromEntries(Object.entries(FORMATIONS).map(([n,p])=>[n,p.slice()])),schemeStates:Object.assign({},SCHEME_STATES),presetSchemeState:Object.assign({},PRESET_SCHEME_STATE),ladders:Object.fromEntries(Object.entries(LADDERS).map(([k,v])=>[k,v.slice()])),displayMeta:Object.assign({},DISPLAY_META),displayOrder:DISPLAY_ORDER.slice(),styleGroups:STYLE_GROUPS.map(x=>Object.assign({},x)),auditTier:AUDIT,fallbackPolicy:'5.61-tactical-suite-v8'};
+    window.SLFActivePresetRegistry={suiteVersion:SUITE_VERSION,recommendationSchema:RECOMMENDATION_SCHEMA,generatorVersion:'5.61',defaultRiskAppetite:DEFAULT_RISK_APPETITE,active:ACTIVE_PRESET_NAMES.slice(),removed:REMOVED_PRESET_NAMES.slice(),retiredActive:V8_RETIRED_PRESET_NAMES.slice(),presets:clonePresets(PRESETS),labels:Object.assign({},LABELS),meta:Object.assign({},META),traits:cloneTraits(TRAITS),formations:Object.fromEntries(Object.entries(FORMATIONS).map(([n,p])=>[n,p.slice()])),schemeStates:Object.assign({},SCHEME_STATES),presetSchemeState:Object.assign({},PRESET_SCHEME_STATE),ladders:Object.fromEntries(Object.entries(LADDERS).map(([k,v])=>[k,v.slice()])),displayMeta:Object.assign({},DISPLAY_META),displayOrder:DISPLAY_ORDER.slice(),styleGroups:STYLE_GROUPS.map(x=>Object.assign({},x)),auditTier:AUDIT,fallbackPolicy:'5.61-tactical-suite-v9-hold-current',
+        situations:['stable_control','pressure_escape','press_cooldown','controlled_chase','positional_siege','width_attack','protect_lead','emergency_lock','late_high_pressure','final_all_in'],
+        controlFields:['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot'],
+        inventorySchema:'slf_active_preset_inventory_v3',
+        // bounded evidence adjustment — reserved, see issue #325
+        evidenceAdjustment:function(){return 0;},
+        roleContracts:Object.fromEntries(Object.entries(ROLE_CONTRACTS).map(([id,c])=>[id,Object.assign({},c,{allowedSituations:c.allowedSituations.slice(),entryConditions:c.entryConditions.slice(),exitConditions:c.exitConditions.slice(),hardVetoes:c.hardVetoes.slice(),formation:(FORMATIONS[id]||[]).slice(),controls:Object.assign({},PRESETS[id],{priority:(PRESETS[id]?.priority||[]).slice()})})]))
+    };
 })();

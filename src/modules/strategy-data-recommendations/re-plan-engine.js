@@ -136,7 +136,16 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
         if (['DC', 'DM', 'CM'].includes(pos)) plan.controls.push(`Слабый центр соперника (${weak.name || pos}) — можно аккуратно усиливать вход через центр, если брак низкий.`);
     },
 
+    // v9: registry-safe wrapper — при наличии активного реестра удалённый пресет
+    // не может «протечь» из legacy-правил: такой результат заменяется на hold (null).
     selectRawPreset(snapshot, state) {
+        const raw = this.selectRawPresetRules(snapshot, state);
+        const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+        if (raw?.name && registry && Array.isArray(registry.active) && !registry.active.includes(raw.name)) return null;
+        return raw;
+    },
+
+    selectRawPresetRules(snapshot, state) {
         const score = state.score;
         const minute = state.minute;
         const xgGap = state.oppXg - state.myXg;
@@ -267,7 +276,13 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
             generatorQualitySignal: state.generatorQualitySignal
         });
 
-        const name = guarded?.name || raw?.name || 'Pep_BoxControl_bal2';
+        const name = guarded?.name || raw?.name || null;
+        // v9: no implicit preset fallback — без валидного пресета держим текущую тактику.
+        if (!name) {
+            plan.primaryPresetName = null;
+            plan.preset.push('Нет безопасной рекомендации — оставить текущую тактику');
+            return null;
+        }
         const title = this.getPresetTitle(name);
         const reason = guarded?.reason || raw?.reason || 'лучший текущий baseline по live-данным';
         plan.primaryPresetName = name;

@@ -509,6 +509,15 @@
         "Assigned onto the owning facade via Object.assign or split along an existing IIFE boundary; call sites unchanged.",
         "Registered in src/app/bundle-order.json dependency audit adjacent to the facade."
       ]
+    },
+    {
+      "file": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
+      "classification": "MIXED_ACTIVE_LEGACY",
+      "evidence": [
+        "v9 (issue #325, PR #326): retired Compact_Counter_def3 removed from ACTIVE_PRESETS; the id remains in TACTIC_SIGNATURES marked legacy_retired for tactic detection only and is never selectable.",
+        "No implicit preset fallback remains: invalid or absent decisions hold the current tactic with null preset (covered by tools/test-tactic-fallback-hold-current.mjs).",
+        "Active path: schema slf_rule_decision_v9_tactical_suite, registry-aware recommendations; the legacy_retired signature is a detection alias pending symbol-level extraction in a future cleanup."
+      ]
     }
   ],
   "symbolReviewQueue": [

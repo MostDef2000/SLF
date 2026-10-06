@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-// Tactical Suite v8 active production set (Compact_Counter_def3 retired).
+// Tactical Suite v9 active production set (Compact_Counter_def3 retired).
 const active = [
   'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2',
   'Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4',
@@ -52,12 +54,13 @@ const registry=context.window.SLFActivePresetRegistry;
 const policy=context.window.SLFTacticDirectionPolicy;
 const engine=context.window.SLFCurrentActionHintEngine;
 
-// --- Tactical Suite v8 identity -------------------------------------------
-assert.equal(registry.suiteVersion,'slf_tactic_suite_561_v8');
-assert.equal(registry.recommendationSchema,'slf_rule_decision_v8_tactical_suite');
+// --- Tactical Suite v9 identity -------------------------------------------
+assert.equal(registry.suiteVersion,'slf_tactic_suite_561_v9');
+assert.equal(registry.recommendationSchema,'slf_rule_decision_v9_tactical_suite');
 assert.equal(registry.defaultRiskAppetite,'standard');
-assert.equal(registry.fallbackPolicy,'5.61-tactical-suite-v8');
+assert.equal(registry.fallbackPolicy,'5.61-tactical-suite-v9-hold-current');
 assert.deepEqual(Array.from(registry.active),active);
+assert.equal(registry.active.length,10,'v9 active production presets are exactly 10');
 assert.equal(new Set(registry.active).size,10,'active production presets must be exactly 10');
 assert.equal(Object.keys(registry.presets).length,10);
 assert.equal(Object.keys(registry.formations).length,10);
@@ -77,12 +80,12 @@ for(const name of active){
 }
 for(const name of retired){assert.equal(context.BASE_PRESETS[name],undefined);assert.equal(context.BASE_LABELS[name],undefined);assert.ok(registry.removed.includes(name));}
 
-// --- Compact_Counter_def3 v8 retirement -----------------------------------
+// --- Compact_Counter_def3 retirement ---------------------------------------
 assert.equal(context.BASE_PRESETS.Compact_Counter_def3,undefined,'Compact Counter must be removed from BASE_PRESETS');
 assert.equal(context.BASE_LABELS.Compact_Counter_def3,undefined,'Compact Counter must be removed from BASE_LABELS');
 assert.equal(registry.active.includes('Compact_Counter_def3'),false,'not active');
+assert.deepEqual([...registry.retiredActive],['Compact_Counter_def3'],'retirement identity is explicit');
 assert.ok(registry.removed.includes('Compact_Counter_def3'),'listed as removed for UI filtering/audit');
-assert.deepEqual([...registry.retiredActive],['Compact_Counter_def3'],'v8 retirement identity is explicit');
 for(const map of ['presets','labels','meta','traits','formations','displayMeta','presetSchemeState']){
   assert.equal(Object.prototype.hasOwnProperty.call(registry[map],'Compact_Counter_def3'),false,`Compact Counter absent from registry.${map}`);
 }
@@ -101,18 +104,22 @@ assert.match(
   'Compact Counter controls must not be retuned'
 );
 
-// --- No tactic control / formation retune of remaining active presets ------
+// --- v9 control/formation table ---------------------------------------------
+// Intentional v9 refresh per issue #325 (replaces the "unchanged vs base
+// 44f14bf2" pin): v9 retunes Pep_BoxControl_bal2 build_fast/dribble/shot 2->1,
+// Conte_WingbackWidth_bal4 cross 5->4, Simeone_LowBlock_def5 build_fast 2->1 and
+// Bielsa_ChaosPress_att5 cross 5->4. Formations are unchanged.
 const EXPECTED_CONTROLS={
   Arteta_Control433_bal3:{def_line:'2',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'2',build_long:'1',build_fast:'2',style:'3',pass_risk:'3',dribble:'2',cross:'2',corner:'1',shot:'2',priority:[]},
-  Pep_BoxControl_bal2:{def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'1',build_long:'1',build_fast:'2',style:'3',pass_risk:'2',dribble:'2',cross:'1',corner:'1',shot:'2',priority:[]},
+  Pep_BoxControl_bal2:{def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'1',build_long:'1',build_fast:'1',style:'3',pass_risk:'2',dribble:'1',cross:'1',corner:'1',shot:'1',priority:[]},
   Pep_PressCooldown_bal2:{def_line:'1',press_line:'2',def_width:'3',press_intense:'1',build_type:'1',build_temp:'2',build_long:'4',build_fast:'2',style:'2',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[]},
   Pep_ControlledPush_att3:{def_line:'3',press_line:'3',def_width:'2',press_intense:'3',build_type:'2',build_temp:'3',build_long:'1',build_fast:'4',style:'4',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[]},
   Pep_TwoThreeFive_att3:{def_line:'4',press_line:'4',def_width:'4',press_intense:'4',build_type:'2',build_temp:'2',build_long:'1',build_fast:'3',style:'5',pass_risk:'4',dribble:'3',cross:'2',corner:'1',shot:'4',priority:[]},
-  Conte_WingbackWidth_bal4:{def_line:'2',press_line:'2',def_width:'5',press_intense:'3',build_type:'3',build_temp:'2',build_long:'3',build_fast:'3',style:'4',pass_risk:'3',dribble:'4',cross:'5',corner:'1',shot:'2',priority:['left','right']},
+  Conte_WingbackWidth_bal4:{def_line:'2',press_line:'2',def_width:'5',press_intense:'3',build_type:'3',build_temp:'2',build_long:'3',build_fast:'3',style:'4',pass_risk:'3',dribble:'4',cross:'4',corner:'1',shot:'2',priority:['left','right']},
   Klopp_Gegenpress_att4:{def_line:'4',press_line:'5',def_width:'3',press_intense:'5',build_type:'3',build_temp:'3',build_long:'2',build_fast:'5',style:'5',pass_risk:'4',dribble:'4',cross:'3',corner:'1',shot:'4',priority:[]},
   Simeone_Compact442_def4:{def_line:'1',press_line:'2',def_width:'1',press_intense:'4',build_type:'1',build_temp:'1',build_long:'3',build_fast:'2',style:'1',pass_risk:'2',dribble:'1',cross:'2',corner:'1',shot:'1',priority:[]},
-  Simeone_LowBlock_def5:{def_line:'1',press_line:'1',def_width:'1',press_intense:'1',build_type:'1',build_temp:'1',build_long:'5',build_fast:'2',style:'1',pass_risk:'1',dribble:'1',cross:'1',corner:'1',shot:'1',priority:[]},
-  Bielsa_ChaosPress_att5:{def_line:'5',press_line:'5',def_width:'5',press_intense:'5',build_type:'3',build_temp:'3',build_long:'4',build_fast:'5',style:'5',pass_risk:'5',dribble:'5',cross:'5',corner:'1',shot:'5',priority:[]}
+  Simeone_LowBlock_def5:{def_line:'1',press_line:'1',def_width:'1',press_intense:'1',build_type:'1',build_temp:'1',build_long:'5',build_fast:'1',style:'1',pass_risk:'1',dribble:'1',cross:'1',corner:'1',shot:'1',priority:[]},
+  Bielsa_ChaosPress_att5:{def_line:'5',press_line:'5',def_width:'5',press_intense:'5',build_type:'3',build_temp:'3',build_long:'4',build_fast:'5',style:'5',pass_risk:'5',dribble:'5',cross:'4',corner:'1',shot:'5',priority:[]}
 };
 const EXPECTED_FORMATIONS={
   Arteta_Control433_bal3:['gk','ld','cd1','cd3','rd','cm1','dm2','cm3','lw','st2','rw'],
@@ -128,33 +135,57 @@ const EXPECTED_FORMATIONS={
 };
 assert.deepEqual(Object.keys(registry.presets).sort(),active.slice().sort(),'only the 10 active presets define controls');
 for(const [name,controls] of Object.entries(EXPECTED_CONTROLS)){
-  assert.deepEqual(JSON.parse(JSON.stringify(registry.presets[name])),Object.assign({},controls,{priority:controls.priority.slice()}),`${name}: controls unchanged vs base 44f14bf2`);
-  assert.deepEqual([...registry.formations[name]],EXPECTED_FORMATIONS[name],`${name}: formation unchanged vs base 44f14bf2`);
+  assert.deepEqual(JSON.parse(JSON.stringify(registry.presets[name])),Object.assign({},controls,{priority:controls.priority.slice()}),`${name}: controls equal the v9 table (intentional v9 refresh per issue #325)`);
+  assert.deepEqual([...registry.formations[name]],EXPECTED_FORMATIONS[name],`${name}: formation`);
 }
 
-// --- Policy identity and v8 pressure_escape --------------------------------
-assert.equal(policy.version,'5.61-tactical-suite-v8.1');
+// --- v9 role contracts, situations, control fields, evidence hook ------------
+assert.equal(Object.keys(registry.roleContracts).length,10,'roleContracts: exactly 10 entries');
+assert.deepEqual([...registry.active].sort(),Object.keys(registry.roleContracts).sort(),'roleContracts cover exactly the active set');
+for(const id of registry.active){
+  const contract=registry.roleContracts[id];
+  assert.equal(contract.fallbackEligible,false,`${id}: fallbackEligible false (v9: no production fallback target)`);
+  assert.ok(registry.situations.includes(contract.primarySituation),`${id}: primarySituation is a known situation`);
+  for(const situation of contract.allowedSituations){
+    assert.ok(registry.situations.includes(situation),`${id}: allowedSituations stay within registry.situations`);
+  }
+  assert.deepEqual(JSON.parse(JSON.stringify(contract.controls)),JSON.parse(JSON.stringify(registry.presets[id])),`${id}: contract controls deep-equal registry controls`);
+  assert.deepEqual([...contract.formation],[...registry.formations[id]],`${id}: contract formation deep-equal registry formation`);
+}
+assert.equal(registry.situations.length,10,'v9 declares exactly 10 situations');
+assert.deepEqual([...registry.situations],['stable_control','pressure_escape','press_cooldown','controlled_chase','positional_siege','width_attack','protect_lead','emergency_lock','late_high_pressure','final_all_in'],'situation keys in the v9 order');
+assert.deepEqual([...registry.controlFields],['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot'],'controlFields exact order');
+assert.equal(registry.inventorySchema,'slf_active_preset_inventory_v3');
+assert.equal(registry.evidenceAdjustment(),0,'evidenceAdjustment() stays a bounded noop (issue #325 reserved)');
+
+// --- Policy identity and v9 score parts --------------------------------------
+assert.equal(policy.version,'5.61-tactical-suite-v9.0');
+assert.equal(policy.suiteVersion,'slf_tactic_suite_561_v9');
+assert.equal(policy.recommendationSchema,'slf_rule_decision_v9_tactical_suite');
 assert.equal(policy.defaultRiskAppetite,'standard');
 assert.equal(policy.autoApply,false,'Production Advisor stays manual-only');
-assert.equal(engine.schema,'slf_rule_decision_v8_tactical_suite');
+assert.equal(engine.schema,'slf_rule_decision_v9_tactical_suite');
 assert.equal(engine.__tacticSuiteV7Installed,true,'v7 compat marker retained for downstream passive layers');
 assert.equal(engine.__tacticSuiteV8Installed,true);
-assert.equal(context.RecommendationEngine.__tacticSuiteV8Installed,true);
+assert.equal(engine.__tacticSuiteV9Installed,true,'v9 suite installed on the engine');
+assert.equal(context.RecommendationEngine.__tacticSuiteV9Installed,true);
+const scoreParts=policy.scoreCandidate('Arteta_Control433_bal3',{});
+assert.deepEqual(Object.keys(scoreParts.parts),['rulePrior','contextFit','riskAdjustment','boundedEvidenceAdjustment'],'scoreCandidate parts keys verbatim (bounded evidence slot present)');
 
 function decide(input={}){
   const snapshot={gameId:'scenario',status:'live',tacticTelemetry:{}};
   const decision=engine.run(snapshot,Object.assign({minute:30,scoreState:'draw',score:{state:'draw'},attackNeed:20,myBad:10,lowBadActions:true,signals:[]},input));
   assert.ok(active.includes(decision.action.preset),'recommendation must exist in active UI set');
   assert.notEqual(decision.action.preset,'Compact_Counter_def3','retired preset must never be recommended');
-  assert.equal(snapshot.tacticTelemetry.libraryVersion,'slf_tactic_suite_561_v8');
-  assert.equal(snapshot.tacticTelemetry.recommendationSchema,'slf_rule_decision_v8_tactical_suite');
+  assert.equal(snapshot.tacticTelemetry.libraryVersion,'slf_tactic_suite_561_v9');
+  assert.equal(snapshot.tacticTelemetry.recommendationSchema,'slf_rule_decision_v9_tactical_suite');
   assert.equal(decision.telemetry.recommendedPreset,decision.action.preset);
   const eligible=decision.candidates.filter(item=>!item.vetoed);
   assert.ok(eligible.length>=2,'diagnostics must keep ranked eligible alternatives');
   assert.ok(new Set(eligible.map(item=>item.score)).size>=2,'candidate scores must be meaningful, not selected=100/rest=0 placeholders');
   assert.ok(decision.runnerUp?.preset,'runner-up must be explicit');
   assert.equal(decision.margin,decision.action.score-decision.runnerUp.score,'margin must match final raw ranking');
-  assert.equal(decision.confidence.gap,decision.margin,'confidence gap must match v8 margin');
+  assert.equal(decision.confidence.gap,decision.margin,'confidence gap must match the suite margin');
   return decision;
 }
 
@@ -177,7 +208,9 @@ for(const [label,input,preset,situation] of scenarios){const d=decide(input);ass
 // pressure_escape, no dedicated pressure_counter situation exists.
 const confirmedOutlet={underPressure:true,counterExitAvailable:true,signals:['under_pressure','counter_exit_available']};
 assert.equal(policy.classifySituation(confirmedOutlet),'pressure_escape');
-assert.equal(policy.preferredPreset('pressure_counter'),'Arteta_Control433_bal3','dedicated pressure_counter situation must not exist');
+// v9: unknown situations must not resolve to any preset name. v8 returned the
+// Arteta fallback literal here; v9 returns null (implicit fallback eliminated).
+assert.equal(policy.preferredPreset('pressure_counter'),null,'dedicated pressure_counter situation must not exist and unknown situations return null');
 const escapeRank=policy.rank(confirmedOutlet);
 assert.equal(escapeRank.situation,'pressure_escape');
 assert.deepEqual([...escapeRank.eligible.slice(0,3)].map(item=>item.preset),['Pep_BoxControl_bal2','Arteta_Control433_bal3','Pep_PressCooldown_bal2'],'conservative pressure_escape ranking');
@@ -330,4 +363,10 @@ assert.equal(/\bApi\b/.test(tacticalLabRuntime),false,'Tactical Lab must reuse d
 assert.equal(/EXP-561-P02-/.test(registrySource),false,'P02 experimental identities must not enter production registry');
 assert.equal(/EXP-561-P03-/.test(registrySource),false,'P03 experimental identities must not enter production registry');
 
-console.log('tactical suite v8 retirement + Tactical Lab v1 P03 validation contracts: OK');
+// Registry<->inventory sync: the diversity run also enforces the canonical
+// inventory is in sync with the registry (belt-and-suspenders with the
+// dedicated CI step in quality-integration.yml).
+const syncOut=execFileSync(process.execPath,['tools/sync-active-preset-inventory.mjs','--check'],{cwd:fileURLToPath(root),encoding:'utf8'});
+assert.match(syncOut,/ok: .*active-preset-inventory-v3\.json in sync/,'active-preset inventory must be in sync with the registry');
+
+console.log('tactical suite v9 hold-current + Tactical Lab v1 P03 validation contracts: OK');
