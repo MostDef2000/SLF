@@ -158,6 +158,7 @@ jobs:
           python -m unittest vps/ops/test_backfill_finished_scores.py -v
           python -m unittest vps/ops/test_quarantine_duplicate_results.py -v
           python -m unittest vps/ops/test_slf_tactics_audit_252.py -v
+          python -m unittest vps/ops/test_slf_tactics_audit_252_digest.py -v
           python -m unittest vps/ops/test_verify_api_deployment.py -v
 
   property-fuzz-reliability:
