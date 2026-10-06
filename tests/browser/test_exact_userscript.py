@@ -565,6 +565,10 @@ def assert_finished_g3(page: Page):
     assert records[0]["status"] == "finished"
     assert records[0]["score"] == {"home": 3, "away": 0}
     assert "|3:0|" in records[0]["resultKey"]
+    # issue #313: the g3-scoreline team names must win over the earlier foreign
+    # roster.php link ("Боа"), and myTeam must resolve to luch (23698).
+    assert records[0]["teamNames"] == {"home": "Луч", "away": "Соперник"}, records[0]["teamNames"]
+    assert records[0]["myTeam"] == 23698, records[0]["myTeam"]
     assert not any("/api/match_snapshots_v2?mode=append" in row["url"] for row in rows), rows
 
 

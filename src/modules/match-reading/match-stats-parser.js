@@ -3,6 +3,20 @@
 
 const MatchStatsParser = {
     readTeamNames() {
+        // FM2026 "g3" layout (issue #313) scopes the match teams inside
+        // .g3-scoreline.  Prefer those nodes so foreign roster.php links that
+        // appear earlier in the document (e.g. a sidebar club link) cannot
+        // hijack home/away.
+        const g3HomeName = document.querySelector('.g3-scoreline .g3-team--home .g3-team__name a[href*="roster.php?id="]');
+        const g3AwayName = document.querySelector('.g3-scoreline .g3-team--away .g3-team__name a[href*="roster.php?id="]');
+
+        const g3Home = (g3HomeName?.textContent || '').trim();
+        const g3Away = (g3AwayName?.textContent || '').trim();
+
+        if (g3Home && g3Away) {
+            return { home: g3Home, away: g3Away };
+        }
+
         const links = [...document.querySelectorAll('a[href*="roster.php?id="]')];
 
         const names = links
