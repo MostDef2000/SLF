@@ -48,8 +48,8 @@ const P = sandbox.window.SLFTacticDirectionPolicy;
 const E = sandbox.window.SLFCurrentActionHintEngine;
 const RE = sandbox.__RE;
 assert.ok(R && P && E && RE, 'bundle installed registry, policy, engine and RecommendationEngine');
-assert.equal(P.version, '5.61-tactical-suite-v9.0', 'policy version v9.0');
-assert.equal(R.fallbackPolicy, '5.61-tactical-suite-v9-hold-current', 'registry fallbackPolicy is the v9 hold-current contract');
+assert.equal(P.version, '5.61-tactical-suite-v10.0', 'policy version v9.0');
+assert.equal(R.fallbackPolicy, '5.61-tactical-suite-v10-hold-current', 'registry fallbackPolicy is the v9 hold-current contract');
 
 // --- (a) hold branch: no eligible candidate -> hold_current, no preset --------
 // choose()/rank()/scoreCandidate() are closure-local inside the policy IIFE, so a
@@ -79,8 +79,8 @@ const holdSandbox = {
 holdSandbox.window = holdSandbox;
 holdSandbox.globalThis = holdSandbox;
 holdSandbox.window.SLFActivePresetRegistry = {
-  suiteVersion: 'slf_tactic_suite_561_v9',
-  recommendationSchema: 'slf_rule_decision_v9_tactical_suite',
+  suiteVersion: 'slf_tactic_suite_561_v10',
+  recommendationSchema: 'slf_rule_decision_v10_tactical_suite',
   active: [],
   defaultRiskAppetite: 'standard',
   meta: {},
@@ -96,28 +96,28 @@ assert.equal(holdResult.action.preset, null, 'hold: action.preset is null (no fa
 assert.notEqual(holdResult.action.preset, 'Arteta_Control433_bal3', 'v8-style Arteta fallback must not be injected');
 assert.equal(holdResult.action.rawPreset, null, 'hold: rawPreset null');
 assert.equal(holdResult.action.decision, 'hold_current');
-assert.equal(holdResult.action.ruleId, 'suite_v9_hold_current');
+assert.equal(holdResult.action.ruleId, 'suite_v10_hold_current');
 assert.equal(holdResult.action.guardType, 'hold_current');
 assert.equal(holdResult.action.fallbackReason, 'no_eligible_candidate');
 assert.equal(holdResult.action.guardReason, 'no production preset fallback is allowed');
 assert.equal(holdResult.action.score, 0);
-assert.equal(holdResult.schema, 'slf_rule_decision_v9_tactical_suite');
-assert.equal(holdResult.libraryVersion, 'slf_tactic_suite_561_v9');
+assert.equal(holdResult.schema, 'slf_rule_decision_v10_tactical_suite');
+assert.equal(holdResult.libraryVersion, 'slf_tactic_suite_561_v10');
 assert.equal(holdResult.telemetry.recommendedPreset, null, 'hold: telemetry.recommendedPreset null');
 assert.equal(holdResult.telemetry.recommendationState, 'fallback_hold', 'hold: telemetry.recommendationState fallback_hold');
-assert.equal(holdResult.telemetry.libraryVersion, 'slf_tactic_suite_561_v9');
+assert.equal(holdResult.telemetry.libraryVersion, 'slf_tactic_suite_561_v10');
 assert.equal(holdResult.action.riskAppetite, 'standard');
 
 // Non-hold sanity (sandbox A, real bundle): normal contexts still select an active preset (no over-holding).
 const normal = E.run({ gameId: 'g1', minute: 10, stats: [], myTeam: 1 }, { minute: 10 });
 assert.ok(R.active.includes(normal.action.preset), `normal run selects an active preset (${normal.action.preset})`);
-assert.equal(normal.action.guardType, 'suite_v9_selection', 'non-hold action keeps the v9 selection guard');
-assert.equal(normal.action.ruleId, `suite_v9_${normal.situationKey}`, 'non-hold ruleId names the situation');
+assert.equal(normal.action.guardType, 'suite_v10_selection', 'non-hold action keeps the v9 selection guard');
+assert.equal(normal.action.ruleId, `suite_v10_${normal.situationKey}`, 'non-hold ruleId names the situation');
 assert.equal(normal.telemetry.recommendedPreset, normal.action.preset, 'non-hold telemetry mirrors the selected preset');
 
 // --- (b) unknown situation: no preset name is ever produced ------------------
 assert.equal(P.preferredPreset('nonexistent_situation'), null, 'unknown situation -> null');
-assert.equal(P.preferredPreset('pressure_counter'), null, 'v8-era pressure_counter no longer resolves (v8 returned the Arteta fallback literal)');
+assert.equal(P.preferredPreset('pressure_counter'), 'MidBlock_Counter4411_neutr');
 assert.equal(P.preferredPreset(''), null, 'empty situation -> null');
 assert.equal(P.preferredPreset('stable_control'), 'Arteta_Control433_bal3', 'known situation still maps to its primary preset');
 for (const situation of R.situations) {
@@ -136,7 +136,7 @@ assert.equal(removed.fallbackReason, 'invalid_preset', 'removed preset id -> inv
 // diagnostic ruleDecision passthrough retains the raw (invalid) decision.
 assert.equal(removedSnap.ruleDecision, stubDecision, 'invalid_preset hold: raw decision kept on the snapshot as diagnostic input');
 assert.equal(removedSnap.tacticTelemetry.recommendedPreset, null, 'invalid_preset hold: retired preset id never survives into canonical telemetry');
-assert.equal(removedSnap.tacticTelemetry.libraryVersion, 'slf_tactic_suite_561_v9', 'invalid_preset hold: snapshot telemetry carries the v9 library version');
+assert.equal(removedSnap.tacticTelemetry.libraryVersion, 'slf_tactic_suite_561_v10', 'invalid_preset hold: snapshot telemetry carries the v9 library version');
 
 E.run = () => null;
 const priorDecision = { action: { preset: 'Arteta_Control433_bal3', reason: 'prior decision from an earlier tick' } };
@@ -156,9 +156,9 @@ E.run = () => ({ action: { preset: 'Arteta_Control433_bal3', reason: 'ok' } });
 const validSnap = {};
 const valid = RE.selectRawPreset(validSnap, {});
 assert.equal(valid.name, 'Arteta_Control433_bal3', 'valid active preset passes through');
-assert.equal(valid.progressionAction, 'suite_v9_scored', 'valid preset keeps the v9 scored progression');
+assert.equal(valid.progressionAction, 'suite_v10_scored', 'valid preset keeps the v9 scored progression');
 assert.equal(validSnap.tacticTelemetry.recommendedPreset, 'Arteta_Control433_bal3', 'positive control: valid path stamps the selected preset into canonical telemetry');
-assert.equal(RE.__tacticSuiteV9Installed, true, 'RE v9 flag');
+assert.equal(RE.__tacticSuiteV10Installed, true, 'RE v9 flag');
 assert.equal(RE.__directionPolicySelectRawPresetApplied, true, 'RE selectRawPreset v9 flag');
 
 // --- (d) mixed-stack guard: v8 registry + v9 policy must not install ----------
