@@ -125,6 +125,11 @@
             }
         }
 
+        const formationBefore = STATE.tacticControlBridge.inspectFixedLineup?.() || null;
+        if (formationBefore?.available && !formationBefore.ok) {
+            debugWarn('[SLF v11] Расстановка отличается от постоянной CD1/CD3 RW/RM; режим не перемещает игроков.');
+        }
+
         const applied = await STATE.tacticControlBridge.applyTacticObject(preset, {
             source: `preset:${name}`,
             strict: true
@@ -140,6 +145,17 @@
                 rolledBack:applied.rolledBack === true, ts:Date.now()
             };
             debugWarn('[SLF] Не подтверждена установка тактики в интерфейсе:', name, applied.failures, applied.mismatches);
+            return false;
+        }
+
+        const formationAfter = STATE.tacticControlBridge.inspectFixedLineup?.() || null;
+        if (formationBefore?.available && formationAfter?.available
+            && JSON.stringify(formationBefore.positions) !== JSON.stringify(formationAfter.positions)) {
+            STATE.lastTacticApplyFailure = {
+                source:'preset_apply', presetId:name,
+                reason:'unexpected_lineup_mutation', ts:Date.now()
+            };
+            debugWarn('[SLF v11] Нативная страница неожиданно изменила позиции игроков:', name);
             return false;
         }
 
