@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Canonical inventory generator/validator for the generator 5.61 tactical suite v9
+// Canonical inventory generator/validator for the generator 5.61 tactical suite v10
 // (SLF issue #325). Derives data/tactics/active-preset-inventory-v3.json
 // deterministically from src/modules/tactics-presets/active-preset-registry.js,
 // closing the registry<->inventory drift class from issue #252.
@@ -21,7 +21,9 @@ const REGISTRY_PATH = path.join(root, 'src/modules/tactics-presets/active-preset
 const INVENTORY_PATH = path.join(root, 'data/tactics/active-preset-inventory-v3.json');
 const GENERATED_FROM = 'src/modules/tactics-presets/active-preset-registry.js';
 const EXPECTED_SCHEMA = 'slf_active_preset_inventory_v3';
-const EXPECTED_SUITE_VERSION = 'slf_tactic_suite_561_v9';
+const EXPECTED_SUITE_VERSION = 'slf_tactic_suite_561_v10';
+const NATIVE_CONTRACT_PATH = path.join(root, 'data/tactics/tactical-lab-contract-v1.json');
+const nativeDomains = JSON.parse(fs.readFileSync(NATIVE_CONTRACT_PATH, 'utf8')).population.nativeControlDomains;
 
 const write = process.argv.includes('--write');
 const unknownArgs = process.argv.slice(2).filter(arg => !['--check', '--write'].includes(arg));
@@ -37,7 +39,7 @@ function fail(message) {
 
 function loadRegistry() {
   const code = fs.readFileSync(REGISTRY_PATH, 'utf8');
-  // Minimal window stub (mirrors .tmp/slf-v9-smoke.js): the registry IIFE is typeof-guarded
+  // Minimal window stub (mirrors .tmp/slf-v10-smoke.js): the registry IIFE is typeof-guarded
   // for BASE_PRESETS/BASE_LABELS/TacticPresetLibrary/RecommendationEngine/
   // CurrentActionHintEngine, so a bare sandbox is enough to install the registry export.
   const sandbox = {
@@ -55,7 +57,7 @@ function loadRegistry() {
     fail(`${GENERATED_FROM} did not install window.SLFActivePresetRegistry`);
   }
   if (registry.suiteVersion !== EXPECTED_SUITE_VERSION) {
-    fail(`registry suiteVersion '${registry.suiteVersion}' !== '${EXPECTED_SUITE_VERSION}'; this tool is v9-bound`);
+    fail(`registry suiteVersion '${registry.suiteVersion}' !== '${EXPECTED_SUITE_VERSION}'; this tool is v10-bound`);
   }
   return registry;
 }
@@ -106,6 +108,24 @@ function validateRegistryInvariants(registry) {
     if (!deepEqual(contract.controls, presets[id])) {
       errors.push(`roleContracts[${id}].controls do not deep-equal registry.presets[${id}]`);
     }
+  }
+  if (active.length !== 12) errors.push(`v10 must have exactly 12 active production presets; got ${active.length}`);
+  if (active.includes('Bielsa_ChaosPress_att5') || Object.keys(presets).includes('Bielsa_ChaosPress_att5'))
+    errors.push('Bielsa is LAB-only, never production-recommendable');
+  for (const id of active) {
+    const controls = presets[id];
+    const formation = registry.formations?.[id];
+    if (!Array.isArray(formation) || formation.length !== 11
+        || new Set(formation).size !== 11 || !formation.includes('gk'))
+        errors.push(`${id}: expected 11 distinct positions including GK`);
+    for (const [field, allowed] of Object.entries(nativeDomains)) {
+      const value = controls?.[field];
+      if (!allowed.includes(String(value ?? ''))) errors.push(`${id}.${field}: invalid native value ${JSON.stringify(value)}`);
+    }
+    const priority = controls?.priority;
+    if (!Array.isArray(priority) || new Set(priority).size !== priority.length
+        || priority.some(key => !nativeDomains.priority.includes(key)))
+        errors.push(`${id}: invalid priority lanes`);
   }
   const covered = new Set();
   for (const id of active) {
