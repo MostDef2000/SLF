@@ -38,6 +38,11 @@ python slf_tactical_lab_v1.py \
   --out "$OUT_DIR" \
   --cache-dir "$BASE_DIR/cache"
 
+# All producers have finished: refresh every manifest entry from final bytes and
+# fail closed on missing/corrupted outputs before publishing the Drive mirror.
+python slf_manifest_integrity.py --out "$OUT_DIR" --finalize
+python slf_manifest_integrity.py --out "$OUT_DIR" --verify
+
 if command -v rclone >/dev/null 2>&1; then
   echo "Starting Google Drive sync"
   if ! rclone sync "$OUT_DIR" gdrive:"SLF AI RAG/current" \
