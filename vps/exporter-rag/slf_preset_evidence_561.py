@@ -28,6 +28,14 @@ QUALITY_SOURCE_ID = "telemetry_quality_summary"
 AI_CONTEXT_MARKER = "<!-- SLF_PRESET_EVIDENCE_561 -->"
 CORE_METRICS = ("myXG", "oppXG", "myShots", "oppShots", "myBadActionsPct")
 VALID_SCORE_STATES = {"winning", "losing", "draw"}
+V9_LIBRARY = "slf_tactic_suite_561_v9"
+V9_RECOMMENDATION_SCHEMA = "slf_rule_decision_v9_tactical_suite"
+V9_PRODUCTION_PRESETS = {
+    "Arteta_Control433_bal3", "Pep_BoxControl_bal2", "Pep_PressCooldown_bal2",
+    "Pep_ControlledPush_att3", "Pep_TwoThreeFive_att3", "Conte_WingbackWidth_bal4",
+    "Klopp_Gegenpress_att4", "Simeone_Compact442_def4",
+    "Simeone_LowBlock_def5", "Bielsa_ChaosPress_att5",
+}
 
 
 
@@ -297,7 +305,21 @@ def select_analysis_cohort(
     }
 
 
-def build_report(events: Sequence[Mapping[str, Any]], effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def is_v9_current_phase_effect(row: Mapping[str, Any]) -> bool:
+    return (
+        is_phase_effect(row)
+        and get_path(row, "telemetryContext.libraryVersion") == V9_LIBRARY
+        and get_path(row, "telemetryContext.recommendationSchema") == V9_RECOMMENDATION_SCHEMA
+        and preset_name(row) in V9_PRODUCTION_PRESETS
+        and generator_period(row) == "stable_5_61"
+    )
+
+
+def build_report(
+    events: Sequence[Mapping[str, Any]],
+    effects: Sequence[Mapping[str, Any]],
+    results: Sequence[Mapping[str, Any]] = (),
+) -> dict[str, Any]:
     analysis_events, analysis_effects, cohort = select_analysis_cohort(events, effects)
     period_event_counts = collections.Counter(generator_period(row) for row in analysis_events)
     period_effect_counts = collections.Counter(generator_period(row) for row in analysis_effects)
@@ -346,7 +368,23 @@ def build_report(events: Sequence[Mapping[str, Any]], effects: Sequence[Mapping[
         if generator_period(row) == "stable_5_61" and preset_name(row) not in {"unknown", "manual_change"}
     ]
     stable_presets = {preset_name(row) for row in stable_named}
-    ready = len(stable_named) >= 60 and len(stable_presets) >= 5
+    # Historical named phases are descriptive only. v9 readiness additionally
+    # requires a named production phase, explicit current version/schema,
+    # game-confirmed application, known situation and a scored finished match.
+    scored_games = {
+        game_id(row) for row in results
+        if game_id(row) and result_score(row) is not None
+    }
+    current_v9_phases = [row for row in analysis_effects if is_v9_current_phase_effect(row)]
+    eligible_v9 = [
+        row for row in current_v9_phases
+        if get_path(row, "eligibility.eligibleForRanking") is True
+        and get_path(row, "tacticContext.applicationStatus") == "game_confirmed"
+        and score_state(row) in VALID_SCORE_STATES
+        and game_id(row) in scored_games
+    ]
+    eligible_v9_presets = {preset_name(row) for row in eligible_v9}
+    ready = len(eligible_v9) >= 60 and len(eligible_v9_presets) >= 5
 
     return {
         "schema": "slf_preset_evidence_561_v2",
@@ -369,6 +407,10 @@ def build_report(events: Sequence[Mapping[str, Any]], effects: Sequence[Mapping[
             "manualChangeEffects": sum(1 for row in analysis_effects if preset_name(row) == "manual_change"),
             "stableNamedEffects": len(stable_named),
             "stablePresetCount": len(stable_presets),
+            "v9CurrentNamedPhaseEffects": len(current_v9_phases),
+            "v9CurrentScoredConfirmedEffects": len(eligible_v9),
+            "v9CurrentScoredConfirmedPresetCount": len(eligible_v9_presets),
+            "v9CurrentLinkedFinishedResults": len(scored_games),
         },
         "scriptVersions": {
             "events": dict(event_versions.most_common()),
@@ -378,7 +420,8 @@ def build_report(events: Sequence[Mapping[str, Any]], effects: Sequence[Mapping[
             "readyForRetune": ready,
             "minimumStableNamedEffects": 60,
             "minimumStablePresetCount": 5,
-            "warning": None if ready else "Недостаточно чистых stable-5.61 эффектов для числовой ретюнировки. Использовать консервативную политику и продолжать сбор.",
+            "readinessCohort": "v9_current_scored_game_confirmed_phase_only",
+            "warning": None if ready else "Нет достаточной выборки подтверждённых и связанных с результатом фаз v9. Смешанная история 5.61 не является основанием для ретюнинга.",
         },
         "byPeriodPreset": by_period_preset,
         "byPeriodPresetContext": by_context[:2000],
@@ -387,6 +430,7 @@ def build_report(events: Sequence[Mapping[str, Any]], effects: Sequence[Mapping[
             "For a game with v4 tactical-phase effects, legacy effects from the same game are excluded from the primary analysis cohort.",
             "No raw event or effect records are written to the public export.",
             "The transition cohort 2026-07-13 through 2026-07-22 is kept separate from stable generator 5.61 evidence.",
+            "readyForRetune requires exact v9 library/schema, game-confirmed applied controls and valid scored result linkage; legacy named effects never satisfy that gate.",
         ],
     }
 
@@ -924,7 +968,7 @@ def main() -> None:
         results = fetch_collection(args.api_base, args.token, "match_results_v2")
 
     out = Path(args.out)
-    report = build_report(events, effects)
+    report = build_report(events, effects, results)
     outcomes = build_match_outcomes_summary(results, effects)
     quality = build_telemetry_quality_summary(snapshots, results, events, effects)
     effects_summary = build_effects_summary(events, effects)
