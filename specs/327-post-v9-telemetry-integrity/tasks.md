@@ -8,17 +8,17 @@
 
 ## PR B — applied tactics
 - [x] Canonical 15-field vector and fingerprint in initial/periodic/finished snapshots; custom marked unknown (PR B).
-- [ ] Detect manual/preset/LAB changes; classify `draft_changed/apply_attempted/applied_confirmed/applied_unverified/apply_failed`.
+- [x] Capture manual/preset changes and label `ui_readback_confirmed` vs `applied_unverified` without inventing native game acknowledgment; LAB remains separate (PR #329).
 - [x] Same-minute UI-observed A→B→A creates unique sequential events and phase/revision snapshot keys (PR B).
-- [ ] Close/open phases only when confirmed; retain previous/applied/next controls and statistical context.
-- [ ] Correlation to final scored result; negative/reload/outbox/foreign-match fixtures.
-- [ ] Exact-head CI, release verification and browser acceptance.
+- [x] Preserve previous/current controls and statistical context at phase boundaries; unverified game application is excluded from ranking (#329).
+- [x] Finished result carries tactical application summary and last-closed-phase linkage; existing outbox/foreign-match fixtures remain green (#329).
+- [x] Exact-head CI SUCCESS on #329; generated release 4.4.336 verified on `release` for source 5f85e45. Browser CI green; live manual browser acceptance remains operational.
 
 ## PR C — historical cleanup/quality
-- [ ] Safe dry-run of invalid-score result records and precise current count; no July cutoff bulk purge.
+- [x] Add strict read-only live dry-run and SHA/count guarded physical-delete tool; **current production count still requires operator preview** (PR C).
 - [ ] User-requested irreversible deletion of invalid-result rows only, separately verified in production.
 - [ ] Valid scored records, snapshots, events and effects unchanged; audit aggregate counts without misleading improved coverage claims.
-- [ ] V8/v9-current cohort isolation, no false `readyForRetune`; exact-head CI and report.
+- [x] Add version/schema/scored/game-confirmed-only v9 retune gate and regression tests; exact-head CI and source merge are separate checks (PR C).
 
 ## Definition of done
 

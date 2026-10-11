@@ -284,5 +284,55 @@ class TelemetryAnalyticsTest(unittest.TestCase):
             self.assertTrue({"preset_evidence_561", "match_outcomes_summary", "telemetry_quality_summary"}.issubset(source_ids))
 
 
+    def test_v9_readiness_ignores_mixed_legacy_and_requires_confirmed_result(self):
+        stable_ts = int(module.dt.datetime(2026, 8, 1, tzinfo=module.dt.timezone.utc).timestamp() * 1000)
+        legacy = []
+        for index in range(80):
+            effect = legacy_effect(game_id=f"legacy-{index}", preset=f"Legacy_{index % 8}")
+            effect["ts"] = stable_ts
+            legacy.append(effect)
+        report_legacy = module.build_report([], legacy)
+        self.assertEqual(report_legacy["counts"]["stableNamedEffects"], 80)
+        self.assertEqual(report_legacy["counts"]["v9CurrentNamedPhaseEffects"], 0)
+        self.assertFalse(report_legacy["quality"]["readyForRetune"])
+
+        current = phase_effect("v9-good", "phase-good", preset="Arteta_Control433_bal3")
+        current["ts"] = stable_ts
+        current["telemetryContext"].update({
+            "libraryVersion": module.V9_LIBRARY,
+            "recommendationSchema": module.V9_RECOMMENDATION_SCHEMA
+        })
+        current["tacticContext"] = {"applicationStatus": "game_confirmed"}
+        finished = result("v9-good", score=(2, 1))
+        report = module.build_report([], legacy + [current], [finished])
+        self.assertEqual(report["counts"]["v9CurrentNamedPhaseEffects"], 1)
+        self.assertEqual(report["counts"]["v9CurrentScoredConfirmedEffects"], 1)
+        self.assertFalse(report["quality"]["readyForRetune"], "one valid phase is not enough")
+
+        missing_result = module.build_report([], [current])
+        self.assertEqual(missing_result["counts"]["v9CurrentScoredConfirmedEffects"], 0)
+        current["tacticContext"]["applicationStatus"] = "ui_readback_confirmed"
+        unverified = module.build_report([], [current], [finished])
+        self.assertEqual(unverified["counts"]["v9CurrentScoredConfirmedEffects"], 0)
+        self.assertFalse(unverified["quality"]["readyForRetune"])
+
+    def test_v9_readiness_rejects_non_integral_score_and_invalid_finish_record(self):
+        current = phase_effect("g-invalid", "p1", preset="Arteta_Control433_bal3")
+        current["ts"] = int(module.dt.datetime(2026, 8, 1, tzinfo=module.dt.timezone.utc).timestamp() * 1000)
+        current["telemetryContext"].update({
+            "libraryVersion": module.V9_LIBRARY,
+            "recommendationSchema": module.V9_RECOMMENDATION_SCHEMA,
+        })
+        current["tacticContext"] = {"applicationStatus": "game_confirmed"}
+        scored = result("g-invalid", score=(1, 0))
+        scored["score"] = {"home": 1.2, "away": 0}
+        self.assertFalse(module.is_strict_scored_finished_result(scored))
+        self.assertEqual(module.build_report([], [current], [scored])["counts"]["v9CurrentScoredConfirmedEffects"], 0)
+        scored["score"] = {"home": 1, "away": 0}
+        scored["resultType"] = "intermediate_snapshot"
+        self.assertFalse(module.is_strict_scored_finished_result(scored))
+        self.assertEqual(module.build_report([], [current], [scored])["counts"]["v9CurrentScoredConfirmedEffects"], 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
