@@ -84,6 +84,8 @@
             ts: Number(legacy.ts || Date.now()),
             url: legacy.url || '',
             phaseSequence: 0,
+            controlChangeSequence: 0,
+            droppedOutboxCount: 0,
             openPhase: null,
             lastClosedPhaseId: null,
             pendingPhaseStart: null,
@@ -125,6 +127,8 @@
             ts: Date.now(),
             url: typeof location !== 'undefined' ? location.href || '' : '',
             phaseSequence: 0,
+            controlChangeSequence: 0,
+            droppedOutboxCount: 0,
             openPhase: null,
             lastClosedPhaseId: null,
             pendingPhaseStart: null,
@@ -203,6 +207,16 @@
             const value = key === 'priority' ? normalizedPriority(tactic[key]) : tactic[key] ?? null;
             return `${key}:${JSON.stringify(value)}`;
         }).join('|');
+    }
+
+    function canonicalTacticControls(tactic) {
+        const result = {};
+        for (const key of TACTIC_KEYS) {
+            result[key] = key === 'priority'
+                ? normalizedPriority(tactic?.[key])
+                : tactic?.[key] == null ? null : String(tactic[key]);
+        }
+        return result;
     }
 
     function exactProductionPresetId(snapshot) {
@@ -361,6 +375,7 @@
             presetId: context.presetId,
             tacticFingerprint: context.tacticFingerprint,
             tactic: clone(snapshot?.currentTactic || null),
+            controls: canonicalTacticControls(snapshot?.currentTactic),
             stats: compactStats(snapshot),
             generatorExpectedPerformance: clone(snapshot?.generatorExpectedPerformance || null),
             completeness: context.completeness,
@@ -413,6 +428,9 @@
         const reasons = [];
         if (duration == null || duration < MIN_PHASE_MINUTES) reasons.push('phase_too_short');
         if (completeness < MIN_PHASE_COMPLETENESS) reasons.push('insufficient_completeness');
+        // UI readback confirms the selected controls, not acceptance by the game
+        // server. A game-confirmed signal must be demonstrated before ranking.
+        if (phase?.applicationStatus !== 'game_confirmed') reasons.push('application_unverified');
         return { durationMinutes: duration, completeness: Number(completeness.toFixed(3)), eligibleForRanking: reasons.length === 0, reasons };
     }
 
@@ -470,7 +488,11 @@
         };
         if (existingIndex >= 0) outbox.splice(existingIndex, 1, item);
         else outbox.push(item);
-        persistState({ outbox: outbox.slice(-OUTBOX_LIMIT) }, { gameId, existing: state });
+        const bounded = outbox.slice(-OUTBOX_LIMIT);
+        persistState({
+            outbox: bounded,
+            droppedOutboxCount: Number(state.droppedOutboxCount || 0) + (outbox.length - bounded.length)
+        }, { gameId, existing: state });
     }
 
     function removeOutboxItem(gameId, collection, key) {
@@ -503,6 +525,7 @@
                         sequence,
                         tacticFingerprint: eventFingerprint,
                         presetId: payload.presetName || 'unknown',
+                        applicationStatus: payload.applicationStatus || 'applied_unverified',
                         source: payload.type === 'manual_change' ? 'manual_change' : 'preset_apply'
                     }
                 }, { gameId, existing: state });
@@ -634,6 +657,14 @@
         return { attempted: pending.length, delivered };
     }
 
+    function nextControlChangeSequence(gameId) {
+        const state = getState(gameId);
+        if (!state) return null;
+        const next = Number(state.controlChangeSequence || 0) + 1;
+        persistState({ controlChangeSequence: next }, { gameId, existing: state });
+        return next;
+    }
+
     function phaseStartEvent(phase, snapshot) {
         return {
             ts: Date.now(),
@@ -651,7 +682,9 @@
             bucket: phase.start.bucket,
             presetName: phase.presetId,
             tactic: clone(phase.tactic),
+            controls: canonicalTacticControls(phase.tactic),
             tacticFingerprint: phase.tacticFingerprint,
+            applicationStatus: phase.applicationStatus,
             transitionSource: phase.source,
             telemetryContext: telemetryContext(snapshot, phase.presetId),
             phaseStart: clone(phase.start),
@@ -689,6 +722,9 @@
             tacticFingerprint: fingerprint,
             tactic: clone(snapshot.currentTactic),
             source: pending?.tacticFingerprint === fingerprint ? pending.source || source : source,
+            applicationStatus: pending?.tacticFingerprint === fingerprint
+                ? pending.applicationStatus || 'applied_unverified'
+                : 'applied_unverified',
             startedAt: Date.now(),
             start: compactSnapshot(snapshot, presetId)
         };
@@ -721,7 +757,9 @@
             tacticContext: {
                 appliedPreset: phase.presetId,
                 appliedTactic: clone(phase.tactic),
+                appliedControls: canonicalTacticControls(phase.tactic),
                 tacticFingerprint: phase.tacticFingerprint,
+                applicationStatus: phase.applicationStatus,
                 transitionSource: phase.source,
                 closeReason: reason
             },
@@ -825,8 +863,37 @@
         if (!snapshot.myTeam || snapshot.matchOwnership === 'foreign') return snapshot;
         const phaseResult = reconcilePhase(snapshot);
         const state = getState(snapshot.gameId);
-        const context = telemetryContext(snapshot, state?.openPhase?.presetId || null);
+        const phase = state?.openPhase || null;
+        const context = telemetryContext(snapshot, phase?.presetId || null);
         snapshot.telemetryContext = context;
+        snapshot.tacticalControlState = {
+            schema: 'slf_tactical_control_state_v1',
+            controls: canonicalTacticControls(snapshot.currentTactic),
+            fingerprint: context.tacticFingerprint,
+            revision: Number(state?.phaseSequence || 0),
+            phaseId: phase?.phaseId || state?.lastClosedPhaseId || null,
+            applicationStatus: phase?.applicationStatus || 'observed_unverified',
+            source: phase?.source || 'snapshot_observation',
+            observedAt: snapshot.ts || Date.now(),
+            formation: clone(snapshot.formation || null)
+        };
+        // The finished result retains the last closed phase identifier, even
+        // though reconcilePhase() closes the active phase at final whistle.
+        snapshot.tacticalApplicationSummary = {
+            sessionId: state?.sessionId || null,
+            lastClosedPhaseId: state?.lastClosedPhaseId || null,
+            phaseSequence: Number(state?.phaseSequence || 0),
+            controlChangeSequence: Number(state?.controlChangeSequence || 0),
+            droppedOutboxCount: Number(state?.droppedOutboxCount || 0),
+            finalControls: canonicalTacticControls(snapshot.currentTactic),
+            finalFingerprint: context.tacticFingerprint,
+            outcomeLinkStatus: snapshot.status === 'finished' ? 'finished_with_observed_controls' : 'in_progress'
+        };
+        // Never use a fuzzy legacy preset signature for v9 attribution.
+        if (snapshot.tacticTelemetry && context.presetId === 'unknown') {
+            snapshot.tacticTelemetry.currentPreset = null;
+            snapshot.tacticTelemetry.actualPreset = null;
+        }
         snapshot.tacticalPhase = state?.openPhase ? {
             schema: 'slf_tactical_phase_ref_v1',
             sessionId: state.openPhase.sessionId,
@@ -948,6 +1015,8 @@
         schema: 'slf_tactical_telemetry_runtime_v2',
         stateSchema: STATE_SCHEMA,
         tacticFingerprint,
+        canonicalTacticControls,
+        nextControlChangeSequence,
         exactProductionPresetId,
         scoreState,
         telemetryContext,
