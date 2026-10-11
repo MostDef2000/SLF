@@ -9,11 +9,12 @@ const active=[
   'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2',
   'Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4',
   'Klopp_Gegenpress_att4','Simeone_Compact442_def4','Simeone_LowBlock_def5',
-  'MidBlock_Control4231_neutr','MidBlock_Counter4411_neutr','Lead_Outlet4141_def1'
+  'Emery_BalancedControl4231_neutr','Mourinho_CompactCounter4411_neutr','Allegri_LeadManagement4141_def1'
 ];
 const retiredActive=['Compact_Counter_def3','Bielsa_ChaosPress_att5'];
 const retired=['Mourinho_WeakSide_def3','Xabi_BoxMidfield_bal3','DeZerbi_BaitPress_bal3'];
-const seededSystem=[...active,...retiredActive,...retired];
+const renamedAliases={"MidBlock_Control4231_neutr":"Emery_BalancedControl4231_neutr","MidBlock_Counter4411_neutr":"Mourinho_CompactCounter4411_neutr","Lead_Outlet4141_def1":"Allegri_LeadManagement4141_def1"};
+const seededSystem=[...active,...Object.keys(renamedAliases),...retiredActive,...retired];
 const root=new URL('../',import.meta.url);
 const source=path=>fs.readFileSync(new URL(path,root),'utf8');
 const context={
@@ -79,9 +80,9 @@ const table={
  Klopp_Gegenpress_att4:'3 3 3 5 3 3 2 3 4 3 4 3 1 3',
  Simeone_Compact442_def4:'1 2 1 2 1 1 3 2 2 2 1 2 1 1',
  Simeone_LowBlock_def5:'1 1 1 1 1 1 2 1 1 1 1 1 1 1',
- MidBlock_Control4231_neutr:'2 1 3 2 2 2 2 2 3 2 1 2 1 2',
- MidBlock_Counter4411_neutr:'1 2 2 2 1 2 3 3 3 2 2 2 1 2',
- Lead_Outlet4141_def1:'2 2 2 1 2 1 2 2 2 1 1 2 1 1'
+ Emery_BalancedControl4231_neutr:'2 1 3 2 2 2 2 2 3 2 1 2 1 2',
+ Mourinho_CompactCounter4411_neutr:'1 2 2 2 1 2 3 3 3 2 2 2 1 2',
+ Allegri_LeadManagement4141_def1:'2 2 2 1 2 1 2 2 2 1 1 2 1 1'
 };
 const specialPriority={Conte_WingbackWidth_bal4:['left','right']};
 for(const id of active){
@@ -99,6 +100,28 @@ for(const id of active){
  assert.ok(registry.displayOrder.includes(id),`${id}: visible in active UI`);
  assert.equal(registry.roleContracts[id].fallbackEligible,false);
 }
+// Renaming changes only identity, not controls, role, graph or risk.
+assert.deepEqual(JSON.parse(JSON.stringify(registry.legacyAliases)),renamedAliases);
+for(const [historical,current] of Object.entries(renamedAliases)){
+ assert.equal(registry.resolvePresetId(historical),current,'old ID resolves to coach');
+ assert.equal(context.BASE_PRESETS[historical],undefined,'old built-in never reappears in active controls');
+ assert.equal(context.BASE_LABELS[historical],undefined,'old built-in never reappears in selector');
+ assert.equal(registry.removed.includes(historical),true,'legacy ID is hidden');
+ assert.equal(policy.scoreCandidate(historical,{}).preset,current,'historical stored ID is resolved in scoring');
+ assert.equal([...registry.active].includes(historical),false);
+}
+assert.equal(registry.labels.Emery_BalancedControl4231_neutr,'Unai Emery — Balanced Control 4-2-3-1');
+assert.equal(registry.labels.Mourinho_CompactCounter4411_neutr,'José Mourinho — Compact Counter 4-4-1-1');
+assert.equal(registry.labels.Allegri_LeadManagement4141_def1,'Massimiliano Allegri — Lead Management 4-1-4-1');
+assert.equal(registry.displayMeta.Emery_BalancedControl4231_neutr.trainer,'Emery');
+assert.equal(registry.displayMeta.Mourinho_CompactCounter4411_neutr.trainer,'Mourinho');
+assert.equal(registry.displayMeta.Allegri_LeadManagement4141_def1.trainer,'Allegri');
+assert.equal(policy.shortestStep('MidBlock_Control4231_neutr','MidBlock_Counter4411_neutr'),
+ policy.shortestStep('Emery_BalancedControl4231_neutr','Mourinho_CompactCounter4411_neutr'));
+assert.equal(policy.hardVeto('MidBlock_Counter4411_neutr',{
+ underPressure:true,counterExitAvailable:true
+}).vetoed,false,'the old stored counter can still be evaluated safely');
+assert.ok(registry.active.every(id=>!/(?:MidBlock|Lead_Outlet)/.test(id)));
 assert.equal(registry.situations.length,12);
 assert.equal(registry.evidenceAdjustment(),0,'No fabricated evidence ranking');
 assert.equal(policy.version,'5.61-tactical-suite-v10.0');
@@ -120,13 +143,13 @@ function decide(input={}){
 }
 const scenarios=[
  ['stable',{},'Arteta_Control433_bal3','stable_control'],
- ['stronger opponent',{strengthGap:-15},'MidBlock_Control4231_neutr','midblock_safe_control'],
+ ['stronger opponent',{strengthGap:-15},'Emery_BalancedControl4231_neutr','midblock_safe_control'],
  ['pressure/no outlet',{underPressure:true,counterExitAvailable:false,signals:['under_pressure','counter_exit_blocked']},'Pep_BoxControl_bal2','pressure_escape'],
- ['pressure/confirmed outlet',{underPressure:true,counterExitAvailable:true,signals:['under_pressure','counter_exit_available']},'MidBlock_Counter4411_neutr','pressure_counter'],
+ ['pressure/confirmed outlet',{underPressure:true,counterExitAvailable:true,signals:['under_pressure','counter_exit_available']},'Mourinho_CompactCounter4411_neutr','pressure_counter'],
  ['cooldown',{pressFatigueRisk:true,myPowerDropPct:5},'Pep_PressCooldown_bal2','press_cooldown'],
  ['width',{centerClosed:true,wideQuality:true,signals:['center_closed','wide_quality']},'Conte_WingbackWidth_bal4','width_attack'],
  ['protect',{minute:72,scoreState:'winning',score:{state:'winning'}},'Simeone_Compact442_def4','protect_lead'],
- ['protect outlet',{minute:72,scoreState:'winning',score:{state:'winning'},counterExitAvailable:true},'Lead_Outlet4141_def1','protect_lead_with_outlet'],
+ ['protect outlet',{minute:72,scoreState:'winning',score:{state:'winning'},counterExitAvailable:true},'Allegri_LeadManagement4141_def1','protect_lead_with_outlet'],
  ['emergency',{minute:60,underPressure:true,counterExitAvailable:false,pressureRisk:90,highBadActions:true,signals:['under_pressure','sustained_siege']},'Simeone_LowBlock_def5','emergency_lock'],
  ['chase',{minute:55,scoreState:'losing',score:{state:'losing'},attackNeed:48},'Pep_ControlledPush_att3','controlled_chase'],
  ['siege',{minute:62,attackNeed:60,attackingMomentum:true},'Pep_TwoThreeFive_att3','positional_siege'],
@@ -137,12 +160,12 @@ for(const [label,input,expected,situation] of scenarios){
  assert.equal(d.situationKey,situation,`${label}: situation`);
  assert.equal(d.action.preset,expected,`${label}: selected preset`);
 }
-assert.equal(policy.hardVeto('MidBlock_Counter4411_neutr',{underPressure:true,counterExitAvailable:false}).vetoed,true);
-assert.equal(policy.hardVeto('MidBlock_Counter4411_neutr',{underPressure:true,counterExitAvailable:true,counterExitBlocked:true}).vetoed,true);
+assert.equal(policy.hardVeto('Mourinho_CompactCounter4411_neutr',{underPressure:true,counterExitAvailable:false}).vetoed,true);
+assert.equal(policy.hardVeto('Mourinho_CompactCounter4411_neutr',{underPressure:true,counterExitAvailable:true,counterExitBlocked:true}).vetoed,true);
 assert.equal(policy.hardVeto('Klopp_Gegenpress_att4',{minute:20,scoreState:'draw'}).vetoed,true);
 assert.equal(policy.hardVeto('Simeone_LowBlock_def5',{minute:20,scoreState:'draw'}).vetoed,true);
 assert.equal(policy.preferredPreset('final_all_in'),null,'Bielsa role removed from production policy');
-assert.equal(policy.preferredPreset('pressure_counter'),'MidBlock_Counter4411_neutr');
+assert.equal(policy.preferredPreset('pressure_counter'),'Mourinho_CompactCounter4411_neutr');
 assert.ok(!policy.activePresets.includes('Bielsa_ChaosPress_att5'));
 context.progression={gameId:'route',lastAppliedPreset:'Arteta_Control433_bal3',previousPreset:'',lastScoreState:'losing'};
 let snap={gameId:'route',status:'live',ruleDecision:{action:{preset:'Klopp_Gegenpress_att4'},telemetry:{}}};
