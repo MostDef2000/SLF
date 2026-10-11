@@ -62,6 +62,8 @@ V11_PRODUCTION_PRESETS = {
     "Allegri_LeadOutlet_v11",
 }
 
+V11_MANUAL_ONLY_DIAGNOSTIC_PRESETS = {"Arteta_SafePossession_v11"}
+
 V9_PRODUCTION_PRESETS = {
     "Arteta_Control433_bal3", "Pep_BoxControl_bal2", "Pep_PressCooldown_bal2",
     "Pep_ControlledPush_att3", "Pep_TwoThreeFive_att3", "Conte_WingbackWidth_bal4",
@@ -478,7 +480,8 @@ def build_report(
     current_v11_phases = [row for row in analysis_effects if is_v11_current_phase_effect(row)]
     eligible_v11 = [
         row for row in current_v11_phases
-        if get_path(row, "eligibility.eligibleForRanking") is True
+        if preset_name(row) not in V11_MANUAL_ONLY_DIAGNOSTIC_PRESETS
+        and get_path(row, "eligibility.eligibleForRanking") is True
         and get_path(row, "tacticContext.applicationStatus") == "game_confirmed"
         and score_state(row) in VALID_SCORE_STATES
         and game_id(row) in scored_games
@@ -517,6 +520,7 @@ def build_report(
             "v10CurrentScoredConfirmedPresetCount": len(eligible_v10_presets),
             "v10CurrentLinkedFinishedResults": len({game_id(row) for row in current_v10_phases} & scored_games),
             "v11CurrentNamedPhaseEffects": len(current_v11_phases),
+            "v11ManualDiagnosticPhaseEffects": sum(1 for row in current_v11_phases if preset_name(row) in V11_MANUAL_ONLY_DIAGNOSTIC_PRESETS),
             "v11CurrentScoredConfirmedEffects": len(eligible_v11),
             "v11CurrentScoredConfirmedPresetCount": len(eligible_v11_presets),
             "v11CurrentLinkedFinishedResults": len({game_id(row) for row in current_v11_phases} & scored_games),
