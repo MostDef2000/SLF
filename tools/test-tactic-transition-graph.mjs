@@ -85,7 +85,8 @@ const STEP = {
   ],
   "Conte_WideChannels_v11": [
     "Guardiola_ControlledPush_v11",
-    "Guardiola_PositionalSiege_v11"
+    "Guardiola_PositionalSiege_v11",
+    "Emery_BalancedBase_v11"
   ],
   "Klopp_LateGegenpress_v11": [
     "Guardiola_PositionalSiege_v11",
@@ -104,7 +105,8 @@ const STEP = {
     "Guardiola_PressEscape_v11",
     "Mourinho_CleanCounter_v11",
     "Allegri_LeadOutlet_v11",
-    "Guardiola_ControlledPush_v11"
+    "Guardiola_ControlledPush_v11",
+    "Conte_WideChannels_v11"
   ],
   "Mourinho_CleanCounter_v11": [
     "Emery_BalancedBase_v11",
