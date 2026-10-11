@@ -2,14 +2,14 @@
 
 ## PR A — exporter
 - [x] Source diagnosis: `slf_preset_evidence_561.main` overwrites two summary files after initial manifest.
-- [ ] Implement final-stage digest refresh + independent verification before any Drive sync.
-- [ ] Test two-producer overwrite, changed-byte corruption, missing entries, unsafe paths, unchanged path.
-- [ ] Exact-head CI; merge evidence and VPS deployment handoff (deployment is separate).
+- [x] Implement final-stage digest refresh + independent verification before any Drive sync (#328).
+- [x] Add regression tests for two-producer overwrite, changed-byte corruption, missing entries and unsafe paths (#328).
+- [x] Exact-head SLF CI SUCCESS and merge (#328, main 583d08d); VPS deployment still separate.
 
 ## PR B — applied tactics
-- [ ] Canonical 15-field vector in periodic/initial/finished snapshot; distinguish custom from exact known preset.
+- [x] Canonical 15-field vector and fingerprint in initial/periodic/finished snapshots; custom marked unknown (PR B).
 - [ ] Detect manual/preset/LAB changes; classify `draft_changed/apply_attempted/applied_confirmed/applied_unverified/apply_failed`.
-- [ ] Same-minute applied A→B→A creates unique durable transitions and snapshots.
+- [x] Same-minute UI-observed A→B→A creates unique sequential events and phase/revision snapshot keys (PR B).
 - [ ] Close/open phases only when confirmed; retain previous/applied/next controls and statistical context.
 - [ ] Correlation to final scored result; negative/reload/outbox/foreign-match fixtures.
 - [ ] Exact-head CI, release verification and browser acceptance.
