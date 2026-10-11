@@ -30,7 +30,7 @@
 
     // Old stored progression IDs must resolve to the same v10 tactical vector.
     // Only aliases are mapped; unknown/custom names are never promoted.
-    const resolvePresetId = name => registry.resolvePresetId?.(name) || String(name || '');
+    const resolvePresetId = name => registry.resolvePresetId ? registry.resolvePresetId(name) : name;
 
     function has(context, key) {
         return Array.isArray(context?.signals) && context.signals.includes(key)
