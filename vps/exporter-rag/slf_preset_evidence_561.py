@@ -410,7 +410,7 @@ def build_report(
             "v9CurrentNamedPhaseEffects": len(current_v9_phases),
             "v9CurrentScoredConfirmedEffects": len(eligible_v9),
             "v9CurrentScoredConfirmedPresetCount": len(eligible_v9_presets),
-            "v9CurrentLinkedFinishedResults": len(scored_games),
+            "v9CurrentLinkedFinishedResults": len({game_id(row) for row in current_v9_phases} & scored_games),
         },
         "scriptVersions": {
             "events": dict(event_versions.most_common()),
