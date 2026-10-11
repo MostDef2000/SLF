@@ -314,14 +314,6 @@
         };
         if (originalGuard) RecommendationEngine.applyProgressionGuard = function applySuiteV9Guard(candidate, snapshot, context = {}) {
             if (candidate?.name) candidate = Object.assign({}, candidate, { name:resolvePresetId(candidate.name) });
-            // A persisted match progression can straddle the userscript update.
-            // Normalize only known aliases in memory before legacy family guard.
-            if (typeof STATE !== 'undefined' && STATE?.presetProgression) {
-                for (const key of ['lastAppliedPreset','previousPreset']) {
-                    const old = STATE.presetProgression[key];
-                    if (old && resolvePresetId(old) !== old) STATE.presetProgression[key] = resolvePresetId(old);
-                }
-            }
             if (!candidate?.name || !ACTIVE_SET.has(candidate.name) || !snapshot || snapshot.status === 'finished') return candidate;
             const targetPreset = candidate.name;
             let guarded = ['Simeone_LowBlock_def5'].includes(candidate.name) || context?.urgency?.overrideProgressionGuard === true
