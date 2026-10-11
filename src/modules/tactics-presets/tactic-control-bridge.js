@@ -245,6 +245,20 @@
                     .sort();
             },
 
+            inspectFixedLineup(profile = window.SLFActivePresetRegistry?.fixedLineupProfile) {
+                const actual = this.readFormation();
+                if (!profile?.formationVariants || actual.length !== 11) {
+                    return { ok:false, available:actual.length === 11, variant:null, reason:'fixed_lineup_unavailable' };
+                }
+                for (const [wing, positions] of Object.entries(profile.formationVariants)) {
+                    const expected = positions.map(value => String(value).toLowerCase()).sort();
+                    if (expected.length === 11 && JSON.stringify(expected) === JSON.stringify(actual)) {
+                        return { ok:true, available:true, variant:wing, positions:actual.slice() };
+                    }
+                }
+                return { ok:false, available:true, variant:null, reason:'lineup_differs_from_fixed_profile', positions:actual.slice() };
+            },
+
             formationMatches(positions) {
                 const expected = (Array.isArray(positions) ? positions : []).map(String).map(x => x.toLowerCase()).sort();
                 const actual = this.readFormation();
