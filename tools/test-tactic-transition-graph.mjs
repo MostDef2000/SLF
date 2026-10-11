@@ -3,7 +3,7 @@
 // Regression layer for the v9 progression graph (base c5ca7de + R1).
 //
 // The direction policy keeps STEP module-local and only exposes shortestStep().
-// This test therefore carries a static mirror of the v10 STEP graph (kept in sync
+// This test therefore carries a static mirror of the v11 STEP graph (kept in sync
 // with src/modules/tactics-presets/tactic-preset-direction-policy.js) and validates
 // the live graph through shortestStep() behavior + registry.active.
 //
@@ -11,8 +11,8 @@
 //   - v8 STEP had no edges: PressCooldown->Compact442, Compact442->PressCooldown,
 //     LowBlock->BoxControl, Klopp->ControlledPush; v8 TwoThreeFive ordered
 //     [ControlledPush, Klopp, Conte] vs v9 [ControlledPush, Conte, Klopp].
-//   - v8 shortestStep('Pep_PressCooldown_bal2','Simeone_Compact442_def4') would return
-//     'Pep_BoxControl_bal2' (first hop of the 3-hop path), not the target.
+//   - v8 shortestStep('Guardiola_PressCooldown_v11','Simeone_CompactLead_v11') would return
+//     'Guardiola_PressEscape_v11' (first hop of the 3-hop path), not the target.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -35,7 +35,7 @@ sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
 // The policy install guard requires a registry AND an engine; the stub engine
 // stands in for SLFCurrentActionHintEngine (run() is replaced per-scenario below).
-sandbox.window.SLFCurrentActionHintEngine = { schema: 'slf_rule_decision_v10_tactical_suite', run: () => null };
+sandbox.window.SLFCurrentActionHintEngine = { schema: 'slf_rule_decision_v11_tactical_suite', run: () => null };
 sandbox.RecommendationEngine = {
   getPresetLadder() { return []; },
   applyProgressionGuard(candidate) { return candidate; }
@@ -51,77 +51,72 @@ const P = sandbox.window.SLFTacticDirectionPolicy;
 const E = sandbox.window.SLFCurrentActionHintEngine;
 const RE = sandbox.RecommendationEngine;
 assert.ok(R && P && E, 'registry and policy installed in the v10 sandbox');
-assert.equal(R.suiteVersion, 'slf_tactic_suite_561_v10');
-assert.equal(P.version, '5.61-tactical-suite-v10.0');
+assert.equal(R.suiteVersion, 'slf_tactic_suite_561_v11');
+assert.equal(P.version, '5.61-tactical-suite-v11.0');
 assert.deepEqual([...P.activePresets], [...R.active], 'policy active set mirrors the registry');
 
 const active = R.active;
 const removed = new Set(R.removed);
 const retired = new Set(R.retiredActive);
 
-// --- Static mirror of the v10 STEP graph (module-local in the policy) -----------
+// --- Static mirror of the v11 STEP graph (module-local in the policy) -----------
 const STEP = {
-  "Arteta_Control433_bal3": [
-    "Emery_BalancedControl4231_neutr",
-    "Pep_BoxControl_bal2",
-    "Pep_ControlledPush_att3",
-    "Conte_WingbackWidth_bal4",
-    "Allegri_LeadManagement4141_def1"
+  "Arteta_SafePossession_v11": [
+    "Emery_BalancedBase_v11"
   ],
-  "Pep_BoxControl_bal2": [
-    "Arteta_Control433_bal3",
-    "Emery_BalancedControl4231_neutr",
-    "Mourinho_CompactCounter4411_neutr",
-    "Pep_PressCooldown_bal2"
+  "Guardiola_PressEscape_v11": [
+    "Emery_BalancedBase_v11",
+    "Mourinho_CleanCounter_v11",
+    "Guardiola_PressCooldown_v11"
   ],
-  "Pep_PressCooldown_bal2": [
-    "Pep_BoxControl_bal2",
-    "Emery_BalancedControl4231_neutr",
-    "Allegri_LeadManagement4141_def1"
+  "Guardiola_PressCooldown_v11": [
+    "Guardiola_PressEscape_v11",
+    "Emery_BalancedBase_v11",
+    "Allegri_LeadOutlet_v11"
   ],
-  "Pep_ControlledPush_att3": [
-    "Arteta_Control433_bal3",
-    "Pep_TwoThreeFive_att3",
-    "Conte_WingbackWidth_bal4"
+  "Guardiola_ControlledPush_v11": [
+    "Guardiola_PositionalSiege_v11",
+    "Conte_WideChannels_v11"
   ],
-  "Pep_TwoThreeFive_att3": [
-    "Pep_ControlledPush_att3",
-    "Conte_WingbackWidth_bal4",
-    "Klopp_Gegenpress_att4"
+  "Guardiola_PositionalSiege_v11": [
+    "Guardiola_ControlledPush_v11",
+    "Conte_WideChannels_v11",
+    "Klopp_LateGegenpress_v11"
   ],
-  "Conte_WingbackWidth_bal4": [
-    "Arteta_Control433_bal3",
-    "Pep_ControlledPush_att3",
-    "Pep_TwoThreeFive_att3"
+  "Conte_WideChannels_v11": [
+    "Guardiola_ControlledPush_v11",
+    "Guardiola_PositionalSiege_v11",
+    "Emery_BalancedBase_v11"
   ],
-  "Klopp_Gegenpress_att4": [
-    "Pep_TwoThreeFive_att3",
-    "Pep_ControlledPush_att3"
+  "Klopp_LateGegenpress_v11": [
+    "Guardiola_PositionalSiege_v11",
+    "Guardiola_ControlledPush_v11"
   ],
-  "Simeone_Compact442_def4": [
-    "Allegri_LeadManagement4141_def1",
-    "Arteta_Control433_bal3",
-    "Simeone_LowBlock_def5"
+  "Simeone_CompactLead_v11": [
+    "Allegri_LeadOutlet_v11",
+    "Simeone_EmergencyBlock_v11"
   ],
-  "Simeone_LowBlock_def5": [
-    "Simeone_Compact442_def4",
-    "Allegri_LeadManagement4141_def1"
+  "Simeone_EmergencyBlock_v11": [
+    "Simeone_CompactLead_v11",
+    "Allegri_LeadOutlet_v11"
   ],
-  "Emery_BalancedControl4231_neutr": [
-    "Arteta_Control433_bal3",
-    "Pep_BoxControl_bal2",
-    "Mourinho_CompactCounter4411_neutr",
-    "Allegri_LeadManagement4141_def1"
+  "Emery_BalancedBase_v11": [
+    "Arteta_SafePossession_v11",
+    "Guardiola_PressEscape_v11",
+    "Mourinho_CleanCounter_v11",
+    "Allegri_LeadOutlet_v11",
+    "Guardiola_ControlledPush_v11",
+    "Conte_WideChannels_v11"
   ],
-  "Mourinho_CompactCounter4411_neutr": [
-    "Emery_BalancedControl4231_neutr",
-    "Pep_BoxControl_bal2",
-    "Pep_ControlledPush_att3"
+  "Mourinho_CleanCounter_v11": [
+    "Emery_BalancedBase_v11",
+    "Guardiola_PressEscape_v11",
+    "Guardiola_ControlledPush_v11"
   ],
-  "Allegri_LeadManagement4141_def1": [
-    "Simeone_Compact442_def4",
-    "Emery_BalancedControl4231_neutr",
-    "Pep_PressCooldown_bal2"
+  "Allegri_LeadOutlet_v11": [
+    "Simeone_CompactLead_v11",
+    "Emery_BalancedBase_v11",
+    "Guardiola_PressCooldown_v11"
   ]
 };
 
@@ -135,15 +130,15 @@ for (const [from, targets] of Object.entries(STEP)) {
     assert.ok(!removed.has(from), `STEP node ${from} must not be removed/retired`);
   }
 }
-assert.ok(!STEP.Simeone_LowBlock_def5.includes('Bielsa_ChaosPress_att5'), 'no LowBlock -> ChaosPress edge (emergency lock must not chain straight into final all-in)');
+assert.ok(!STEP.Simeone_EmergencyBlock_v11.includes('Bielsa_ChaosPress_att5'), 'no LowBlock -> ChaosPress edge (emergency lock must not chain straight into final all-in)');
 
 // Undirected connectivity: BFS from Arteta reaches all 12 active presets.
 const undirected = new Map(active.map(name => [name, new Set()]));
 for (const [from, targets] of Object.entries(STEP)) {
   for (const to of targets) { undirected.get(from).add(to); undirected.get(to).add(from); }
 }
-let reached = new Set(['Arteta_Control433_bal3']);
-let queue = ['Arteta_Control433_bal3'];
+let reached = new Set(['Arteta_SafePossession_v11']);
+let queue = ['Arteta_SafePossession_v11'];
 while (queue.length) {
   const node = queue.pop();
   for (const next of undirected.get(node)) {
@@ -225,8 +220,8 @@ for (const from of active) {
 // Dynamic connectivity: walking repeated shortestStep hops from Arteta lands on
 // every active preset within a bounded number of hops.
 for (const target of active) {
-  if (target === 'Arteta_Control433_bal3') continue;
-  let current = 'Arteta_Control433_bal3';
+  if (target === 'Arteta_SafePossession_v11') continue;
+  let current = 'Arteta_SafePossession_v11';
   let hops = 0;
   while (current !== target && hops < 15) {
     const next = P.shortestStep(current, target);
@@ -239,7 +234,7 @@ for (const target of active) {
 
 // --- Progression guard: removed ids pass through, selectRawPreset never emits --
 const removedCandidate = { name: 'Compact_Counter_def3', reason: 'retired id must pass through unguarded' };
-const guarded = RE.applyProgressionGuard(removedCandidate, { gameId: 'g', status: 'live', ruleDecision: { action: { preset: 'Arteta_Control433_bal3' }, telemetry: {} } }, {});
+const guarded = RE.applyProgressionGuard(removedCandidate, { gameId: 'g', status: 'live', ruleDecision: { action: { preset: 'Arteta_SafePossession_v11' }, telemetry: {} } }, {});
 assert.equal(guarded, removedCandidate, 'applyProgressionGuard passthrough: non-active candidate returned unchanged (documented)');
 assert.equal(guarded.name, 'Compact_Counter_def3');
 
@@ -249,4 +244,4 @@ const selected = RE.selectRawPreset({}, {});
 assert.equal(selected.name, null, 'selectRawPreset never emits a removed preset');
 assert.equal(selected.fallbackReason, 'invalid_preset');
 
-console.log('tactical suite v10 transition graph invariants: OK');
+console.log('tactical suite v11 transition graph invariants: OK');

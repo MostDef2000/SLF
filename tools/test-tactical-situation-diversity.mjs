@@ -4,17 +4,25 @@ import vm from 'node:vm';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-// Native-valid v10 tactical suite: 9 retuned/retained, 3 new, Bielsa LAB-only.
+// #335: one user-locked XI, twelve tactical modes, no formation switching.
 const active=[
-  'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2',
-  'Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4',
-  'Klopp_Gegenpress_att4','Simeone_Compact442_def4','Simeone_LowBlock_def5',
-  'Emery_BalancedControl4231_neutr','Mourinho_CompactCounter4411_neutr','Allegri_LeadManagement4141_def1'
+ 'Emery_BalancedBase_v11','Mourinho_CleanCounter_v11','Guardiola_PressEscape_v11',
+ 'Arteta_SafePossession_v11','Guardiola_PressCooldown_v11','Guardiola_ControlledPush_v11',
+ 'Guardiola_PositionalSiege_v11','Conte_WideChannels_v11','Klopp_LateGegenpress_v11',
+ 'Simeone_CompactLead_v11','Simeone_EmergencyBlock_v11','Allegri_LeadOutlet_v11'
 ];
 const retiredActive=['Compact_Counter_def3','Bielsa_ChaosPress_att5'];
 const retired=['Mourinho_WeakSide_def3','Xabi_BoxMidfield_bal3','DeZerbi_BaitPress_bal3'];
-const renamedAliases={"MidBlock_Control4231_neutr":"Emery_BalancedControl4231_neutr","MidBlock_Counter4411_neutr":"Mourinho_CompactCounter4411_neutr","Lead_Outlet4141_def1":"Allegri_LeadManagement4141_def1"};
-const seededSystem=[...active,...Object.keys(renamedAliases),...retiredActive,...retired];
+const oldV10=[
+ 'Emery_BalancedControl4231_neutr','Mourinho_CompactCounter4411_neutr',
+ 'Pep_BoxControl_bal2','Arteta_Control433_bal3','Pep_PressCooldown_bal2',
+ 'Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4',
+ 'Klopp_Gegenpress_att4','Simeone_Compact442_def4','Simeone_LowBlock_def5',
+ 'Allegri_LeadManagement4141_def1'
+];
+const oldGeneric=['MidBlock_Control4231_neutr','MidBlock_Counter4411_neutr','Lead_Outlet4141_def1'];
+const oldIds=[...oldV10,...oldGeneric];
+const seededSystem=[...active,...oldIds,...retiredActive,...retired];
 const root=new URL('../',import.meta.url);
 const source=path=>fs.readFileSync(new URL(path,root),'utf8');
 const context={
@@ -37,7 +45,7 @@ const context={
 };
 context.window.SLFCurrentActionHintEngine={
  schema:'old',ACTIVE_PRESETS:active.slice(),
- run(_snapshot,ctx={}){return{schema:'old',moment:{context:{...ctx},gameId:'g',minute:Number(ctx.minute||0)},action:{preset:'Arteta_Control433_bal3',reason:'old'},candidates:[],confidence:{level:'low',gap:0},margin:0,telemetry:{}};}
+ run(_snapshot,ctx={}){return{schema:'old',moment:{context:{...ctx},gameId:'g',minute:Number(ctx.minute||0)},action:{preset:'Emery_BalancedBase_v11',reason:'old'},candidates:[],confidence:{level:'low',gap:0},margin:0,telemetry:{}};}
 };
 context.globalThis=context;
 vm.createContext(context);
@@ -46,10 +54,11 @@ vm.runInContext(source('src/modules/tactics-presets/tactic-preset-direction-poli
 const registry=context.window.SLFActivePresetRegistry;
 const policy=context.window.SLFTacticDirectionPolicy;
 const engine=context.window.SLFCurrentActionHintEngine;
-assert.equal(registry.suiteVersion,'slf_tactic_suite_561_v10');
-assert.equal(registry.recommendationSchema,'slf_rule_decision_v10_tactical_suite');
+assert.equal(registry.suiteVersion,'slf_tactic_suite_561_v11');
+assert.equal(registry.recommendationSchema,'slf_rule_decision_v11_tactical_suite');
 assert.equal(registry.defaultRiskAppetite,'standard');
-assert.equal(registry.fallbackPolicy,'5.61-tactical-suite-v10-hold-current');
+assert.equal(registry.fallbackPolicy,'5.61-tactical-suite-v11-hold-current');
+assert.equal(registry.defaultPresetId,'Emery_BalancedBase_v11');
 assert.deepEqual([...registry.active],active);
 assert.equal(active.length,12);
 assert.equal(new Set(active).size,12);
@@ -59,122 +68,123 @@ assert.equal(Object.keys(registry.formations).length,12);
 assert.equal(Object.keys(registry.labels).length,13);
 assert.equal(Object.keys(registry.displayMeta).length,13);
 assert.deepEqual([...registry.retiredActive],retiredActive);
-for(const id of retiredActive.concat(retired)){
- assert.equal(context.BASE_PRESETS[id],undefined,`${id}: retired built-in absent from BASE_PRESETS`);
- assert.equal(context.BASE_LABELS[id],undefined,`${id}: retired built-in absent from BASE_LABELS`);
- assert.ok(registry.removed.includes(id),`${id}: retired preset must be listed`);
- assert.equal(policy.hardVeto(id,{}).vetoed,true,`${id}: cannot be recommended`);
+for(const id of oldIds.concat(retiredActive,retired)){
+ assert.equal(context.BASE_PRESETS[id],undefined,`${id}: old built-in absent from BASE_PRESETS`);
+ assert.equal(context.BASE_LABELS[id],undefined,`${id}: old built-in absent from BASE_LABELS`);
+ assert.ok(registry.removed.includes(id),`${id}: old name hidden`);
 }
 const registrySource=source('src/modules/tactics-presets/active-preset-registry.js');
 assert.match(registrySource,/HISTORICAL_COMPACT_COUNTER/);
-assert.ok(registrySource.includes("preset:{def_line:'1',press_line:'1',def_width:'2',press_intense:'2',build_type:'1',build_temp:'3',build_long:'4',build_fast:'4',style:'3',pass_risk:'2',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[]}"),'historical Compact Counter remains unchanged');
+assert.ok(registrySource.includes("preset:{def_line:'1',press_line:'1',def_width:'2',press_intense:'2',build_type:'1',build_temp:'3',build_long:'4',build_fast:'4',style:'3',pass_risk:'2',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[]}"),'historical Compact Counter unchanged');
 const native=JSON.parse(source('data/tactics/tactical-lab-contract-v1.json')).population.nativeControlDomains;
 const keys=['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot'];
 const table={
- Arteta_Control433_bal3:'2 3 2 3 2 2 1 2 3 3 2 2 1 2',
- Pep_BoxControl_bal2:'2 2 2 2 2 1 1 1 3 2 1 1 1 1',
- Pep_PressCooldown_bal2:'1 2 3 1 1 2 2 1 2 1 1 1 1 1',
- Pep_ControlledPush_att3:'3 3 2 3 2 3 1 3 4 3 3 2 1 3',
- Pep_TwoThreeFive_att3:'3 3 3 4 2 2 1 3 5 4 4 3 1 3',
- Conte_WingbackWidth_bal4:'2 2 3 3 3 2 3 3 4 3 3 3 1 2',
- Klopp_Gegenpress_att4:'3 3 3 5 3 3 2 3 4 3 4 3 1 3',
- Simeone_Compact442_def4:'1 2 1 2 1 1 3 2 2 2 1 2 1 1',
- Simeone_LowBlock_def5:'1 1 1 1 1 1 2 1 1 1 1 1 1 1',
- Emery_BalancedControl4231_neutr:'2 1 3 2 2 2 2 2 3 2 1 2 1 2',
- Mourinho_CompactCounter4411_neutr:'1 2 2 2 1 2 3 3 3 2 2 2 1 2',
- Allegri_LeadManagement4141_def1:'2 2 2 1 2 1 2 2 2 1 1 2 1 1'
+ Emery_BalancedBase_v11:'2 2 2 2 2 2 2 2 3 2 2 2 1 2',
+ Mourinho_CleanCounter_v11:'1 2 2 2 1 3 3 3 3 2 2 2 1 2',
+ Guardiola_PressEscape_v11:'2 2 2 2 2 1 1 2 3 2 1 1 1 2',
+ Arteta_SafePossession_v11:'2 2 2 2 2 2 1 2 3 2 2 2 1 2',
+ Guardiola_PressCooldown_v11:'1 2 2 1 1 2 2 2 2 1 1 1 1 1',
+ Guardiola_ControlledPush_v11:'2 3 2 3 2 3 2 3 4 3 3 2 1 3',
+ Guardiola_PositionalSiege_v11:'3 3 3 4 2 2 2 3 5 4 3 3 1 3',
+ Conte_WideChannels_v11:'2 2 3 3 3 2 2 3 4 3 3 3 1 2',
+ Klopp_LateGegenpress_v11:'3 3 2 4 3 3 2 3 4 3 3 3 1 3',
+ Simeone_CompactLead_v11:'1 2 1 2 1 2 2 2 2 2 1 2 1 1',
+ Simeone_EmergencyBlock_v11:'1 1 1 1 1 1 2 1 1 1 1 1 1 1',
+ Allegri_LeadOutlet_v11:'2 2 2 1 2 2 2 2 2 1 1 2 1 1'
 };
-const specialPriority={Conte_WingbackWidth_bal4:['left','right']};
+const rw=['gk','ld','cd1','cd3','rd','dm2','cm2','lw','am1','rw','st2'];
+const rm=rw.map(p=>p==='rw'?'rm':p);
+assert.deepEqual(JSON.parse(JSON.stringify(registry.fixedLineupProfile.canonicalPositions)),rw);
+assert.deepEqual(JSON.parse(JSON.stringify(registry.fixedLineupProfile.formationVariants.rw)),rw);
+assert.deepEqual(JSON.parse(JSON.stringify(registry.fixedLineupProfile.formationVariants.rm)),rm);
+assert.equal(registry.fixedLineupProfile.presetSwitchChangesFormation,false);
+assert.equal(registry.fixedLineupProfile.rightWingLock,'user_pre_match_selection');
+assert.ok(!rw.includes('cd2'));
 for(const id of active){
  const v=table[id].split(' ');
  const expected=Object.fromEntries(keys.map((k,i)=>[k,v[i]]));
- expected.priority=specialPriority[id]||[];
- assert.deepEqual(JSON.parse(JSON.stringify(registry.presets[id])),expected,`${id}: frozen v10 proposal controls`);
+ expected.priority=id==='Conte_WideChannels_v11'?['left','right']:[];
+ assert.deepEqual(JSON.parse(JSON.stringify(registry.presets[id])),expected,`${id}: frozen owner-approved v11 vector`);
  for(const [key,allowed] of Object.entries(native)){
   if(key!=='priority')assert.ok(allowed.includes(expected[key]),`${id}.${key}: native domain`);
  }
- assert.ok(registry.formations[id].length===11&&new Set(registry.formations[id]).size===11&&registry.formations[id].includes('gk'),`${id}: valid 11 slots`);
- assert.deepEqual(JSON.parse(JSON.stringify(registry.roleContracts[id].controls)),expected,`${id}: contract vector`);
- assert.deepEqual([...registry.roleContracts[id].formation],[...registry.formations[id]],`${id}: contract formation`);
- assert.ok(registry.situations.includes(registry.meta[id].role),`${id}: situation`);
+ assert.deepEqual(JSON.parse(JSON.stringify(registry.formations[id])),rw,`${id}: same 11 slots`);
+ assert.deepEqual(JSON.parse(JSON.stringify(registry.roleContracts[id].formation)),rw,`${id}: role formation`);
+ assert.deepEqual(JSON.parse(JSON.stringify(registry.roleContracts[id].controls)),expected,`${id}: role vector`);
+ assert.equal(registry.roleContracts[id].fixedLineupProfileId,'fixed_4231_cd1_cd3_rw_or_rm');
+ assert.ok(registry.situations.includes(registry.meta[id].role),`${id}: role included`);
  assert.ok(registry.displayOrder.includes(id),`${id}: visible in active UI`);
  assert.equal(registry.roleContracts[id].fallbackEligible,false);
+ assert.match(registry.labels[id],/Emery|Mourinho|Guardiola|Arteta|Conte|Klopp|Simeone|Allegri/);
+ assert.ok(!/3-2-5|4-4-2|5-4-1|4-3-3/.test(registry.labels[id]),`${id}: label is mode not formation`);
 }
-// Renaming changes only identity, not controls, role, graph or risk.
-assert.deepEqual(JSON.parse(JSON.stringify(registry.legacyAliases)),renamedAliases);
-for(const [historical,current] of Object.entries(renamedAliases)){
- assert.equal(registry.resolvePresetId(historical),current,'old ID resolves to coach');
- assert.equal(context.BASE_PRESETS[historical],undefined,'old built-in never reappears in active controls');
- assert.equal(context.BASE_LABELS[historical],undefined,'old built-in never reappears in selector');
- assert.equal(registry.removed.includes(historical),true,'legacy ID is hidden');
- assert.equal(policy.scoreCandidate(historical,{}).preset,current,'historical stored ID is resolved in scoring');
- assert.equal([...registry.active].includes(historical),false);
-}
-assert.equal(registry.labels.Emery_BalancedControl4231_neutr,'Unai Emery — Balanced Control 4-2-3-1');
-assert.equal(registry.labels.Mourinho_CompactCounter4411_neutr,'José Mourinho — Compact Counter 4-4-1-1');
-assert.equal(registry.labels.Allegri_LeadManagement4141_def1,'Massimiliano Allegri — Lead Management 4-1-4-1');
-assert.equal(registry.displayMeta.Emery_BalancedControl4231_neutr.trainer,'Emery');
-assert.equal(registry.displayMeta.Mourinho_CompactCounter4411_neutr.trainer,'Mourinho');
-assert.equal(registry.displayMeta.Allegri_LeadManagement4141_def1.trainer,'Allegri');
-assert.equal(policy.shortestStep('MidBlock_Control4231_neutr','MidBlock_Counter4411_neutr'),
- policy.shortestStep('Emery_BalancedControl4231_neutr','Mourinho_CompactCounter4411_neutr'));
-assert.equal(policy.hardVeto('MidBlock_Counter4411_neutr',{
- underPressure:true,counterExitAvailable:true
-}).vetoed,false,'the old stored counter can still be evaluated safely');
-assert.ok(registry.active.every(id=>!/(?:MidBlock|Lead_Outlet)/.test(id)));
+assert.equal(registry.roleContracts.Arteta_SafePossession_v11.manualOnly,true);
+assert.equal(policy.hardVeto('Arteta_SafePossession_v11',{}).vetoed,true);
+assert.equal(registry.auditTier.manualOnly[0],'Arteta_SafePossession_v11');
 assert.equal(registry.situations.length,12);
-assert.equal(registry.evidenceAdjustment(),0,'No fabricated evidence ranking');
-assert.equal(policy.version,'5.61-tactical-suite-v10.0');
-assert.equal(policy.suiteVersion,'slf_tactic_suite_561_v10');
-assert.equal(policy.recommendationSchema,'slf_rule_decision_v10_tactical_suite');
+assert.equal(registry.evidenceAdjustment(),0,'never fabricate causal evidence');
+assert.equal(policy.version,'5.61-tactical-suite-v11.0');
+assert.equal(policy.suiteVersion,'slf_tactic_suite_561_v11');
+assert.equal(policy.recommendationSchema,'slf_rule_decision_v11_tactical_suite');
 assert.equal(policy.autoApply,false);
-assert.equal(engine.__tacticSuiteV10Installed,true);
-assert.equal(context.RecommendationEngine.__tacticSuiteV10Installed,true);
-assert.deepEqual(Object.keys(policy.scoreCandidate('Arteta_Control433_bal3',{}).parts),['rulePrior','contextFit','riskAdjustment','boundedEvidenceAdjustment']);
+assert.equal(engine.__tacticSuiteV11Installed,true);
+assert.equal(context.RecommendationEngine.__tacticSuiteV11Installed,true);
+assert.deepEqual(Object.keys(policy.scoreCandidate('Emery_BalancedBase_v11',{}).parts),['rulePrior','contextFit','riskAdjustment','boundedEvidenceAdjustment']);
+assert.equal(policy.preferredPreset('possession_control'),null,'Arteta is never an automatic preference');
+for(const [historical,current] of Object.entries(registry.legacyAliases)){
+ assert.equal(registry.resolvePresetId(historical),current);
+ assert.equal(policy.scoreCandidate(historical,{}).preset,current);
+ assert.ok(!registry.active.includes(historical));
+}
 function decide(input={}){
  const snapshot={gameId:'scenario',status:'live',tacticTelemetry:{}};
  const d=engine.run(snapshot,{minute:30,scoreState:'draw',score:{state:'draw'},attackNeed:20,myBad:10,lowBadActions:true,signals:[],...input});
- assert.ok(active.includes(d.action.preset),`eligible v10 production preset: ${d.action.preset}`);
- assert.equal(snapshot.tacticTelemetry.libraryVersion,'slf_tactic_suite_561_v10');
- assert.equal(snapshot.tacticTelemetry.recommendationSchema,'slf_rule_decision_v10_tactical_suite');
- assert.ok(d.runnerUp?.preset,'runner-up expected');
- assert.equal(d.confidence.gap,d.margin,'rule-scoring gap, not calibrated success probability');
+ assert.ok(active.includes(d.action.preset),`eligible v11 preset: ${d.action.preset}`);
+ assert.notEqual(d.action.preset,'Arteta_SafePossession_v11','diagnostic never auto');
+ assert.equal(snapshot.tacticTelemetry.libraryVersion,'slf_tactic_suite_561_v11');
+ assert.equal(snapshot.tacticTelemetry.recommendationSchema,'slf_rule_decision_v11_tactical_suite');
+ assert.equal(d.confidence.gap,d.margin,'score margin, not calibrated win rate');
  return d;
 }
 const scenarios=[
- ['stable',{},'Arteta_Control433_bal3','stable_control'],
- ['stronger opponent',{strengthGap:-15},'Emery_BalancedControl4231_neutr','midblock_safe_control'],
- ['pressure/no outlet',{underPressure:true,counterExitAvailable:false,signals:['under_pressure','counter_exit_blocked']},'Pep_BoxControl_bal2','pressure_escape'],
- ['pressure/confirmed outlet',{underPressure:true,counterExitAvailable:true,signals:['under_pressure','counter_exit_available']},'Mourinho_CompactCounter4411_neutr','pressure_counter'],
- ['cooldown',{pressFatigueRisk:true,myPowerDropPct:5},'Pep_PressCooldown_bal2','press_cooldown'],
- ['width',{centerClosed:true,wideQuality:true,signals:['center_closed','wide_quality']},'Conte_WingbackWidth_bal4','width_attack'],
- ['protect',{minute:72,scoreState:'winning',score:{state:'winning'}},'Simeone_Compact442_def4','protect_lead'],
- ['protect outlet',{minute:72,scoreState:'winning',score:{state:'winning'},counterExitAvailable:true},'Allegri_LeadManagement4141_def1','protect_lead_with_outlet'],
- ['emergency',{minute:60,underPressure:true,counterExitAvailable:false,pressureRisk:90,highBadActions:true,signals:['under_pressure','sustained_siege']},'Simeone_LowBlock_def5','emergency_lock'],
- ['chase',{minute:55,scoreState:'losing',score:{state:'losing'},attackNeed:48},'Pep_ControlledPush_att3','controlled_chase'],
- ['siege',{minute:62,attackNeed:60,attackingMomentum:true},'Pep_TwoThreeFive_att3','positional_siege'],
- ['late chase',{minute:86,scoreState:'losing',score:{state:'losing'},attackNeed:92,myBad:10,lowBadActions:true},'Klopp_Gegenpress_att4','late_high_pressure']
+ ['start',{},'Emery_BalancedBase_v11','default_start'],
+ ['stronger opponent',{strengthGap:-15},'Guardiola_PressEscape_v11','pressure_escape'],
+ ['pressure/no outlet',{underPressure:true,counterExitAvailable:false,signals:['under_pressure','counter_exit_blocked']},'Guardiola_PressEscape_v11','pressure_escape'],
+ ['pressure/clean outlet',{underPressure:true,counterExitAvailable:true,signals:['under_pressure','counter_exit_available']},'Mourinho_CleanCounter_v11','pressure_counter'],
+ ['cooldown',{pressFatigueRisk:true,myPowerDropPct:5},'Guardiola_PressCooldown_v11','press_cooldown'],
+ ['wide',{centerClosed:true,wideQuality:true},'Conte_WideChannels_v11','width_attack'],
+ ['lead',{minute:72,scoreState:'winning',score:{state:'winning'}},'Simeone_CompactLead_v11','protect_lead'],
+ ['lead outlet',{minute:72,scoreState:'winning',score:{state:'winning'},counterExitAvailable:true},'Allegri_LeadOutlet_v11','protect_lead_with_outlet'],
+ ['emergency',{minute:60,underPressure:true,counterExitAvailable:false,pressureRisk:90,highBadActions:true,signals:['under_pressure','sustained_siege']},'Simeone_EmergencyBlock_v11','emergency_lock'],
+ ['chase',{minute:55,scoreState:'losing',score:{state:'losing'},attackNeed:48},'Guardiola_ControlledPush_v11','controlled_chase'],
+ ['siege',{minute:62,attackNeed:60,attackingMomentum:true},'Guardiola_PositionalSiege_v11','positional_siege'],
+ ['late chase',{minute:86,scoreState:'losing',score:{state:'losing'},attackNeed:92,myBad:10,lowBadActions:true},'Klopp_LateGegenpress_v11','late_high_pressure']
 ];
-for(const [label,input,expected,situation] of scenarios){
+for(const [label,input,id,situation] of scenarios){
  const d=decide(input);
  assert.equal(d.situationKey,situation,`${label}: situation`);
- assert.equal(d.action.preset,expected,`${label}: selected preset`);
+ assert.equal(d.action.preset,id,`${label}: mode`);
 }
-assert.equal(policy.hardVeto('Mourinho_CompactCounter4411_neutr',{underPressure:true,counterExitAvailable:false}).vetoed,true);
-assert.equal(policy.hardVeto('Mourinho_CompactCounter4411_neutr',{underPressure:true,counterExitAvailable:true,counterExitBlocked:true}).vetoed,true);
-assert.equal(policy.hardVeto('Klopp_Gegenpress_att4',{minute:20,scoreState:'draw'}).vetoed,true);
-assert.equal(policy.hardVeto('Simeone_LowBlock_def5',{minute:20,scoreState:'draw'}).vetoed,true);
-assert.equal(policy.preferredPreset('final_all_in'),null,'Bielsa role removed from production policy');
-assert.equal(policy.preferredPreset('pressure_counter'),'Mourinho_CompactCounter4411_neutr');
-assert.ok(!policy.activePresets.includes('Bielsa_ChaosPress_att5'));
-context.progression={gameId:'route',lastAppliedPreset:'Arteta_Control433_bal3',previousPreset:'',lastScoreState:'losing'};
-let snap={gameId:'route',status:'live',ruleDecision:{action:{preset:'Klopp_Gegenpress_att4'},telemetry:{}}};
-let guarded=context.RecommendationEngine.applyProgressionGuard({name:'Klopp_Gegenpress_att4',reason:'late'},snap,{score:{state:'losing'},urgency:{overrideProgressionGuard:false}});
-assert.equal(guarded.name,'Pep_ControlledPush_att3');
-assert.equal(snap.ruleDecision.action.rawPreset,'Klopp_Gegenpress_att4');
-context.progression={gameId:'route',lastAppliedPreset:'Arteta_Control433_bal3',previousPreset:''};
-guarded=context.RecommendationEngine.applyProgressionGuard({name:'Simeone_LowBlock_def5',reason:'emergency'}, {gameId:'route',status:'live',ruleDecision:{action:{preset:'Simeone_LowBlock_def5'},telemetry:{}}},{urgency:{overrideProgressionGuard:false}});
-assert.equal(guarded.name,'Simeone_LowBlock_def5');
+assert.equal(policy.hardVeto('Mourinho_CleanCounter_v11',{underPressure:true,counterExitAvailable:false}).vetoed,true);
+assert.equal(policy.hardVeto('Mourinho_CleanCounter_v11',{underPressure:true,counterExitAvailable:true,counterExitBlocked:true}).vetoed,true);
+assert.equal(policy.hardVeto('Klopp_LateGegenpress_v11',{minute:20,scoreState:'draw'}).vetoed,true);
+assert.equal(policy.hardVeto('Simeone_EmergencyBlock_v11',{minute:20,scoreState:'draw'}).vetoed,true);
+assert.equal(policy.preferredPreset('final_all_in'),null);
+assert.equal(policy.preferredPreset('default_start'),'Emery_BalancedBase_v11');
+assert.equal(policy.preferredPreset('pressure_counter'),'Mourinho_CleanCounter_v11');
+const engineSource=source('src/modules/tactics-presets/tactic-control-engine.js');
+const panelSource=source('src/modules/tactics-presets/tactic-preset-library-panel.js');
+assert.equal(/tacticControlBridge\.(applyFormation|saveLiveLineup)\s*\(/.test(engineSource),false,'switching mode cannot change/save formation');
+assert.equal(/data-slf-formation-preset/.test(panelSource),false,'mode UI must not offer per-mode formation change');
+assert.match(panelSource,/CD1/);
+assert.match(panelSource,/RW\/RM/);
+context.progression={gameId:'route',lastAppliedPreset:'Emery_BalancedBase_v11',previousPreset:''};
+let snap={gameId:'route',status:'live',ruleDecision:{action:{preset:'Klopp_LateGegenpress_v11'},telemetry:{}}};
+let guarded=context.RecommendationEngine.applyProgressionGuard({name:'Klopp_LateGegenpress_v11',reason:'late'},snap,{score:{state:'losing'},urgency:{overrideProgressionGuard:false}});
+assert.equal(guarded.name,'Guardiola_ControlledPush_v11');
+context.progression={gameId:'route',lastAppliedPreset:'Emery_BalancedBase_v11',previousPreset:''};
+guarded=context.RecommendationEngine.applyProgressionGuard({name:'Simeone_EmergencyBlock_v11',reason:'emergency'}, {gameId:'route',status:'live',ruleDecision:{action:{preset:'Simeone_EmergencyBlock_v11'},telemetry:{}}},{urgency:{overrideProgressionGuard:false}});
+assert.equal(guarded.name,'Simeone_EmergencyBlock_v11');
 assert.equal(guarded.progressionAction,'emergency_override');
 
 for(const file of ['coach-mode-policy.js','adaptive-opponent-style-layer.js','moment-drift-stabilizer.js']){
@@ -294,6 +304,7 @@ assert.equal(/EXP-561-P03-/.test(registrySource),false,'P03 experimental identit
 // dedicated CI step in quality-integration.yml).
 const bridgeOut=execFileSync(process.execPath,['tools/test-tactic-bridge-v10.mjs'],{cwd:fileURLToPath(root),encoding:'utf8'});
 assert.match(bridgeOut,/v10 tactic bridge native preflight and rollback: OK/);
+assert.match(bridgeOut,/v11 RW\/RM fixed lineup read-only control application: OK/);
 
 const aliasOut=execFileSync(process.execPath,['tools/test-coach-preset-aliases.mjs'],{cwd:fileURLToPath(root),encoding:'utf8'});
 assert.match(aliasOut,/coach preset alias migration: OK/,'old saved v10 names remain readable and cannot re-enter active dropdown');
@@ -301,4 +312,4 @@ assert.match(aliasOut,/coach preset alias migration: OK/,'old saved v10 names re
 const syncOut=execFileSync(process.execPath,['tools/sync-active-preset-inventory.mjs','--check'],{cwd:fileURLToPath(root),encoding:'utf8'});
 assert.match(syncOut,/ok: .*active-preset-inventory-v3\.json in sync/,'active-preset inventory must be in sync with the registry');
 
-console.log('tactical suite v10 hold-current + Tactical Lab v1 P03 validation contracts: OK');
+console.log('tactical suite v11 fixed lineup + Tactical Lab v1 P03 validation contracts: OK');

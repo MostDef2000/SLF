@@ -291,20 +291,20 @@ def assert_owned_live(page: Page):
     assert "расстановка игроков не меняется" in page.locator("#slf-tactical-lab-detail").text_content()
 
     expected_dropdown_ids = [
-        "Pep_TwoThreeFive_att3",
+        "Guardiola_PositionalSiege_v11",
         "standard",
-        "Conte_WingbackWidth_bal4",
-        "Pep_ControlledPush_att3",
-        "Klopp_Gegenpress_att4",
-        "Arteta_Control433_bal3",
-        "Emery_BalancedControl4231_neutr",
-        "Pep_BoxControl_bal2",
-        "Mourinho_CompactCounter4411_neutr",
+        "Conte_WideChannels_v11",
+        "Guardiola_ControlledPush_v11",
+        "Klopp_LateGegenpress_v11",
+        "Arteta_SafePossession_v11",
+        "Emery_BalancedBase_v11",
+        "Guardiola_PressEscape_v11",
+        "Mourinho_CleanCounter_v11",
         "Henta abuse",
-        "Allegri_LeadManagement4141_def1",
-        "Pep_PressCooldown_bal2",
-        "Simeone_Compact442_def4",
-        "Simeone_LowBlock_def5",
+        "Allegri_LeadOutlet_v11",
+        "Guardiola_PressCooldown_v11",
+        "Simeone_CompactLead_v11",
+        "Simeone_EmergencyBlock_v11",
     ]
     # User-visible names must identify real coaches, not generic tactical labels.
     coach_labels = page.eval_on_selector_all(
@@ -312,10 +312,11 @@ def assert_owned_live(page: Page):
         "options => options.map(option => ({value: option.value, text: option.textContent}))",
     )
     for identity, trainer in [
-        ("Emery_BalancedControl4231_neutr", "Emery"),
-        ("Mourinho_CompactCounter4411_neutr", "Mourinho"),
-        ("Allegri_LeadManagement4141_def1", "Allegri"),
-    ]:
+        ("Emery_BalancedBase_v11", "Emery"),
+        ("Mourinho_CleanCounter_v11", "Mourinho"),
+        ("Allegri_LeadOutlet_v11", "Allegri"),
+        ("Arteta_SafePossession_v11", "Arteta"),
+        ]:
         assert any(x["value"] == identity and trainer in x["text"] for x in coach_labels), coach_labels
 
     dropdown_ids = page.eval_on_selector_all(
@@ -323,6 +324,17 @@ def assert_owned_live(page: Page):
         "options => options.map(option => option.value)",
     )
     assert dropdown_ids == expected_dropdown_ids, dropdown_ids
+    fixed = page.evaluate("() => window.SLFActivePresetRegistry?.fixedLineupProfile || null")
+    assert fixed and fixed["id"] == "fixed_4231_cd1_cd3_rw_or_rm", fixed
+    assert fixed["presetSwitchChangesFormation"] is False
+    assert fixed["formationVariants"]["rw"] == ["gk","ld","cd1","cd3","rd","dm2","cm2","lw","am1","rw","st2"]
+    assert fixed["formationVariants"]["rm"] == ["gk","ld","cd1","cd3","rd","dm2","cm2","lw","am1","rm","st2"]
+    assert page.evaluate("() => Object.values(window.SLFActivePresetRegistry.formations).every(positions => JSON.stringify(positions) === JSON.stringify(window.SLFActivePresetRegistry.fixedLineupProfile.canonicalPositions))")
+    assert page.evaluate("() => window.SLFTacticDirectionPolicy.preferredPreset('default_start')") == "Emery_BalancedBase_v11"
+    assert page.evaluate("() => window.SLFTacticDirectionPolicy.hardVeto('Arteta_SafePossession_v11', {}).vetoed") is True
+    assert page.locator("button[data-slf-formation-preset]").count() == 0
+    assert page.locator("#slf-preset-library-panel").count() in (0, 1)
+
     assert all(not value.startswith("EXP-") for value in dropdown_ids), dropdown_ids
     assert page.locator("#slf-tactics-dropdown select optgroup").count() == 5
     assert page.eval_on_selector_all(
@@ -331,6 +343,18 @@ def assert_owned_live(page: Page):
     ) == ["5", "4", "3", "2", "1"]
 
     retired_ids = {
+        "Arteta_Control433_bal3",
+        "Pep_BoxControl_bal2",
+        "Pep_PressCooldown_bal2",
+        "Pep_ControlledPush_att3",
+        "Pep_TwoThreeFive_att3",
+        "Conte_WingbackWidth_bal4",
+        "Klopp_Gegenpress_att4",
+        "Simeone_Compact442_def4",
+        "Simeone_LowBlock_def5",
+        "Emery_BalancedControl4231_neutr",
+        "Mourinho_CompactCounter4411_neutr",
+        "Allegri_LeadManagement4141_def1",
         "Compact_Counter_def3",
         "Bielsa_ChaosPress_att5",
         "MidBlock_Control4231_neutr",
@@ -475,7 +499,7 @@ def assert_owned_live(page: Page):
     assert page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id") == experiment_id
     assert "ACTIVE" in page.locator("#slf-tactical-lab-status").text_content()
 
-    page.locator("#slf-tactics-dropdown select").select_option("Arteta_Control433_bal3")
+    page.locator("#slf-tactics-dropdown select").select_option("Emery_BalancedBase_v11")
     page.wait_for_function(
         "() => document.getElementById('slf-tactical-lab-status')?.textContent.includes('протестирован')"
     )

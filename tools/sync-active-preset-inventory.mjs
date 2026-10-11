@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Canonical inventory generator/validator for the generator 5.61 tactical suite v10
+// Canonical inventory generator/validator for the generator 5.61 tactical suite v11
 // (SLF issue #325). Derives data/tactics/active-preset-inventory-v3.json
 // deterministically from src/modules/tactics-presets/active-preset-registry.js,
 // closing the registry<->inventory drift class from issue #252.
@@ -21,7 +21,7 @@ const REGISTRY_PATH = path.join(root, 'src/modules/tactics-presets/active-preset
 const INVENTORY_PATH = path.join(root, 'data/tactics/active-preset-inventory-v3.json');
 const GENERATED_FROM = 'src/modules/tactics-presets/active-preset-registry.js';
 const EXPECTED_SCHEMA = 'slf_active_preset_inventory_v3';
-const EXPECTED_SUITE_VERSION = 'slf_tactic_suite_561_v10';
+const EXPECTED_SUITE_VERSION = 'slf_tactic_suite_561_v11';
 const NATIVE_CONTRACT_PATH = path.join(root, 'data/tactics/tactical-lab-contract-v1.json');
 const nativeDomains = JSON.parse(fs.readFileSync(NATIVE_CONTRACT_PATH, 'utf8')).population.nativeControlDomains;
 
@@ -57,7 +57,7 @@ function loadRegistry() {
     fail(`${GENERATED_FROM} did not install window.SLFActivePresetRegistry`);
   }
   if (registry.suiteVersion !== EXPECTED_SUITE_VERSION) {
-    fail(`registry suiteVersion '${registry.suiteVersion}' !== '${EXPECTED_SUITE_VERSION}'; this tool is v10-bound`);
+    fail(`registry suiteVersion '${registry.suiteVersion}' !== '${EXPECTED_SUITE_VERSION}'; this tool is v11-bound`);
   }
   return registry;
 }
@@ -128,6 +128,35 @@ function validateRegistryInvariants(registry) {
         || priority.some(key => !nativeDomains.priority.includes(key)))
         errors.push(`${id}: invalid priority lanes`);
   }
+  // #335: every mode describes exactly one 11-player formation.
+  // The only allowed user-selected pre-match difference is RW vs RM.
+  const fixed = registry.fixedLineupProfile;
+  const expectedRW = ['gk','ld','cd1','cd3','rd','dm2','cm2','lw','am1','rw','st2'];
+  const expectedRM = expectedRW.map(position => position === 'rw' ? 'rm' : position);
+  if (!fixed || fixed.id !== 'fixed_4231_cd1_cd3_rw_or_rm')
+    errors.push('missing canonical fixed-lineup v11 profile');
+  if (!deepEqual(fixed?.canonicalPositions, expectedRW))
+    errors.push('fixed profile: canonical positions must use CD1/CD3, not CD2');
+  if (!deepEqual(fixed?.formationVariants?.rw, expectedRW)
+      || !deepEqual(fixed?.formationVariants?.rm, expectedRM))
+    errors.push('fixed profile must support exact RW and RM alternatives');
+  if (!deepEqual(fixed?.rightWingAlternatives, ['rw','rm']))
+    errors.push('fixed profile right wing alternatives must be rw/rm');
+  if (fixed?.presetSwitchChangesFormation !== false)
+    errors.push('a tactical mode must not change formation');
+  for (const id of active) {
+    if (!deepEqual(registry.formations?.[id], expectedRW))
+      errors.push(`${id}: tactical modes must share identical fixed canonical formation`);
+    if (registry.roleContracts?.[id]?.fixedLineupProfileId !== fixed?.id)
+      errors.push(`${id}: missing same fixed-lineup contract`);
+  }
+  if (registry.defaultPresetId !== 'Emery_BalancedBase_v11')
+    errors.push('v11 start mode must be Emery, not Arteta');
+  if (registry.roleContracts?.Arteta_SafePossession_v11?.manualOnly !== true)
+    errors.push('Arteta diagnostic must be manual-only');
+  if ((registry.auditTier?.manualOnly || []).includes('Arteta_SafePossession_v11') !== true)
+    errors.push('Arteta diagnostic missing manual-only audit tier');
+
   const covered = new Set();
   for (const id of active) {
     const contract = roleContracts[id];
@@ -215,6 +244,8 @@ function buildInventory(registry) {
     fallbackPolicy: registry.fallbackPolicy,
     inventorySchema: registry.inventorySchema,
     presetCount: active.length,
+    defaultPresetId: registry.defaultPresetId,
+    fixedLineupProfile: registry.fixedLineupProfile,
     controlFields: controlFields.slice(),
     situations: registry.situations.slice(),
     retiredActive: registry.retiredActive.slice(),

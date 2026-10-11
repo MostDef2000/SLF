@@ -380,13 +380,13 @@
             const decision = EventTracker.compactRuleDecision(snapshot.ruleDecision || STATE.lastRuleDecision || null);
             let riskAppetite = decision?.riskAppetite || decision?.action?.riskAppetite || null;
             try { riskAppetite = riskAppetite || localStorage.getItem('slf:tactics:risk-appetite'); } catch (_) {}
-            // v10: single-writer contract (#252) — enrich дополняет прежний tacticTelemetry (MERGE),
+            // v11: single-writer contract (#252) — enrich дополняет прежний tacticTelemetry (MERGE),
             // а не заменяет его: recommendedPreset и актуальный libraryVersion больше не теряются.
             const prior = snapshot.tacticTelemetry || {};
             const action = snapshot.ruleDecision?.action || null;
             snapshot.tacticTelemetry = Object.assign({}, prior, {
                 schema: 'slf_tactic_telemetry_v1',
-                libraryVersion: prior.libraryVersion || window.SLFActivePresetRegistry?.suiteVersion || 'slf_tactic_suite_561_v10',
+                libraryVersion: window.SLFActivePresetRegistry?.suiteVersion || prior.libraryVersion || 'slf_tactic_suite_561_v11',
                 recommendationSchema: prior.recommendationSchema || window.SLFActivePresetRegistry?.recommendationSchema || null,
                 riskAppetite: riskAppetite || (typeof window !== 'undefined' && window.SLFActivePresetRegistry?.defaultRiskAppetite) || 'standard',
                 currentPreset,

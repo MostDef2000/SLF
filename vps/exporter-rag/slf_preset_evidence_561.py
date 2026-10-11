@@ -45,6 +45,25 @@ V10_LEGACY_PRESET_ALIASES = {
     "Lead_Outlet4141_def1": "Allegri_LeadManagement4141_def1"
 }
 
+V11_LIBRARY = "slf_tactic_suite_561_v11"
+V11_RECOMMENDATION_SCHEMA = "slf_rule_decision_v11_tactical_suite"
+V11_PRODUCTION_PRESETS = {
+    "Emery_BalancedBase_v11",
+    "Mourinho_CleanCounter_v11",
+    "Guardiola_PressEscape_v11",
+    "Arteta_SafePossession_v11",
+    "Guardiola_PressCooldown_v11",
+    "Guardiola_ControlledPush_v11",
+    "Guardiola_PositionalSiege_v11",
+    "Conte_WideChannels_v11",
+    "Klopp_LateGegenpress_v11",
+    "Simeone_CompactLead_v11",
+    "Simeone_EmergencyBlock_v11",
+    "Allegri_LeadOutlet_v11",
+}
+
+V11_MANUAL_ONLY_DIAGNOSTIC_PRESETS = {"Arteta_SafePossession_v11"}
+
 V9_PRODUCTION_PRESETS = {
     "Arteta_Control433_bal3", "Pep_BoxControl_bal2", "Pep_PressCooldown_bal2",
     "Pep_ControlledPush_att3", "Pep_TwoThreeFive_att3", "Conte_WingbackWidth_bal4",
@@ -332,6 +351,18 @@ def analysis_preset_name(row: Mapping[str, Any]) -> str:
     return raw
 
 
+def is_v11_current_phase_effect(row: Mapping[str, Any]) -> bool:
+    # The fixed-XI, altered-control v11 interventions must never inherit
+    # outcome evidence from v9 or v10, even when a coach name is similar.
+    return (
+        is_phase_effect(row)
+        and get_path(row, "telemetryContext.libraryVersion") == V11_LIBRARY
+        and get_path(row, "telemetryContext.recommendationSchema") == V11_RECOMMENDATION_SCHEMA
+        and preset_name(row) in V11_PRODUCTION_PRESETS
+        and generator_period(row) == "stable_5_61"
+    )
+
+
 def is_v10_current_phase_effect(row: Mapping[str, Any]) -> bool:
     return (
         is_phase_effect(row)
@@ -419,7 +450,7 @@ def build_report(
         if generator_period(row) == "stable_5_61" and preset_name(row) not in {"unknown", "manual_change"}
     ]
     stable_presets = {analysis_preset_name(row) for row in stable_named}
-    # Historical named phases are descriptive only. v10 readiness additionally
+    # Historical named phases are descriptive only. v11 readiness additionally
     # requires a named production phase, explicit current version/schema,
     # game-confirmed application, known situation and a scored finished match.
     scored_games = {
@@ -436,7 +467,7 @@ def build_report(
     ]
     eligible_v9_presets = {preset_name(row) for row in eligible_v9}
     # The old v9 cohort remains visible as historical evidence, never
-    # authorizes ranking/retuning of the newly deployed v10 production suite.
+    # authorizes ranking/retuning of the newly deployed v11 production suite.
     current_v10_phases = [row for row in analysis_effects if is_v10_current_phase_effect(row)]
     eligible_v10 = [
         row for row in current_v10_phases
@@ -446,7 +477,17 @@ def build_report(
         and game_id(row) in scored_games
     ]
     eligible_v10_presets = {analysis_preset_name(row) for row in eligible_v10}
-    ready = len(eligible_v10) >= 60 and len(eligible_v10_presets) >= 5
+    current_v11_phases = [row for row in analysis_effects if is_v11_current_phase_effect(row)]
+    eligible_v11 = [
+        row for row in current_v11_phases
+        if preset_name(row) not in V11_MANUAL_ONLY_DIAGNOSTIC_PRESETS
+        and get_path(row, "eligibility.eligibleForRanking") is True
+        and get_path(row, "tacticContext.applicationStatus") == "game_confirmed"
+        and score_state(row) in VALID_SCORE_STATES
+        and game_id(row) in scored_games
+    ]
+    eligible_v11_presets = {preset_name(row) for row in eligible_v11}
+    ready = len(eligible_v11) >= 60 and len(eligible_v11_presets) >= 5
 
     return {
         "schema": "slf_preset_evidence_561_v2",
@@ -478,6 +519,11 @@ def build_report(
             "v10CurrentScoredConfirmedEffects": len(eligible_v10),
             "v10CurrentScoredConfirmedPresetCount": len(eligible_v10_presets),
             "v10CurrentLinkedFinishedResults": len({game_id(row) for row in current_v10_phases} & scored_games),
+            "v11CurrentNamedPhaseEffects": len(current_v11_phases),
+            "v11ManualDiagnosticPhaseEffects": sum(1 for row in current_v11_phases if preset_name(row) in V11_MANUAL_ONLY_DIAGNOSTIC_PRESETS),
+            "v11CurrentScoredConfirmedEffects": len(eligible_v11),
+            "v11CurrentScoredConfirmedPresetCount": len(eligible_v11_presets),
+            "v11CurrentLinkedFinishedResults": len({game_id(row) for row in current_v11_phases} & scored_games),
         },
         "scriptVersions": {
             "events": dict(event_versions.most_common()),
@@ -487,8 +533,8 @@ def build_report(
             "readyForRetune": ready,
             "minimumStableNamedEffects": 60,
             "minimumStablePresetCount": 5,
-            "readinessCohort": "v10_current_scored_game_confirmed_phase_only",
-            "warning": None if ready else "Нет достаточной выборки подтверждённых и связанных с результатом фаз v10. Смешанная история 5.61 не является основанием для ретюнинга.",
+            "readinessCohort": "v11_current_scored_game_confirmed_phase_only",
+            "warning": None if ready else "Нет достаточной выборки подтверждённых и связанных с результатом фаз v11. Смешанная история 5.61 не является основанием для ретюнинга.",
         },
         "byPeriodPreset": by_period_preset,
         "byPeriodPresetContext": by_context[:2000],
@@ -497,7 +543,7 @@ def build_report(
             "For a game with v4 tactical-phase effects, legacy effects from the same game are excluded from the primary analysis cohort.",
             "No raw event or effect records are written to the public export.",
             "The transition cohort 2026-07-13 through 2026-07-22 is kept separate from stable generator 5.61 evidence.",
-            "readyForRetune requires exact v10 library/schema, game-confirmed applied controls and valid scored result linkage; legacy named effects never satisfy that gate.",
+            "readyForRetune requires exact v11 library/schema, game-confirmed applied controls and valid scored result linkage; legacy named effects never satisfy that gate.",
         ],
     }
 

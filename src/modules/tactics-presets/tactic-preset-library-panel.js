@@ -53,7 +53,7 @@ const TacticPresetLibraryPanel = {
             <div style="background:#181818;border:1px solid #444;border-left:4px solid ${color};border-radius:6px;padding:8px 9px;margin:7px 0;">
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;">
                     <div style="min-width:0;">
-                        <div style="font-weight:bold;color:${color};font-size:13px;line-height:1.25;word-break:break-word;">${this.escapeHtml(name)}</div>
+                        <div style="font-weight:bold;color:${color};font-size:13px;line-height:1.25;word-break:break-word;">${this.escapeHtml(meta.title || name)}</div>
                         <div style="font-size:10px;color:#aaa;margin-top:2px;line-height:1.3;">${this.escapeHtml(meta.title || '')} · rank: ${this.escapeHtml(meta.rank ?? '')}</div>
                     </div>
                     <div style="font-size:10px;color:${statusColor};border:1px solid ${statusColor};border-radius:10px;padding:1px 6px;white-space:nowrap;">${this.escapeHtml(statusText)}</div>
@@ -96,6 +96,8 @@ const TacticPresetLibraryPanel = {
             <div style="margin-bottom:9px;padding:7px 8px;background:#181818;border:1px solid #444;border-radius:6px;color:#ddd;line-height:1.35;font-size:11px;">
                 Tactical Suite: <b>${this.escapeHtml(registry?.suiteVersion || 'loading')}</b><br>
                 В dropdown: <b style="color:#7cff7c;">${importedCount}</b> из <b>${names.length}</b> active presets.
+                <div style="margin-top:6px;color:#a9e7c2;">Одна схема во всех режимах: GK–LD–CD1–CD3–RD–DM2–CM2–LW–AM1–RW/RM–ST2. Правый фланг RW или RM выбирается до матча.</div>
+                <div style="margin-top:3px;">Смена режима меняет только настройки тактики, не перемещает и не сохраняет игроков.</div>
             </div>${groups}`;
     },
 
