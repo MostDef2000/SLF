@@ -126,13 +126,20 @@
             source: `preset:${name}`,
             strict: false
         });
-        if (!applied.ok) return false;
+        // A successful click sequence is not enough: the local controls must
+        // match the requested vector before recording a UI-verified apply.
+        // No server/game acknowledgment is exposed here; telemetry retains
+        // that distinction and does not claim game-level confirmation.
+        if (!applied.ok || applied.failures?.length || applied.mismatches?.length) {
+            debugWarn('[SLF] Не подтверждена установка тактики в интерфейсе:', name, applied.failures, applied.mismatches);
+            return false;
+        }
 
         const labels = PresetStorage.getAllLabels ? PresetStorage.getAllLabels() : {};
         const presetLabel = labels[name] || TacticPresetLibrary?.meta?.[name]?.title || name;
 
         if (location.pathname.includes('/game.php') && beforeSnapshot?.myTeam) {
-            EventTracker.savePresetEvent(name, preset, beforeSnapshot);
+            EventTracker.savePresetEvent(name, preset, beforeSnapshot, applied.tactic);
         } else {
             PresetUsageTracker.record(name, {
                 gameId: MatchStateParser.getGameId(),
