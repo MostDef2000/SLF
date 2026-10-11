@@ -318,6 +318,18 @@
             // edit was accepted by the game's match engine.
             STATE.lastManualTacticSnapshot = snapshot;
             void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, eventRecord, 'manual tactic event history').catch(() => {});
+            // A separate, debounced *readback* checks whether the browser kept
+            // the last selection after native page handlers settled. This must
+            // never coalesce or erase the individual change events above.
+            const intendedFingerprint = runtime?.tacticFingerprint?.(current) || '';
+            clearTimeout(STATE.manualReadbackTimer);
+            STATE.manualReadbackTimer = setTimeout(() => {
+                if (!location.pathname.includes('/game.php')) return;
+                const actualFingerprint = runtime?.tacticFingerprint?.(getCurrentTactic()) || '';
+                STATE.lastManualReadbackStatus = intendedFingerprint && actualFingerprint === intendedFingerprint
+                    ? 'ui_readback_confirmed'
+                    : 'applied_unverified';
+            }, 500);
         }, true);
         return true;
     }
