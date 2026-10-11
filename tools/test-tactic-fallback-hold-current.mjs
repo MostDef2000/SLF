@@ -117,7 +117,7 @@ assert.equal(normal.telemetry.recommendedPreset, normal.action.preset, 'non-hold
 
 // --- (b) unknown situation: no preset name is ever produced ------------------
 assert.equal(P.preferredPreset('nonexistent_situation'), null, 'unknown situation -> null');
-assert.equal(P.preferredPreset('pressure_counter'), 'MidBlock_Counter4411_neutr');
+assert.equal(P.preferredPreset('pressure_counter'), 'Mourinho_CompactCounter4411_neutr');
 assert.equal(P.preferredPreset(''), null, 'empty situation -> null');
 assert.equal(P.preferredPreset('stable_control'), 'Arteta_Control433_bal3', 'known situation still maps to its primary preset');
 for (const situation of R.situations) {

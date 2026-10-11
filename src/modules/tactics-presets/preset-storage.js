@@ -8,6 +8,9 @@
         return [
             'Compact_Counter_def3',
             'Bielsa_ChaosPress_att5',
+            'MidBlock_Control4231_neutr',
+            'MidBlock_Counter4411_neutr',
+            'Lead_Outlet4141_def1',
             'Mourinho_WeakSide_def3',
             'Henta_Hold_def3',
             'Pep_StandardControl_bal3',
@@ -89,6 +92,12 @@
     }
 
     const PresetStorage = {
+        resolvePresetId(name) {
+            const key = String(name || '');
+            const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+            return registry?.resolvePresetId?.(key) || key;
+        },
+
         isRetiredBuiltInPreset(name) {
             return isDeprecatedHentaPreset(name);
         },
@@ -97,6 +106,9 @@
             return [
                 'Compact_Counter_def3',
                 'Bielsa_ChaosPress_att5',
+                'MidBlock_Control4231_neutr',
+                'MidBlock_Counter4411_neutr',
+                'Lead_Outlet4141_def1',
                 'Mourinho_WeakSide_def3',
                 'Henta_Hold_def3',
                 'Pep_StandardControl_bal3',

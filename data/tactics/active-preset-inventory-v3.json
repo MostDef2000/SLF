@@ -281,7 +281,7 @@
       ],
       "fallbackEligible": false
     },
-    "MidBlock_Control4231_neutr": {
+    "Emery_BalancedControl4231_neutr": {
       "controls": {
         "def_line": "2",
         "press_line": "1",
@@ -308,7 +308,7 @@
       ],
       "fallbackEligible": false
     },
-    "MidBlock_Counter4411_neutr": {
+    "Mourinho_CompactCounter4411_neutr": {
       "controls": {
         "def_line": "1",
         "press_line": "2",
@@ -334,7 +334,7 @@
       ],
       "fallbackEligible": false
     },
-    "Lead_Outlet4141_def1": {
+    "Allegri_LeadManagement4141_def1": {
       "controls": {
         "def_line": "2",
         "press_line": "2",
@@ -480,7 +480,7 @@
       "rm",
       "st2"
     ],
-    "MidBlock_Control4231_neutr": [
+    "Emery_BalancedControl4231_neutr": [
       "gk",
       "ld",
       "cd1",
@@ -493,7 +493,7 @@
       "rw",
       "st2"
     ],
-    "MidBlock_Counter4411_neutr": [
+    "Mourinho_CompactCounter4411_neutr": [
       "gk",
       "ld",
       "cd1",
@@ -506,7 +506,7 @@
       "am2",
       "st2"
     ],
-    "Lead_Outlet4141_def1": [
+    "Allegri_LeadManagement4141_def1": [
       "gk",
       "ld",
       "cd1",
@@ -949,8 +949,8 @@
         "priority": []
       }
     },
-    "MidBlock_Control4231_neutr": {
-      "presetId": "MidBlock_Control4231_neutr",
+    "Emery_BalancedControl4231_neutr": {
+      "presetId": "Emery_BalancedControl4231_neutr",
       "role": "midblock_safe_control",
       "primarySituation": "midblock_safe_control",
       "allowedSituations": [
@@ -996,8 +996,8 @@
         "priority": []
       }
     },
-    "MidBlock_Counter4411_neutr": {
-      "presetId": "MidBlock_Counter4411_neutr",
+    "Mourinho_CompactCounter4411_neutr": {
+      "presetId": "Mourinho_CompactCounter4411_neutr",
       "role": "pressure_counter",
       "primarySituation": "pressure_counter",
       "allowedSituations": [
@@ -1045,8 +1045,8 @@
         "priority": []
       }
     },
-    "Lead_Outlet4141_def1": {
-      "presetId": "Lead_Outlet4141_def1",
+    "Allegri_LeadManagement4141_def1": {
+      "presetId": "Allegri_LeadManagement4141_def1",
       "role": "protect_lead_with_outlet",
       "primarySituation": "protect_lead_with_outlet",
       "allowedSituations": [
@@ -1124,9 +1124,9 @@
       "Klopp_Gegenpress_att4": 13,
       "Simeone_Compact442_def4": 12,
       "Simeone_LowBlock_def5": 17,
-      "MidBlock_Control4231_neutr": 7,
-      "MidBlock_Counter4411_neutr": 8,
-      "Lead_Outlet4141_def1": 10
+      "Emery_BalancedControl4231_neutr": 7,
+      "Mourinho_CompactCounter4411_neutr": 8,
+      "Allegri_LeadManagement4141_def1": 10
     },
     "Pep_BoxControl_bal2": {
       "Arteta_Control433_bal3": 8,
@@ -1138,9 +1138,9 @@
       "Klopp_Gegenpress_att4": 21,
       "Simeone_Compact442_def4": 8,
       "Simeone_LowBlock_def5": 9,
-      "MidBlock_Control4231_neutr": 7,
-      "MidBlock_Counter4411_neutr": 10,
-      "Lead_Outlet4141_def1": 6
+      "Emery_BalancedControl4231_neutr": 7,
+      "Mourinho_CompactCounter4411_neutr": 10,
+      "Allegri_LeadManagement4141_def1": 6
     },
     "Pep_PressCooldown_bal2": {
       "Arteta_Control433_bal3": 14,
@@ -1152,9 +1152,9 @@
       "Klopp_Gegenpress_att4": 23,
       "Simeone_Compact442_def4": 8,
       "Simeone_LowBlock_def5": 5,
-      "MidBlock_Control4231_neutr": 9,
-      "MidBlock_Counter4411_neutr": 10,
-      "Lead_Outlet4141_def1": 6
+      "Emery_BalancedControl4231_neutr": 9,
+      "Mourinho_CompactCounter4411_neutr": 10,
+      "Allegri_LeadManagement4141_def1": 6
     },
     "Pep_ControlledPush_att3": {
       "Arteta_Control433_bal3": 6,
@@ -1166,9 +1166,9 @@
       "Klopp_Gegenpress_att4": 7,
       "Simeone_Compact442_def4": 18,
       "Simeone_LowBlock_def5": 23,
-      "MidBlock_Control4231_neutr": 13,
-      "MidBlock_Counter4411_neutr": 12,
-      "Lead_Outlet4141_def1": 16
+      "Emery_BalancedControl4231_neutr": 13,
+      "Mourinho_CompactCounter4411_neutr": 12,
+      "Allegri_LeadManagement4141_def1": 16
     },
     "Pep_TwoThreeFive_att3": {
       "Arteta_Control433_bal3": 11,
@@ -1180,9 +1180,9 @@
       "Klopp_Gegenpress_att4": 6,
       "Simeone_Compact442_def4": 23,
       "Simeone_LowBlock_def5": 28,
-      "MidBlock_Control4231_neutr": 16,
-      "MidBlock_Counter4411_neutr": 17,
-      "Lead_Outlet4141_def1": 21
+      "Emery_BalancedControl4231_neutr": 16,
+      "Mourinho_CompactCounter4411_neutr": 17,
+      "Allegri_LeadManagement4141_def1": 21
     },
     "Conte_WingbackWidth_bal4": {
       "Arteta_Control433_bal3": 9,
@@ -1194,9 +1194,9 @@
       "Klopp_Gegenpress_att4": 8,
       "Simeone_Compact442_def4": 15,
       "Simeone_LowBlock_def5": 22,
-      "MidBlock_Control4231_neutr": 10,
-      "MidBlock_Counter4411_neutr": 9,
-      "Lead_Outlet4141_def1": 15
+      "Emery_BalancedControl4231_neutr": 10,
+      "Mourinho_CompactCounter4411_neutr": 9,
+      "Allegri_LeadManagement4141_def1": 15
     },
     "Klopp_Gegenpress_att4": {
       "Arteta_Control433_bal3": 13,
@@ -1208,9 +1208,9 @@
       "Klopp_Gegenpress_att4": 0,
       "Simeone_Compact442_def4": 23,
       "Simeone_LowBlock_def5": 28,
-      "MidBlock_Control4231_neutr": 16,
-      "MidBlock_Counter4411_neutr": 17,
-      "Lead_Outlet4141_def1": 21
+      "Emery_BalancedControl4231_neutr": 16,
+      "Mourinho_CompactCounter4411_neutr": 17,
+      "Allegri_LeadManagement4141_def1": 21
     },
     "Simeone_Compact442_def4": {
       "Arteta_Control433_bal3": 12,
@@ -1222,9 +1222,9 @@
       "Klopp_Gegenpress_att4": 23,
       "Simeone_Compact442_def4": 0,
       "Simeone_LowBlock_def5": 7,
-      "MidBlock_Control4231_neutr": 9,
-      "MidBlock_Counter4411_neutr": 6,
-      "Lead_Outlet4141_def1": 6
+      "Emery_BalancedControl4231_neutr": 9,
+      "Mourinho_CompactCounter4411_neutr": 6,
+      "Allegri_LeadManagement4141_def1": 6
     },
     "Simeone_LowBlock_def5": {
       "Arteta_Control433_bal3": 17,
@@ -1236,11 +1236,11 @@
       "Klopp_Gegenpress_att4": 28,
       "Simeone_Compact442_def4": 7,
       "Simeone_LowBlock_def5": 0,
-      "MidBlock_Control4231_neutr": 12,
-      "MidBlock_Counter4411_neutr": 13,
-      "Lead_Outlet4141_def1": 7
+      "Emery_BalancedControl4231_neutr": 12,
+      "Mourinho_CompactCounter4411_neutr": 13,
+      "Allegri_LeadManagement4141_def1": 7
     },
-    "MidBlock_Control4231_neutr": {
+    "Emery_BalancedControl4231_neutr": {
       "Arteta_Control433_bal3": 7,
       "Pep_BoxControl_bal2": 7,
       "Pep_PressCooldown_bal2": 9,
@@ -1250,11 +1250,11 @@
       "Klopp_Gegenpress_att4": 16,
       "Simeone_Compact442_def4": 9,
       "Simeone_LowBlock_def5": 12,
-      "MidBlock_Control4231_neutr": 0,
-      "MidBlock_Counter4411_neutr": 7,
-      "Lead_Outlet4141_def1": 7
+      "Emery_BalancedControl4231_neutr": 0,
+      "Mourinho_CompactCounter4411_neutr": 7,
+      "Allegri_LeadManagement4141_def1": 7
     },
-    "MidBlock_Counter4411_neutr": {
+    "Mourinho_CompactCounter4411_neutr": {
       "Arteta_Control433_bal3": 8,
       "Pep_BoxControl_bal2": 10,
       "Pep_PressCooldown_bal2": 10,
@@ -1264,11 +1264,11 @@
       "Klopp_Gegenpress_att4": 17,
       "Simeone_Compact442_def4": 6,
       "Simeone_LowBlock_def5": 13,
-      "MidBlock_Control4231_neutr": 7,
-      "MidBlock_Counter4411_neutr": 0,
-      "Lead_Outlet4141_def1": 10
+      "Emery_BalancedControl4231_neutr": 7,
+      "Mourinho_CompactCounter4411_neutr": 0,
+      "Allegri_LeadManagement4141_def1": 10
     },
-    "Lead_Outlet4141_def1": {
+    "Allegri_LeadManagement4141_def1": {
       "Arteta_Control433_bal3": 10,
       "Pep_BoxControl_bal2": 6,
       "Pep_PressCooldown_bal2": 6,
@@ -1278,9 +1278,9 @@
       "Klopp_Gegenpress_att4": 21,
       "Simeone_Compact442_def4": 6,
       "Simeone_LowBlock_def5": 7,
-      "MidBlock_Control4231_neutr": 7,
-      "MidBlock_Counter4411_neutr": 10,
-      "Lead_Outlet4141_def1": 0
+      "Emery_BalancedControl4231_neutr": 7,
+      "Mourinho_CompactCounter4411_neutr": 10,
+      "Allegri_LeadManagement4141_def1": 0
     }
   },
   "nearestPairs": [
@@ -1290,6 +1290,27 @@
         "Simeone_LowBlock_def5"
       ],
       "distance": 5
+    },
+    {
+      "pair": [
+        "Allegri_LeadManagement4141_def1",
+        "Pep_BoxControl_bal2"
+      ],
+      "distance": 6
+    },
+    {
+      "pair": [
+        "Allegri_LeadManagement4141_def1",
+        "Pep_PressCooldown_bal2"
+      ],
+      "distance": 6
+    },
+    {
+      "pair": [
+        "Allegri_LeadManagement4141_def1",
+        "Simeone_Compact442_def4"
+      ],
+      "distance": 6
     },
     {
       "pair": [
@@ -1307,36 +1328,43 @@
     },
     {
       "pair": [
-        "Lead_Outlet4141_def1",
-        "Pep_BoxControl_bal2"
-      ],
-      "distance": 6
-    },
-    {
-      "pair": [
-        "Lead_Outlet4141_def1",
-        "Pep_PressCooldown_bal2"
-      ],
-      "distance": 6
-    },
-    {
-      "pair": [
-        "Lead_Outlet4141_def1",
+        "Mourinho_CompactCounter4411_neutr",
         "Simeone_Compact442_def4"
       ],
       "distance": 6
     },
     {
       "pair": [
-        "MidBlock_Counter4411_neutr",
-        "Simeone_Compact442_def4"
+        "Allegri_LeadManagement4141_def1",
+        "Emery_BalancedControl4231_neutr"
       ],
-      "distance": 6
+      "distance": 7
+    },
+    {
+      "pair": [
+        "Allegri_LeadManagement4141_def1",
+        "Simeone_LowBlock_def5"
+      ],
+      "distance": 7
     },
     {
       "pair": [
         "Arteta_Control433_bal3",
-        "MidBlock_Control4231_neutr"
+        "Emery_BalancedControl4231_neutr"
+      ],
+      "distance": 7
+    },
+    {
+      "pair": [
+        "Emery_BalancedControl4231_neutr",
+        "Mourinho_CompactCounter4411_neutr"
+      ],
+      "distance": 7
+    },
+    {
+      "pair": [
+        "Emery_BalancedControl4231_neutr",
+        "Pep_BoxControl_bal2"
       ],
       "distance": 7
     },
@@ -1344,34 +1372,6 @@
       "pair": [
         "Klopp_Gegenpress_att4",
         "Pep_ControlledPush_att3"
-      ],
-      "distance": 7
-    },
-    {
-      "pair": [
-        "Lead_Outlet4141_def1",
-        "MidBlock_Control4231_neutr"
-      ],
-      "distance": 7
-    },
-    {
-      "pair": [
-        "Lead_Outlet4141_def1",
-        "Simeone_LowBlock_def5"
-      ],
-      "distance": 7
-    },
-    {
-      "pair": [
-        "MidBlock_Control4231_neutr",
-        "MidBlock_Counter4411_neutr"
-      ],
-      "distance": 7
-    },
-    {
-      "pair": [
-        "MidBlock_Control4231_neutr",
-        "Pep_BoxControl_bal2"
       ],
       "distance": 7
     },
@@ -1392,7 +1392,7 @@
     {
       "pair": [
         "Arteta_Control433_bal3",
-        "MidBlock_Counter4411_neutr"
+        "Mourinho_CompactCounter4411_neutr"
       ],
       "distance": 8
     },
@@ -1441,7 +1441,7 @@
     {
       "pair": [
         "Conte_WingbackWidth_bal4",
-        "MidBlock_Counter4411_neutr"
+        "Mourinho_CompactCounter4411_neutr"
       ],
       "distance": 9
     },
@@ -1454,14 +1454,14 @@
     },
     {
       "pair": [
-        "MidBlock_Control4231_neutr",
+        "Emery_BalancedControl4231_neutr",
         "Pep_PressCooldown_bal2"
       ],
       "distance": 9
     },
     {
       "pair": [
-        "MidBlock_Control4231_neutr",
+        "Emery_BalancedControl4231_neutr",
         "Simeone_Compact442_def4"
       ],
       "distance": 9
@@ -1475,15 +1475,22 @@
     },
     {
       "pair": [
-        "Arteta_Control433_bal3",
-        "Lead_Outlet4141_def1"
+        "Allegri_LeadManagement4141_def1",
+        "Arteta_Control433_bal3"
+      ],
+      "distance": 10
+    },
+    {
+      "pair": [
+        "Allegri_LeadManagement4141_def1",
+        "Mourinho_CompactCounter4411_neutr"
       ],
       "distance": 10
     },
     {
       "pair": [
         "Conte_WingbackWidth_bal4",
-        "MidBlock_Control4231_neutr"
+        "Emery_BalancedControl4231_neutr"
       ],
       "distance": 10
     },
@@ -1496,21 +1503,14 @@
     },
     {
       "pair": [
-        "Lead_Outlet4141_def1",
-        "MidBlock_Counter4411_neutr"
-      ],
-      "distance": 10
-    },
-    {
-      "pair": [
-        "MidBlock_Counter4411_neutr",
+        "Mourinho_CompactCounter4411_neutr",
         "Pep_BoxControl_bal2"
       ],
       "distance": 10
     },
     {
       "pair": [
-        "MidBlock_Counter4411_neutr",
+        "Mourinho_CompactCounter4411_neutr",
         "Pep_PressCooldown_bal2"
       ],
       "distance": 10
@@ -1531,14 +1531,14 @@
     },
     {
       "pair": [
-        "MidBlock_Control4231_neutr",
+        "Emery_BalancedControl4231_neutr",
         "Simeone_LowBlock_def5"
       ],
       "distance": 12
     },
     {
       "pair": [
-        "MidBlock_Counter4411_neutr",
+        "Mourinho_CompactCounter4411_neutr",
         "Pep_ControlledPush_att3"
       ],
       "distance": 12
@@ -1552,14 +1552,14 @@
     },
     {
       "pair": [
-        "MidBlock_Control4231_neutr",
+        "Emery_BalancedControl4231_neutr",
         "Pep_ControlledPush_att3"
       ],
       "distance": 13
     },
     {
       "pair": [
-        "MidBlock_Counter4411_neutr",
+        "Mourinho_CompactCounter4411_neutr",
         "Simeone_LowBlock_def5"
       ],
       "distance": 13
@@ -1580,8 +1580,8 @@
     },
     {
       "pair": [
-        "Conte_WingbackWidth_bal4",
-        "Lead_Outlet4141_def1"
+        "Allegri_LeadManagement4141_def1",
+        "Conte_WingbackWidth_bal4"
       ],
       "distance": 15
     },
@@ -1601,21 +1601,21 @@
     },
     {
       "pair": [
-        "Klopp_Gegenpress_att4",
-        "MidBlock_Control4231_neutr"
-      ],
-      "distance": 16
-    },
-    {
-      "pair": [
-        "Lead_Outlet4141_def1",
+        "Allegri_LeadManagement4141_def1",
         "Pep_ControlledPush_att3"
       ],
       "distance": 16
     },
     {
       "pair": [
-        "MidBlock_Control4231_neutr",
+        "Emery_BalancedControl4231_neutr",
+        "Klopp_Gegenpress_att4"
+      ],
+      "distance": 16
+    },
+    {
+      "pair": [
+        "Emery_BalancedControl4231_neutr",
         "Pep_TwoThreeFive_att3"
       ],
       "distance": 16
@@ -1637,13 +1637,13 @@
     {
       "pair": [
         "Klopp_Gegenpress_att4",
-        "MidBlock_Counter4411_neutr"
+        "Mourinho_CompactCounter4411_neutr"
       ],
       "distance": 17
     },
     {
       "pair": [
-        "MidBlock_Counter4411_neutr",
+        "Mourinho_CompactCounter4411_neutr",
         "Pep_TwoThreeFive_att3"
       ],
       "distance": 17
@@ -1671,8 +1671,15 @@
     },
     {
       "pair": [
-        "Klopp_Gegenpress_att4",
-        "Lead_Outlet4141_def1"
+        "Allegri_LeadManagement4141_def1",
+        "Klopp_Gegenpress_att4"
+      ],
+      "distance": 21
+    },
+    {
+      "pair": [
+        "Allegri_LeadManagement4141_def1",
+        "Pep_TwoThreeFive_att3"
       ],
       "distance": 21
     },
@@ -1680,13 +1687,6 @@
       "pair": [
         "Klopp_Gegenpress_att4",
         "Pep_BoxControl_bal2"
-      ],
-      "distance": 21
-    },
-    {
-      "pair": [
-        "Lead_Outlet4141_def1",
-        "Pep_TwoThreeFive_att3"
       ],
       "distance": 21
     },

@@ -235,9 +235,13 @@
         const productionNames = typeof BASE_PRESETS !== 'undefined' && BASE_PRESETS
             ? new Set(Object.keys(BASE_PRESETS).filter(name => name !== 'standard'))
             : new Set();
+        const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+        const resolve = name => registry?.resolvePresetId?.(name) || String(name);
         const observed = snapshot?.tacticTelemetry?.currentPreset;
-        if (observed && !productionNames.has(String(observed))) return String(observed);
-        if (fallback && !productionNames.has(String(fallback))) return String(fallback);
+        // A persisted legacy name of an active built-in is not a custom tactic.
+        // Without exact control-vector readback it must stay unknown.
+        if (observed && !productionNames.has(resolve(observed))) return String(observed);
+        if (fallback && !productionNames.has(resolve(fallback))) return String(fallback);
         return 'unknown';
     }
 

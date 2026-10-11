@@ -7,6 +7,7 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
 
     Object.assign(RecommendationEngine, {
     getPresetTitle(name) {
+        name = TacticPresetLibrary?.resolvePresetId?.(name) || name;
         const labels = typeof PresetStorage !== 'undefined' && PresetStorage.getAllLabels ? PresetStorage.getAllLabels() : {};
         return labels[name] || TacticPresetLibrary?.meta?.[name]?.title || name || '';
     },
@@ -85,7 +86,10 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
         if (!candidate?.name || !snapshot || snapshot.status === 'finished') return candidate;
 
         const progression = STATE.presetProgression || null;
-        const lastApplied = progression?.lastAppliedPreset || '';
+        const resolvePresetId = name => TacticPresetLibrary?.resolvePresetId?.(name) || name;
+        // Read legacy ID as the same canonical v10 identity without mutating
+        // the saved progression envelope or any historical match data.
+        const lastApplied = resolvePresetId(progression?.lastAppliedPreset) || '';
         if (!lastApplied || lastApplied === 'manual_change' || !TacticPresetLibrary?.meta?.[lastApplied]) {
             return Object.assign({}, candidate, { progressionAction: 'new_baseline' });
         }
@@ -104,7 +108,7 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
         const strongFailure = this.hasStrongPostApplyFailure(snapshot, context);
         const currentGroup = progression.family || this.getPresetGroup(lastApplied);
         const candidateGroup = this.getPresetGroup(candidate.name);
-        const previousPreset = progression.previousPreset || '';
+        const previousPreset = resolvePresetId(progression.previousPreset) || '';
         const allowFamilyChange = urgency.allowFamilyChange === true;
 
         if (qualityPositive && candidate.name !== lastApplied && !strongFailure) {

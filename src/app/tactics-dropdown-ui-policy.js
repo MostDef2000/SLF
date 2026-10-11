@@ -9,10 +9,12 @@ function applyTacticsDropdownUiPolicy() {
 
     function getTrainerSortKey(key, label) {
         const text = `${label || ''} ${key || ''}`.toLowerCase();
+        if (text.includes('allegri')) return 'allegri';
         if (text.includes('arteta')) return 'arteta';
         if (text.includes('bielsa')) return 'bielsa';
         if (text.includes('compact counter')) return 'compact';
         if (text.includes('conte')) return 'conte';
+        if (text.includes('emery')) return 'emery';
         if (text.includes('de zerbi') || text.includes('dezerbi')) return 'de zerbi';
         if (text.includes('henta')) return 'henta';
         if (text.includes('klopp')) return 'klopp';
@@ -65,7 +67,8 @@ function applyTacticsDropdownUiPolicy() {
             select.appendChild(option);
         });
 
-        if (items.some(item => item.key === current)) select.value = current;
+        const canonicalCurrent = PresetStorage.resolvePresetId?.(current) || current;
+        if (items.some(item => item.key === canonicalCurrent)) select.value = canonicalCurrent;
         else if (items.length) select.value = items[0].key;
 
         setTimeout(() => {

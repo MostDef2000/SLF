@@ -1,8 +1,8 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
-  "reviewedAt": "2026-08-23",
+  "reviewedAt": "2026-10-11",
   "reviewCandidateCount": 50,
-  "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains.",
+  "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains. Issue #333 extension: direct symbol-level review of two active Tactical Suite v10 modules containing exact read-only old preset aliases; no deletion or new runtime behavior authorized by this evidence.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
     "ACTIVE_BUT_MISNAMED": "Active code stored under a historical or misleading namespace.",
@@ -517,6 +517,26 @@
         "v9 (issue #325, PR #326): retired Compact_Counter_def3 removed from ACTIVE_PRESETS; the id remains in TACTIC_SIGNATURES marked legacy_retired for tactic detection only and is never selectable.",
         "No implicit preset fallback remains: invalid or absent decisions hold the current tactic with null preset (covered by tools/test-tactic-fallback-hold-current.mjs).",
         "Active path: schema slf_rule_decision_v9_tactical_suite, registry-aware recommendations; the legacy_retired signature is a detection alias pending symbol-level extraction in a future cleanup."
+      ]
+    },
+    {
+      "file": "src/modules/tactics-presets/active-preset-registry.js",
+      "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
+      "classification": "MIXED_ACTIVE_LEGACY",
+      "evidence": [
+        "Issue #333: this active registry publishes 12 coach-named v10 canonical production IDs via window.SLFActivePresetRegistry and installs exact same canonical numeric controls/roles into BASE_PRESETS. Bundle dependency and Node/browser v10 tests prove active reachability.",
+        "The literal legacy markers belong to exactly three closed old v10 preset aliases (MidBlock_Control4231_neutr, MidBlock_Counter4411_neutr, Lead_Outlet4141_def1). They are read-only compatibility inputs to resolvePresetId; all three IDs are in removed and cannot reappear in active choices.",
+        "No historic match, snapshot, event or effect is rewritten; generated release and published v9 cohorts are separate. Registry vectors and eleven-player formations were compared byte-for-byte with prior v10 by alias."
+      ]
+    },
+    {
+      "file": "src/modules/tactics-presets/tactic-preset-direction-policy.js",
+      "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
+      "classification": "MIXED_ACTIVE_LEGACY",
+      "evidence": [
+        "Issue #333: the active v10 direction-policy patch exports SLFTacticDirectionPolicy, installs current-action scorer and RecommendationEngine guards, and is loaded in bundle order after the canonical registry.",
+        "Legacy naming marks the explicit read-time ID compatibility boundary; input-only resolvePresetId maps exactly the three old v10 names before hard-veto/scoreCandidate/shortestStep and prior-progress state is normalized by the audited re-preset-family facade.",
+        "Production scoring weights, risk constraints, 12 eligible names, graph reachability and hold_current semantics are unchanged; targeted Node tests verify aliases and browser E2E checks canonical menu names. Never delete the module solely because its documented legacy names appear."
       ]
     }
   ],
