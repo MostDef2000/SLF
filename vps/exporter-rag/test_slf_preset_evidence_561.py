@@ -359,5 +359,43 @@ class TelemetryAnalyticsTest(unittest.TestCase):
         self.assertFalse(unverified["quality"]["readyForRetune"])
 
 
+    def test_coach_aliases_group_v10_history_without_mutating_raw_names(self):
+        stable_ts = int(module.dt.datetime(2026, 8, 1, tzinfo=module.dt.timezone.utc).timestamp() * 1000)
+        old_id = "MidBlock_Counter4411_neutr"
+        new_id = "Mourinho_CompactCounter4411_neutr"
+        rows = []
+        finished = []
+        for game, preset in (("legacy-v10", old_id), ("coach-v10", new_id)):
+            phase = phase_effect(game, "phase-1", preset=preset)
+            phase["ts"] = stable_ts
+            phase["telemetryContext"].update({
+                "libraryVersion": module.V10_LIBRARY,
+                "recommendationSchema": module.V10_RECOMMENDATION_SCHEMA,
+            })
+            phase["tacticContext"] = {"applicationStatus": "game_confirmed"}
+            rows.append(phase)
+            finished.append(result(game, score=(1, 0)))
+        report = module.build_report([], rows, finished)
+        self.assertEqual([module.preset_name(row) for row in rows], [old_id, new_id])
+        self.assertEqual([module.analysis_preset_name(row) for row in rows], [new_id, new_id])
+        self.assertEqual(report["counts"]["v10CurrentNamedPhaseEffects"], 2)
+        self.assertEqual(report["counts"]["v10LegacyAliasPhaseEffects"], 1)
+        self.assertEqual(report["counts"]["v10CurrentScoredConfirmedEffects"], 2)
+        self.assertEqual(report["counts"]["v10CurrentScoredConfirmedPresetCount"], 1)
+        grouped = [x for x in report["byPeriodPreset"] if x["presetName"] == new_id]
+        self.assertEqual(len(grouped), 1)
+        self.assertEqual(grouped[0]["sample"], 2)
+        self.assertFalse(report["quality"]["readyForRetune"])
+
+        historical = phase_effect("v9-record", "v9-phase", preset=old_id)
+        historical["ts"] = stable_ts
+        historical["telemetryContext"].update({
+            "libraryVersion": module.V9_LIBRARY,
+            "recommendationSchema": module.V9_RECOMMENDATION_SCHEMA,
+        })
+        self.assertEqual(module.analysis_preset_name(historical), old_id)
+        self.assertFalse(module.is_v10_current_phase_effect(historical))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
