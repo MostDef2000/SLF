@@ -36,9 +36,15 @@ V10_PRODUCTION_PRESETS = {
     "Arteta_Control433_bal3", "Pep_BoxControl_bal2", "Pep_PressCooldown_bal2",
     "Pep_ControlledPush_att3", "Pep_TwoThreeFive_att3", "Conte_WingbackWidth_bal4",
     "Klopp_Gegenpress_att4", "Simeone_Compact442_def4", "Simeone_LowBlock_def5",
-    "MidBlock_Control4231_neutr", "MidBlock_Counter4411_neutr",
-    "Lead_Outlet4141_def1",
+    "Emery_BalancedControl4231_neutr", "Mourinho_CompactCounter4411_neutr",
+    "Allegri_LeadManagement4141_def1",
 }
+V10_LEGACY_PRESET_ALIASES = {
+    "MidBlock_Control4231_neutr": "Emery_BalancedControl4231_neutr",
+    "MidBlock_Counter4411_neutr": "Mourinho_CompactCounter4411_neutr",
+    "Lead_Outlet4141_def1": "Allegri_LeadManagement4141_def1"
+}
+
 V9_PRODUCTION_PRESETS = {
     "Arteta_Control433_bal3", "Pep_BoxControl_bal2", "Pep_PressCooldown_bal2",
     "Pep_ControlledPush_att3", "Pep_TwoThreeFive_att3", "Conte_WingbackWidth_bal4",
@@ -314,12 +320,24 @@ def select_analysis_cohort(
     }
 
 
+def analysis_preset_name(row: Mapping[str, Any]) -> str:
+    """Map the same native v10 vectors for aggregate joins, never alter source rows.
+
+    Historical v8/v9 cohorts retain their original names.
+    """
+    raw = preset_name(row)
+    if (get_path(row, "telemetryContext.libraryVersion") == V10_LIBRARY
+            and get_path(row, "telemetryContext.recommendationSchema") == V10_RECOMMENDATION_SCHEMA):
+        return V10_LEGACY_PRESET_ALIASES.get(raw, raw)
+    return raw
+
+
 def is_v10_current_phase_effect(row: Mapping[str, Any]) -> bool:
     return (
         is_phase_effect(row)
         and get_path(row, "telemetryContext.libraryVersion") == V10_LIBRARY
         and get_path(row, "telemetryContext.recommendationSchema") == V10_RECOMMENDATION_SCHEMA
-        and preset_name(row) in V10_PRODUCTION_PRESETS
+        and analysis_preset_name(row) in V10_PRODUCTION_PRESETS
         and generator_period(row) == "stable_5_61"
     )
 
@@ -364,10 +382,10 @@ def build_report(
     context_groups: dict[tuple[str, str, str, str], list[Mapping[str, Any]]] = collections.defaultdict(list)
 
     for row in analysis_events:
-        event_groups[(generator_period(row), preset_name(row))].append(row)
+        event_groups[(generator_period(row), analysis_preset_name(row))].append(row)
     for row in analysis_effects:
         period = generator_period(row)
-        preset = preset_name(row)
+        preset = analysis_preset_name(row)
         effect_groups[(period, preset)].append(row)
         context_groups[(period, preset, score_state(row), minute_bucket(minute_of(row)))].append(row)
 
@@ -400,7 +418,7 @@ def build_report(
         row for row in analysis_effects
         if generator_period(row) == "stable_5_61" and preset_name(row) not in {"unknown", "manual_change"}
     ]
-    stable_presets = {preset_name(row) for row in stable_named}
+    stable_presets = {analysis_preset_name(row) for row in stable_named}
     # Historical named phases are descriptive only. v10 readiness additionally
     # requires a named production phase, explicit current version/schema,
     # game-confirmed application, known situation and a scored finished match.
@@ -427,7 +445,7 @@ def build_report(
         and score_state(row) in VALID_SCORE_STATES
         and game_id(row) in scored_games
     ]
-    eligible_v10_presets = {preset_name(row) for row in eligible_v10}
+    eligible_v10_presets = {analysis_preset_name(row) for row in eligible_v10}
     ready = len(eligible_v10) >= 60 and len(eligible_v10_presets) >= 5
 
     return {
@@ -456,6 +474,7 @@ def build_report(
             "v9CurrentScoredConfirmedPresetCount": len(eligible_v9_presets),
             "v9CurrentLinkedFinishedResults": len({game_id(row) for row in current_v9_phases} & scored_games),
             "v10CurrentNamedPhaseEffects": len(current_v10_phases),
+            "v10LegacyAliasPhaseEffects": sum(1 for row in current_v10_phases if preset_name(row) in V10_LEGACY_PRESET_ALIASES),
             "v10CurrentScoredConfirmedEffects": len(eligible_v10),
             "v10CurrentScoredConfirmedPresetCount": len(eligible_v10_presets),
             "v10CurrentLinkedFinishedResults": len({game_id(row) for row in current_v10_phases} & scored_games),
@@ -488,7 +507,7 @@ def build_effects_summary(events: Sequence[Mapping[str, Any]], effects: Sequence
     by_preset: dict[str, list[Mapping[str, Any]]] = collections.defaultdict(list)
     by_context: dict[tuple[str, str, str], list[Mapping[str, Any]]] = collections.defaultdict(list)
     for row in analysis_effects:
-        name = preset_name(row)
+        name = analysis_preset_name(row)
         by_preset[name].append(row)
         by_context[(name, score_state(row), minute_bucket(minute_of(row)))].append(row)
 
@@ -525,9 +544,9 @@ def build_effects_summary(events: Sequence[Mapping[str, Any]], effects: Sequence
 
 def build_events_summary(events: Sequence[Mapping[str, Any]], effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     analysis_events, _, cohort = select_analysis_cohort(events, effects)
-    by_preset = collections.Counter(preset_name(row) for row in analysis_events)
+    by_preset = collections.Counter(analysis_preset_name(row) for row in analysis_events)
     by_context = collections.Counter(
-        (preset_name(row), score_state(row), minute_bucket(minute_of(row)))
+        (analysis_preset_name(row), score_state(row), minute_bucket(minute_of(row)))
         for row in analysis_events
     )
     return {
