@@ -30,6 +30,15 @@ CORE_METRICS = ("myXG", "oppXG", "myShots", "oppShots", "myBadActionsPct")
 VALID_SCORE_STATES = {"winning", "losing", "draw"}
 V9_LIBRARY = "slf_tactic_suite_561_v9"
 V9_RECOMMENDATION_SCHEMA = "slf_rule_decision_v9_tactical_suite"
+V10_LIBRARY = "slf_tactic_suite_561_v10"
+V10_RECOMMENDATION_SCHEMA = "slf_rule_decision_v10_tactical_suite"
+V10_PRODUCTION_PRESETS = {
+    "Arteta_Control433_bal3", "Pep_BoxControl_bal2", "Pep_PressCooldown_bal2",
+    "Pep_ControlledPush_att3", "Pep_TwoThreeFive_att3", "Conte_WingbackWidth_bal4",
+    "Klopp_Gegenpress_att4", "Simeone_Compact442_def4", "Simeone_LowBlock_def5",
+    "MidBlock_Control4231_neutr", "MidBlock_Counter4411_neutr",
+    "Lead_Outlet4141_def1",
+}
 V9_PRODUCTION_PRESETS = {
     "Arteta_Control433_bal3", "Pep_BoxControl_bal2", "Pep_PressCooldown_bal2",
     "Pep_ControlledPush_att3", "Pep_TwoThreeFive_att3", "Conte_WingbackWidth_bal4",
@@ -305,6 +314,16 @@ def select_analysis_cohort(
     }
 
 
+def is_v10_current_phase_effect(row: Mapping[str, Any]) -> bool:
+    return (
+        is_phase_effect(row)
+        and get_path(row, "telemetryContext.libraryVersion") == V10_LIBRARY
+        and get_path(row, "telemetryContext.recommendationSchema") == V10_RECOMMENDATION_SCHEMA
+        and preset_name(row) in V10_PRODUCTION_PRESETS
+        and generator_period(row) == "stable_5_61"
+    )
+
+
 def is_v9_current_phase_effect(row: Mapping[str, Any]) -> bool:
     return (
         is_phase_effect(row)
@@ -382,7 +401,7 @@ def build_report(
         if generator_period(row) == "stable_5_61" and preset_name(row) not in {"unknown", "manual_change"}
     ]
     stable_presets = {preset_name(row) for row in stable_named}
-    # Historical named phases are descriptive only. v9 readiness additionally
+    # Historical named phases are descriptive only. v10 readiness additionally
     # requires a named production phase, explicit current version/schema,
     # game-confirmed application, known situation and a scored finished match.
     scored_games = {
@@ -398,7 +417,18 @@ def build_report(
         and game_id(row) in scored_games
     ]
     eligible_v9_presets = {preset_name(row) for row in eligible_v9}
-    ready = len(eligible_v9) >= 60 and len(eligible_v9_presets) >= 5
+    # The old v9 cohort remains visible as historical evidence, never
+    # authorizes ranking/retuning of the newly deployed v10 production suite.
+    current_v10_phases = [row for row in analysis_effects if is_v10_current_phase_effect(row)]
+    eligible_v10 = [
+        row for row in current_v10_phases
+        if get_path(row, "eligibility.eligibleForRanking") is True
+        and get_path(row, "tacticContext.applicationStatus") == "game_confirmed"
+        and score_state(row) in VALID_SCORE_STATES
+        and game_id(row) in scored_games
+    ]
+    eligible_v10_presets = {preset_name(row) for row in eligible_v10}
+    ready = len(eligible_v10) >= 60 and len(eligible_v10_presets) >= 5
 
     return {
         "schema": "slf_preset_evidence_561_v2",
@@ -425,6 +455,10 @@ def build_report(
             "v9CurrentScoredConfirmedEffects": len(eligible_v9),
             "v9CurrentScoredConfirmedPresetCount": len(eligible_v9_presets),
             "v9CurrentLinkedFinishedResults": len({game_id(row) for row in current_v9_phases} & scored_games),
+            "v10CurrentNamedPhaseEffects": len(current_v10_phases),
+            "v10CurrentScoredConfirmedEffects": len(eligible_v10),
+            "v10CurrentScoredConfirmedPresetCount": len(eligible_v10_presets),
+            "v10CurrentLinkedFinishedResults": len({game_id(row) for row in current_v10_phases} & scored_games),
         },
         "scriptVersions": {
             "events": dict(event_versions.most_common()),
@@ -434,8 +468,8 @@ def build_report(
             "readyForRetune": ready,
             "minimumStableNamedEffects": 60,
             "minimumStablePresetCount": 5,
-            "readinessCohort": "v9_current_scored_game_confirmed_phase_only",
-            "warning": None if ready else "Нет достаточной выборки подтверждённых и связанных с результатом фаз v9. Смешанная история 5.61 не является основанием для ретюнинга.",
+            "readinessCohort": "v10_current_scored_game_confirmed_phase_only",
+            "warning": None if ready else "Нет достаточной выборки подтверждённых и связанных с результатом фаз v10. Смешанная история 5.61 не является основанием для ретюнинга.",
         },
         "byPeriodPreset": by_period_preset,
         "byPeriodPresetContext": by_context[:2000],
@@ -444,7 +478,7 @@ def build_report(
             "For a game with v4 tactical-phase effects, legacy effects from the same game are excluded from the primary analysis cohort.",
             "No raw event or effect records are written to the public export.",
             "The transition cohort 2026-07-13 through 2026-07-22 is kept separate from stable generator 5.61 evidence.",
-            "readyForRetune requires exact v9 library/schema, game-confirmed applied controls and valid scored result linkage; legacy named effects never satisfy that gate.",
+            "readyForRetune requires exact v10 library/schema, game-confirmed applied controls and valid scored result linkage; legacy named effects never satisfy that gate.",
         ],
     }
 
