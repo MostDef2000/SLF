@@ -889,6 +889,30 @@ class SlfTacticsAudit252Test(unittest.TestCase):
         self.assertEqual(json.loads(results_path.read_text(encoding="utf-8")), payload)
 
 
+class Issue327ReadinessAndPurgeGateTest(unittest.TestCase):
+    """Run the two bounded #327 exporter/cleanup regressions from canonical CI."""
+
+    def test_invalid_result_cleanup_and_v9_readiness_regressions(self):
+        project_root = Path(__file__).resolve().parents[2]
+        for relative in (
+            "vps/ops/test_purge_invalid_match_results.py",
+            "vps/exporter-rag/test_slf_preset_evidence_561.py",
+        ):
+            with self.subTest(script=relative):
+                process = subprocess.run(
+                    [sys.executable, str(project_root / relative)],
+                    cwd=project_root,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+                self.assertEqual(
+                    process.returncode, 0,
+                    f"{relative} failed:\\n{process.stdout}\\n{process.stderr}",
+                )
+
+
 class FakeResponse:
     def __init__(self, payload):
         self.payload = payload
