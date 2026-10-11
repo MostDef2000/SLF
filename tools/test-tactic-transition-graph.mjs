@@ -62,22 +62,22 @@ const retired = new Set(R.retiredActive);
 // --- Static mirror of the v10 STEP graph (module-local in the policy) -----------
 const STEP = {
   "Arteta_Control433_bal3": [
-    "MidBlock_Control4231_neutr",
+    "Emery_BalancedControl4231_neutr",
     "Pep_BoxControl_bal2",
     "Pep_ControlledPush_att3",
     "Conte_WingbackWidth_bal4",
-    "Lead_Outlet4141_def1"
+    "Allegri_LeadManagement4141_def1"
   ],
   "Pep_BoxControl_bal2": [
     "Arteta_Control433_bal3",
-    "MidBlock_Control4231_neutr",
-    "MidBlock_Counter4411_neutr",
+    "Emery_BalancedControl4231_neutr",
+    "Mourinho_CompactCounter4411_neutr",
     "Pep_PressCooldown_bal2"
   ],
   "Pep_PressCooldown_bal2": [
     "Pep_BoxControl_bal2",
-    "MidBlock_Control4231_neutr",
-    "Lead_Outlet4141_def1"
+    "Emery_BalancedControl4231_neutr",
+    "Allegri_LeadManagement4141_def1"
   ],
   "Pep_ControlledPush_att3": [
     "Arteta_Control433_bal3",
@@ -99,28 +99,28 @@ const STEP = {
     "Pep_ControlledPush_att3"
   ],
   "Simeone_Compact442_def4": [
-    "Lead_Outlet4141_def1",
+    "Allegri_LeadManagement4141_def1",
     "Arteta_Control433_bal3",
     "Simeone_LowBlock_def5"
   ],
   "Simeone_LowBlock_def5": [
     "Simeone_Compact442_def4",
-    "Lead_Outlet4141_def1"
+    "Allegri_LeadManagement4141_def1"
   ],
-  "MidBlock_Control4231_neutr": [
+  "Emery_BalancedControl4231_neutr": [
     "Arteta_Control433_bal3",
     "Pep_BoxControl_bal2",
-    "MidBlock_Counter4411_neutr",
-    "Lead_Outlet4141_def1"
+    "Mourinho_CompactCounter4411_neutr",
+    "Allegri_LeadManagement4141_def1"
   ],
-  "MidBlock_Counter4411_neutr": [
-    "MidBlock_Control4231_neutr",
+  "Mourinho_CompactCounter4411_neutr": [
+    "Emery_BalancedControl4231_neutr",
     "Pep_BoxControl_bal2",
     "Pep_ControlledPush_att3"
   ],
-  "Lead_Outlet4141_def1": [
+  "Allegri_LeadManagement4141_def1": [
     "Simeone_Compact442_def4",
-    "MidBlock_Control4231_neutr",
+    "Emery_BalancedControl4231_neutr",
     "Pep_PressCooldown_bal2"
   ]
 };
