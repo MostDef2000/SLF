@@ -7,6 +7,7 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
 
     Object.assign(RecommendationEngine, {
     getPresetTitle(name) {
+        name = TacticPresetLibrary?.resolvePresetId?.(name) || name;
         const labels = typeof PresetStorage !== 'undefined' && PresetStorage.getAllLabels ? PresetStorage.getAllLabels() : {};
         return labels[name] || TacticPresetLibrary?.meta?.[name]?.title || name || '';
     },
