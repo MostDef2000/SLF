@@ -66,7 +66,7 @@ for(const id of retiredActive.concat(retired)){
 }
 const registrySource=source('src/modules/tactics-presets/active-preset-registry.js');
 assert.match(registrySource,/HISTORICAL_COMPACT_COUNTER/);
-assert.match(registrySource,/preset:\\{def_line:'1',press_line:'1',def_width:'2',press_intense:'2',build_type:'1',build_temp:'3',build_long:'4',build_fast:'4',style:'3',pass_risk:'2',dribble:'3',cross:'2',corner:'1',shot:'3',priority:\\[\\]\\}/,'historical Compact Counter remains unchanged');
+assert.ok(registrySource.includes("preset:{def_line:'1',press_line:'1',def_width:'2',press_intense:'2',build_type:'1',build_temp:'3',build_long:'4',build_fast:'4',style:'3',pass_risk:'2',dribble:'3',cross:'2',corner:'1',shot:'3',priority:[]}"),'historical Compact Counter remains unchanged');
 const native=JSON.parse(source('data/tactics/tactical-lab-contract-v1.json')).population.nativeControlDomains;
 const keys=['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot'];
 const table={
