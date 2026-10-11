@@ -3,11 +3,11 @@
 // Regression layer for the v9 hold_current contract (base c5ca7de + R1).
 //
 // v8 behavior these assertions catch (RED authenticity):
-//   - v8 choose() fell back to `ranked.eligible[0] || { preset:'Arteta_Control433_bal3', ... }`
+//   - v8 choose() fell back to `ranked.eligible[0] || { preset:'Emery_BalancedBase_v11', ... }`
 //     (tactic-preset-direction-policy.js:166 at c5ca7de) — v9 must return hold:true, name:null.
-//   - v8 selectRawPreset injected `'Arteta_Control433_bal3'` for any invalid/missing decision
+//   - v8 selectRawPreset injected `'Emery_BalancedBase_v11'` for any invalid/missing decision
 //     (policy:266 at c5ca7de) — v9 must return name:null + hold_current + fallbackReason.
-//   - v8 preferredPreset returned `|| 'Arteta_Control433_bal3'` for unknown situations
+//   - v8 preferredPreset returned `|| 'Emery_BalancedBase_v11'` for unknown situations
 //     (policy:328 at c5ca7de) — v9 must return null (no fallback literal anywhere).
 //
 // vm-sandbox harness: single concatenated bundle in one script scope (mirrors the
@@ -48,14 +48,14 @@ const P = sandbox.window.SLFTacticDirectionPolicy;
 const E = sandbox.window.SLFCurrentActionHintEngine;
 const RE = sandbox.__RE;
 assert.ok(R && P && E && RE, 'bundle installed registry, policy, engine and RecommendationEngine');
-assert.equal(P.version, '5.61-tactical-suite-v10.0', 'policy version v9.0');
-assert.equal(R.fallbackPolicy, '5.61-tactical-suite-v10-hold-current', 'registry fallbackPolicy is the v9 hold-current contract');
+assert.equal(P.version, '5.61-tactical-suite-v11.0', 'policy version v9.0');
+assert.equal(R.fallbackPolicy, '5.61-tactical-suite-v11-hold-current', 'registry fallbackPolicy is the v9 hold-current contract');
 
 // --- (a) hold branch: no eligible candidate -> hold_current, no preset --------
 // choose()/rank()/scoreCandidate() are closure-local inside the policy IIFE, so a
 // property patch on the exported policy object is bypassed. We cannot force a
 // full veto from public signals either: the v9 policy gives
-// Arteta_Control433_bal3 no hard veto at all (verified below). The hold branch is
+// Emery_BalancedBase_v11 no hard veto at all (verified below). The hold branch is
 // therefore exercised through the REAL closure path (rank -> choose -> hold) in a
 // dedicated sandbox whose v9-identity registry stub carries `active: []`, so the
 // active set is genuinely empty and choose() has no eligible candidate. Zero
@@ -66,8 +66,9 @@ const emergencyCtx = {
   pressureRisk: 90, signals: ['under_pressure', 'sustained_siege']
 };
 assert.equal(P.classifySituation(emergencyCtx), 'emergency_lock', 'emergency context classifies as emergency_lock');
-assert.equal(P.hardVeto('Arteta_Control433_bal3', emergencyCtx).vetoed, false, 'Arteta carries no hard veto in v9 (full veto not constructible via public signals)');
-assert.equal(P.hardVeto('Simeone_LowBlock_def5', emergencyCtx).vetoed, false, 'LowBlock is allowed in emergency_lock');
+assert.equal(P.hardVeto('Emery_BalancedBase_v11', emergencyCtx).vetoed, false, 'Emery has no veto in emergency context');
+assert.equal(P.hardVeto('Arteta_SafePossession_v11', {}).vetoed, true, 'Arteta is manual-only');
+assert.equal(P.hardVeto('Simeone_EmergencyBlock_v11', emergencyCtx).vetoed, false, 'LowBlock is allowed in emergency_lock');
 
 // Sandbox B: real closure path to the hold branch with an empty active set.
 const holdSandbox = {
@@ -79,8 +80,8 @@ const holdSandbox = {
 holdSandbox.window = holdSandbox;
 holdSandbox.globalThis = holdSandbox;
 holdSandbox.window.SLFActivePresetRegistry = {
-  suiteVersion: 'slf_tactic_suite_561_v10',
-  recommendationSchema: 'slf_rule_decision_v10_tactical_suite',
+  suiteVersion: 'slf_tactic_suite_561_v11',
+  recommendationSchema: 'slf_rule_decision_v11_tactical_suite',
   active: [],
   defaultRiskAppetite: 'standard',
   meta: {},
@@ -93,35 +94,39 @@ const holdEngine = holdSandbox.window.SLFCurrentActionHintEngine;
 assert.ok(holdSandbox.window.SLFTacticDirectionPolicy, 'policy installs on a v9-identity registry with an empty active set');
 const holdResult = holdEngine.run({});
 assert.equal(holdResult.action.preset, null, 'hold: action.preset is null (no fallback preset injected)');
-assert.notEqual(holdResult.action.preset, 'Arteta_Control433_bal3', 'v8-style Arteta fallback must not be injected');
+assert.notEqual(holdResult.action.preset, 'Emery_BalancedBase_v11', 'v8-style Arteta fallback must not be injected');
 assert.equal(holdResult.action.rawPreset, null, 'hold: rawPreset null');
 assert.equal(holdResult.action.decision, 'hold_current');
-assert.equal(holdResult.action.ruleId, 'suite_v10_hold_current');
+assert.equal(holdResult.action.ruleId, 'suite_v11_hold_current');
 assert.equal(holdResult.action.guardType, 'hold_current');
 assert.equal(holdResult.action.fallbackReason, 'no_eligible_candidate');
 assert.equal(holdResult.action.guardReason, 'no production preset fallback is allowed');
 assert.equal(holdResult.action.score, 0);
-assert.equal(holdResult.schema, 'slf_rule_decision_v10_tactical_suite');
-assert.equal(holdResult.libraryVersion, 'slf_tactic_suite_561_v10');
+assert.equal(holdResult.schema, 'slf_rule_decision_v11_tactical_suite');
+assert.equal(holdResult.libraryVersion, 'slf_tactic_suite_561_v11');
 assert.equal(holdResult.telemetry.recommendedPreset, null, 'hold: telemetry.recommendedPreset null');
 assert.equal(holdResult.telemetry.recommendationState, 'fallback_hold', 'hold: telemetry.recommendationState fallback_hold');
-assert.equal(holdResult.telemetry.libraryVersion, 'slf_tactic_suite_561_v10');
+assert.equal(holdResult.telemetry.libraryVersion, 'slf_tactic_suite_561_v11');
 assert.equal(holdResult.action.riskAppetite, 'standard');
 
 // Non-hold sanity (sandbox A, real bundle): normal contexts still select an active preset (no over-holding).
 const normal = E.run({ gameId: 'g1', minute: 10, stats: [], myTeam: 1 }, { minute: 10 });
 assert.ok(R.active.includes(normal.action.preset), `normal run selects an active preset (${normal.action.preset})`);
-assert.equal(normal.action.guardType, 'suite_v10_selection', 'non-hold action keeps the v9 selection guard');
-assert.equal(normal.action.ruleId, `suite_v10_${normal.situationKey}`, 'non-hold ruleId names the situation');
+assert.equal(normal.action.guardType, 'suite_v11_selection', 'non-hold action keeps the v9 selection guard');
+assert.equal(normal.action.ruleId, `suite_v11_${normal.situationKey}`, 'non-hold ruleId names the situation');
 assert.equal(normal.telemetry.recommendedPreset, normal.action.preset, 'non-hold telemetry mirrors the selected preset');
 
 // --- (b) unknown situation: no preset name is ever produced ------------------
 assert.equal(P.preferredPreset('nonexistent_situation'), null, 'unknown situation -> null');
-assert.equal(P.preferredPreset('pressure_counter'), 'Mourinho_CompactCounter4411_neutr');
+assert.equal(P.preferredPreset('pressure_counter'), 'Mourinho_CleanCounter_v11');
 assert.equal(P.preferredPreset(''), null, 'empty situation -> null');
-assert.equal(P.preferredPreset('stable_control'), 'Arteta_Control433_bal3', 'known situation still maps to its primary preset');
+assert.equal(P.preferredPreset('default_start'), 'Emery_BalancedBase_v11', 'v11 fixed-lineup mode defaults to Emery');
 for (const situation of R.situations) {
-  assert.ok(typeof P.preferredPreset(situation) === 'string' && R.active.includes(P.preferredPreset(situation)), `${situation} maps to an active preset`);
+  if (situation === 'possession_control') {
+    assert.equal(P.preferredPreset(situation),null,'Arteta is manual-only, no auto recommendation');
+    continue;
+  }
+  assert.ok(typeof P.preferredPreset(situation) === 'string' && R.active.includes(P.preferredPreset(situation)), `${situation} maps to an active mode`);
 }
 
 // --- (c) selectRawPreset hold paths -------------------------------------------
@@ -136,10 +141,10 @@ assert.equal(removed.fallbackReason, 'invalid_preset', 'removed preset id -> inv
 // diagnostic ruleDecision passthrough retains the raw (invalid) decision.
 assert.equal(removedSnap.ruleDecision, stubDecision, 'invalid_preset hold: raw decision kept on the snapshot as diagnostic input');
 assert.equal(removedSnap.tacticTelemetry.recommendedPreset, null, 'invalid_preset hold: retired preset id never survives into canonical telemetry');
-assert.equal(removedSnap.tacticTelemetry.libraryVersion, 'slf_tactic_suite_561_v10', 'invalid_preset hold: snapshot telemetry carries the v9 library version');
+assert.equal(removedSnap.tacticTelemetry.libraryVersion, 'slf_tactic_suite_561_v11', 'invalid_preset hold: snapshot telemetry carries the v9 library version');
 
 E.run = () => null;
-const priorDecision = { action: { preset: 'Arteta_Control433_bal3', reason: 'prior decision from an earlier tick' } };
+const priorDecision = { action: { preset: 'Emery_BalancedBase_v11', reason: 'prior decision from an earlier tick' } };
 const noDecisionSnap = { ruleDecision: priorDecision };
 const noDecision = RE.selectRawPreset(noDecisionSnap, {});
 assert.equal(noDecision.name, null, 'no decision -> name null');
@@ -152,13 +157,13 @@ RE.selectRawPreset(freshSnap, {});
 assert.equal(freshSnap.ruleDecision, null, 'no_decision hold: fresh snapshot keeps ruleDecision null');
 assert.equal(freshSnap.tacticTelemetry.recommendedPreset, null, 'no_decision hold: fresh snapshot telemetry carries no recommendation');
 
-E.run = () => ({ action: { preset: 'Arteta_Control433_bal3', reason: 'ok' } });
+E.run = () => ({ action: { preset: 'Emery_BalancedBase_v11', reason: 'ok' } });
 const validSnap = {};
 const valid = RE.selectRawPreset(validSnap, {});
-assert.equal(valid.name, 'Arteta_Control433_bal3', 'valid active preset passes through');
-assert.equal(valid.progressionAction, 'suite_v10_scored', 'valid preset keeps the v9 scored progression');
-assert.equal(validSnap.tacticTelemetry.recommendedPreset, 'Arteta_Control433_bal3', 'positive control: valid path stamps the selected preset into canonical telemetry');
-assert.equal(RE.__tacticSuiteV10Installed, true, 'RE v9 flag');
+assert.equal(valid.name, 'Emery_BalancedBase_v11', 'valid active preset passes through');
+assert.equal(valid.progressionAction, 'suite_v11_scored', 'valid preset keeps the v9 scored progression');
+assert.equal(validSnap.tacticTelemetry.recommendedPreset, 'Emery_BalancedBase_v11', 'positive control: valid path stamps the selected preset into canonical telemetry');
+assert.equal(RE.__tacticSuiteV11Installed, true, 'RE v9 flag');
 assert.equal(RE.__directionPolicySelectRawPresetApplied, true, 'RE selectRawPreset v9 flag');
 
 // --- (d) mixed-stack guard: v8 registry + v9 policy must not install ----------
@@ -175,7 +180,7 @@ assert.equal(guardSandbox.window.SLFTacticDirectionPolicy, undefined, 'install g
 const rows = E.toPlanRows({ action: { preset: null, decision: 'hold_current', score: 0, reason: 'hold' }, candidates: [], confidence: { level: 'low' }, margin: 0 });
 const holdRow = rows.find(row => row.startsWith('Рекомендация'));
 assert.equal(holdRow, 'Рекомендация отсутствует — оставить текущую тактику', 'hold plan row text without preset identity');
-assert.ok(!rows.some(row => row.includes('Arteta_Control433_bal3')), 'no preset id leaks into any hold plan row');
+assert.ok(!rows.some(row => row.includes('Emery_BalancedBase_v11')), 'no preset id leaks into any hold plan row');
 assert.ok(rows.some(row => row.startsWith('Режим: hold_current')), 'mode row reflects hold_current');
 
 // --- (f) static source guard: no Arteta fallback literal in the policy --------
@@ -184,4 +189,4 @@ for (const pattern of [/\|\|\s*'Arteta/, /find\([^)]*Arteta/, /\?\s*'Arteta/]) {
   assert.equal(pattern.test(policySource), false, `policy source must not contain an Arteta fallback literal (${pattern})`);
 }
 
-console.log('tactical suite v9 fallback/hold-current contract: OK');
+console.log('tactical suite v11 fixed-lineup fallback/hold-current contract: OK');
