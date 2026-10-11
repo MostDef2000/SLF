@@ -896,6 +896,7 @@ class Issue327ReadinessAndPurgeGateTest(unittest.TestCase):
         project_root = Path(__file__).resolve().parents[2]
         for relative in (
             "vps/ops/test_purge_invalid_match_results.py",
+            "vps/exporter-rag/test_slf_manifest_integrity.py",
             "vps/exporter-rag/test_slf_preset_evidence_561.py",
         ):
             with self.subTest(script=relative):
