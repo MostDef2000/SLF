@@ -110,4 +110,30 @@ const change={...Object.fromEntries(controls.map(key=>[key,'2'])),priority:[]};
  assert.equal(result.ok,false);
  assert.equal(h.writes.length,0,'not safe to mutate without original rollback option');
 }
+// #335: the 11 players stay in the same slots; RW and RM are alternatives
+// chosen by the user before kickoff. No formation mutation is part of apply.
+{
+ const h=harness();
+ const rw=['gk','ld','cd1','cd3','rd','dm2','cm2','lw','am1','rw','st2'];
+ const rm=rw.map(x=>x==='rw'?'rm':x);
+ const profile={formationVariants:{rw,rm}};
+ for(const [variant,positions] of [['rw',rw],['rm',rm]]) {
+  let lineupChanges=0;
+  h.bridge.readFormation=()=>positions.slice().sort();
+  h.bridge.applyFormation=()=>{lineupChanges++;throw Error('formation must not be changed');};
+  h.bridge.saveLiveLineup=()=>{lineupChanges++;throw Error('save must not be used');};
+  const before=h.bridge.inspectFixedLineup(profile);
+  assert.equal(before.ok,true,variant+' formation matches');
+  assert.equal(before.variant,variant);
+  const applied=await h.bridge.applyTacticObject(change,{strict:true,source:'v11:fixed-lineup'});
+  assert.equal(applied.ok,true);
+  const after=h.bridge.inspectFixedLineup(profile);
+  assert.equal(after.ok,true);
+  assert.equal(after.variant,variant);
+  assert.equal(lineupChanges,0);
+ }
+ h.bridge.readFormation=()=>rw.map(x=>x==='cd3'?'cd2':x).sort();
+ assert.equal(h.bridge.inspectFixedLineup(profile).ok,false,'CD2 is not a user-approved fixed slot');
+}
+console.log('v11 RW/RM fixed lineup read-only control application: OK');
 console.log('v10 tactic bridge native preflight and rollback: OK');
