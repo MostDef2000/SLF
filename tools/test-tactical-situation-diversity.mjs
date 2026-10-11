@@ -269,6 +269,9 @@ assert.equal(/EXP-561-P03-/.test(registrySource),false,'P03 experimental identit
 // Registry<->inventory sync: the diversity run also enforces the canonical
 // inventory is in sync with the registry (belt-and-suspenders with the
 // dedicated CI step in quality-integration.yml).
+const bridgeOut=execFileSync(process.execPath,['tools/test-tactic-bridge-v10.mjs'],{cwd:fileURLToPath(root),encoding:'utf8'});
+assert.match(bridgeOut,/v10 tactic bridge native preflight and rollback: OK/);
+
 const syncOut=execFileSync(process.execPath,['tools/sync-active-preset-inventory.mjs','--check'],{cwd:fileURLToPath(root),encoding:'utf8'});
 assert.match(syncOut,/ok: .*active-preset-inventory-v3\.json in sync/,'active-preset inventory must be in sync with the registry');
 
