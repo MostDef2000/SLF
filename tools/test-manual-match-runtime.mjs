@@ -238,6 +238,28 @@ function createHarness({
   assert.equal('beforeSnapshot' in manualEvent.payload, false);
   assert.equal('snapshot' in manualEvent.payload, false);
   assert.equal(manualEvent.payload.tacticTelemetry.transitions, undefined);
+  assert.equal(manualEvent.payload.applicationStatus, 'applied_unverified');
+  assert.equal(manualEvent.payload.afterControls.def_line, '2');
+  assert.equal(manualEvent.payload.beforeControls.def_line, '1');
+  assert.ok(manualEvent.payload.fromFingerprint && manualEvent.payload.toFingerprint);
+  assert.equal(manualEvent.payload.changedKeys.includes('def_line'), true);
+  assert.equal(manualEvent.payload.verification, 'dom_change_only_no_game_ack');
+
+  // No 500ms debounce: every distinct control change produces a row even
+  // when all three edits occur within one game minute.
+  harness.setTactic({ def_line: '1', press_line: '1', priority: [] });
+  harness.listeners.change({ target: { name: 'def_line', matches: selector => selector.includes('input[type="radio"]') } });
+  harness.setTactic({ def_line: '2', press_line: '1', priority: [] });
+  harness.listeners.change({ target: { name: 'def_line', matches: selector => selector.includes('input[type="radio"]') } });
+  await new Promise(resolve => setTimeout(resolve, 35));
+  const manualEvents = harness.posted.filter(item => item.collection === 'preset_events_v2' && item.payload.type === 'manual_change');
+  assert.equal(manualEvents.length, 3, 'rapid A -> B -> A events must not be collapsed');
+  assert.equal(new Set(manualEvents.map(item => item.payload.eventKey)).size, 3, 'every change must have a stable sequential event key');
+  assert.deepEqual(manualEvents.map(item => item.payload.applicationSequence), [1, 2, 3]);
+  const revised = harness.context.SnapshotEngine.build();
+  assert.equal(revised.tacticalControlState.controls.def_line, '2');
+  assert.equal(revised.tacticalControlState.applicationStatus, 'applied_unverified');
+  assert.equal(revised.tacticalApplicationSummary.controlChangeSequence, 3);
 
   const phaseEffect = harness.posted.find(item => item.collection === 'preset_effects_v2' && item.payload.eventType === 'tactical_phase');
   assert.ok(phaseEffect, 'previous tactical phase was not closed on tactic change');
