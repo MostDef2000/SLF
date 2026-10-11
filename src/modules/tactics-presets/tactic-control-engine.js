@@ -99,6 +99,9 @@
     }
 
     async function applyPresetAsync(name) {
+        // Allow an old persisted v10 selection without reintroducing the old
+        // ID into active preset controls or recording it as a new source ID.
+        name = PresetStorage.resolvePresetId?.(name) || name;
         const presets = PresetStorage.getAllPresets();
         const preset = presets[name];
 
