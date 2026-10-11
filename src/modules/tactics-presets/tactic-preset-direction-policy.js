@@ -1,4 +1,4 @@
-// Generator 5.61 Tactical Suite v9 Recommendation Policy
+// Generator 5.61 Tactical Suite v10 Recommendation Policy
 // ============================================================
 // The active registry owns tactic data/UI identity. This layer makes the
 // registry decision canonical for Coach Mode, progression and telemetry.
@@ -8,7 +8,7 @@
 (function tacticPresetDirectionPolicy() {
     'use strict';
 
-    const VERSION = '5.61-tactical-suite-v9.0';
+    const VERSION = '5.61-tactical-suite-v10.0';
     const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
     const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
     if (!registry || !engine || window.SLFTacticDirectionPolicy?.version === VERSION) return;
@@ -16,7 +16,7 @@
     // v9 install guard: the policy only installs on a registry that carries the v9 suite
     // identity. SUITE must NOT be derived before this check, otherwise a stale v8 registry
     // would satisfy a self-referential comparison and silently install a mixed stack.
-    const EXPECTED_SUITE = 'slf_tactic_suite_561_v9';
+    const EXPECTED_SUITE = 'slf_tactic_suite_561_v10';
     if (registry.suiteVersion !== EXPECTED_SUITE) return;
     const SUITE = registry.suiteVersion;
     const SCHEMA = registry.recommendationSchema;
@@ -24,31 +24,9 @@
     const ACTIVE_SET = new Set(ACTIVE);
     const DEFAULT_RISK = registry.defaultRiskAppetite || 'standard';
 
-    const STEP = {
-        Arteta_Control433_bal3:['Pep_BoxControl_bal2','Pep_ControlledPush_att3','Conte_WingbackWidth_bal4','Simeone_Compact442_def4'],
-        Pep_BoxControl_bal2:['Arteta_Control433_bal3','Pep_PressCooldown_bal2'],
-        Pep_PressCooldown_bal2:['Pep_BoxControl_bal2','Arteta_Control433_bal3','Simeone_Compact442_def4'],
-        Pep_ControlledPush_att3:['Arteta_Control433_bal3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4'],
-        Pep_TwoThreeFive_att3:['Pep_ControlledPush_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4'],
-        Conte_WingbackWidth_bal4:['Arteta_Control433_bal3','Pep_ControlledPush_att3','Pep_TwoThreeFive_att3'],
-        Simeone_Compact442_def4:['Arteta_Control433_bal3','Simeone_LowBlock_def5','Pep_PressCooldown_bal2'],
-        Simeone_LowBlock_def5:['Simeone_Compact442_def4','Pep_BoxControl_bal2'],
-        Klopp_Gegenpress_att4:['Pep_TwoThreeFive_att3','Pep_ControlledPush_att3','Bielsa_ChaosPress_att5'],
-        Bielsa_ChaosPress_att5:['Klopp_Gegenpress_att4']
-    };
+    const STEP = {"Arteta_Control433_bal3":["MidBlock_Control4231_neutr","Pep_BoxControl_bal2","Pep_ControlledPush_att3","Lead_Outlet4141_def1"],"Pep_BoxControl_bal2":["Arteta_Control433_bal3","MidBlock_Control4231_neutr","MidBlock_Counter4411_neutr","Pep_PressCooldown_bal2"],"Pep_PressCooldown_bal2":["Pep_BoxControl_bal2","MidBlock_Control4231_neutr","Lead_Outlet4141_def1"],"Pep_ControlledPush_att3":["Arteta_Control433_bal3","Pep_TwoThreeFive_att3","Conte_WingbackWidth_bal4"],"Pep_TwoThreeFive_att3":["Pep_ControlledPush_att3","Conte_WingbackWidth_bal4","Klopp_Gegenpress_att4"],"Conte_WingbackWidth_bal4":["Arteta_Control433_bal3","Pep_ControlledPush_att3","Pep_TwoThreeFive_att3"],"Klopp_Gegenpress_att4":["Pep_TwoThreeFive_att3","Pep_ControlledPush_att3"],"Simeone_Compact442_def4":["Lead_Outlet4141_def1","Arteta_Control433_bal3","Simeone_LowBlock_def5"],"Simeone_LowBlock_def5":["Simeone_Compact442_def4","Lead_Outlet4141_def1"],"MidBlock_Control4231_neutr":["Arteta_Control433_bal3","Pep_BoxControl_bal2","MidBlock_Counter4411_neutr","Lead_Outlet4141_def1"],"MidBlock_Counter4411_neutr":["MidBlock_Control4231_neutr","Pep_BoxControl_bal2","Pep_ControlledPush_att3"],"Lead_Outlet4141_def1":["Simeone_Compact442_def4","MidBlock_Control4231_neutr","Pep_PressCooldown_bal2"]};
 
-    const SCORE_BY_SITUATION = {
-        stable_control:{Arteta_Control433_bal3:68,Pep_BoxControl_bal2:34,Pep_ControlledPush_att3:14},
-        pressure_escape:{Pep_BoxControl_bal2:74,Arteta_Control433_bal3:36,Pep_PressCooldown_bal2:28},
-        press_cooldown:{Pep_PressCooldown_bal2:76,Pep_BoxControl_bal2:38,Arteta_Control433_bal3:26},
-        controlled_chase:{Pep_ControlledPush_att3:72,Pep_TwoThreeFive_att3:38,Arteta_Control433_bal3:18},
-        positional_siege:{Pep_TwoThreeFive_att3:74,Pep_ControlledPush_att3:48,Conte_WingbackWidth_bal4:24},
-        width_attack:{Conte_WingbackWidth_bal4:76,Pep_ControlledPush_att3:34,Pep_TwoThreeFive_att3:28},
-        protect_lead:{Simeone_Compact442_def4:74,Arteta_Control433_bal3:48,Pep_PressCooldown_bal2:24},
-        emergency_lock:{Simeone_LowBlock_def5:84,Simeone_Compact442_def4:46,Pep_BoxControl_bal2:18},
-        late_high_pressure:{Klopp_Gegenpress_att4:78,Pep_ControlledPush_att3:54,Pep_TwoThreeFive_att3:44},
-        final_all_in:{Bielsa_ChaosPress_att5:90,Klopp_Gegenpress_att4:58,Pep_ControlledPush_att3:32}
-    };
+    const SCORE_BY_SITUATION = {"stable_control":{"Arteta_Control433_bal3":68,"MidBlock_Control4231_neutr":51,"Pep_BoxControl_bal2":35},"midblock_safe_control":{"MidBlock_Control4231_neutr":82,"Arteta_Control433_bal3":46,"Pep_BoxControl_bal2":32},"pressure_escape":{"Pep_BoxControl_bal2":74,"MidBlock_Control4231_neutr":46,"Pep_PressCooldown_bal2":28},"pressure_counter":{"MidBlock_Counter4411_neutr":82,"Pep_BoxControl_bal2":48,"MidBlock_Control4231_neutr":42},"press_cooldown":{"Pep_PressCooldown_bal2":76,"MidBlock_Control4231_neutr":48,"Pep_BoxControl_bal2":38},"controlled_chase":{"Pep_ControlledPush_att3":72,"Arteta_Control433_bal3":26,"Pep_TwoThreeFive_att3":24},"positional_siege":{"Pep_TwoThreeFive_att3":74,"Pep_ControlledPush_att3":50,"Conte_WingbackWidth_bal4":31},"width_attack":{"Conte_WingbackWidth_bal4":76,"Pep_ControlledPush_att3":37,"Pep_TwoThreeFive_att3":26},"protect_lead":{"Simeone_Compact442_def4":74,"Lead_Outlet4141_def1":68,"MidBlock_Control4231_neutr":38},"protect_lead_with_outlet":{"Lead_Outlet4141_def1":86,"Simeone_Compact442_def4":52,"MidBlock_Control4231_neutr":44},"emergency_lock":{"Simeone_LowBlock_def5":84,"Lead_Outlet4141_def1":48,"Simeone_Compact442_def4":46},"late_high_pressure":{"Klopp_Gegenpress_att4":79,"Pep_ControlledPush_att3":56,"Pep_TwoThreeFive_att3":44}};
 
     function has(context, key) {
         return Array.isArray(context?.signals) && context.signals.includes(key)
@@ -86,15 +64,25 @@
 
     function classify(context = {}) {
         const c = normalizedContext(context);
-        if (c.scoreState === 'losing' && c.minute >= 84 && c.attackNeed >= 75 && c.lowBadActions && !c.pressFatigueRisk) return 'final_all_in';
         if (c.emergencyLockRequired || (c.scoreState === 'winning' && c.minute >= 84 && c.underPressure && c.pressureRisk >= 55)) return 'emergency_lock';
         if (c.pressFatigueRisk && !(c.scoreState === 'losing' && c.minute >= 70)) return 'press_cooldown';
-        if (c.scoreState === 'winning' && c.minute >= 65) return 'protect_lead';
-        if (c.underPressure) return 'pressure_escape';
+        if (c.scoreState === 'winning' && c.minute >= 65) {
+            return c.counterExitAvailable && !c.counterExitBlocked && !c.highBadActions
+                ? 'protect_lead_with_outlet' : 'protect_lead';
+        }
+        // Never choose counter from pressure alone: the clean first pass
+        // must be explicitly observable, and pressure/fatigue vetoes apply.
+        if (c.underPressure) {
+            if (c.counterExitAvailable && !c.counterExitBlocked && !c.highBadActions && !c.pressFatigueRisk)
+                return 'pressure_counter';
+            return 'pressure_escape';
+        }
         if (c.centerClosed && c.wideQuality && !c.ownCrossesBad && !c.opponentCrossesDangerous) return 'width_attack';
         if (c.scoreState === 'losing' && c.minute >= 72 && c.attackNeed >= 65 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat) return 'late_high_pressure';
         if ((c.attackingMomentum || c.attackNeed >= 58) && c.minute >= 55 && !c.transitionThreat && !c.highBadActions && !c.pressFatigueRisk) return 'positional_siege';
         if ((c.scoreState === 'losing' && c.minute >= 45) || c.attackNeed >= 38) return 'controlled_chase';
+        const strengthGap = Number(c.strengthGap ?? c.myStrengthGap ?? 0);
+        if (c.transitionThreat || (Number.isFinite(strengthGap) && strengthGap <= -8) || has(c, 'opponent_stronger')) return 'midblock_safe_control';
         return 'stable_control';
     }
 
@@ -113,19 +101,20 @@
         const reasons = [];
         if (!ACTIVE_SET.has(name)) reasons.push('preset отсутствует в active registry');
         if (name === 'Simeone_LowBlock_def5' && situation !== 'emergency_lock') reasons.push('Low Block только временный emergency lock');
+        if (name === 'MidBlock_Counter4411_neutr' && (!c.underPressure || !c.counterExitAvailable || c.counterExitBlocked || c.highBadActions || c.pressFatigueRisk)) reasons.push('Контратака только с подтверждённым чистым выходом');
+        if (name === 'Lead_Outlet4141_def1' && (c.scoreState !== 'winning' || !c.counterExitAvailable || c.counterExitBlocked || c.highBadActions)) reasons.push('Удержание с выходом только при преимуществе и доступном первом пасе');
         if (name === 'Simeone_Compact442_def4' && c.scoreState === 'losing') reasons.push('защитный 4-4-2 запрещён при проигрыше');
         if (name === 'Pep_PressCooldown_bal2' && c.scoreState === 'losing' && c.minute >= 70 && c.attackNeed >= 55) reasons.push('поздний проигрыш требует продвижения, а не cooldown');
         if (name === 'Pep_TwoThreeFive_att3' && (c.transitionThreat || c.underPressure || c.pressFatigueRisk || c.highBadActions)) reasons.push('3-2-5 запрещён при transition threat/fatigue/браке');
         if (name === 'Klopp_Gegenpress_att4' && !['late_high_pressure','final_all_in'].includes(situation)) reasons.push('Klopp только поздняя погоня');
-        if (name === 'Bielsa_ChaosPress_att5' && situation !== 'final_all_in') reasons.push('Bielsa только финальный all-in');
-        if (['Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5'].includes(name) && (c.pressFatigueRisk || c.highBadActions || c.ownRedCard || c.myPowerDropPct >= 5)) reasons.push('дорогой прессинг запрещён по fatigue/браку/удалению');
-        if (c.scoreState === 'winning' && c.minute >= 70 && ['Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5','Pep_TwoThreeFive_att3'].includes(name)) reasons.push('позднее преимущество не требует high/all-in риска');
+        if (name === 'Klopp_Gegenpress_att4' && (c.pressFatigueRisk || c.highBadActions || c.ownRedCard || c.myPowerDropPct >= 5)) reasons.push('дорогой прессинг запрещён по fatigue/браку/удалению');
+        if (c.scoreState === 'winning' && c.minute >= 70 && ['Klopp_Gegenpress_att4','Pep_TwoThreeFive_att3'].includes(name)) reasons.push('позднее преимущество не требует high/all-in риска');
         return { vetoed:reasons.length > 0, reasons };
     }
 
     function riskDelta(name, appetite) {
-        const high = ['Pep_TwoThreeFive_att3','Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5'].includes(name);
-        const attack = ['Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4','Bielsa_ChaosPress_att5'].includes(name);
+        const high = ['Pep_TwoThreeFive_att3','Klopp_Gegenpress_att4'].includes(name);
+        const attack = ['Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4'].includes(name);
         if (appetite === 'conservative') return high ? -8 : attack ? -3 : 0;
         if (appetite === 'bold') return high ? 4 : attack ? 2 : 0;
         if (appetite === 'experimental') return high ? 7 : attack ? 4 : 0;
@@ -163,13 +152,14 @@
         const c = normalizedContext(context);
         const situation = classify(c);
         const all = ACTIVE.map(name => scoreCandidate(name, c, situation));
-        const eligible = all.filter(item => !item.vetoed).sort((a, b) => b.score - a.score || a.preset.localeCompare(b.preset));
+        const eligible = all.filter(item => !item.vetoed && item.parts.rulePrior > 0)
+            .sort((a, b) => b.score - a.score || a.preset.localeCompare(b.preset));
         return { context:c, situation, all, eligible };
     }
 
     function choose(context = {}) {
         const ranked = rank(context);
-        // v9: no implicit preset fallback — без безопасного кандидата решение hold_current.
+        // v10: no implicit preset fallback — без безопасного кандидата решение hold_current.
         if (!ranked.eligible[0]) {
             return {
                 name:null,
@@ -190,7 +180,7 @@
         return {
             name:selected.preset,
             situation:ranked.situation,
-            reason:`${ranked.situation}: ${registry.meta?.[selected.preset]?.use || 'tactical suite v9'}`,
+            reason:`${ranked.situation}: ${registry.meta?.[selected.preset]?.use || 'tactical suite v10'}`,
             selected,
             runnerUp,
             margin,
@@ -241,12 +231,12 @@
         result.confidence = Object.assign({}, result.confidence || {}, { level:selected.confidence, gap:selected.margin });
         result.runnerUp = selected.runnerUp ? { preset:selected.runnerUp.preset, score:selected.runnerUp.score } : null;
         if (selected.hold) {
-            // v9: без production fallback — держим текущую тактику, пресет не подставляем.
+            // v10: без production fallback — держим текущую тактику, пресет не подставляем.
             result.action = {
                 preset:null,
                 rawPreset:null,
                 decision:'hold_current',
-                ruleId:'suite_v9_hold_current',
+                ruleId:'suite_v10_hold_current',
                 reason:selected.reason,
                 fallbackReason:'no_eligible_candidate',
                 guardType:'hold_current',
@@ -262,13 +252,13 @@
                 rawPreset:selected.name,
                 score:selected.selected.score,
                 decision:selected.situation,
-                ruleId:`suite_v9_${selected.situation}`,
+                ruleId:`suite_v10_${selected.situation}`,
                 reason:selected.reason,
                 riskAppetite:result.riskAppetite,
                 libraryVersion:SUITE,
                 recommendationSchema:SCHEMA,
-                guardType:'suite_v9_selection',
-                guardReason:'central tactical suite v9 ranking'
+                guardType:'suite_v10_selection',
+                guardReason:'central tactical suite v10 ranking'
             });
         }
         result.candidates = selected.candidates.slice().sort((a, b) => {
@@ -291,7 +281,7 @@
     engine.ACTIVE_PRESETS = ACTIVE.slice();
     engine.__tacticSuiteV7Installed = true;
     engine.__tacticSuiteV8Installed = true;
-    engine.__tacticSuiteV9Installed = true;
+    engine.__tacticSuiteV10Installed = true;
     engine.__generator561RuleScorerApplied = true;
     engine.__generator561PressureResponseApplied = true;
 
@@ -304,19 +294,19 @@
         };
         RecommendationEngine.selectRawPreset = function selectSuiteV9(snapshot, state = {}) {
             const decision = window.SLFCurrentActionHintEngine?.run ? window.SLFCurrentActionHintEngine.run(snapshot || {}, state || {}) : null;
-            // v9: no implicit preset fallback — невалидное/отсутствующее решение означает hold_current.
+            // v10: no implicit preset fallback — невалидное/отсутствующее решение означает hold_current.
             const preset = decision?.action?.preset;
             if (!decision || !ACTIVE_SET.has(preset)) {
                 stamp(snapshot, decision, null);
                 return { name:null, reason:'hold_current: no valid suite decision', ruleDecision:decision, progressionAction:'hold_current', fallbackReason:decision ? 'invalid_preset' : 'no_decision' };
             }
             stamp(snapshot, decision, preset);
-            return { name:preset, reason:decision.action.reason || 'tactical suite v9', ruleDecision:decision, progressionAction:'suite_v9_scored' };
+            return { name:preset, reason:decision.action.reason || 'tactical suite v10', ruleDecision:decision, progressionAction:'suite_v10_scored' };
         };
         if (originalGuard) RecommendationEngine.applyProgressionGuard = function applySuiteV9Guard(candidate, snapshot, context = {}) {
             if (!candidate?.name || !ACTIVE_SET.has(candidate.name) || !snapshot || snapshot.status === 'finished') return candidate;
             const targetPreset = candidate.name;
-            let guarded = ['Simeone_LowBlock_def5','Bielsa_ChaosPress_att5'].includes(candidate.name) || context?.urgency?.overrideProgressionGuard === true
+            let guarded = ['Simeone_LowBlock_def5'].includes(candidate.name) || context?.urgency?.overrideProgressionGuard === true
                 ? Object.assign({}, candidate, { progressionAction:'emergency_override' })
                 : (originalGuard.call(this, candidate, snapshot, context) || candidate);
             if (!ACTIVE_SET.has(guarded?.name)) guarded = candidate;
@@ -339,7 +329,7 @@
         RecommendationEngine.__generator561PressureResponseApplied = true;
         RecommendationEngine.__tacticSuiteV7Installed = true;
         RecommendationEngine.__tacticSuiteV8Installed = true;
-        RecommendationEngine.__tacticSuiteV9Installed = true;
+        RecommendationEngine.__tacticSuiteV10Installed = true;
     }
 
     if (typeof BASE_PRESETS !== 'undefined' && BASE_PRESETS) {
@@ -372,7 +362,7 @@
         shortestStep,
         preferredPreset:situation => {
             const scores = SCORE_BY_SITUATION[situation] || {};
-            // v9: no implicit preset fallback — пустая таблица означает null.
+            // v10: no implicit preset fallback — пустая таблица означает null.
             return Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
         },
         evaluate:(snapshot={}, context={}) => window.SLFCurrentActionHintEngine?.run ? window.SLFCurrentActionHintEngine.run(snapshot, context) : null
