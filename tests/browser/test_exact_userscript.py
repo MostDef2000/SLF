@@ -291,16 +291,18 @@ def assert_owned_live(page: Page):
     assert "расстановка игроков не меняется" in page.locator("#slf-tactical-lab-detail").text_content()
 
     expected_dropdown_ids = [
-        "Bielsa_ChaosPress_att5",
         "Pep_TwoThreeFive_att3",
-        "Klopp_Gegenpress_att4",
         "standard",
         "Conte_WingbackWidth_bal4",
         "Pep_ControlledPush_att3",
+        "Klopp_Gegenpress_att4",
         "Arteta_Control433_bal3",
         "Pep_BoxControl_bal2",
+        "MidBlock_Control4231_neutr",
+        "MidBlock_Counter4411_neutr",
         "Henta abuse",
         "Pep_PressCooldown_bal2",
+        "Lead_Outlet4141_def1",
         "Simeone_Compact442_def4",
         "Simeone_LowBlock_def5",
     ]
@@ -318,6 +320,7 @@ def assert_owned_live(page: Page):
 
     retired_ids = {
         "Compact_Counter_def3",
+        "Bielsa_ChaosPress_att5",
         "DeZerbi_BaitPress_bal3",
         "DeZerbi_Release_att4",
         "Henta_LeftTrap_att3",
