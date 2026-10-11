@@ -119,6 +119,7 @@ function validateRegistryInvariants(registry) {
         || new Set(formation).size !== 11 || !formation.includes('gk'))
         errors.push(`${id}: expected 11 distinct positions including GK`);
     for (const [field, allowed] of Object.entries(nativeDomains)) {
+      if (field === 'priority') continue; // Multi-select lanes are checked below.
       const value = controls?.[field];
       if (!allowed.includes(String(value ?? ''))) errors.push(`${id}.${field}: invalid native value ${JSON.stringify(value)}`);
     }
