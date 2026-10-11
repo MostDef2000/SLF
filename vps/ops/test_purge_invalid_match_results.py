@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
 """Focused, no-VPS contract tests for issue #327 permanent invalid-result cleanup."""
 import hashlib
+import importlib.util
 import json
 import tempfile
 import unittest
 from pathlib import Path
-from purge_invalid_match_results import inspect, delete_if_exact, valid_score
+
+MODULE_PATH = Path(__file__).resolve().with_name("purge_invalid_match_results.py")
+SPEC = importlib.util.spec_from_file_location("purge_invalid_match_results", MODULE_PATH)
+assert SPEC and SPEC.loader
+purge = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(purge)
+inspect = purge.inspect
+delete_if_exact = purge.delete_if_exact
+valid_score = purge.valid_score
 
 
 def row(game, score):
