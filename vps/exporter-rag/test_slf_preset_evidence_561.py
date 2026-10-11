@@ -350,7 +350,7 @@ class TelemetryAnalyticsTest(unittest.TestCase):
         self.assertEqual(report["counts"]["v9CurrentScoredConfirmedEffects"], 1)
         self.assertEqual(report["counts"]["v10CurrentScoredConfirmedEffects"], 1)
         self.assertEqual(report["counts"]["v10CurrentNamedPhaseEffects"], 1)
-        self.assertEqual(report["quality"]["readinessCohort"], "v10_current_scored_game_confirmed_phase_only")
+        self.assertEqual(report["quality"]["readinessCohort"], "v11_current_scored_game_confirmed_phase_only")
         self.assertFalse(report["quality"]["readyForRetune"], "single v10 phase is insufficient")
 
         v10["tacticContext"]["applicationStatus"] = "ui_readback_confirmed"
@@ -395,6 +395,40 @@ class TelemetryAnalyticsTest(unittest.TestCase):
         })
         self.assertEqual(module.analysis_preset_name(historical), old_id)
         self.assertFalse(module.is_v10_current_phase_effect(historical))
+
+
+    def test_fixed_lineup_v11_isolated_from_all_historical_cohorts_and_manual_arteta(self):
+        stable_ts = int(module.dt.datetime(2026, 8, 1, tzinfo=module.dt.timezone.utc).timestamp() * 1000)
+        def phase(game, preset, library, schema, status="game_confirmed"):
+            row = phase_effect(game, "p1", preset=preset)
+            row["ts"] = stable_ts
+            row["telemetryContext"].update({
+                "libraryVersion": library, "recommendationSchema": schema,
+            })
+            row["tacticContext"] = {"applicationStatus": status}
+            return row
+        v9 = phase("g-v9", "Arteta_Control433_bal3", module.V9_LIBRARY, module.V9_RECOMMENDATION_SCHEMA)
+        v10 = phase("g-v10", "Emery_BalancedControl4231_neutr", module.V10_LIBRARY, module.V10_RECOMMENDATION_SCHEMA)
+        v11 = phase("g-v11", "Emery_BalancedBase_v11", module.V11_LIBRARY, module.V11_RECOMMENDATION_SCHEMA)
+        diagnostic = phase("g-arteta", "Arteta_SafePossession_v11", module.V11_LIBRARY, module.V11_RECOMMENDATION_SCHEMA)
+        unverified = phase("g-unverified", "Guardiola_PressEscape_v11", module.V11_LIBRARY, module.V11_RECOMMENDATION_SCHEMA, "ui_readback_confirmed")
+        finished = [result(game, score=(1, 0)) for game in ["g-v9", "g-v10", "g-v11", "g-arteta", "g-unverified"]]
+        data = module.build_report([], [v9, v10, v11, diagnostic, unverified], finished)
+        self.assertTrue(module.is_v11_current_phase_effect(v11))
+        self.assertTrue(module.is_v11_current_phase_effect(diagnostic))
+        self.assertFalse(module.is_v11_current_phase_effect(v10))
+        self.assertFalse(module.is_v11_current_phase_effect(v9))
+        self.assertEqual(data["counts"]["v10CurrentNamedPhaseEffects"], 1)
+        self.assertEqual(data["counts"]["v11CurrentNamedPhaseEffects"], 3)
+        self.assertEqual(data["counts"]["v11ManualDiagnosticPhaseEffects"], 1)
+        self.assertEqual(data["counts"]["v11CurrentScoredConfirmedEffects"], 1)
+        self.assertEqual(data["counts"]["v11CurrentScoredConfirmedPresetCount"], 1)
+        self.assertEqual(data["quality"]["readinessCohort"], "v11_current_scored_game_confirmed_phase_only")
+        self.assertFalse(data["quality"]["readyForRetune"])
+        self.assertEqual(module.preset_name(v10), "Emery_BalancedControl4231_neutr")
+        self.assertEqual(module.preset_name(v11), "Emery_BalancedBase_v11")
+        self.assertEqual(module.analysis_preset_name(v10), "Emery_BalancedControl4231_neutr")
+        self.assertEqual(module.analysis_preset_name(v11), "Emery_BalancedBase_v11")
 
 
 if __name__ == "__main__":
