@@ -316,6 +316,23 @@ class TelemetryAnalyticsTest(unittest.TestCase):
         self.assertEqual(unverified["counts"]["v9CurrentScoredConfirmedEffects"], 0)
         self.assertFalse(unverified["quality"]["readyForRetune"])
 
+    def test_v9_readiness_rejects_non_integral_score_and_invalid_finish_record(self):
+        current = phase_effect("g-invalid", "p1", preset="Arteta_Control433_bal3")
+        current["ts"] = int(module.dt.datetime(2026, 8, 1, tzinfo=module.dt.timezone.utc).timestamp() * 1000)
+        current["telemetryContext"].update({
+            "libraryVersion": module.V9_LIBRARY,
+            "recommendationSchema": module.V9_RECOMMENDATION_SCHEMA,
+        })
+        current["tacticContext"] = {"applicationStatus": "game_confirmed"}
+        scored = result("g-invalid", score=(1, 0))
+        scored["score"] = {"home": 1.2, "away": 0}
+        self.assertFalse(module.is_strict_scored_finished_result(scored))
+        self.assertEqual(module.build_report([], [current], [scored])["counts"]["v9CurrentScoredConfirmedEffects"], 0)
+        scored["score"] = {"home": 1, "away": 0}
+        scored["resultType"] = "intermediate_snapshot"
+        self.assertFalse(module.is_strict_scored_finished_result(scored))
+        self.assertEqual(module.build_report([], [current], [scored])["counts"]["v9CurrentScoredConfirmedEffects"], 0)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
