@@ -298,14 +298,26 @@ def assert_owned_live(page: Page):
         "Klopp_Gegenpress_att4",
         "Arteta_Control433_bal3",
         "Pep_BoxControl_bal2",
-        "MidBlock_Counter4411_neutr",
-        "MidBlock_Control4231_neutr",
+        "Mourinho_CompactCounter4411_neutr",
+        "Emery_BalancedControl4231_neutr",
         "Henta abuse",
         "Pep_PressCooldown_bal2",
-        "Lead_Outlet4141_def1",
+        "Allegri_LeadManagement4141_def1",
         "Simeone_Compact442_def4",
         "Simeone_LowBlock_def5",
     ]
+    # User-visible names must identify real coaches, not generic tactical labels.
+    coach_labels = page.eval_on_selector_all(
+        "#slf-tactics-dropdown select option",
+        "options => options.map(option => ({value: option.value, text: option.textContent}))",
+    )
+    for identity, trainer in [
+        ("Emery_BalancedControl4231_neutr", "Emery"),
+        ("Mourinho_CompactCounter4411_neutr", "Mourinho"),
+        ("Allegri_LeadManagement4141_def1", "Allegri"),
+    ]:
+        assert any(x["value"] == identity and trainer in x["text"] for x in coach_labels), coach_labels
+
     dropdown_ids = page.eval_on_selector_all(
         "#slf-tactics-dropdown select option",
         "options => options.map(option => option.value)",
@@ -321,6 +333,9 @@ def assert_owned_live(page: Page):
     retired_ids = {
         "Compact_Counter_def3",
         "Bielsa_ChaosPress_att5",
+        "MidBlock_Control4231_neutr",
+        "MidBlock_Counter4411_neutr",
+        "Lead_Outlet4141_def1",
         "DeZerbi_BaitPress_bal3",
         "DeZerbi_Release_att4",
         "Henta_LeftTrap_att3",
