@@ -313,7 +313,10 @@
             return { name:preset, reason:decision.action.reason || 'tactical suite v10', ruleDecision:decision, progressionAction:'suite_v10_scored' };
         };
         if (originalGuard) RecommendationEngine.applyProgressionGuard = function applySuiteV9Guard(candidate, snapshot, context = {}) {
-            if (candidate?.name) candidate = Object.assign({}, candidate, { name:resolvePresetId(candidate.name) });
+            if (candidate?.name) {
+                const canonical = resolvePresetId(candidate.name);
+                if (canonical !== candidate.name) candidate = Object.assign({}, candidate, { name:canonical });
+            }
             if (!candidate?.name || !ACTIVE_SET.has(candidate.name) || !snapshot || snapshot.status === 'finished') return candidate;
             const targetPreset = candidate.name;
             let guarded = ['Simeone_LowBlock_def5'].includes(candidate.name) || context?.urgency?.overrideProgressionGuard === true
