@@ -54,7 +54,7 @@ const TacticPresetLibraryPanel = {
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;">
                     <div style="min-width:0;">
                         <div style="font-weight:bold;color:${color};font-size:13px;line-height:1.25;word-break:break-word;">${this.escapeHtml(name)}</div>
-                        <div style="font-size:10px;color:#aaa;margin-top:2px;line-height:1.3;">${this.escapeHtml(meta.title || '')} · role: ${this.escapeHtml(meta.role || '')} · rank: ${this.escapeHtml(meta.rank ?? '')}</div>
+                        <div style="font-size:10px;color:#aaa;margin-top:2px;line-height:1.3;">${this.escapeHtml(meta.title || '')} · rank: ${this.escapeHtml(meta.rank ?? '')}</div>
                     </div>
                     <div style="font-size:10px;color:${statusColor};border:1px solid ${statusColor};border-radius:10px;padding:1px 6px;white-space:nowrap;">${this.escapeHtml(statusText)}</div>
                 </div>
