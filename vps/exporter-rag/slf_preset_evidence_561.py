@@ -315,6 +315,20 @@ def is_v9_current_phase_effect(row: Mapping[str, Any]) -> bool:
     )
 
 
+def is_strict_scored_finished_result(row: Mapping[str, Any]) -> bool:
+    if row.get("recordType") != "match_result" or row.get("resultType") != "finished_match":
+        return False
+    score = row.get("score")
+    if not isinstance(score, Mapping):
+        return False
+    home, away = score.get("home"), score.get("away")
+    return (
+        type(home) is int and type(away) is int
+        and 0 <= home <= 99 and 0 <= away <= 99
+        and result_score(row) is not None
+    )
+
+
 def build_report(
     events: Sequence[Mapping[str, Any]],
     effects: Sequence[Mapping[str, Any]],
@@ -373,7 +387,7 @@ def build_report(
     # game-confirmed application, known situation and a scored finished match.
     scored_games = {
         game_id(row) for row in results
-        if game_id(row) and result_score(row) is not None
+        if game_id(row) and is_strict_scored_finished_result(row)
     }
     current_v9_phases = [row for row in analysis_effects if is_v9_current_phase_effect(row)]
     eligible_v9 = [
