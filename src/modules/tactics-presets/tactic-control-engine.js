@@ -124,13 +124,18 @@
 
         const applied = await STATE.tacticControlBridge.applyTacticObject(preset, {
             source: `preset:${name}`,
-            strict: false
+            strict: true
         });
         // A successful click sequence is not enough: the local controls must
         // match the requested vector before recording a UI-verified apply.
         // No server/game acknowledgment is exposed here; telemetry retains
         // that distinction and does not claim game-level confirmation.
         if (!applied.ok || applied.failures?.length || applied.mismatches?.length) {
+            STATE.lastTacticApplyFailure = {
+                source:'preset_apply', presetId:name, reason:applied.reason || 'control_mismatch',
+                failures:applied.failures || [], mismatches:applied.mismatches || [],
+                rolledBack:applied.rolledBack === true, ts:Date.now()
+            };
             debugWarn('[SLF] Не подтверждена установка тактики в интерфейсе:', name, applied.failures, applied.mismatches);
             return false;
         }
