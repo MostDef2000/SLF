@@ -18,7 +18,7 @@
     // Legacy aliases resolve persisted v10 references without rewriting recorded matches.
     // They never enter the active preset library or dropdown.
     const LEGACY_PRESET_ALIASES=Object.freeze({"MidBlock_Control4231_neutr":"Emery_BalancedControl4231_neutr","MidBlock_Counter4411_neutr":"Mourinho_CompactCounter4411_neutr","Lead_Outlet4141_def1":"Allegri_LeadManagement4141_def1"});
-    const resolvePresetId=name=>LEGACY_PRESET_ALIASES[String(name||'')]||String(name||'');
+    const resolvePresetId=name=>typeof name==='string'?(LEGACY_PRESET_ALIASES[name]||name):name;
 
     const REMOVED_PRESET_NAMES=[
         ...V8_RETIRED_PRESET_NAMES,
