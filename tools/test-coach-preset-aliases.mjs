@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #333: legacy v10 names remain readable without re-entering active presets.
+// #333: v10 built-in names remain readable by v11 without re-entering active presets.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -8,16 +8,26 @@ import { fileURLToPath } from 'node:url';
 const root = new URL('../', import.meta.url);
 const read = path => fs.readFileSync(new URL(path, root), 'utf8');
 const aliases = {
-    MidBlock_Control4231_neutr: 'Emery_BalancedControl4231_neutr',
-    MidBlock_Counter4411_neutr: 'Mourinho_CompactCounter4411_neutr',
-    Lead_Outlet4141_def1: 'Allegri_LeadManagement4141_def1'
+    Arteta_Control433_bal3: 'Arteta_SafePossession_v11',
+    Pep_BoxControl_bal2: 'Guardiola_PressEscape_v11',
+    Pep_PressCooldown_bal2: 'Guardiola_PressCooldown_v11',
+    Pep_ControlledPush_att3: 'Guardiola_ControlledPush_v11',
+    Pep_TwoThreeFive_att3: 'Guardiola_PositionalSiege_v11',
+    Conte_WingbackWidth_bal4: 'Conte_WideChannels_v11',
+    Klopp_Gegenpress_att4: 'Klopp_LateGegenpress_v11',
+    Simeone_Compact442_def4: 'Simeone_CompactLead_v11',
+    Simeone_LowBlock_def5: 'Simeone_EmergencyBlock_v11',
+    Emery_BalancedControl4231_neutr: 'Emery_BalancedBase_v11',
+    Mourinho_CompactCounter4411_neutr: 'Mourinho_CleanCounter_v11',
+    Allegri_LeadManagement4141_def1: 'Allegri_LeadOutlet_v11',
+    MidBlock_Control4231_neutr: 'Emery_BalancedBase_v11',
+    MidBlock_Counter4411_neutr: 'Mourinho_CleanCounter_v11',
+    Lead_Outlet4141_def1: 'Allegri_LeadOutlet_v11'
 };
 const legacyControls = {def_line:'1',press_line:'1',priority:[]};
 const localKey = 'slf_custom_presets';
 let persisted = JSON.stringify({
-    MidBlock_Control4231_neutr:legacyControls,
-    MidBlock_Counter4411_neutr:legacyControls,
-    Lead_Outlet4141_def1:legacyControls,
+    ...Object.fromEntries(Object.keys(aliases).map(name=>[name,legacyControls])),
     'Own Original Preset':{def_line:'2',press_line:'2',priority:['left']}
 });
 const saved = [];
@@ -56,7 +66,7 @@ for(const [oldId,newId] of Object.entries(aliases)){
     assert.equal(storage.getAllPresets()[oldId],undefined,'no duplicate menu item');
     assert.equal(storage.getAllLabels()[oldId],undefined,'no duplicate display label');
     assert.deepEqual(JSON.parse(JSON.stringify(storage.getAllPresets()[storage.resolvePresetId(oldId)])),
-        JSON.parse(JSON.stringify(registry.presets[newId])),'legacy selection resolves to canonical v10 controls');
+        JSON.parse(JSON.stringify(registry.presets[newId])),'legacy selection resolves to canonical v11 controls');
 }
 assert.equal(storage.resolvePresetId('Own Original Preset'),'Own Original Preset');
 assert.equal(storage.resolvePresetId('not-a-preset'),'not-a-preset');
