@@ -27,7 +27,7 @@
         // Switching to the current production registry would silently rewrite
         // parent genomes when Tactical Suite v10 replaces v9.
         const historicalP02ProductionIds = [
-            'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2','Compact_Counter_def3',
+            'Arteta_Control433_bal3','Pep_BoxControl_bal2','Pep_PressCooldown_bal2',
             'Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4',
             'Klopp_Gegenpress_att4','Simeone_Compact442_def4','Simeone_LowBlock_def5','Bielsa_ChaosPress_att5'
         ];
