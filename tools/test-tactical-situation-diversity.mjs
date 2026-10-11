@@ -304,6 +304,7 @@ assert.equal(/EXP-561-P03-/.test(registrySource),false,'P03 experimental identit
 // dedicated CI step in quality-integration.yml).
 const bridgeOut=execFileSync(process.execPath,['tools/test-tactic-bridge-v10.mjs'],{cwd:fileURLToPath(root),encoding:'utf8'});
 assert.match(bridgeOut,/v10 tactic bridge native preflight and rollback: OK/);
+assert.match(bridgeOut,/v11 RW\/RM fixed lineup read-only control application: OK/);
 
 const aliasOut=execFileSync(process.execPath,['tools/test-coach-preset-aliases.mjs'],{cwd:fileURLToPath(root),encoding:'utf8'});
 assert.match(aliasOut,/coach preset alias migration: OK/,'old saved v10 names remain readable and cannot re-enter active dropdown');
