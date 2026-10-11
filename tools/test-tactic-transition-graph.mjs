@@ -3,7 +3,7 @@
 // Regression layer for the v9 progression graph (base c5ca7de + R1).
 //
 // The direction policy keeps STEP module-local and only exposes shortestStep().
-// This test therefore carries a static mirror of the v9 STEP graph (kept in sync
+// This test therefore carries a static mirror of the v10 STEP graph (kept in sync
 // with src/modules/tactics-presets/tactic-preset-direction-policy.js) and validates
 // the live graph through shortestStep() behavior + registry.active.
 //
@@ -35,7 +35,7 @@ sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
 // The policy install guard requires a registry AND an engine; the stub engine
 // stands in for SLFCurrentActionHintEngine (run() is replaced per-scenario below).
-sandbox.window.SLFCurrentActionHintEngine = { schema: 'slf_rule_decision_v9_tactical_suite', run: () => null };
+sandbox.window.SLFCurrentActionHintEngine = { schema: 'slf_rule_decision_v10_tactical_suite', run: () => null };
 sandbox.RecommendationEngine = {
   getPresetLadder() { return []; },
   applyProgressionGuard(candidate) { return candidate; }
@@ -50,31 +50,83 @@ const R = sandbox.window.SLFActivePresetRegistry;
 const P = sandbox.window.SLFTacticDirectionPolicy;
 const E = sandbox.window.SLFCurrentActionHintEngine;
 const RE = sandbox.RecommendationEngine;
-assert.ok(R && P && E, 'registry and policy installed in the v9 sandbox');
-assert.equal(R.suiteVersion, 'slf_tactic_suite_561_v9');
-assert.equal(P.version, '5.61-tactical-suite-v9.0');
+assert.ok(R && P && E, 'registry and policy installed in the v10 sandbox');
+assert.equal(R.suiteVersion, 'slf_tactic_suite_561_v10');
+assert.equal(P.version, '5.61-tactical-suite-v10.0');
 assert.deepEqual([...P.activePresets], [...R.active], 'policy active set mirrors the registry');
 
 const active = R.active;
 const removed = new Set(R.removed);
 const retired = new Set(R.retiredActive);
 
-// --- Static mirror of the v9 STEP graph (module-local in the policy) -----------
+// --- Static mirror of the v10 STEP graph (module-local in the policy) -----------
 const STEP = {
-  Arteta_Control433_bal3: ['Pep_BoxControl_bal2', 'Pep_ControlledPush_att3', 'Conte_WingbackWidth_bal4', 'Simeone_Compact442_def4'],
-  Pep_BoxControl_bal2: ['Arteta_Control433_bal3', 'Pep_PressCooldown_bal2'],
-  Pep_PressCooldown_bal2: ['Pep_BoxControl_bal2', 'Arteta_Control433_bal3', 'Simeone_Compact442_def4'],
-  Pep_ControlledPush_att3: ['Arteta_Control433_bal3', 'Pep_TwoThreeFive_att3', 'Conte_WingbackWidth_bal4'],
-  Pep_TwoThreeFive_att3: ['Pep_ControlledPush_att3', 'Conte_WingbackWidth_bal4', 'Klopp_Gegenpress_att4'],
-  Conte_WingbackWidth_bal4: ['Arteta_Control433_bal3', 'Pep_ControlledPush_att3', 'Pep_TwoThreeFive_att3'],
-  Simeone_Compact442_def4: ['Arteta_Control433_bal3', 'Simeone_LowBlock_def5', 'Pep_PressCooldown_bal2'],
-  Simeone_LowBlock_def5: ['Simeone_Compact442_def4', 'Pep_BoxControl_bal2'],
-  Klopp_Gegenpress_att4: ['Pep_TwoThreeFive_att3', 'Pep_ControlledPush_att3', 'Bielsa_ChaosPress_att5'],
-  Bielsa_ChaosPress_att5: ['Klopp_Gegenpress_att4']
+  "Arteta_Control433_bal3": [
+    "MidBlock_Control4231_neutr",
+    "Pep_BoxControl_bal2",
+    "Pep_ControlledPush_att3",
+    "Conte_WingbackWidth_bal4",
+    "Lead_Outlet4141_def1"
+  ],
+  "Pep_BoxControl_bal2": [
+    "Arteta_Control433_bal3",
+    "MidBlock_Control4231_neutr",
+    "MidBlock_Counter4411_neutr",
+    "Pep_PressCooldown_bal2"
+  ],
+  "Pep_PressCooldown_bal2": [
+    "Pep_BoxControl_bal2",
+    "MidBlock_Control4231_neutr",
+    "Lead_Outlet4141_def1"
+  ],
+  "Pep_ControlledPush_att3": [
+    "Arteta_Control433_bal3",
+    "Pep_TwoThreeFive_att3",
+    "Conte_WingbackWidth_bal4"
+  ],
+  "Pep_TwoThreeFive_att3": [
+    "Pep_ControlledPush_att3",
+    "Conte_WingbackWidth_bal4",
+    "Klopp_Gegenpress_att4"
+  ],
+  "Conte_WingbackWidth_bal4": [
+    "Arteta_Control433_bal3",
+    "Pep_ControlledPush_att3",
+    "Pep_TwoThreeFive_att3"
+  ],
+  "Klopp_Gegenpress_att4": [
+    "Pep_TwoThreeFive_att3",
+    "Pep_ControlledPush_att3"
+  ],
+  "Simeone_Compact442_def4": [
+    "Lead_Outlet4141_def1",
+    "Arteta_Control433_bal3",
+    "Simeone_LowBlock_def5"
+  ],
+  "Simeone_LowBlock_def5": [
+    "Simeone_Compact442_def4",
+    "Lead_Outlet4141_def1"
+  ],
+  "MidBlock_Control4231_neutr": [
+    "Arteta_Control433_bal3",
+    "Pep_BoxControl_bal2",
+    "MidBlock_Counter4411_neutr",
+    "Lead_Outlet4141_def1"
+  ],
+  "MidBlock_Counter4411_neutr": [
+    "MidBlock_Control4231_neutr",
+    "Pep_BoxControl_bal2",
+    "Pep_ControlledPush_att3"
+  ],
+  "Lead_Outlet4141_def1": [
+    "Simeone_Compact442_def4",
+    "MidBlock_Control4231_neutr",
+    "Pep_PressCooldown_bal2"
+  ]
 };
 
 // Every active preset is a STEP node and nothing else is.
-assert.deepEqual(Object.keys(STEP).sort(), [...active].sort(), 'STEP node set equals the 10 active presets');
+assert.deepEqual(Object.keys(STEP).sort(), [...active].sort(), 'STEP node set equals the 12 active presets');
 for (const [from, targets] of Object.entries(STEP)) {
   for (const to of targets) {
     assert.ok(active.includes(to), `edge ${from} -> ${to} targets an active preset`);
@@ -85,7 +137,7 @@ for (const [from, targets] of Object.entries(STEP)) {
 }
 assert.ok(!STEP.Simeone_LowBlock_def5.includes('Bielsa_ChaosPress_att5'), 'no LowBlock -> ChaosPress edge (emergency lock must not chain straight into final all-in)');
 
-// Undirected connectivity: BFS from Arteta reaches all 10 active presets.
+// Undirected connectivity: BFS from Arteta reaches all 12 active presets.
 const undirected = new Map(active.map(name => [name, new Set()]));
 for (const [from, targets] of Object.entries(STEP)) {
   for (const to of targets) { undirected.get(from).add(to); undirected.get(to).add(from); }
@@ -98,7 +150,7 @@ while (queue.length) {
     if (!reached.has(next)) { reached.add(next); queue.push(next); }
   }
 }
-assert.equal(reached.size, active.length, 'undirected graph connected: BFS from Arteta reaches all 10');
+assert.equal(reached.size, active.length, 'undirected graph connected: BFS from Arteta reaches all 12');
 
 // Directed reachability mirror (used to scope the non-adjacent checks below).
 function mirrorReachable(from, to) {
@@ -145,7 +197,7 @@ for (const group of ['balance', 'attack', 'defensive']) {
 // Adjacency: for every mirrored edge u->v, shortestStep(u, v) === v (direct edge).
 for (const [from, targets] of Object.entries(STEP)) {
   for (const to of targets) {
-    assert.equal(P.shortestStep(from, to), to, `live graph has the v9 edge ${from} -> ${to}`);
+    assert.equal(P.shortestStep(from, to), to, `live graph has the v10 edge ${from} -> ${to}`);
   }
 }
 // Non-adjacent reachable pairs: shortestStep must not jump straight to the target
@@ -197,4 +249,4 @@ const selected = RE.selectRawPreset({}, {});
 assert.equal(selected.name, null, 'selectRawPreset never emits a removed preset');
 assert.equal(selected.fallbackReason, 'invalid_preset');
 
-console.log('tactical suite v9 transition graph invariants: OK');
+console.log('tactical suite v10 transition graph invariants: OK');

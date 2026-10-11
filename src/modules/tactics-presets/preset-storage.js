@@ -6,6 +6,8 @@
     function isDeprecatedHentaPreset(name) {
         const key = String(name || '');
         return [
+            'Compact_Counter_def3',
+            'Bielsa_ChaosPress_att5',
             'Mourinho_WeakSide_def3',
             'Henta_Hold_def3',
             'Pep_StandardControl_bal3',
@@ -93,6 +95,8 @@
 
         getRetiredBuiltInPresetNames() {
             return [
+                'Compact_Counter_def3',
+                'Bielsa_ChaosPress_att5',
                 'Mourinho_WeakSide_def3',
                 'Henta_Hold_def3',
                 'Pep_StandardControl_bal3',

@@ -9,6 +9,18 @@
             'corner', 'shot', 'priority'
         ];
 
+        // FM2026 controls: authored in Tactical Lab native-domain contract and
+        // checked against the actual page DOM before the first mutation.
+        const nativeDomains = Object.freeze({
+            def_line:['1','2','3'], press_line:['1','2','3'], def_width:['1','2','3'],
+            press_intense:['1','2','3','4','5'],
+            build_type:['1','2','3'], build_temp:['1','2','3'],
+            build_long:['1','2','3'], build_fast:['1','2','3'],
+            style:['1','2','3','4','5'], pass_risk:['1','2','3','4','5'],
+            dribble:['1','2','3','4','5'], cross:['1','2','3'],
+            corner:['1','2'], shot:['1','2','3']
+        });
+        const priorityInputName = { left:'priority_l', center:'priority_c', right:'priority_r' };
         const normalizePriority = value => (Array.isArray(value) ? value : value ? [value] : [])
             .map(item => String(item))
             .sort();
@@ -66,38 +78,107 @@
             allowedKeys: controlKeys.slice(),
 
             async applyTacticObject(tactic, options = {}) {
-                const normalized = normalizePresets({ current: tactic }).current || tactic;
+                const normalized = normalizePresets({ current:tactic }).current || tactic;
                 if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
-                    return { ok:false, reason:'invalid_tactic', failures:['tactic'], mismatches:[] };
+                    return { ok:false, reason:'invalid_tactic', failures:['tactic'], mismatches:[], rolledBack:false };
+                }
+                if (STATE.tacticControlBridgeApplyInProgress) {
+                    return { ok:false, reason:'apply_in_progress', failures:['reentrancy'], mismatches:[], rolledBack:false };
                 }
                 const strict = options.strict === true;
                 const source = String(options.source || 'direct_tactic');
+                const requested = controlKeys.filter(key => Object.prototype.hasOwnProperty.call(normalized, key));
+                const initial = getCurrentTactic();
+                const requestedPriorities = normalizePriority(normalized.priority);
+                const initialPriorities = normalizePriority(initial?.priority);
                 const failures = [];
-                STATE.suppressManualWatcherUntil = Date.now() + 2500;
-                STATE.suppressManualWatcherReason = source;
 
-                for (const key of controlKeys) {
-                    if (!Object.prototype.hasOwnProperty.call(normalized, key)) continue;
-                    const applied = await setControlAsync(key, normalized[key]);
-                    if (!applied) failures.push(key);
+                // All-or-nothing preflight. An unsupported ordinal or unavailable
+                // DOM input rejects *before* even one radio/checkbox is clicked.
+                for (const key of requested) {
+                    if (key === 'priority') {
+                        const invalid = requestedPriorities.filter(value => !priorityInputName[value]);
+                        if (invalid.length) failures.push('priority_invalid');
+                        const needed = new Set([...requestedPriorities, ...initialPriorities]);
+                        for (const value of needed) {
+                            if (!document.querySelector(`input[type="checkbox"][name="${priorityInputName[value]}"]`))
+                                failures.push('priority_' + value);
+                        }
+                    } else {
+                        const value = String(normalized[key] ?? '');
+                        if (!nativeDomains[key]?.includes(value)) failures.push(key + ':out_of_domain');
+                        else if (!document.querySelector(`input[name="${key}"][value="${value}"]`))
+                            failures.push(key + ':missing_dom_input');
+                        // A rollback also needs the original option to be present.
+                        const originalValue = String(initial?.[key] ?? '');
+                        if (!nativeDomains[key]?.includes(originalValue)
+                            || !document.querySelector(`input[name="${key}"][value="${originalValue}"]`))
+                            failures.push(key + ':rollback_unavailable');
+                    }
+                }
+                if (failures.length) {
+                    return { ok:false, reason:'preflight_failed', strict, source,
+                        failures, mismatches:[], rolledBack:false, tactic:initial };
                 }
 
-                const current = getCurrentTactic();
-                const mismatches = controlKeys.filter(key =>
-                    Object.prototype.hasOwnProperty.call(normalized, key)
-                    && !valuesEqual(key, normalized[key], current?.[key])
-                );
-                STATE.lastManualTactic = current;
-                STATE.suppressManualWatcherUntil = Date.now() + 800;
+                STATE.tacticControlBridgeApplyInProgress = true;
+                STATE.suppressManualWatcherUntil = Date.now() + 2500;
                 STATE.suppressManualWatcherReason = source;
-
-                return {
-                    ok: strict ? failures.length === 0 && mismatches.length === 0 : true,
-                    strict,
-                    failures,
-                    mismatches,
-                    tactic: current
-                };
+                try {
+                    for (const key of requested) {
+                        const applied = await setControlAsync(key, normalized[key]);
+                        if (!applied) { failures.push(key); break; }
+                    }
+                    let current = getCurrentTactic();
+                    const mismatches = requested.filter(key => !valuesEqual(key, normalized[key], current?.[key]));
+                    if (failures.length || mismatches.length) {
+                        // A native event handler may reject a control after the
+                        // preflight. Restore the full original vector and verify.
+                        const rollbackFailures = [];
+                        for (const key of controlKeys) {
+                            if (!Object.prototype.hasOwnProperty.call(initial, key)) continue;
+                            try {
+                                if (!(await setControlAsync(key, initial[key]))) rollbackFailures.push(key);
+                            } catch (_) { rollbackFailures.push(key); }
+                        }
+                        current = getCurrentTactic();
+                        const rollbackMismatches = controlKeys.filter(key =>
+                            Object.prototype.hasOwnProperty.call(initial, key)
+                            && !valuesEqual(key, initial[key], current?.[key]));
+                        const rolledBack = !rollbackFailures.length && !rollbackMismatches.length;
+                        STATE.lastManualTactic = current;
+                        return { ok:false, strict, source, reason:rolledBack?'post_apply_rolled_back':'rollback_unverified',
+                            failures, mismatches, rollbackFailures, rollbackMismatches, rolledBack,
+                            applicationStatus:rolledBack?'apply_failed_rolled_back':'apply_failed_unverified',
+                            tactic:current };
+                    }
+                    STATE.lastManualTactic = current;
+                    return { ok:true, strict, source, failures:[], mismatches:[],
+                        rolledBack:false, applicationStatus:'ui_readback_confirmed',
+                        verification:'native_control_dom_readback_only', tactic:current };
+                } catch (error) {
+                    // Exceptions are failures, never successful partial applies.
+                    const rollbackFailures = [];
+                    for (const key of controlKeys) {
+                        if (!Object.prototype.hasOwnProperty.call(initial, key)) continue;
+                        try {
+                            if (!(await setControlAsync(key, initial[key]))) rollbackFailures.push(key);
+                        } catch (_) { rollbackFailures.push(key); }
+                    }
+                    const current = getCurrentTactic();
+                    STATE.lastManualTactic = current;
+                    const rolledBack = !rollbackFailures.length
+                        && controlKeys.every(key => !Object.prototype.hasOwnProperty.call(initial, key)
+                            || valuesEqual(key, initial[key], current?.[key]));
+                    return { ok:false, strict, source, reason:rolledBack?'exception_rolled_back':'rollback_unverified',
+                        failures:['native_handler_exception'], mismatches:[], rollbackFailures,
+                        rolledBack, applicationStatus:rolledBack?'apply_failed_rolled_back':'apply_failed_unverified',
+                        tactic:current };
+                } finally {
+                    STATE.tacticControlBridgeApplyInProgress = false;
+                    STATE.suppressManualWatcherUntil = Date.now() + 800;
+                    STATE.suppressManualWatcherReason = source;
+                }
             },
 
             validateFormation(positions) {

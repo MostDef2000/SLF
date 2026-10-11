@@ -47,8 +47,8 @@ const context = {
     },
     SLFActivePresetRegistry: {
       active: ['test_preset', 'Pep_BoxControl_bal2'],
-      suiteVersion: 'slf_tactic_suite_561_v9',
-      recommendationSchema: 'slf_rule_decision_v9_tactical_suite',
+      suiteVersion: 'slf_tactic_suite_561_v10',
+      recommendationSchema: 'slf_rule_decision_v10_tactical_suite',
       defaultRiskAppetite: 'bold'
     }
   },
@@ -258,19 +258,19 @@ const presetA = 'Arteta_Control433_bal3';
 const presetB = 'Pep_BoxControl_bal2';
 const tacticB = { def_line: '2', press_line: '2', def_width: '1', press_intense: '2', build_type: '2', build_temp: '1', build_long: '1', build_fast: '1', style: '3', pass_risk: '2', dribble: '1', cross: '1', shot: '1' };
 const ruleA = {
-  schema: 'slf_rule_decision_v9_tactical_suite',
+  schema: 'slf_rule_decision_v10_tactical_suite',
   mode: 'button_on_demand_scored_rules',
   generatedAt: Date.now(),
-  action: { preset: presetA, decision: 'stable_control', ruleId: 'suite_v9_stable_control', score: 68, reason: 'stable_control', guardType: 'suite_v9_selection' },
+  action: { preset: presetA, decision: 'stable_control', ruleId: 'suite_v10_stable_control', score: 68, reason: 'stable_control', guardType: 'suite_v10_selection' },
   confidence: { level: 'high', gap: 34 },
   margin: 34,
   moment: { context: {} }
 };
 const ruleHold = {
-  schema: 'slf_rule_decision_v9_tactical_suite',
+  schema: 'slf_rule_decision_v10_tactical_suite',
   mode: 'button_on_demand_scored_rules',
   generatedAt: Date.now(),
-  action: { preset: null, rawPreset: null, decision: 'hold_current', ruleId: 'suite_v9_hold_current', score: 0, reason: 'Нет безопасной рекомендации — оставить текущую тактику', fallbackReason: 'no_eligible_candidate', guardType: 'hold_current', guardReason: 'no production preset fallback is allowed' },
+  action: { preset: null, rawPreset: null, decision: 'hold_current', ruleId: 'suite_v10_hold_current', score: 0, reason: 'Нет безопасной рекомендации — оставить текущую тактику', fallbackReason: 'no_eligible_candidate', guardType: 'hold_current', guardReason: 'no production preset fallback is allowed' },
   confidence: { level: 'low', gap: 0 },
   margin: 0,
   moment: { context: {} }
@@ -289,7 +289,7 @@ snapshotTemplate = {
 };
 const beforeA = context.SnapshotEngine.build();
 assert.equal(beforeA.tacticTelemetry.recommendedPreset, presetA, 'enrich stamps recommendedPreset from the rule decision');
-assert.equal(beforeA.tacticTelemetry.libraryVersion, 'slf_tactic_suite_561_v9');
+assert.equal(beforeA.tacticTelemetry.libraryVersion, 'slf_tactic_suite_561_v10');
 
 context.__EventTracker.savePresetEvent(presetB, tacticB, beforeA);
 const pendingA = context.STATE.pendingPresetEvent;
@@ -321,7 +321,7 @@ assert.equal(effectA.tacticContext.actualPreset, presetB, 'tacticContext: applie
 assert.equal(effectA.tacticContext.recommendationState, 'recommended_not_applied', 'tacticContext state');
 assert.equal(effectA.applicationSource, 'preset_apply');
 assert.equal(effectA.decisionContext.action.preset, presetA, 'decision context retains the recommended side');
-assert.equal(effectA.ruleId, 'suite_v9_stable_control');
+assert.equal(effectA.ruleId, 'suite_v10_stable_control');
 
 // (a, merge) enrich() MERGE: a snapshot that already carries telemetry keeps its
 // recommendation fields even when the current build has no rule decision.
@@ -337,12 +337,12 @@ const merged = context.SnapshotEngine.buildSnapshotRecord({
   currentTactic: tacticB,
   stats: stats(1.1, 0.6),
   developerHints: [],
-  tacticTelemetry: { recommendedPreset: presetA, rawRecommendedPreset: presetA, libraryVersion: 'slf_tactic_suite_561_v9' }
+  tacticTelemetry: { recommendedPreset: presetA, rawRecommendedPreset: presetA, libraryVersion: 'slf_tactic_suite_561_v10' }
 });
 assert.equal(merged.tacticTelemetry.recommendedPreset, presetA, 'merge keeps the prior recommendedPreset (not clobbered)');
 assert.equal(merged.tacticTelemetry.rawRecommendedPreset, presetA, 'merge keeps the prior raw recommendedPreset');
-assert.equal(merged.tacticTelemetry.libraryVersion, 'slf_tactic_suite_561_v9', 'libraryVersion survives the merge (v8 replaced it with the legacy constant)');
-assert.equal(merged.tacticTelemetry.recommendationSchema, 'slf_rule_decision_v9_tactical_suite', 'registry recommendationSchema through the merge');
+assert.equal(merged.tacticTelemetry.libraryVersion, 'slf_tactic_suite_561_v10', 'libraryVersion survives the merge (v8 replaced it with the legacy constant)');
+assert.equal(merged.tacticTelemetry.recommendationSchema, 'slf_rule_decision_v10_tactical_suite', 'registry recommendationSchema through the merge');
 assert.equal(merged.tacticTelemetry.actualPreset, presetB, 'actualPreset tracks the current tactic');
 assert.equal(merged.tacticTelemetry.currentPreset, presetB, 'currentPreset detects the applied tactic');
 
