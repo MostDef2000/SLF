@@ -24,9 +24,13 @@
     const ACTIVE_SET = new Set(ACTIVE);
     const DEFAULT_RISK = registry.defaultRiskAppetite || 'standard';
 
-    const STEP = {"Arteta_Control433_bal3":["MidBlock_Control4231_neutr","Pep_BoxControl_bal2","Pep_ControlledPush_att3","Conte_WingbackWidth_bal4","Lead_Outlet4141_def1"],"Pep_BoxControl_bal2":["Arteta_Control433_bal3","MidBlock_Control4231_neutr","MidBlock_Counter4411_neutr","Pep_PressCooldown_bal2"],"Pep_PressCooldown_bal2":["Pep_BoxControl_bal2","MidBlock_Control4231_neutr","Lead_Outlet4141_def1"],"Pep_ControlledPush_att3":["Arteta_Control433_bal3","Pep_TwoThreeFive_att3","Conte_WingbackWidth_bal4"],"Pep_TwoThreeFive_att3":["Pep_ControlledPush_att3","Conte_WingbackWidth_bal4","Klopp_Gegenpress_att4"],"Conte_WingbackWidth_bal4":["Arteta_Control433_bal3","Pep_ControlledPush_att3","Pep_TwoThreeFive_att3"],"Klopp_Gegenpress_att4":["Pep_TwoThreeFive_att3","Pep_ControlledPush_att3"],"Simeone_Compact442_def4":["Lead_Outlet4141_def1","Arteta_Control433_bal3","Simeone_LowBlock_def5"],"Simeone_LowBlock_def5":["Simeone_Compact442_def4","Lead_Outlet4141_def1"],"MidBlock_Control4231_neutr":["Arteta_Control433_bal3","Pep_BoxControl_bal2","MidBlock_Counter4411_neutr","Lead_Outlet4141_def1"],"MidBlock_Counter4411_neutr":["MidBlock_Control4231_neutr","Pep_BoxControl_bal2","Pep_ControlledPush_att3"],"Lead_Outlet4141_def1":["Simeone_Compact442_def4","MidBlock_Control4231_neutr","Pep_PressCooldown_bal2"]};
+    const STEP = {"Arteta_Control433_bal3":["Emery_BalancedControl4231_neutr","Pep_BoxControl_bal2","Pep_ControlledPush_att3","Conte_WingbackWidth_bal4","Allegri_LeadManagement4141_def1"],"Pep_BoxControl_bal2":["Arteta_Control433_bal3","Emery_BalancedControl4231_neutr","Mourinho_CompactCounter4411_neutr","Pep_PressCooldown_bal2"],"Pep_PressCooldown_bal2":["Pep_BoxControl_bal2","Emery_BalancedControl4231_neutr","Allegri_LeadManagement4141_def1"],"Pep_ControlledPush_att3":["Arteta_Control433_bal3","Pep_TwoThreeFive_att3","Conte_WingbackWidth_bal4"],"Pep_TwoThreeFive_att3":["Pep_ControlledPush_att3","Conte_WingbackWidth_bal4","Klopp_Gegenpress_att4"],"Conte_WingbackWidth_bal4":["Arteta_Control433_bal3","Pep_ControlledPush_att3","Pep_TwoThreeFive_att3"],"Klopp_Gegenpress_att4":["Pep_TwoThreeFive_att3","Pep_ControlledPush_att3"],"Simeone_Compact442_def4":["Allegri_LeadManagement4141_def1","Arteta_Control433_bal3","Simeone_LowBlock_def5"],"Simeone_LowBlock_def5":["Simeone_Compact442_def4","Allegri_LeadManagement4141_def1"],"Emery_BalancedControl4231_neutr":["Arteta_Control433_bal3","Pep_BoxControl_bal2","Mourinho_CompactCounter4411_neutr","Allegri_LeadManagement4141_def1"],"Mourinho_CompactCounter4411_neutr":["Emery_BalancedControl4231_neutr","Pep_BoxControl_bal2","Pep_ControlledPush_att3"],"Allegri_LeadManagement4141_def1":["Simeone_Compact442_def4","Emery_BalancedControl4231_neutr","Pep_PressCooldown_bal2"]};
 
-    const SCORE_BY_SITUATION = {"stable_control":{"Arteta_Control433_bal3":68,"MidBlock_Control4231_neutr":51,"Pep_BoxControl_bal2":35},"midblock_safe_control":{"MidBlock_Control4231_neutr":82,"Arteta_Control433_bal3":46,"Pep_BoxControl_bal2":32},"pressure_escape":{"Pep_BoxControl_bal2":74,"MidBlock_Control4231_neutr":46,"Pep_PressCooldown_bal2":28},"pressure_counter":{"MidBlock_Counter4411_neutr":82,"Pep_BoxControl_bal2":48,"MidBlock_Control4231_neutr":42},"press_cooldown":{"Pep_PressCooldown_bal2":76,"MidBlock_Control4231_neutr":48,"Pep_BoxControl_bal2":38},"controlled_chase":{"Pep_ControlledPush_att3":72,"Arteta_Control433_bal3":26,"Pep_TwoThreeFive_att3":24},"positional_siege":{"Pep_TwoThreeFive_att3":74,"Pep_ControlledPush_att3":50,"Conte_WingbackWidth_bal4":31},"width_attack":{"Conte_WingbackWidth_bal4":76,"Pep_ControlledPush_att3":37,"Pep_TwoThreeFive_att3":26},"protect_lead":{"Simeone_Compact442_def4":74,"Lead_Outlet4141_def1":68,"MidBlock_Control4231_neutr":38},"protect_lead_with_outlet":{"Lead_Outlet4141_def1":86,"Simeone_Compact442_def4":52,"MidBlock_Control4231_neutr":44},"emergency_lock":{"Simeone_LowBlock_def5":84,"Lead_Outlet4141_def1":48,"Simeone_Compact442_def4":46},"late_high_pressure":{"Klopp_Gegenpress_att4":79,"Pep_ControlledPush_att3":56,"Pep_TwoThreeFive_att3":44}};
+    const SCORE_BY_SITUATION = {"stable_control":{"Arteta_Control433_bal3":68,"Emery_BalancedControl4231_neutr":51,"Pep_BoxControl_bal2":35},"midblock_safe_control":{"Emery_BalancedControl4231_neutr":82,"Arteta_Control433_bal3":46,"Pep_BoxControl_bal2":32},"pressure_escape":{"Pep_BoxControl_bal2":74,"Emery_BalancedControl4231_neutr":46,"Pep_PressCooldown_bal2":28},"pressure_counter":{"Mourinho_CompactCounter4411_neutr":82,"Pep_BoxControl_bal2":48,"Emery_BalancedControl4231_neutr":42},"press_cooldown":{"Pep_PressCooldown_bal2":76,"Emery_BalancedControl4231_neutr":48,"Pep_BoxControl_bal2":38},"controlled_chase":{"Pep_ControlledPush_att3":72,"Arteta_Control433_bal3":26,"Pep_TwoThreeFive_att3":24},"positional_siege":{"Pep_TwoThreeFive_att3":74,"Pep_ControlledPush_att3":50,"Conte_WingbackWidth_bal4":31},"width_attack":{"Conte_WingbackWidth_bal4":76,"Pep_ControlledPush_att3":37,"Pep_TwoThreeFive_att3":26},"protect_lead":{"Simeone_Compact442_def4":74,"Allegri_LeadManagement4141_def1":68,"Emery_BalancedControl4231_neutr":38},"protect_lead_with_outlet":{"Allegri_LeadManagement4141_def1":86,"Simeone_Compact442_def4":52,"Emery_BalancedControl4231_neutr":44},"emergency_lock":{"Simeone_LowBlock_def5":84,"Allegri_LeadManagement4141_def1":48,"Simeone_Compact442_def4":46},"late_high_pressure":{"Klopp_Gegenpress_att4":79,"Pep_ControlledPush_att3":56,"Pep_TwoThreeFive_att3":44}};
+
+    // Old stored progression IDs must resolve to the same v10 tactical vector.
+    // Only aliases are mapped; unknown/custom names are never promoted.
+    const resolvePresetId = name => registry.resolvePresetId?.(name) || String(name || '');
 
     function has(context, key) {
         return Array.isArray(context?.signals) && context.signals.includes(key)
@@ -96,13 +100,14 @@
     }
 
     function hardVeto(name, context = {}) {
+        name = resolvePresetId(name);
         const c = normalizedContext(context);
         const situation = classify(c);
         const reasons = [];
         if (!ACTIVE_SET.has(name)) reasons.push('preset отсутствует в active registry');
         if (name === 'Simeone_LowBlock_def5' && situation !== 'emergency_lock') reasons.push('Low Block только временный emergency lock');
-        if (name === 'MidBlock_Counter4411_neutr' && (!c.underPressure || !c.counterExitAvailable || c.counterExitBlocked || c.highBadActions || c.pressFatigueRisk)) reasons.push('Контратака только с подтверждённым чистым выходом');
-        if (name === 'Lead_Outlet4141_def1' && (c.scoreState !== 'winning' || !c.counterExitAvailable || c.counterExitBlocked || c.highBadActions)) reasons.push('Удержание с выходом только при преимуществе и доступном первом пасе');
+        if (name === 'Mourinho_CompactCounter4411_neutr' && (!c.underPressure || !c.counterExitAvailable || c.counterExitBlocked || c.highBadActions || c.pressFatigueRisk)) reasons.push('Контратака только с подтверждённым чистым выходом');
+        if (name === 'Allegri_LeadManagement4141_def1' && (c.scoreState !== 'winning' || !c.counterExitAvailable || c.counterExitBlocked || c.highBadActions)) reasons.push('Удержание с выходом только при преимуществе и доступном первом пасе');
         if (name === 'Simeone_Compact442_def4' && c.scoreState === 'losing') reasons.push('защитный 4-4-2 запрещён при проигрыше');
         if (name === 'Pep_PressCooldown_bal2' && c.scoreState === 'losing' && c.minute >= 70 && c.attackNeed >= 55) reasons.push('поздний проигрыш требует продвижения, а не cooldown');
         if (name === 'Pep_TwoThreeFive_att3' && (c.transitionThreat || c.underPressure || c.pressFatigueRisk || c.highBadActions)) reasons.push('3-2-5 запрещён при transition threat/fatigue/браке');
@@ -122,6 +127,7 @@
     }
 
     function scoreCandidate(name, context = {}, situation = classify(context)) {
+        name = resolvePresetId(name);
         const c = normalizedContext(context);
         const veto = hardVeto(name, c);
         if (veto.vetoed) {
@@ -190,6 +196,8 @@
     }
 
     function shortestStep(from, to) {
+        from = resolvePresetId(from);
+        to = resolvePresetId(to);
         if (!from || !to || from === to || !STEP[from] || !STEP[to]) return to;
         const queue = [[from]];
         const seen = new Set([from]);
@@ -295,7 +303,8 @@
         RecommendationEngine.selectRawPreset = function selectSuiteV9(snapshot, state = {}) {
             const decision = window.SLFCurrentActionHintEngine?.run ? window.SLFCurrentActionHintEngine.run(snapshot || {}, state || {}) : null;
             // v10: no implicit preset fallback — невалидное/отсутствующее решение означает hold_current.
-            const preset = decision?.action?.preset;
+            const preset = resolvePresetId(decision?.action?.preset);
+            if (decision?.action && preset !== decision.action.preset) decision.action.preset = preset;
             if (!decision || !ACTIVE_SET.has(preset)) {
                 stamp(snapshot, decision, null);
                 return { name:null, reason:'hold_current: no valid suite decision', ruleDecision:decision, progressionAction:'hold_current', fallbackReason:decision ? 'invalid_preset' : 'no_decision' };
@@ -304,6 +313,15 @@
             return { name:preset, reason:decision.action.reason || 'tactical suite v10', ruleDecision:decision, progressionAction:'suite_v10_scored' };
         };
         if (originalGuard) RecommendationEngine.applyProgressionGuard = function applySuiteV9Guard(candidate, snapshot, context = {}) {
+            if (candidate?.name) candidate = Object.assign({}, candidate, { name:resolvePresetId(candidate.name) });
+            // A persisted match progression can straddle the userscript update.
+            // Normalize only known aliases in memory before legacy family guard.
+            if (typeof STATE !== 'undefined' && STATE?.presetProgression) {
+                for (const key of ['lastAppliedPreset','previousPreset']) {
+                    const old = STATE.presetProgression[key];
+                    if (old && resolvePresetId(old) !== old) STATE.presetProgression[key] = resolvePresetId(old);
+                }
+            }
             if (!candidate?.name || !ACTIVE_SET.has(candidate.name) || !snapshot || snapshot.status === 'finished') return candidate;
             const targetPreset = candidate.name;
             let guarded = ['Simeone_LowBlock_def5'].includes(candidate.name) || context?.urgency?.overrideProgressionGuard === true
