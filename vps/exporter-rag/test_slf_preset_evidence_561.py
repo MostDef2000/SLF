@@ -334,5 +334,30 @@ class TelemetryAnalyticsTest(unittest.TestCase):
         self.assertEqual(module.build_report([], [current], [scored])["counts"]["v9CurrentScoredConfirmedEffects"], 0)
 
 
+    def test_v10_readiness_separate_from_v9_and_unverified_browser_edits(self):
+        stable_ts = int(module.dt.datetime(2026, 8, 1, tzinfo=module.dt.timezone.utc).timestamp() * 1000)
+        def current(game, library, schema, preset):
+            phase = phase_effect(game, "p1", preset=preset)
+            phase["ts"] = stable_ts
+            phase["telemetryContext"].update({"libraryVersion": library, "recommendationSchema": schema})
+            phase["tacticContext"] = {"applicationStatus": "game_confirmed"}
+            return phase
+
+        v9 = current("history", module.V9_LIBRARY, module.V9_RECOMMENDATION_SCHEMA, "Arteta_Control433_bal3")
+        v10 = current("new", module.V10_LIBRARY, module.V10_RECOMMENDATION_SCHEMA, "MidBlock_Counter4411_neutr")
+        finished = [result("history", score=(1, 0)), result("new", score=(2, 1))]
+        report = module.build_report([], [v9, v10], finished)
+        self.assertEqual(report["counts"]["v9CurrentScoredConfirmedEffects"], 1)
+        self.assertEqual(report["counts"]["v10CurrentScoredConfirmedEffects"], 1)
+        self.assertEqual(report["counts"]["v10CurrentNamedPhaseEffects"], 1)
+        self.assertEqual(report["quality"]["readinessCohort"], "v10_current_scored_game_confirmed_phase_only")
+        self.assertFalse(report["quality"]["readyForRetune"], "single v10 phase is insufficient")
+
+        v10["tacticContext"]["applicationStatus"] = "ui_readback_confirmed"
+        unverified = module.build_report([], [v9, v10], finished)
+        self.assertEqual(unverified["counts"]["v10CurrentScoredConfirmedEffects"], 0)
+        self.assertFalse(unverified["quality"]["readyForRetune"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
