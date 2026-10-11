@@ -112,7 +112,11 @@ const SnapshotEngine = {
             snapshot.minute ?? '',
             snapshot.bucket || '',
             this.getScoreKey(snapshot.score),
-            (snapshot.teams || []).join('-')
+            (snapshot.teams || []).join('-'),
+            // v9/#327: two tactical revisions can share a match minute/score.
+            snapshot.tacticalPhase?.phaseId || snapshot.tacticalControlState?.phaseId || '',
+            snapshot.tacticalControlState?.revision ?? snapshot.tacticTelemetry?.transitionCount ?? '',
+            snapshot.tacticalControlState?.fingerprint || snapshot.tacticTelemetry?.currentTacticFingerprint || ''
         ].join('|');
     },
 

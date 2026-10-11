@@ -53,8 +53,11 @@
             return null;
         },
 
-        savePresetEvent(name, preset, beforeSnapshot) {
+        savePresetEvent(name, preset, beforeSnapshot, verifiedControls = null) {
             const ts = Date.now();
+            const appliedControls = verifiedControls || preset;
+            const changed = this.diffTactic(beforeSnapshot?.currentTactic, appliedControls);
+            const applicationSequence = SnapshotEngine.telemetryV2?.nextControlChangeSequence?.(beforeSnapshot?.gameId) ?? null;
             const generationWindow = beforeSnapshot?.generationWindow || MatchStateParser.getGenerationWindow(beforeSnapshot?.minute);
             const targetGenerationWindow = MatchTimingModel.getTargetWindowAfterChange(beforeSnapshot?.minute);
             const ruleDecision = this.compactRuleDecision(beforeSnapshot?.ruleDecision || STATE.lastRuleDecision || null);
@@ -70,7 +73,7 @@
                 recordType: 'preset_event',
                 schemaVersion: 3,
                 parserVersion: 'preset_event_generation_v4_tactic_telemetry',
-                eventKey: ['preset_event', MatchStateParser.getGameId(), beforeSnapshot.minute ?? '', beforeSnapshot.bucket || '', name || '', ts].join('|'),
+                eventKey: ['preset_event', MatchStateParser.getGameId(), beforeSnapshot.minute ?? '', beforeSnapshot.bucket || '', name || '', applicationSequence ?? ts].join('|'),
                 type: 'preset',
                 gameId: MatchStateParser.getGameId(),
                 minute: beforeSnapshot.minute,
@@ -80,7 +83,16 @@
                 targetBucket: targetGenerationWindow?.label || beforeSnapshot.bucket,
                 timingModel: 'generation_windows_v1_last_change_before_next_window',
                 presetName: name,
-                tactic: preset,
+                tactic: appliedControls,
+                beforeControls: beforeSnapshot?.currentTactic || null,
+                afterControls: appliedControls,
+                changed,
+                changedKeys: Object.keys(changed),
+                fromFingerprint: beforeSnapshot?.tacticalControlState?.fingerprint || null,
+                toFingerprint: SnapshotEngine.telemetryV2?.tacticFingerprint?.(appliedControls) || null,
+                applicationSequence,
+                applicationStatus: verifiedControls ? 'ui_readback_confirmed' : 'applied_unverified',
+                verification: verifiedControls ? 'native_control_dom_readback_only' : 'no_readback',
                 applicationSource,
                 recommendedPreset,
                 actualPreset,

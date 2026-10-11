@@ -61,6 +61,30 @@ assert.notEqual(
   'a changed score must remain a distinct snapshot observation'
 );
 
+// Issue #327: two tactical actions may share minute, score and window.
+const withPhaseA = {
+  ...baseSnapshot,
+  tacticalPhase: { phaseId: 'phase|g1|1|abc' },
+  tacticalControlState: { revision: 1, fingerprint: 'def_line:1' }
+};
+const withPhaseB = {
+  ...baseSnapshot,
+  tacticalPhase: { phaseId: 'phase|g1|2|def' },
+  tacticalControlState: { revision: 2, fingerprint: 'def_line:2' }
+};
+const withPhaseBackToA = {
+  ...baseSnapshot,
+  tacticalPhase: { phaseId: 'phase|g1|3|abc' },
+  tacticalControlState: { revision: 3, fingerprint: 'def_line:1' }
+};
+assert.notEqual(engine.buildSnapshotKey(withPhaseA), engine.buildSnapshotKey(withPhaseB),
+  'same-minute A -> B must retain distinct snapshot identity');
+assert.notEqual(engine.buildSnapshotKey(withPhaseA), engine.buildSnapshotKey(withPhaseBackToA),
+  'same-minute A -> B -> A must retain a second A snapshot');
+assert.equal(engine.buildSnapshotKey(withPhaseB),
+  engine.buildSnapshotKey({ ...withPhaseB, ts: 999, recommendationSource: 'retry' }),
+  'retry of the same applied phase must be idempotent');
+
 const firstResult = {
   ...baseSnapshot,
   status: 'finished',

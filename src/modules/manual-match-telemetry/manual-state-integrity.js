@@ -255,53 +255,80 @@
         if (!initialSnapshot?.myTeam || initialSnapshot.matchOwnership === 'foreign') return false;
         STATE.tacticWatcherStarted = true;
         STATE.lastManualTactic = getCurrentTactic();
+        STATE.lastManualTacticSnapshot = initialSnapshot;
         document.body.addEventListener('change', event => {
             const element = event.target;
             if (!isTacticalInput(element)) return;
             if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
-            clearTimeout(STATE.manualChangeTimer);
-            STATE.manualChangeTimer = setTimeout(() => {
-                if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
-                const current = getCurrentTactic();
-                const changed = EventTracker.diffTactic(STATE.lastManualTactic, current);
-                if (!Object.keys(changed).length) return;
-                setTransitionSourceHint('manual_change');
-                const snapshot = SnapshotEngine.build();
-                if (!snapshot?.myTeam || snapshot.matchOwnership === 'foreign' || snapshot.status === 'finished') {
-                    STATE.lastManualTactic = current;
-                    return;
-                }
-                snapshot.ruleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
-                const ts = Date.now();
-                const generationWindow = snapshot.generationWindow || MatchStateParser.getGenerationWindow(snapshot.minute);
-                const targetGenerationWindow = MatchTimingModel.getTargetWindowAfterChange(snapshot.minute);
-                const eventRecord = {
-                    ts,
-                    recordType: 'preset_event',
-                    schemaVersion: 3,
-                    parserVersion: 'manual_tactic_event_generation_v5_telemetry_only',
-                    eventKey: ['manual_tactic_event', snapshot.gameId || '', snapshot.minute ?? '', snapshot.bucket || '', ts].join('|'),
-                    type: 'manual_change',
-                    gameId: snapshot.gameId,
-                    minute: snapshot.minute,
-                    bucket: snapshot.bucket,
-                    generationWindow,
-                    targetGenerationWindow,
-                    targetBucket: targetGenerationWindow?.label || snapshot.bucket,
-                    timingModel: 'generation_windows_v1_last_change_before_next_window',
-                    myTeam: snapshot.myTeam,
-                    changed,
-                    tactic: current,
-                    ruleDecision: EventTracker.compactRuleDecision(snapshot.ruleDecision),
-                    tacticTelemetry: snapshot.tacticTelemetry || null,
-                    beforeSnapshot: snapshot,
-                    snapshot,
-                    source: { page: 'game', trigger: 'manual_tactic_control', collectedAt: ts, scriptVersion: SLF_VERSION_INFO.scriptVersion }
-                };
-                STATE.pendingPresetEvent = eventRecord;
-                SnapshotEngine.persistManualState({ manualTacticEventPending: true });
-                void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, eventRecord, 'manual tactic event history').catch(() => {});
-                STATE.lastManualTactic = current;
+
+            // Record every observed control transition synchronously. Debouncing
+            // all change events by 500ms previously erased rapid A -> B -> A
+            // changes within the same game minute.
+            const beforeControls = STATE.lastManualTactic;
+            const current = getCurrentTactic();
+            const changed = EventTracker.diffTactic(beforeControls, current);
+            if (!Object.keys(changed).length) return;
+            STATE.lastManualTactic = current;
+            setTransitionSourceHint('manual_change');
+            const snapshot = SnapshotEngine.build();
+            if (!snapshot?.myTeam || snapshot.matchOwnership === 'foreign' || snapshot.status === 'finished') return;
+            snapshot.ruleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
+            const ts = Date.now();
+            const generationWindow = snapshot.generationWindow || MatchStateParser.getGenerationWindow(snapshot.minute);
+            const targetGenerationWindow = MatchTimingModel.getTargetWindowAfterChange(snapshot.minute);
+            const runtime = SnapshotEngine.telemetryV2;
+            const sequence = runtime?.nextControlChangeSequence?.(snapshot.gameId)
+                ?? (STATE.manualTacticChangeSequence = Number(STATE.manualTacticChangeSequence || 0) + 1);
+            const beforeSnapshot = STATE.lastManualTacticSnapshot || initialSnapshot;
+            const eventRecord = {
+                ts,
+                recordType: 'preset_event',
+                schemaVersion: 4,
+                parserVersion: 'manual_tactic_control_change_v6',
+                eventKey: ['manual_tactic_change', snapshot.gameId || '', sequence].join('|'),
+                type: 'manual_change',
+                gameId: snapshot.gameId,
+                sessionId: snapshot.telemetryContext?.sessionId || null,
+                applicationSequence: sequence,
+                minute: snapshot.minute,
+                bucket: snapshot.bucket,
+                generationWindow,
+                targetGenerationWindow,
+                targetBucket: targetGenerationWindow?.label || snapshot.bucket,
+                timingModel: 'generation_windows_v1_last_change_before_next_window',
+                myTeam: snapshot.myTeam,
+                changed,
+                changedKeys: Object.keys(changed),
+                beforeControls: runtime?.canonicalTacticControls?.(beforeControls) || beforeControls,
+                afterControls: runtime?.canonicalTacticControls?.(current) || current,
+                fromFingerprint: runtime?.tacticFingerprint?.(beforeControls) || '',
+                toFingerprint: runtime?.tacticFingerprint?.(current) || '',
+                applicationSource: 'manual_ui',
+                applicationStatus: 'applied_unverified',
+                verification: 'dom_change_only_no_game_ack',
+                tactic: current,
+                actualPreset: snapshot.telemetryContext?.presetId !== 'unknown' ? snapshot.telemetryContext?.presetId : null,
+                ruleDecision: EventTracker.compactRuleDecision(snapshot.ruleDecision),
+                tacticTelemetry: snapshot.tacticTelemetry || null,
+                beforeSnapshot,
+                snapshot,
+                source: { page: 'game', trigger: 'manual_tactic_control', collectedAt: ts, scriptVersion: SLF_VERSION_INFO.scriptVersion }
+            };
+            // Legacy pending preset effect must not claim that an unsaved DOM
+            // edit was accepted by the game's match engine.
+            STATE.lastManualTacticSnapshot = snapshot;
+            void Api.postAppend(CONFIG.COLLECTIONS.PRESET_EVENTS, eventRecord, 'manual tactic event history').catch(() => {});
+            // A separate, debounced *readback* checks whether the browser kept
+            // the last selection after native page handlers settled. This must
+            // never coalesce or erase the individual change events above.
+            const intendedFingerprint = runtime?.tacticFingerprint?.(current) || '';
+            clearTimeout(STATE.manualReadbackTimer);
+            STATE.manualReadbackTimer = setTimeout(() => {
+                if (!location.pathname.includes('/game.php')) return;
+                const actualFingerprint = runtime?.tacticFingerprint?.(getCurrentTactic()) || '';
+                STATE.lastManualReadbackStatus = intendedFingerprint && actualFingerprint === intendedFingerprint
+                    ? 'ui_readback_confirmed'
+                    : 'applied_unverified';
             }, 500);
         }, true);
         return true;
