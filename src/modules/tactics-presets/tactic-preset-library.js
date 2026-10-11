@@ -2,6 +2,11 @@
 // ============================================================
 
 const TacticPresetLibrary = {
+    resolvePresetId(name) {
+        const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+        return registry?.resolvePresetId?.(name) || name;
+    },
+
     meta: {
         // ----------------------------
         // DEFENSIVE
@@ -297,15 +302,18 @@ const TacticPresetLibrary = {
     },
 
     getSchemeForPreset(name) {
+        name = this.resolvePresetId(name);
         const state = this.presetSchemeState[name] || 'base_balance';
         return this.schemeStates[state] || this.schemeStates.base_balance;
     },
 
     getTraits(name) {
+        name = this.resolvePresetId(name);
         return this.traits?.[name] || null;
     },
 
     makeSchemeHint(name) {
+        name = this.resolvePresetId(name);
         const scheme = this.getSchemeForPreset(name);
         const title = this.meta[name]?.title || name || '';
         return scheme ? `Схема для ${title}: ${scheme}.` : '';
@@ -316,6 +324,7 @@ const TacticPresetLibrary = {
     },
 
     makeRoleHint(role, name, reason) {
+        name = this.resolvePresetId(name);
         const meta = this.meta[name];
         const label = meta?.title || name;
 
@@ -336,20 +345,24 @@ const TacticPresetLibrary = {
     },
 
     makeRoleNameHint(role, name) {
+        name = this.resolvePresetId(name);
         const meta = this.meta[name];
         const label = meta?.title || name;
         return `${role}: ${label}.`;
     },
 
     getGroup(name) {
+        name = this.resolvePresetId(name);
         return this.meta[name]?.group || 'custom';
     },
 
     getRank(name) {
+        name = this.resolvePresetId(name);
         return Number(this.meta[name]?.rank || 0);
     },
 
     getShortDescription(name) {
+        name = this.resolvePresetId(name);
         const meta = this.meta[name];
 
         if (!meta) return '';
