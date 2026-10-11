@@ -1,22 +1,22 @@
-// Generator 5.61 Tactical Suite v10 Recommendation Policy
+// Generator 5.61 Tactical Suite v11 Recommendation Policy
 // ============================================================
 // The active registry owns tactic data/UI identity. This layer makes the
 // registry decision canonical for Coach Mode, progression and telemetry.
-// v9 eliminates all implicit preset fallbacks: when no eligible candidate
+// v11 eliminates all implicit preset fallbacks: when no eligible candidate
 // exists the decision is hold_current — a hardcoded preset is never injected.
 
 (function tacticPresetDirectionPolicy() {
     'use strict';
 
-    const VERSION = '5.61-tactical-suite-v10.0';
+    const VERSION = '5.61-tactical-suite-v11.0';
     const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
     const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
     if (!registry || !engine || window.SLFTacticDirectionPolicy?.version === VERSION) return;
 
-    // v9 install guard: the policy only installs on a registry that carries the v9 suite
-    // identity. SUITE must NOT be derived before this check, otherwise a stale v8 registry
+    // v11 install guard: the policy only installs on a registry that carries the v11 suite
+    // identity. SUITE must NOT be derived before this check, otherwise a stale v10 registry
     // would satisfy a self-referential comparison and silently install a mixed stack.
-    const EXPECTED_SUITE = 'slf_tactic_suite_561_v10';
+    const EXPECTED_SUITE = 'slf_tactic_suite_561_v11';
     if (registry.suiteVersion !== EXPECTED_SUITE) return;
     const SUITE = registry.suiteVersion;
     const SCHEMA = registry.recommendationSchema;
@@ -24,9 +24,9 @@
     const ACTIVE_SET = new Set(ACTIVE);
     const DEFAULT_RISK = registry.defaultRiskAppetite || 'standard';
 
-    const STEP = {"Arteta_Control433_bal3":["Emery_BalancedControl4231_neutr","Pep_BoxControl_bal2","Pep_ControlledPush_att3","Conte_WingbackWidth_bal4","Allegri_LeadManagement4141_def1"],"Pep_BoxControl_bal2":["Arteta_Control433_bal3","Emery_BalancedControl4231_neutr","Mourinho_CompactCounter4411_neutr","Pep_PressCooldown_bal2"],"Pep_PressCooldown_bal2":["Pep_BoxControl_bal2","Emery_BalancedControl4231_neutr","Allegri_LeadManagement4141_def1"],"Pep_ControlledPush_att3":["Arteta_Control433_bal3","Pep_TwoThreeFive_att3","Conte_WingbackWidth_bal4"],"Pep_TwoThreeFive_att3":["Pep_ControlledPush_att3","Conte_WingbackWidth_bal4","Klopp_Gegenpress_att4"],"Conte_WingbackWidth_bal4":["Arteta_Control433_bal3","Pep_ControlledPush_att3","Pep_TwoThreeFive_att3"],"Klopp_Gegenpress_att4":["Pep_TwoThreeFive_att3","Pep_ControlledPush_att3"],"Simeone_Compact442_def4":["Allegri_LeadManagement4141_def1","Arteta_Control433_bal3","Simeone_LowBlock_def5"],"Simeone_LowBlock_def5":["Simeone_Compact442_def4","Allegri_LeadManagement4141_def1"],"Emery_BalancedControl4231_neutr":["Arteta_Control433_bal3","Pep_BoxControl_bal2","Mourinho_CompactCounter4411_neutr","Allegri_LeadManagement4141_def1"],"Mourinho_CompactCounter4411_neutr":["Emery_BalancedControl4231_neutr","Pep_BoxControl_bal2","Pep_ControlledPush_att3"],"Allegri_LeadManagement4141_def1":["Simeone_Compact442_def4","Emery_BalancedControl4231_neutr","Pep_PressCooldown_bal2"]};
+    const STEP = {"Arteta_SafePossession_v11":["Emery_BalancedBase_v11"],"Guardiola_PressEscape_v11":["Emery_BalancedBase_v11","Mourinho_CleanCounter_v11","Guardiola_PressCooldown_v11"],"Guardiola_PressCooldown_v11":["Guardiola_PressEscape_v11","Emery_BalancedBase_v11","Allegri_LeadOutlet_v11"],"Guardiola_ControlledPush_v11":["Guardiola_PositionalSiege_v11","Conte_WideChannels_v11"],"Guardiola_PositionalSiege_v11":["Guardiola_ControlledPush_v11","Conte_WideChannels_v11","Klopp_LateGegenpress_v11"],"Conte_WideChannels_v11":["Guardiola_ControlledPush_v11","Guardiola_PositionalSiege_v11"],"Klopp_LateGegenpress_v11":["Guardiola_PositionalSiege_v11","Guardiola_ControlledPush_v11"],"Simeone_CompactLead_v11":["Allegri_LeadOutlet_v11","Simeone_EmergencyBlock_v11"],"Simeone_EmergencyBlock_v11":["Simeone_CompactLead_v11","Allegri_LeadOutlet_v11"],"Emery_BalancedBase_v11":["Arteta_SafePossession_v11","Guardiola_PressEscape_v11","Mourinho_CleanCounter_v11","Allegri_LeadOutlet_v11","Guardiola_ControlledPush_v11"],"Mourinho_CleanCounter_v11":["Emery_BalancedBase_v11","Guardiola_PressEscape_v11","Guardiola_ControlledPush_v11"],"Allegri_LeadOutlet_v11":["Simeone_CompactLead_v11","Emery_BalancedBase_v11","Guardiola_PressCooldown_v11"]};
 
-    const SCORE_BY_SITUATION = {"stable_control":{"Arteta_Control433_bal3":68,"Emery_BalancedControl4231_neutr":51,"Pep_BoxControl_bal2":35},"midblock_safe_control":{"Emery_BalancedControl4231_neutr":82,"Arteta_Control433_bal3":46,"Pep_BoxControl_bal2":32},"pressure_escape":{"Pep_BoxControl_bal2":74,"Emery_BalancedControl4231_neutr":46,"Pep_PressCooldown_bal2":28},"pressure_counter":{"Mourinho_CompactCounter4411_neutr":82,"Pep_BoxControl_bal2":48,"Emery_BalancedControl4231_neutr":42},"press_cooldown":{"Pep_PressCooldown_bal2":76,"Emery_BalancedControl4231_neutr":48,"Pep_BoxControl_bal2":38},"controlled_chase":{"Pep_ControlledPush_att3":72,"Arteta_Control433_bal3":26,"Pep_TwoThreeFive_att3":24},"positional_siege":{"Pep_TwoThreeFive_att3":74,"Pep_ControlledPush_att3":50,"Conte_WingbackWidth_bal4":31},"width_attack":{"Conte_WingbackWidth_bal4":76,"Pep_ControlledPush_att3":37,"Pep_TwoThreeFive_att3":26},"protect_lead":{"Simeone_Compact442_def4":74,"Allegri_LeadManagement4141_def1":68,"Emery_BalancedControl4231_neutr":38},"protect_lead_with_outlet":{"Allegri_LeadManagement4141_def1":86,"Simeone_Compact442_def4":52,"Emery_BalancedControl4231_neutr":44},"emergency_lock":{"Simeone_LowBlock_def5":84,"Allegri_LeadManagement4141_def1":48,"Simeone_Compact442_def4":46},"late_high_pressure":{"Klopp_Gegenpress_att4":79,"Pep_ControlledPush_att3":56,"Pep_TwoThreeFive_att3":44}};
+    const SCORE_BY_SITUATION = {"default_start":{"Emery_BalancedBase_v11":85,"Guardiola_PressEscape_v11":30},"pressure_escape":{"Guardiola_PressEscape_v11":82,"Emery_BalancedBase_v11":48,"Guardiola_PressCooldown_v11":25},"pressure_counter":{"Mourinho_CleanCounter_v11":85,"Guardiola_PressEscape_v11":46,"Emery_BalancedBase_v11":40},"press_cooldown":{"Guardiola_PressCooldown_v11":80,"Guardiola_PressEscape_v11":42,"Emery_BalancedBase_v11":35},"controlled_chase":{"Guardiola_ControlledPush_v11":75,"Emery_BalancedBase_v11":30,"Guardiola_PositionalSiege_v11":20},"positional_siege":{"Guardiola_PositionalSiege_v11":77,"Guardiola_ControlledPush_v11":49,"Conte_WideChannels_v11":33},"width_attack":{"Conte_WideChannels_v11":78,"Guardiola_ControlledPush_v11":38,"Guardiola_PositionalSiege_v11":25},"late_high_pressure":{"Klopp_LateGegenpress_v11":80,"Guardiola_ControlledPush_v11":55,"Guardiola_PositionalSiege_v11":44},"protect_lead":{"Simeone_CompactLead_v11":78,"Allegri_LeadOutlet_v11":68,"Emery_BalancedBase_v11":30},"protect_lead_with_outlet":{"Allegri_LeadOutlet_v11":86,"Simeone_CompactLead_v11":48,"Emery_BalancedBase_v11":35},"emergency_lock":{"Simeone_EmergencyBlock_v11":85,"Allegri_LeadOutlet_v11":44,"Simeone_CompactLead_v11":42}};
 
     // Old stored progression IDs must resolve to the same v10 tactical vector.
     // Only aliases are mapped; unknown/custom names are never promoted.
@@ -86,8 +86,8 @@
         if ((c.attackingMomentum || c.attackNeed >= 58) && c.minute >= 55 && !c.transitionThreat && !c.highBadActions && !c.pressFatigueRisk) return 'positional_siege';
         if ((c.scoreState === 'losing' && c.minute >= 45) || c.attackNeed >= 38) return 'controlled_chase';
         const strengthGap = Number(c.strengthGap ?? c.myStrengthGap ?? 0);
-        if (c.transitionThreat || (Number.isFinite(strengthGap) && strengthGap <= -8) || has(c, 'opponent_stronger')) return 'midblock_safe_control';
-        return 'stable_control';
+        if (c.transitionThreat || (Number.isFinite(strengthGap) && strengthGap <= -8) || has(c, 'opponent_stronger')) return 'pressure_escape';
+        return 'default_start';
     }
 
     function currentRisk() {
@@ -105,21 +105,22 @@
         const situation = classify(c);
         const reasons = [];
         if (!ACTIVE_SET.has(name)) reasons.push('preset отсутствует в active registry');
-        if (name === 'Simeone_LowBlock_def5' && situation !== 'emergency_lock') reasons.push('Low Block только временный emergency lock');
-        if (name === 'Mourinho_CompactCounter4411_neutr' && (!c.underPressure || !c.counterExitAvailable || c.counterExitBlocked || c.highBadActions || c.pressFatigueRisk)) reasons.push('Контратака только с подтверждённым чистым выходом');
-        if (name === 'Allegri_LeadManagement4141_def1' && (c.scoreState !== 'winning' || !c.counterExitAvailable || c.counterExitBlocked || c.highBadActions)) reasons.push('Удержание с выходом только при преимуществе и доступном первом пасе');
-        if (name === 'Simeone_Compact442_def4' && c.scoreState === 'losing') reasons.push('защитный 4-4-2 запрещён при проигрыше');
-        if (name === 'Pep_PressCooldown_bal2' && c.scoreState === 'losing' && c.minute >= 70 && c.attackNeed >= 55) reasons.push('поздний проигрыш требует продвижения, а не cooldown');
-        if (name === 'Pep_TwoThreeFive_att3' && (c.transitionThreat || c.underPressure || c.pressFatigueRisk || c.highBadActions)) reasons.push('3-2-5 запрещён при transition threat/fatigue/браке');
-        if (name === 'Klopp_Gegenpress_att4' && !['late_high_pressure','final_all_in'].includes(situation)) reasons.push('Klopp только поздняя погоня');
-        if (name === 'Klopp_Gegenpress_att4' && (c.pressFatigueRisk || c.highBadActions || c.ownRedCard || c.myPowerDropPct >= 5)) reasons.push('дорогой прессинг запрещён по fatigue/браку/удалению');
-        if (c.scoreState === 'winning' && c.minute >= 70 && ['Klopp_Gegenpress_att4','Pep_TwoThreeFive_att3'].includes(name)) reasons.push('позднее преимущество не требует high/all-in риска');
+        if (name === 'Arteta_SafePossession_v11') reasons.push('Arteta только ручная диагностика; нельзя рекомендовать автоматически');
+        if (name === 'Simeone_EmergencyBlock_v11' && situation !== 'emergency_lock') reasons.push('Low Block только временный emergency lock');
+        if (name === 'Mourinho_CleanCounter_v11' && (!c.underPressure || !c.counterExitAvailable || c.counterExitBlocked || c.highBadActions || c.pressFatigueRisk)) reasons.push('Контратака только с подтверждённым чистым выходом');
+        if (name === 'Allegri_LeadOutlet_v11' && (c.scoreState !== 'winning' || !c.counterExitAvailable || c.counterExitBlocked || c.highBadActions)) reasons.push('Удержание с выходом только при преимуществе и доступном первом пасе');
+        if (name === 'Simeone_CompactLead_v11' && c.scoreState === 'losing') reasons.push('Compact Lead запрещён при проигрыше');
+        if (name === 'Guardiola_PressCooldown_v11' && c.scoreState === 'losing' && c.minute >= 70 && c.attackNeed >= 55) reasons.push('поздний проигрыш требует продвижения, а не cooldown');
+        if (name === 'Guardiola_PositionalSiege_v11' && (c.transitionThreat || c.underPressure || c.pressFatigueRisk || c.highBadActions)) reasons.push('Positional Siege запрещён при transition threat/fatigue/браке');
+        if (name === 'Klopp_LateGegenpress_v11' && !['late_high_pressure'].includes(situation)) reasons.push('Klopp только поздняя погоня');
+        if (name === 'Klopp_LateGegenpress_v11' && (c.pressFatigueRisk || c.highBadActions || c.ownRedCard || c.myPowerDropPct >= 5)) reasons.push('дорогой прессинг запрещён по fatigue/браку/удалению');
+        if (c.scoreState === 'winning' && c.minute >= 70 && ['Klopp_LateGegenpress_v11','Guardiola_PositionalSiege_v11'].includes(name)) reasons.push('позднее преимущество не требует high/all-in риска');
         return { vetoed:reasons.length > 0, reasons };
     }
 
     function riskDelta(name, appetite) {
-        const high = ['Pep_TwoThreeFive_att3','Klopp_Gegenpress_att4'].includes(name);
-        const attack = ['Pep_ControlledPush_att3','Pep_TwoThreeFive_att3','Conte_WingbackWidth_bal4','Klopp_Gegenpress_att4'].includes(name);
+        const high = ['Guardiola_PositionalSiege_v11','Klopp_LateGegenpress_v11'].includes(name);
+        const attack = ['Guardiola_ControlledPush_v11','Guardiola_PositionalSiege_v11','Conte_WideChannels_v11','Klopp_LateGegenpress_v11'].includes(name);
         if (appetite === 'conservative') return high ? -8 : attack ? -3 : 0;
         if (appetite === 'bold') return high ? 4 : attack ? 2 : 0;
         if (appetite === 'experimental') return high ? 7 : attack ? 4 : 0;
@@ -165,7 +166,7 @@
 
     function choose(context = {}) {
         const ranked = rank(context);
-        // v10: no implicit preset fallback — без безопасного кандидата решение hold_current.
+        // v11: no implicit preset fallback — без безопасного кандидата решение hold_current.
         if (!ranked.eligible[0]) {
             return {
                 name:null,
@@ -186,7 +187,7 @@
         return {
             name:selected.preset,
             situation:ranked.situation,
-            reason:`${ranked.situation}: ${registry.meta?.[selected.preset]?.use || 'tactical suite v10'}`,
+            reason:`${ranked.situation}: ${registry.meta?.[selected.preset]?.use || 'tactical suite v11'}`,
             selected,
             runnerUp,
             margin,
@@ -205,7 +206,7 @@
             const path = queue.shift();
             const node = path[path.length - 1];
             for (const next of STEP[node] || []) {
-                if (seen.has(next)) continue;
+                if (seen.has(next) || (next === 'Arteta_SafePossession_v11' && to !== next)) continue;
                 const candidate = path.concat(next);
                 if (next === to) return candidate[1] || to;
                 seen.add(next);
@@ -227,7 +228,7 @@
     }
 
     const originalRun = engine.run.bind(engine);
-    engine.run = function runTacticalSuiteV9(snapshot, context = {}) {
+    engine.run = function runTacticalSuiteV11(snapshot, context = {}) {
         const result = originalRun(snapshot, context) || {};
         const mergedContext = Object.assign({}, result?.moment?.context || {}, context);
         const selected = choose(mergedContext);
@@ -239,12 +240,12 @@
         result.confidence = Object.assign({}, result.confidence || {}, { level:selected.confidence, gap:selected.margin });
         result.runnerUp = selected.runnerUp ? { preset:selected.runnerUp.preset, score:selected.runnerUp.score } : null;
         if (selected.hold) {
-            // v10: без production fallback — держим текущую тактику, пресет не подставляем.
+            // v11: без production fallback — держим текущую тактику, пресет не подставляем.
             result.action = {
                 preset:null,
                 rawPreset:null,
                 decision:'hold_current',
-                ruleId:'suite_v10_hold_current',
+                ruleId:'suite_v11_hold_current',
                 reason:selected.reason,
                 fallbackReason:'no_eligible_candidate',
                 guardType:'hold_current',
@@ -260,13 +261,13 @@
                 rawPreset:selected.name,
                 score:selected.selected.score,
                 decision:selected.situation,
-                ruleId:`suite_v10_${selected.situation}`,
+                ruleId:`suite_v11_${selected.situation}`,
                 reason:selected.reason,
                 riskAppetite:result.riskAppetite,
                 libraryVersion:SUITE,
                 recommendationSchema:SCHEMA,
-                guardType:'suite_v10_selection',
-                guardReason:'central tactical suite v10 ranking'
+                guardType:'suite_v11_selection',
+                guardReason:'central tactical suite v11 ranking'
             });
         }
         result.candidates = selected.candidates.slice().sort((a, b) => {
@@ -289,7 +290,7 @@
     engine.ACTIVE_PRESETS = ACTIVE.slice();
     engine.__tacticSuiteV7Installed = true;
     engine.__tacticSuiteV8Installed = true;
-    engine.__tacticSuiteV10Installed = true;
+    engine.__tacticSuiteV11Installed = true;
     engine.__generator561RuleScorerApplied = true;
     engine.__generator561PressureResponseApplied = true;
 
@@ -300,9 +301,9 @@
             const step = shortestStep(current, desired);
             return ACTIVE_SET.has(step) ? step : desired;
         };
-        RecommendationEngine.selectRawPreset = function selectSuiteV9(snapshot, state = {}) {
+        RecommendationEngine.selectRawPreset = function selectSuiteV11(snapshot, state = {}) {
             const decision = window.SLFCurrentActionHintEngine?.run ? window.SLFCurrentActionHintEngine.run(snapshot || {}, state || {}) : null;
-            // v10: no implicit preset fallback — невалидное/отсутствующее решение означает hold_current.
+            // v11: no implicit preset fallback — невалидное/отсутствующее решение означает hold_current.
             const preset = resolvePresetId(decision?.action?.preset);
             if (decision?.action && preset !== decision.action.preset) decision.action.preset = preset;
             if (!decision || !ACTIVE_SET.has(preset)) {
@@ -310,16 +311,16 @@
                 return { name:null, reason:'hold_current: no valid suite decision', ruleDecision:decision, progressionAction:'hold_current', fallbackReason:decision ? 'invalid_preset' : 'no_decision' };
             }
             stamp(snapshot, decision, preset);
-            return { name:preset, reason:decision.action.reason || 'tactical suite v10', ruleDecision:decision, progressionAction:'suite_v10_scored' };
+            return { name:preset, reason:decision.action.reason || 'tactical suite v11', ruleDecision:decision, progressionAction:'suite_v11_scored' };
         };
-        if (originalGuard) RecommendationEngine.applyProgressionGuard = function applySuiteV9Guard(candidate, snapshot, context = {}) {
+        if (originalGuard) RecommendationEngine.applyProgressionGuard = function applySuiteV11Guard(candidate, snapshot, context = {}) {
             if (candidate?.name) {
                 const canonical = resolvePresetId(candidate.name);
                 if (canonical !== candidate.name) candidate = Object.assign({}, candidate, { name:canonical });
             }
             if (!candidate?.name || !ACTIVE_SET.has(candidate.name) || !snapshot || snapshot.status === 'finished') return candidate;
             const targetPreset = candidate.name;
-            let guarded = ['Simeone_LowBlock_def5'].includes(candidate.name) || context?.urgency?.overrideProgressionGuard === true
+            let guarded = ['Simeone_EmergencyBlock_v11'].includes(candidate.name) || context?.urgency?.overrideProgressionGuard === true
                 ? Object.assign({}, candidate, { progressionAction:'emergency_override' })
                 : (originalGuard.call(this, candidate, snapshot, context) || candidate);
             if (!ACTIVE_SET.has(guarded?.name)) guarded = candidate;
@@ -342,7 +343,7 @@
         RecommendationEngine.__generator561PressureResponseApplied = true;
         RecommendationEngine.__tacticSuiteV7Installed = true;
         RecommendationEngine.__tacticSuiteV8Installed = true;
-        RecommendationEngine.__tacticSuiteV10Installed = true;
+        RecommendationEngine.__tacticSuiteV11Installed = true;
     }
 
     if (typeof BASE_PRESETS !== 'undefined' && BASE_PRESETS) {
@@ -375,7 +376,7 @@
         shortestStep,
         preferredPreset:situation => {
             const scores = SCORE_BY_SITUATION[situation] || {};
-            // v10: no implicit preset fallback — пустая таблица означает null.
+            // v11: no implicit preset fallback — пустая таблица означает null.
             return Object.entries(scores).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
         },
         evaluate:(snapshot={}, context={}) => window.SLFCurrentActionHintEngine?.run ? window.SLFCurrentActionHintEngine.run(snapshot, context) : null
