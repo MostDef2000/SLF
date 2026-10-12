@@ -11,7 +11,7 @@
       "classification": "PERMANENT",
       "role": "CI",
       "owner": "MostDef2000",
-      "triggers": ["pull_request", "workflow_dispatch"],
+      "triggers": ["pull_request", "push:main", "workflow_dispatch"],
       "requiredContext": "SLF CI / ci",
       "purpose": "Single pull-request quality gate covering static/contracts/security, full-git-history secret scanning (gitleaks), Python dependency audit (pip-audit), runtime/tactics, reliability, browser and release evidence."
     },
