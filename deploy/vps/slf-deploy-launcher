@@ -1,0 +1,553 @@
+#!/usr/bin/env bash
+# =============================================================================
+# slf-deploy-launcher — forced command for the SLF deploy user on the VPS
+# (135.106.195.18; same host pattern as the lifesim forced command, T7 of
+# specs/deploy-unification/ in the workspace repo ai-playground).
+#
+# Installed path : /usr/local/sbin/slf-deploy-launcher (root:root, mode 0755).
+# Called only by .github/workflows/deploy-vps.yml, which pipes a git bundle
+# of the exact dispatch SHA over SSH stdin (the VPS has no GitHub egress:
+# outbound :22 is blocked, so this is a push-model transport — the launcher
+# never talks to GitHub).
+#
+# VERBS (SSH_ORIGINAL_COMMAND, exact-match regex, no eval; everything else —
+# fail-closed refusal):
+#   slf-deploy-v1 <40-hex sha> <api|exporter-rag>    apply bundle from stdin
+#   slf-rollback-v1 <40-hex sha> <api|exporter-rag>  restore the backup of the
+#                    deploy <sha> (restores the recorded pre-deploy state)
+#   slf-status-v1                                    read-only state report
+#
+# Documented deviation from the lifesim/content verb shape: SLF deploys two
+# components through one deploy user, so the mutating verbs carry a third
+# token — a CLOSED allowlist (api|exporter-rag), never free text. The SHA
+# token is validated twice: by the dispatch regex and again by require_sha
+# (^[0-9a-f]{40}$), so no short/ambiguous/free-form ref is ever accepted.
+#
+# LAUNCHER/ENGINE SPLIT (T2 philosophy): this file is only the launcher —
+# verb/SHA validation, single-flight flock, bundle verification/apply, and
+# verbatim exit-code propagation. It performs NO service mutations itself:
+# the repo's own proven installers vps/ops/deploy-code.sh and
+# vps/ops/rollback-code.sh (engine-from-checkout: run from $APP_REPO_DIR at
+# the freshly applied SHA) do the actual mutations, invoked via explicit
+# `sudo -n` grants the sysadmin configures once (bootstrap step 4 below).
+# They run as root by their own contract; every other step here runs as the
+# unprivileged deploy user (non-root-friendly: the lock self-heals in
+# /var/tmp, no root bootstrap needed for this file).
+#
+# CONTRACT (fail-closed):
+#   * deploy:  read full stdin -> temp bundle -> `git bundle verify` ->
+#     bundle list-heads must carry exactly the requested SHA on
+#     refs/slf-deploy-ship (capture-then-match, byte compare) -> fetch
+#     objects into $APP_REPO_DIR -> `git cat-file -e <sha>^{commit}` ->
+#     checkout --detach <sha> -> sudo deploy-code.sh --repo --commit
+#     --component -> state files -> marker.
+#   * previous = the currently recorded live SHA for the target component
+#     (DEPLOYED_GIT_COMMIT, then the latest manifest record, then the
+#     checkout HEAD), printed in the byte-exact marker
+#     `DEPLOYMENT_ACCEPTED sha=<newly-deployed> previous=<was-live-before>`.
+#     On the rollback verb the marker bytes stay
+#     `DEPLOY_ROLLED_BACK sha=${sha} previous=${prev}` but the semantics are:
+#     sha = the deploy whose backup was used, previous = the sha that was
+#     live when the rollback started. The restored-to sha (the previous of
+#     that deploy's manifest record, or unknown) is written to the rollback
+#     manifest record, and the checkout is moved to it when its objects are
+#     present. The strings are byte-identical to the unified contract used
+#     by lifesim/deploy/deploy-engine (content/deploy/deploy-wrapper prints
+#     the same DEPLOYMENT_ACCEPTED fixed substring via printf).
+#   * lock: flock -n on /var/tmp/slf-deploy.lock, taken BEFORE any mutation
+#     and before the engine runs; self-heal like the content/lifesim
+#     contract: the file is created by this script when absent (/var/tmp is
+#     1777 on stock Ubuntu — no root bootstrap), mode 0666 umask-independently
+#     so peer deploy users can touch it (keeps mtime fresh against
+#     systemd-tmpfiles-clean 30d eviction; this script touches it on every
+#     mutating call). The fd is never closed explicitly — the kernel drops
+#     the lock when the process exits, including through the ERR trap.
+#   * verbatim exit codes: engine failures are captured with `|| rc=$?` and
+#     re-exited unchanged (the ERR trap would flatten them to 1).
+#
+# STRUCTURAL LESSONS (#163-#165 / T2, workspace deploy-unification):
+# set -Eeuo pipefail + ERR trap reporting the failing line, no process
+# substitution, capture-then-match on pipes, pre-check before exec
+# redirections, launcher stays dumb (accepts verb+SHA, runs engine).
+#
+# BOOTSTRAP (one-off, Lane B — sysadmin; not executable from CI):
+#   1. Clone the repo into $APP_REPO_DIR (default /opt/slf/slf-repo) so the
+#      deploy user owns it (bundle target + engine source + state dir).
+#   2. install -o root -g root -m 0755 deploy/vps/slf-deploy-launcher \
+#        /usr/local/sbin/slf-deploy-launcher
+#   3. authorized_keys of the deploy key, one line (forced command):
+#        command="/usr/local/sbin/slf-deploy-launcher",no-pty,no-agent-forwarding,no-X11-forwarding,no-port-forwarding ssh-ed25519 AAAA... slf-deploy@ci
+#   4. sudoers (visudo) — exact command+args, no wildcards beyond the commit
+#      value the launcher already validated as 40-hex:
+#        deploy ALL=(root) NOPASSWD: /opt/slf/slf-repo/vps/ops/deploy-code.sh --repo /opt/slf/slf-repo --commit * --component api
+#        deploy ALL=(root) NOPASSWD: /opt/slf/slf-repo/vps/ops/deploy-code.sh --repo /opt/slf/slf-repo --commit * --component exporter-rag
+#        deploy ALL=(root) NOPASSWD: /opt/slf/slf-repo/vps/ops/rollback-code.sh --backup /var/backups/slf-code/*
+#   5. GitHub-side pointers (names only, values added by the owner):
+#        secrets SLF_VPS_DEPLOY_KEY, SLF_VPS_HOST, SLF_VPS_USER;
+#        vars SLF_VPS_KNOWN_HOSTS (pinned host keys; ssh-keyscan is forbidden).
+#
+# Drill overrides (drills only; production uses the defaults):
+#   SLF_DEPLOY_REPO_DIR, SLF_DEPLOY_STATE_DIR, SLF_DEPLOY_BACKUP_ROOT,
+#   SLF_DEPLOY_LAUNCHER_PATH, SLF_DEPLOY_LOCK_FILE (production lock stays at
+#   the contract path /var/tmp/slf-deploy.lock; the override exists so the
+#   launcher can be exercised end-to-end in an unprivileged drill sandbox).
+# =============================================================================
+
+set -Eeuo pipefail
+umask 077
+
+APP_REPO_DIR="${SLF_DEPLOY_REPO_DIR:-/opt/slf/slf-repo}"
+STATE_DIR="${SLF_DEPLOY_STATE_DIR:-$APP_REPO_DIR/deploy-state}"
+BACKUP_ROOT="${SLF_DEPLOY_BACKUP_ROOT:-/var/backups/slf-code}"
+LAUNCHER_PATH="${SLF_DEPLOY_LAUNCHER_PATH:-/usr/local/sbin/slf-deploy-launcher}"
+
+DEPLOY_SCRIPT="$APP_REPO_DIR/vps/ops/deploy-code.sh"
+ROLLBACK_SCRIPT="$APP_REPO_DIR/vps/ops/rollback-code.sh"
+API_DIR='/opt/slf/slf-server'
+EXPORT_DIR='/opt/slf_ai_exporter_v2/slf_ai_exporter_v2'
+API_DEPLOYED_FILE="$API_DIR/DEPLOYED_GIT_COMMIT"
+EXPORTER_DEPLOYED_FILE="$EXPORT_DIR/DEPLOYED_GIT_COMMIT"
+API_SERVICE='slf-server.service'
+API_HEALTH_URL='http://127.0.0.1:5000/api/analysis'
+EXPORTER_MANIFEST='/var/www/html/slf_ai/manifest.json'
+
+LOCK_FILE="${SLF_DEPLOY_LOCK_FILE:-/var/tmp/slf-deploy.lock}"
+BUNDLE_REF='refs/slf-deploy-ship'
+
+STAGE_DIR=''
+
+on_err() {
+    local ec=$?
+    # ${BASH_LINENO[1]} — the failing line in the caller frame (the trap
+    # itself is frame 0); ${LINENO} inside the trap would point at the trap.
+    echo "SLF-ERR: unexpected failure (status ${ec}): ${BASH_COMMAND:-?} at line ${BASH_LINENO[1]:-unknown}" >&2
+    exit 1
+}
+trap on_err ERR
+
+err() { echo "SLF-ERR: $*" >&2; exit 1; }
+log() { echo "SLF: $*"; }
+
+usage() {
+    cat >&2 <<'USAGE'
+usage:
+  slf-deploy-v1 <40-hex-sha> <api|exporter-rag>   apply git bundle from stdin
+  slf-rollback-v1 <40-hex-sha> <api|exporter-rag> restore latest backup for sha
+  slf-status-v1                                   print transport/state report
+USAGE
+    exit 64
+}
+
+require_sha() {
+    [[ "$1" =~ ^[0-9a-f]{40}$ ]] || err "invalid sha: expected 40 lowercase hex"
+}
+
+require_component() {
+    case "$1" in
+        api|exporter-rag) ;;
+        *) err "invalid component: expected api or exporter-rag" ;;
+    esac
+}
+
+compute_sha() {  # sha256 of $1 on stdout, first line; failure -> rc 1 (not swallowed)
+    local h
+    read -r h _ <<<"$(sha256sum -- "$1" 2>/dev/null)" || return 1
+    [ -n "$h" ] || return 1
+    printf '%s\n' "$h"
+}
+
+# component_deployed_file <component> -> prints the DEPLOYED_GIT_COMMIT path
+component_deployed_file() {
+    case "$1" in
+        api) printf '%s' "$API_DEPLOYED_FILE" ;;
+        exporter-rag) printf '%s' "$EXPORTER_DEPLOYED_FILE" ;;
+    esac
+}
+
+# live_sha <component> — currently recorded live SHA (40-hex) or ''.
+live_sha() {
+    local value
+    value="$(cat "$(component_deployed_file "$1")" 2>/dev/null || true)"
+    [[ "$value" =~ ^[0-9a-f]{40}$ ]] || value=''
+    printf '%s' "$value"
+}
+
+# manifest_latest_field <component> <field> — value of <field> in the latest
+# manifest record for <component>, or '' when absent. Capture-then-match on
+# grep/sed only (no jq dependency); field names are launcher constants, the
+# component comes from the closed allowlist.
+manifest_latest_field() {
+    local component="$1" field="$2" line value
+    [ -f "$STATE_DIR/deployment-manifest.jsonl" ] || return 0
+    line="$(grep -F "\"component\": \"$component\"" "$STATE_DIR/deployment-manifest.jsonl" 2>/dev/null | tail -n 1)" || line=''
+    [ -n "$line" ] || return 0
+    value="$(printf '%s\n' "$line" | sed -n "s/.*\"${field}\": \"\([^\"]*\)\".*/\1/p")" || value=''
+    [ -n "$value" ] || return 0
+    printf '%s' "$value"
+}
+
+# manifest_previous_of_deploy <component> <deploy-sha> — the `previous` field
+# of the latest kind=deploy manifest record for that deploy, or '' when no
+# such record exists (pre-transport manual state).
+manifest_previous_of_deploy() {
+    local component="$1" sha="$2" line prev
+    [ -f "$STATE_DIR/deployment-manifest.jsonl" ] || return 0
+    line="$(grep -F '"kind": "deploy"' "$STATE_DIR/deployment-manifest.jsonl" 2>/dev/null \
+        | grep -F "\"component\": \"$component\"" \
+        | grep -F "\"sha\": \"$sha\"" | tail -n 1)" || line=''
+    [ -n "$line" ] || return 0
+    prev="$(printf '%s\n' "$line" | sed -n 's/.*"previous": "\([0-9a-f]\{40\}\)".*/\1/p')" || prev=''
+    [ -n "$prev" ] || return 0
+    printf '%s' "$prev"
+}
+
+# recorded_deployed_sha <component> — best-known deployed sha for a component:
+# the engine-maintained DEPLOYED_GIT_COMMIT first, then the manifest record
+# (a rollback record resolves to its restored_to; "unknown" resolves to '').
+# Used by previous_sha and by do_status drift reporting.
+recorded_deployed_sha() {
+    local component="$1" sha kind restored
+    sha="$(live_sha "$component")"
+    if [ -n "$sha" ]; then
+        printf '%s' "$sha"
+        return 0
+    fi
+    sha="$(manifest_latest_field "$component" "sha")"
+    kind="$(manifest_latest_field "$component" "kind")"
+    if [ "$kind" = "rollback" ]; then
+        restored="$(manifest_latest_field "$component" "restored_to")"
+        if [ -z "$restored" ] || [ "$restored" = "unknown" ]; then
+            printf ''
+            return 0
+        fi
+        sha="$restored"
+    fi
+    [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || sha=''
+    printf '%s' "$sha"
+}
+
+# previous_sha <component> — the sha that was live before this operation:
+# recorded deployed sha first, falling back to the checkout HEAD; fail-closed
+# when neither exists (bootstrap requirement).
+previous_sha() {
+    local prev
+    prev="$(recorded_deployed_sha "$1")"
+    if [ -z "$prev" ]; then
+        prev="$(git -C "$APP_REPO_DIR" rev-parse HEAD 2>/dev/null)" || true
+    fi
+    [[ "$prev" =~ ^[0-9a-f]{40}$ ]] \
+        || err "cannot determine previous sha (no DEPLOYED_GIT_COMMIT, no manifest record, no valid checkout HEAD in $APP_REPO_DIR)"
+    printf '%s' "$prev"
+}
+
+# open_lock — self-heal cross-cutting deploy lock (contract: /var/tmp path,
+# 0666 umask-independently, flock -n; taken before any mutation).
+open_lock() {
+    # touch: create when absent (self-heal, no root needed on 1777 /var/tmp)
+    # and refresh mtime on every mutating call against tmpfiles-clean 30d.
+    if ! ( umask 000 && touch "$LOCK_FILE" ) 2>/dev/null; then
+        # Non-fatal here (e.g. a foreign 0644 file): the open+flock below
+        # still decides fail-closed.
+        log "note: touch on $LOCK_FILE failed — continuing, open+flock decides"
+    fi
+    chmod 0666 "$LOCK_FILE" 2>/dev/null || true
+    # Pre-check before exec redirections: `exec 8<` failures would otherwise
+    # permanently redirect this shell's diagnostics.
+    if ! : <"$LOCK_FILE" 2>/dev/null; then
+        err "cannot open deploy lock $LOCK_FILE (self-heal failed: check permissions on /var/tmp?)"
+    fi
+    exec 8<"$LOCK_FILE"
+    flock -n 8 || err "another slf deploy is active (lock $LOCK_FILE)"
+}
+
+# apply_bundle <sha> — read stdin bundle, verify, apply into $APP_REPO_DIR.
+apply_bundle() {
+    local sha="$1" heads bundle_sha resolved
+
+    [ -d "$APP_REPO_DIR/.git" ] || err "not a git checkout: $APP_REPO_DIR (bootstrap step 1)"
+    [ -f "$DEPLOY_SCRIPT" ] || err "deploy engine missing in checkout: $DEPLOY_SCRIPT"
+
+    install -d -m 0700 "$STATE_DIR"
+
+    STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/slf-deploy.XXXXXX")" \
+        || err "cannot create staging dir"
+    trap 'rm -rf "$STAGE_DIR"' EXIT
+    local bundle_file="$STAGE_DIR/deploy.bundle"
+
+    # Consume the full bundle from stdin BEFORE any mutation. A short/empty
+    # stdin fails closed before anything on the host is touched.
+    cat >"$bundle_file" || err "cannot read bundle from stdin"
+    [ -s "$bundle_file" ] || err "empty bundle on stdin (workflow must pipe git bundle output)"
+
+    # Prerequisites check + integrity; runs in repo context (a full-history
+    # bundle has no prerequisites and verifies standalone).
+    git -C "$APP_REPO_DIR" bundle verify "$bundle_file" >/dev/null \
+        || err "git bundle verify failed for the received bundle"
+
+    # capture-then-match (no process substitution): the bundle must carry
+    # exactly the requested SHA on the canonical ref.
+    heads="$(git -C "$APP_REPO_DIR" bundle list-heads "$bundle_file")" \
+        || err "git bundle list-heads failed"
+    # `|` delimiter: BUNDLE_REF contains slashes and must stay expandable.
+    bundle_sha="$(printf '%s\n' "$heads" | sed -n "s|^\([0-9a-f]\{40\}\) ${BUNDLE_REF}\$|\1|p")"
+    [ -n "$bundle_sha" ] || err "bundle does not carry $BUNDLE_REF (workflow must bundle that ref)"
+    [ "$bundle_sha" = "$sha" ] \
+        || err "bundle HEAD mismatch: bundle=$bundle_sha requested=$sha"
+
+    git -C "$APP_REPO_DIR" fetch --quiet "$bundle_file" "$BUNDLE_REF" \
+        || err "git fetch from bundle failed"
+    git -C "$APP_REPO_DIR" cat-file -e "${sha}^{commit}" \
+        || err "requested sha ${sha} not present after bundle fetch"
+    resolved="$(git -C "$APP_REPO_DIR" rev-parse "${sha}^{commit}")"
+    [ "$resolved" = "$sha" ] \
+        || err "requested sha ${sha} resolved to ${resolved} in the checkout"
+    git -C "$APP_REPO_DIR" -c advice.detachedHead=false checkout --quiet --detach "$sha"
+    log "checkout at ${sha} (engine source: $APP_REPO_DIR)"
+}
+
+# run_engine <script> <args...> — verbatim exit-code propagation: capture rc,
+# re-exit unchanged (an ERR-trap exit would flatten every code to 1).
+run_engine() {
+    local script="$1"; shift
+    local rc=0
+    sudo -n "$script" "$@" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "SLF-ERR: engine $(basename "$script") failed with rc=${rc}" >&2
+        exit "$rc"
+    fi
+}
+
+# write_state <component> <sha> <prev> <kind> <restored_to> — append one
+# provenance record to the manifest (JSONL, one object per line; appended
+# under the deploy lock). kind is deploy|rollback; rollback records carry
+# restored_to — the sha the provenance chain was restored to (the previous
+# of the deploy record whose backup was used), or "unknown" when the chain
+# cannot be reconstructed (pre-transport manual state) or its objects are
+# absent from the checkout. The marker bytes are NOT affected by this bookkeeping.
+write_state() {
+    local component="$1" sha="$2" prev="$3" kind="$4" restored_to="$5" ts launcher_sha
+    case "$kind" in
+        deploy|rollback) ;;
+        *) err "invalid manifest kind: $kind" ;;
+    esac
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    launcher_sha="$(compute_launcher_sha || true)"
+    {
+        printf '{"schema": "slf_deployment_manifest_v2", "kind": "%s", "component": "%s", "sha": "%s", "previous": "%s", ' "$kind" "$component" "$sha" "$prev"
+        if [ "$kind" = "rollback" ]; then
+            printf '"restored_to": "%s", ' "${restored_to:-unknown}"
+        fi
+        printf '"deployed_at": "%s", "launcher_sha256": "%s"}\n' "$ts" "${launcher_sha:-unavailable}"
+    } >> "$STATE_DIR/deployment-manifest.jsonl" \
+        || err "cannot append manifest record"
+}
+
+compute_launcher_sha() {
+    local h
+    read -r h _ <<<"$(sha256sum -- "$LAUNCHER_PATH" 2>/dev/null)" || return 1
+    [ -n "$h" ] || return 1
+    printf '%s\n' "$h"
+}
+
+# ----------------------------------------------------------------------------
+# verbs
+# ----------------------------------------------------------------------------
+
+do_deploy() {
+    local sha="$1" component="$2" prev
+    require_sha "$sha"
+    require_component "$component"
+
+    command -v git    >/dev/null 2>&1 || err "missing tool: git"
+    command -v flock  >/dev/null 2>&1 || err "missing tool: flock"
+    command -v sha256sum >/dev/null 2>&1 || err "missing tool: sha256sum"
+    command -v sudo   >/dev/null 2>&1 || err "missing tool: sudo"
+
+    # The lock serializes the state read (previous-sha resolution) with any
+    # other mutating verb.
+    open_lock
+    prev="$(previous_sha "$component")"
+    apply_bundle "$sha"
+
+    log "DEPLOY_MUTATION component=$component target=$sha previous=$prev"
+    run_engine "$DEPLOY_SCRIPT" --repo "$APP_REPO_DIR" --commit "$sha" --component "$component"
+
+    write_state "$component" "$sha" "$prev" "deploy" ""
+    log "deployed component=$component sha=$sha previous=$prev"
+    echo "DEPLOYMENT_ACCEPTED sha=${sha} previous=${prev}"
+}
+
+# latest_backup <component> <sha> — lexicographically newest backup for the
+# exact component+sha (deploy-code.sh names dirs <ts>-<component>-<sha>).
+latest_backup() {
+    local component="$1" sha="$2" listing dir
+    [ -d "$BACKUP_ROOT" ] || err "backup root not found: $BACKUP_ROOT"
+    listing="$(ls -1 "$BACKUP_ROOT" 2>/dev/null)" || err "cannot list backup root: $BACKUP_ROOT"
+    # capture-then-match; sort keeps the newest (timestamps sort lexically).
+    dir="$(printf '%s\n' "$listing" \
+        | grep -E "^[0-9]{8}T[0-9]{6}Z-${component}-${sha}\$" \
+        | sort | tail -n 1)"
+    [ -n "$dir" ] || err "no backup found for component=$component sha=$sha in $BACKUP_ROOT"
+    printf '%s' "$BACKUP_ROOT/$dir"
+}
+
+do_rollback() {
+    local sha="$1" component="$2" backup prev restored_to
+    require_sha "$sha"
+    require_component "$component"
+
+    command -v git    >/dev/null 2>&1 || err "missing tool: git"
+    command -v flock  >/dev/null 2>&1 || err "missing tool: flock"
+    command -v sha256sum >/dev/null 2>&1 || err "missing tool: sha256sum"
+    command -v sudo   >/dev/null 2>&1 || err "missing tool: sudo"
+    [ -f "$ROLLBACK_SCRIPT" ] || err "rollback engine missing in checkout: $ROLLBACK_SCRIPT"
+
+    open_lock
+    # Serialized state read + resolution (previous/backup) under the lock.
+    prev="$(previous_sha "$component")"
+    backup="$(latest_backup "$component" "$sha")"
+    install -d -m 0700 "$STATE_DIR"
+
+    log "ROLLBACK_MUTATION component=$component to=$sha from=$prev backup=$backup"
+    run_engine "$ROLLBACK_SCRIPT" --backup "$backup"
+
+    # Restore the provenance chain: rolling back deploy <sha> restores the
+    # state recorded as that deploy's `previous`. Unknown (no deploy record —
+    # pre-transport manual state) or missing objects -> leave HEAD unchanged
+    # and record restored_to=unknown in the rollback record.
+    restored_to="$(manifest_previous_of_deploy "$component" "$sha")"
+    if [ -n "$restored_to" ] && git -C "$APP_REPO_DIR" cat-file -e "${restored_to}^{commit}" 2>/dev/null; then
+        if git -C "$APP_REPO_DIR" -c advice.detachedHead=false checkout --quiet --detach "$restored_to"; then
+            log "provenance restored: checkout at ${restored_to}"
+        else
+            log "note: checkout of restored-to ${restored_to} failed — HEAD left unchanged"
+            restored_to=''
+        fi
+    else
+        log "note: no deploy record for ${sha} (or restored-to objects absent) — restored_to=unknown, HEAD unchanged"
+        restored_to=''
+    fi
+
+    write_state "$component" "$sha" "$prev" "rollback" "$restored_to"
+    log "rolled back component=$component to=$sha previous=$prev restored_to=${restored_to:-unknown}"
+    echo "DEPLOY_ROLLED_BACK sha=${sha} previous=${prev}"
+}
+
+do_status() {
+    local lsha rsha deployed repo_head component recorded drift_found code state
+    echo "== transport =="
+    echo "launcher_path=${LAUNCHER_PATH}"
+    lsha="$(compute_launcher_sha)" || lsha="unavailable"
+    echo "launcher_sha256=${lsha}"
+    echo "launcher_interface=slf-launcher-v1"
+    echo "engine_deploy=${DEPLOY_SCRIPT}"
+    echo "engine_rollback=${ROLLBACK_SCRIPT}"
+    # Drift field: installed launcher vs the repo copy at the deployed SHA.
+    rsha="unavailable"
+    if [ -f "$APP_REPO_DIR/deploy/vps/slf-deploy-launcher" ]; then
+        rsha="$(compute_sha "$APP_REPO_DIR/deploy/vps/slf-deploy-launcher")" || rsha="unavailable"
+    fi
+    echo "launcher_repo_sha256=${rsha}"
+    if [ "$lsha" != "unavailable" ] && [ "$rsha" != "unavailable" ]; then
+        [ "$lsha" = "$rsha" ] && echo "launcher_drift=same" || echo "launcher_drift=drifted"
+    else
+        echo "launcher_drift=unavailable"
+    fi
+    echo "lock_file=${LOCK_FILE}"
+    echo "repo_dir=${APP_REPO_DIR}"
+    repo_head="$(git -C "$APP_REPO_DIR" rev-parse HEAD 2>/dev/null)" || repo_head="unavailable"
+    echo "repo_head=${repo_head}"
+    echo "== manifest =="
+    if [ -f "$STATE_DIR/deployment-manifest.jsonl" ]; then
+        echo "manifest_records=$(grep -c . "$STATE_DIR/deployment-manifest.jsonl" 2>/dev/null || true)"
+        echo "manifest_latest:"
+        tail -n 3 "$STATE_DIR/deployment-manifest.jsonl"
+    else
+        echo "manifest=(none — no deploy through this launcher yet)"
+    fi
+
+    # Drift: per component, the best-known recorded deployed sha vs the
+    # on-disk checkout HEAD (one checkout is shared by both components; the
+    # most recently deployed component matches, the other legitimately may
+    # not right after a deploy of its sibling — the caller decides).
+    drift_found=0
+    echo "== deployed state =="
+    for component in api exporter-rag; do
+        deployed="$(recorded_deployed_sha "$component")"
+        echo "${component}_deployed_sha=${deployed:-absent}"
+        if [ -n "$deployed" ] && [ "$repo_head" != "unavailable" ]; then
+            if [ "$deployed" = "$repo_head" ]; then
+                echo "${component}_drift=false"
+            else
+                echo "${component}_drift=true deployed=${deployed} checkout=${repo_head}"
+                drift_found=1
+            fi
+        else
+            echo "${component}_drift=absent (no recorded state)"
+        fi
+    done
+
+    state="$(systemctl is-active "$API_SERVICE" 2>/dev/null || true)"
+    echo "api_service=${state:-unknown}"
+    code="$(curl -s -o /dev/null -m 5 -w '%{http_code}' "$API_HEALTH_URL" 2>/dev/null || true)"
+    echo "api_health_http=${code:-000} (want 401 unauthenticated)"
+    if [ -s "$EXPORTER_MANIFEST" ]; then
+        echo "exporter_manifest=present"
+    else
+        echo "exporter_manifest=absent"
+    fi
+    # status is read-only; the exit code is the drift verdict:
+    # 0 = every recorded component matches the checkout HEAD (or has no
+    # recorded state yet), 1 = at least one recorded component drifted.
+    if [ "$drift_found" -ne 0 ]; then
+        echo "status=drift"
+        exit 1
+    fi
+    echo "status=ok"
+    exit 0
+}
+
+# ---------------------------------------------------------------------------- #
+# dispatch: exact-match allowlist on SSH_ORIGINAL_COMMAND; no eval, no sh -c
+# of client input. Mutating verbs take the lock; status is read-only.
+# ---------------------------------------------------------------------------- #
+main() {
+    local cmd="${SSH_ORIGINAL_COMMAND:-}"
+    # Capture the dispatch groups into locals BEFORE calling require_sha:
+    # require_sha runs its own `[[ =~ ]]`, which clobbers BASH_REMATCH —
+    # with `set -u`, reading BASH_REMATCH[1] after that call aborts the
+    # launcher (observed in the C4-C9 drill cases as an unbound-variable
+    # exit before the lock was even taken).
+    if [[ "$cmd" =~ ^slf-deploy-v1\ ([0-9a-f]{40})\ (api|exporter-rag)$ ]]; then
+        SHA="${BASH_REMATCH[1]}"; COMPONENT="${BASH_REMATCH[2]}"; MODE="deploy"
+        require_sha "$SHA"
+    elif [[ "$cmd" =~ ^slf-rollback-v1\ ([0-9a-f]{40})\ (api|exporter-rag)$ ]]; then
+        SHA="${BASH_REMATCH[1]}"; COMPONENT="${BASH_REMATCH[2]}"; MODE="rollback"
+        require_sha "$SHA"
+    elif [[ "$cmd" == "slf-status-v1" ]]; then
+        MODE="status"
+    else
+        err "command not allowed (expected: slf-deploy-v1 <sha> <component> | slf-rollback-v1 <sha> <component> | slf-status-v1)"
+    fi
+
+    if [ "$MODE" = "deploy" ]; then
+        do_deploy "$SHA" "$COMPONENT"
+    elif [ "$MODE" = "rollback" ]; then
+        do_rollback "$SHA" "$COMPONENT"
+    else
+        do_status
+    fi
+    exit 0
+}
+
+# Tools without which the launcher is meaningless (fail fast). Everything
+# else — engine responsibility.
+for _tool in git flock sha256sum sudo; do
+    command -v "$_tool" >/dev/null 2>&1 || err "missing tool: $_tool"
+done
+unset _tool
+
+MODE=""
+SHA=""
+COMPONENT=""
+main "$@"

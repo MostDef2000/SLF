@@ -2,7 +2,7 @@
   "schema": "slf_workflow_inventory_v1",
   "repository": "MostDef2000/SLF",
   "defaultBranch": "main",
-  "maxPermanentWorkflows": 3,
+  "maxPermanentWorkflows": 4,
   "canonicalRequiredContext": "SLF CI / ci",
   "workflows": [
     {
@@ -32,6 +32,16 @@
       "owner": "MostDef2000",
       "triggers": ["schedule", "workflow_dispatch"],
       "purpose": "Weekly and manual governance, risk, workflow-lifecycle and maintenance review."
+    },
+    {
+      "path": ".github/workflows/deploy-vps.yml",
+      "name": "SLF VPS Deploy",
+      "classification": "PERMANENT",
+      "role": "DEPLOY",
+      "owner": "MostDef2000",
+      "triggers": ["workflow_dispatch"],
+      "requiredContext": "SLF CI / ci",
+      "purpose": "Manual production VPS deploy transport (workflow_dispatch-only, push-model): gates on a completed+success trusted SLF CI push-run for the exact 40-hex input SHA, bundles that exact commit and pipes it over SSH to the on-box deploy launcher; never a pull-request, push or schedule trigger."
     }
   ]
 }

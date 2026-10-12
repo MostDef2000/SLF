@@ -56,7 +56,7 @@ case "$component" in
     EXPORT_DIR='/opt/slf_ai_exporter_v2/slf_ai_exporter_v2'
     VENV_PY="$EXPORT_DIR/.venv/bin/python"
     VENV_PIP="$EXPORT_DIR/.venv/bin/pip"
-    FILES='slf_ai_export.py slf_rag_build.py slf_generator_update_rag.py slf_preset_evidence_561.py slf_tactical_lab_v1.py generator_updates.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
+    FILES='slf_ai_export.py slf_rag_build.py slf_generator_update_rag.py slf_preset_evidence_561.py slf_tactical_lab_v1.py slf_common_utils.py slf_manifest_integrity.py generator_updates.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
     [ -x "$VENV_PY" ] || { echo "Missing exporter Python: $VENV_PY" >&2; exit 1; }
     [ -x "$VENV_PIP" ] || { echo "Missing exporter pip: $VENV_PIP" >&2; exit 1; }
 
@@ -65,7 +65,7 @@ case "$component" in
         mode=0644
         [ "$file" = 'run_daily_export.sh' ] && mode=0755
         install -m "$mode" "$BACKUP_DIR/$file" "$EXPORT_DIR/$file"
-      elif [ "$file" = 'slf_generator_update_rag.py' ] || [ "$file" = 'generator_updates.json' ] || [ "$file" = 'slf_preset_evidence_561.py' ] || [ "$file" = 'slf_tactical_lab_v1.py' ]; then
+      elif [ "$file" = 'slf_generator_update_rag.py' ] || [ "$file" = 'generator_updates.json' ] || [ "$file" = 'slf_preset_evidence_561.py' ] || [ "$file" = 'slf_tactical_lab_v1.py' ] || [ "$file" = 'slf_common_utils.py' ] || [ "$file" = 'slf_manifest_integrity.py' ]; then
         rm -f "$EXPORT_DIR/$file"
       fi
     done
@@ -76,6 +76,8 @@ case "$component" in
     [ -f "$EXPORT_DIR/slf_generator_update_rag.py" ] && PY_FILES="$PY_FILES $EXPORT_DIR/slf_generator_update_rag.py"
     [ -f "$EXPORT_DIR/slf_preset_evidence_561.py" ] && PY_FILES="$PY_FILES $EXPORT_DIR/slf_preset_evidence_561.py"
     [ -f "$EXPORT_DIR/slf_tactical_lab_v1.py" ] && PY_FILES="$PY_FILES $EXPORT_DIR/slf_tactical_lab_v1.py"
+    [ -f "$EXPORT_DIR/slf_common_utils.py" ] && PY_FILES="$PY_FILES $EXPORT_DIR/slf_common_utils.py"
+    [ -f "$EXPORT_DIR/slf_manifest_integrity.py" ] && PY_FILES="$PY_FILES $EXPORT_DIR/slf_manifest_integrity.py"
     "$VENV_PY" -m py_compile $PY_FILES
     if [ -f "$EXPORT_DIR/generator_updates.json" ]; then
       "$VENV_PY" -c 'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); assert p.get("schema") == "slf_generator_update_pack_v1"; assert p.get("rules")' "$EXPORT_DIR/generator_updates.json"

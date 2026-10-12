@@ -172,10 +172,10 @@ assert.match(gates.branchProtectionTarget.singleMaintainerException, /No indepen
 assert.equal(gates.productionDeploymentImplied, false);
 
 assert.equal(inventory.schema, 'slf_workflow_inventory_v1');
-assert.equal(inventory.maxPermanentWorkflows, 3);
+assert.equal(inventory.maxPermanentWorkflows, 4);
 assert.equal(inventory.canonicalRequiredContext, 'SLF CI / ci');
-assert.equal(inventory.workflows.length, 3);
-assert.deepEqual(new Set(inventory.workflows.map(item => item.role)), new Set(['CI', 'RELEASE', 'MAINTENANCE']));
+assert.equal(inventory.workflows.length, 4);
+assert.deepEqual(new Set(inventory.workflows.map(item => item.role)), new Set(['CI', 'RELEASE', 'MAINTENANCE', 'DEPLOY']));
 const releaseInventory = inventory.workflows.find(item => item.role === 'RELEASE');
 assert.ok(releaseInventory, 'workflow inventory missing RELEASE role');
 assert.match(releaseInventory.purpose, /release branch/i);

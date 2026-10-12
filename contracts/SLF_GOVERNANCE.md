@@ -107,11 +107,12 @@ Every active workflow YAML must be registered by `data/quality/workflow-inventor
 
 ## 8. Active Actions topology
 
-The permanent workflow budget is three:
+The permanent workflow budget is four:
 
 1. `SLF CI` — pull-request quality gate;
 2. `SLF Release` — automatic/main and manual-fallback latest-only publication;
-3. `SLF Maintenance` — scheduled/manual governance maintenance.
+3. `SLF Maintenance` — scheduled/manual governance maintenance;
+4. `SLF VPS Deploy` — dispatch-only push transport that carries a trusted-CI-verified commit bundle to the SLF VPS through the on-box `slf-deploy-launcher` (role `DEPLOY`; no push/pull_request triggers).
 
 Completed migration or temporary workflow YAML must be removed. Historical names/runs may remain visible in the GitHub Actions sidebar and are audit history, not active orchestration.
 

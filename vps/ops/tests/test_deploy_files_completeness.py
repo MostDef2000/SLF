@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 DEPLOY_SCRIPT = ROOT / "vps" / "ops" / "deploy-code.sh"
+ROLLBACK_SCRIPT = ROOT / "vps" / "ops" / "rollback-code.sh"
 DAILY_EXPORT_SCRIPT = ROOT / "vps" / "exporter-rag" / "run_daily_export.sh"
 EXPORTER_DIR = ROOT / "vps" / "exporter-rag"
 SERVICE_FILE = ROOT / "vps" / "ops" / "slf-server.service"
@@ -30,7 +31,9 @@ class DeployFilesCompletenessTest(unittest.TestCase):
 
     def setUp(self):
         self.deploy_script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+        self.rollback_script = ROLLBACK_SCRIPT.read_text(encoding="utf-8")
         self.exporter_files = self.parse_exporter_files()
+        self.rollback_exporter_files = self.parse_rollback_exporter_files()
 
     def parse_exporter_files(self):
         declarations = re.findall(r"^\s*FILES='([^']*)'$", self.deploy_script, re.MULTILINE)
@@ -38,6 +41,15 @@ class DeployFilesCompletenessTest(unittest.TestCase):
             len(declarations),
             1,
             "deploy-code.sh must declare exactly one exporter FILES list",
+        )
+        return declarations[0].split()
+
+    def parse_rollback_exporter_files(self):
+        declarations = re.findall(r"^\s*FILES='([^']*)'$", self.rollback_script, re.MULTILINE)
+        self.assertEqual(
+            len(declarations),
+            1,
+            "rollback-code.sh must declare exactly one exporter FILES list",
         )
         return declarations[0].split()
 
@@ -49,6 +61,21 @@ class DeployFilesCompletenessTest(unittest.TestCase):
             for path in STAGED_FILE_PATTERN.findall(self.deploy_script)
             if "$" not in path
         ]
+
+    def test_rollback_files_match_deploy_files(self):
+        """Rollback must restore the exact deploy file set (order included).
+
+        Regression guard for the same missing-file defect class on the
+        restore path: a rollback from a deploy-created backup must restore
+        the full exporter file set, including slf_common_utils.py and
+        slf_manifest_integrity.py.
+        """
+        self.assertEqual(
+            self.rollback_exporter_files,
+            self.exporter_files,
+            "rollback-code.sh exporter FILES must match deploy-code.sh "
+            "exporter FILES exactly (same entries, same order)",
+        )
 
     def test_daily_export_invoked_scripts_are_shipped(self):
         invoked = {
