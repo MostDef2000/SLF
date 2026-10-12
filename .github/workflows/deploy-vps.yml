@@ -1,5 +1,10 @@
 name: SLF VPS Deploy
 
+# Dispatch-index refresh touch 2026-10-12: GitHub's dispatch API validated
+# choice inputs against a stale index for this never-run workflow (HTTP 422
+# "not in the list of allowed values" for both valid choices). This comment
+# touch forces a re-parse; no behavior change.
+
 # SLF VPS production deploy (T7 of specs/deploy-unification/ in the
 # workspace repo ai-playground; adapted from the PROVEN lifesim pattern,
 # lifesim/.github/workflows/deploy.yml).
