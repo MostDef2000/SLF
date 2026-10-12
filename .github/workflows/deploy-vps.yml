@@ -53,12 +53,9 @@ on:
         required: true
         type: string
       target:
-        description: "Deployment target component"
+        description: "Deployment target component (api | exporter-rag; enforced fail-closed by the gate job)"
         required: true
-        type: choice
-        choices:
-          - exporter-rag
-          - api
+        type: string
       confirmation:
         description: "Type: deploy confirmed"
         required: true
