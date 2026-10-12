@@ -28,8 +28,7 @@ def write_jsonl(path, rows):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
-        for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        f.writelines(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
     tmp.replace(path)
 
 def write_text(path, text):
@@ -41,7 +40,7 @@ def write_text(path, text):
 
 def safe_id(value):
     value = str(value or "").lower()
-    value = re.sub(r"[^a-z0-9а-яё]+", "_", value, flags=re.I)
+    value = re.sub(r"[^a-z0-9а-яё]+", "_", value, flags=re.IGNORECASE)
     return value.strip("_")[:120] or "item"
 
 def extract_items_from_summary(summary):
@@ -222,7 +221,7 @@ def build_match_evidence():
                 "schema": "slf_match_evidence_v1",
                 "source": source_type,
                 "summary_file": f"data/{filename}",
-                "summary_keys": sorted(list(data.keys()))[:50],
+                "summary_keys": sorted(data.keys())[:50],
                 "note": "Summary file exists; detailed extraction will be added after schema inspection."
             })
             continue

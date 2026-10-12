@@ -21,7 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from playwright.sync_api import Browser, Page, sync_playwright
+from playwright.sync_api import Page, sync_playwright
 
 ROOT = Path.cwd()
 ARTIFACT = ROOT / "releases" / "latest.user.js"
@@ -41,7 +41,7 @@ MALICIOUS_PRESETS = {
 class FixtureHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
-        query = parse_qs(parsed.query)
+        parse_qs(parsed.query)
 
         if parsed.path == "/team4.php":
             fixture_path = FIXTURES / "team-tactic.html"

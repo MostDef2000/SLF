@@ -114,7 +114,7 @@ case "$COMPONENT" in
     EXPORT_DIR='/opt/slf_ai_exporter_v2/slf_ai_exporter_v2'
     VENV_PY="$EXPORT_DIR/.venv/bin/python"
     VENV_PIP="$EXPORT_DIR/.venv/bin/pip"
-    FILES='slf_ai_export.py slf_rag_build.py slf_generator_update_rag.py slf_preset_evidence_561.py slf_tactical_lab_v1.py generator_updates.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
+    FILES='slf_ai_export.py slf_common_utils.py slf_rag_build.py slf_generator_update_rag.py slf_preset_evidence_561.py slf_tactical_lab_v1.py generator_updates.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
     [ -d "$EXPORT_DIR" ] || { echo "Missing exporter directory: $EXPORT_DIR" >&2; exit 1; }
     [ -x "$VENV_PY" ] || { echo "Missing exporter Python: $VENV_PY" >&2; exit 1; }
     [ -x "$VENV_PIP" ] || { echo "Missing exporter pip: $VENV_PIP" >&2; exit 1; }
@@ -124,6 +124,7 @@ case "$COMPONENT" in
     done
     "$VENV_PY" -m py_compile \
       "$STAGE_DIR/slf_ai_export.py" \
+      "$STAGE_DIR/slf_common_utils.py" \
       "$STAGE_DIR/slf_rag_build.py" \
       "$STAGE_DIR/slf_generator_update_rag.py" \
       "$STAGE_DIR/slf_preset_evidence_561.py" \
@@ -140,6 +141,7 @@ case "$COMPONENT" in
 
     "$VENV_PIP" install -r "$STAGE_DIR/requirements.txt"
     install -m 0644 "$STAGE_DIR/slf_ai_export.py" "$EXPORT_DIR/slf_ai_export.py"
+    install -m 0644 "$STAGE_DIR/slf_common_utils.py" "$EXPORT_DIR/slf_common_utils.py"
     install -m 0644 "$STAGE_DIR/slf_rag_build.py" "$EXPORT_DIR/slf_rag_build.py"
     install -m 0644 "$STAGE_DIR/slf_generator_update_rag.py" "$EXPORT_DIR/slf_generator_update_rag.py"
     install -m 0644 "$STAGE_DIR/slf_preset_evidence_561.py" "$EXPORT_DIR/slf_preset_evidence_561.py"

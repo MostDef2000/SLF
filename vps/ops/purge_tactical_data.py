@@ -12,11 +12,12 @@ import datetime as dt
 import json
 import math
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
 
 COLLECTIONS = (
     "match_snapshots_v2",

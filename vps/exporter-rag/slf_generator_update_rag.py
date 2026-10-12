@@ -39,8 +39,7 @@ def write_jsonl(path, rows):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     with open(tmp, "w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        handle.writelines(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
     tmp.replace(path)
 
 

@@ -4,7 +4,6 @@ import shlex
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 SERVICE_FILE = ROOT / "vps" / "ops" / "slf-server.service"
 REQUIREMENTS_FILE = ROOT / "vps" / "api" / "requirements.txt"

@@ -1,12 +1,13 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
 import hmac
-import os
 import json
-import time
+import os
 import re
 import threading
+import time
 from contextlib import contextmanager
+
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 app = Flask(__name__)
 

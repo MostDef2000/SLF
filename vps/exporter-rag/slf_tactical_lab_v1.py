@@ -7,14 +7,15 @@ import argparse
 import hashlib
 import json
 import math
+import sys
 from collections import Counter, defaultdict
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
-import sys
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slf_common_utils import read_json, write_json  # noqa: E402
+from slf_common_utils import read_json, write_json
 
 SUMMARY_SCHEMA = "slf_tactical_lab_summary_v1"
 QUALITY_SCHEMA = "slf_tactical_lab_quality_v1"
@@ -28,7 +29,7 @@ def now_iso() -> str:
 
 
 
-def as_records(value: Any) -> List[Dict[str, Any]]:
+def as_records(value: Any) -> list[dict[str, Any]]:
     if isinstance(value, list):
         return [row for row in value if isinstance(row, dict)]
     if isinstance(value, dict):
@@ -38,7 +39,7 @@ def as_records(value: Any) -> List[Dict[str, Any]]:
     return []
 
 
-def number(value: Any) -> Optional[float]:
+def number(value: Any) -> float | None:
     try:
         parsed = float(value)
         return parsed if math.isfinite(parsed) else None
@@ -46,7 +47,7 @@ def number(value: Any) -> Optional[float]:
         return None
 
 
-def integer(value: Any) -> Optional[int]:
+def integer(value: Any) -> int | None:
     parsed = number(value)
     return int(parsed) if parsed is not None else None
 
@@ -59,12 +60,12 @@ def rounded(value: float, digits: int = 4) -> float:
     return round(float(value), digits)
 
 
-def average(values: Iterable[Any]) -> Optional[float]:
+def average(values: Iterable[Any]) -> float | None:
     rows = [parsed for value in values if (parsed := number(value)) is not None]
     return rounded(sum(rows) / len(rows)) if rows else None
 
 
-def median(values: Iterable[Any]) -> Optional[float]:
+def median(values: Iterable[Any]) -> float | None:
     rows = sorted(parsed for value in values if (parsed := number(value)) is not None)
     if not rows:
         return None
@@ -84,12 +85,12 @@ def minute_bucket(value: Any) -> str:
     return "unknown"
 
 
-def counter_dict(values: Iterable[Any]) -> Dict[str, int]:
+def counter_dict(values: Iterable[Any]) -> dict[str, int]:
     counter = Counter(str(value or "unknown") for value in values)
     return dict(sorted(counter.items(), key=lambda item: (-item[1], item[0])))
 
 
-def assignment_from_state(state: Any) -> Optional[Dict[str, Any]]:
+def assignment_from_state(state: Any) -> dict[str, Any] | None:
     if not isinstance(state, dict):
         return None
     assignment = state.get("assignment")
@@ -102,12 +103,12 @@ def assignment_from_state(state: Any) -> Optional[Dict[str, Any]]:
     return assignment
 
 
-def lab_state(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def lab_state(record: dict[str, Any]) -> dict[str, Any] | None:
     state = record.get("tacticalLab")
     return state if isinstance(state, dict) else None
 
 
-def lifecycle(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def lifecycle(record: dict[str, Any]) -> dict[str, Any] | None:
     event = record.get("tacticalLabEvent")
     if not isinstance(event, dict) or event.get("schema") != "slf_tactical_lab_event_v1":
         return None
@@ -116,7 +117,7 @@ def lifecycle(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return event
 
 
-def owned_result(record: Dict[str, Any]) -> Optional[str]:
+def owned_result(record: dict[str, Any]) -> str | None:
     score = record.get("score") if isinstance(record.get("score"), dict) else {}
     teams = record.get("teams") if isinstance(record.get("teams"), list) else []
     my_team = record.get("myTeam")
@@ -134,7 +135,7 @@ def owned_result(record: Dict[str, Any]) -> Optional[str]:
     return "win" if mine > theirs else "loss" if mine < theirs else "draw"
 
 
-def safe_previous(context: Dict[str, Any]) -> str:
+def safe_previous(context: dict[str, Any]) -> str:
     previous = context.get("previous") if isinstance(context.get("previous"), dict) else {}
     preset = str(previous.get("presetId") or "").strip()
     if preset:
@@ -156,14 +157,14 @@ def completeness(context: Any, fields: Sequence[str]) -> bool:
     return True
 
 
-def collect_evidence(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
-    assignments: Dict[str, Dict[str, Any]] = {}
-    activation_events: Dict[str, Dict[str, Any]] = {}
-    exit_events: Dict[str, Dict[str, Any]] = {}
-    result_by_assignment: Dict[str, Dict[str, Any]] = {}
+def collect_evidence(snapshots: Sequence[dict[str, Any]], results: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    assignments: dict[str, dict[str, Any]] = {}
+    activation_events: dict[str, dict[str, Any]] = {}
+    exit_events: dict[str, dict[str, Any]] = {}
+    result_by_assignment: dict[str, dict[str, Any]] = {}
     duplicate_events = 0
 
-    def remember_state(record: Dict[str, Any], is_result: bool = False) -> None:
+    def remember_state(record: dict[str, Any], is_result: bool = False) -> None:
         state = lab_state(record)
         assignment = assignment_from_state(state)
         if not assignment:
@@ -208,12 +209,12 @@ def collect_evidence(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict
     for record in results:
         remember_state(record, is_result=True)
 
-    activation_by_assignment: Dict[str, Dict[str, Any]] = {}
+    activation_by_assignment: dict[str, dict[str, Any]] = {}
     for event in activation_events.values():
         assignment_id = str(event.get("assignmentId") or "")
         activation_by_assignment.setdefault(assignment_id, event)
 
-    exit_by_assignment: Dict[str, Dict[str, Any]] = {}
+    exit_by_assignment: dict[str, dict[str, Any]] = {}
     for event in exit_events.values():
         assignment_id = str(event.get("assignmentId") or "")
         exit_by_assignment.setdefault(assignment_id, event)
@@ -229,14 +230,14 @@ def collect_evidence(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict
     }
 
 
-def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[str, Any]]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def build_outputs(snapshots: Sequence[dict[str, Any]], results: Sequence[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
     evidence = collect_evidence(snapshots, results)
     assignments = evidence["assignments"]
     activation_by_assignment = evidence["activationByAssignment"]
     exit_by_assignment = evidence["exitByAssignment"]
     result_by_assignment = evidence["resultByAssignment"]
 
-    buckets: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    buckets: dict[str, list[dict[str, Any]]] = defaultdict(list)
     population_counts: Counter[str] = Counter()
     for assignment_id, row in assignments.items():
         experiment_id = str(row.get("experimentId") or "unknown")
@@ -275,7 +276,7 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
             "populationVersion": population,
         })
 
-    per_experiment: List[Dict[str, Any]] = []
+    per_experiment: list[dict[str, Any]] = []
     for experiment_id in sorted(buckets):
         rows = buckets[experiment_id]
         activated = [row for row in rows if row["activated"]]
@@ -392,7 +393,7 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
     return summary, quality
 
 
-def file_row(path: Path, relative: str) -> Dict[str, Any]:
+def file_row(path: Path, relative: str) -> dict[str, Any]:
     raw = path.read_bytes() if path.exists() else b""
     return {
         "path": relative,
@@ -465,7 +466,7 @@ def enrich_public_indexes(out: Path) -> None:
         context_path.write_text(text, encoding="utf-8")
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build privacy-safe Tactical Lab v1 summaries from cached tactical collections.")
     parser.add_argument("--out", default="/var/www/html/slf_ai")
     parser.add_argument("--cache-dir", default="cache")

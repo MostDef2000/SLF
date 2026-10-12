@@ -10,23 +10,21 @@ from __future__ import annotations
 
 import argparse
 import collections
-import dataclasses
 import datetime as dt
 import hashlib
 import json
 import math
 import os
 import re
-import statistics
 import sys
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 import requests
-import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slf_common_utils import first_path, get_path  # noqa: E402
+from slf_common_utils import first_path, get_path
 
 EXPORTER_VERSION = "slf_ai_exporter_v2"
 DEFAULT_COLLECTIONS = [
@@ -55,7 +53,7 @@ def now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
 
 
-def safe_int(value: Any) -> Optional[int]:
+def safe_int(value: Any) -> int | None:
     if value is None or value == "":
         return None
     if isinstance(value, bool):
@@ -79,7 +77,7 @@ def safe_int(value: Any) -> Optional[int]:
         return None
 
 
-def safe_float(value: Any) -> Optional[float]:
+def safe_float(value: Any) -> float | None:
     if value is None or value == "":
         return None
     if isinstance(value, bool):
@@ -99,21 +97,21 @@ def safe_float(value: Any) -> Optional[float]:
         return None
 
 
-def pctile(sorted_values: Sequence[float], p: float) -> Optional[float]:
+def pctile(sorted_values: Sequence[float], p: float) -> float | None:
     if not sorted_values:
         return None
     if len(sorted_values) == 1:
         return float(sorted_values[0])
     pos = (len(sorted_values) - 1) * p
-    lo = int(math.floor(pos))
-    hi = int(math.ceil(pos))
+    lo = math.floor(pos)
+    hi = math.ceil(pos)
     if lo == hi:
         return float(sorted_values[lo])
     weight = pos - lo
     return float(sorted_values[lo] * (1 - weight) + sorted_values[hi] * weight)
 
 
-def compact_stats(values: Iterable[Any]) -> Dict[str, Any]:
+def compact_stats(values: Iterable[Any]) -> dict[str, Any]:
     nums = [safe_float(v) for v in values]
     nums = [v for v in nums if v is not None]
     if not nums:
@@ -149,7 +147,7 @@ def json_size(obj: Any) -> int:
     return len(json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
-def normalize_api_payload(payload: Any) -> List[Dict[str, Any]]:
+def normalize_api_payload(payload: Any) -> list[dict[str, Any]]:
     """Handle list responses and a few common wrapped shapes."""
     if isinstance(payload, list):
         return [x for x in payload if isinstance(x, dict)]
@@ -165,7 +163,7 @@ def normalize_api_payload(payload: Any) -> List[Dict[str, Any]]:
     return []
 
 
-def fetch_collection(api_base: str, token: str, collection: str, timeout: int = 60) -> List[Dict[str, Any]]:
+def fetch_collection(api_base: str, token: str, collection: str, timeout: int = 60) -> list[dict[str, Any]]:
     url = f"{api_base.rstrip('/')}/{collection}"
     response = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=timeout)
     if response.status_code == 404:
@@ -248,7 +246,7 @@ def primary_position(record: Mapping[str, Any]) -> str:
     return str(value or "unknown")
 
 
-def compact_transfer_record(record: Mapping[str, Any]) -> Dict[str, Any]:
+def compact_transfer_record(record: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "date": get_path(record, "transfer.dateText"),
         "price": safe_int(get_path(record, "transfer.price")),
@@ -267,8 +265,8 @@ def compact_transfer_record(record: Mapping[str, Any]) -> Dict[str, Any]:
     }
 
 
-def group_price_summary(records: Sequence[Mapping[str, Any]], key_fn, min_sample: int = 1) -> List[Dict[str, Any]]:
-    groups: Dict[Tuple[Any, ...], List[Mapping[str, Any]]] = collections.defaultdict(list)
+def group_price_summary(records: Sequence[Mapping[str, Any]], key_fn, min_sample: int = 1) -> list[dict[str, Any]]:
+    groups: dict[tuple[Any, ...], list[Mapping[str, Any]]] = collections.defaultdict(list)
     for rec in records:
         price = safe_int(get_path(rec, "transfer.price"))
         if price is None:
@@ -277,7 +275,7 @@ def group_price_summary(records: Sequence[Mapping[str, Any]], key_fn, min_sample
         if not isinstance(key, tuple):
             key = (key,)
         groups[key].append(rec)
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for key, group in groups.items():
         if len(group) < min_sample:
             continue
@@ -295,18 +293,18 @@ def group_price_summary(records: Sequence[Mapping[str, Any]], key_fn, min_sample
     return rows[:TRANSFER_GROUP_LIMIT]
 
 
-def trim_extremes(values: Sequence[int], lower: float = 0.05, upper: float = 0.95) -> List[int]:
+def trim_extremes(values: Sequence[int], lower: float = 0.05, upper: float = 0.95) -> list[int]:
     if not values:
         return []
     vals = sorted(values)
     if len(vals) < 8:
         return vals
-    lo_idx = int(math.floor((len(vals) - 1) * lower))
-    hi_idx = int(math.ceil((len(vals) - 1) * upper))
+    lo_idx = math.floor((len(vals) - 1) * lower)
+    hi_idx = math.ceil((len(vals) - 1) * upper)
     return vals[lo_idx : hi_idx + 1]
 
 
-def build_transfer_market_summary(records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def build_transfer_market_summary(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
     completed = [r for r in records if r.get("recordType") == "completed_transfer" or r.get("eventType") == "completed_transfer"]
     v2 = [r for r in completed if safe_int(r.get("schemaVersion")) == 2 or r.get("parserVersion") == "history_v2_cells"]
     invalid_price = [r for r in v2 if safe_int(get_path(r, "transfer.price")) is None]
@@ -318,7 +316,7 @@ def build_transfer_market_summary(records: Sequence[Dict[str, Any]]) -> Dict[str
     schema_counts = collections.Counter(str(r.get("schemaVersion", "missing")) for r in completed)
     parser_counts = collections.Counter(str(r.get("parserVersion", "missing")) for r in completed)
 
-    def key_profile(r: Mapping[str, Any]) -> Tuple[str, str, str, str]:
+    def key_profile(r: Mapping[str, Any]) -> tuple[str, str, str, str]:
         return (
             primary_position(r),
             age_bucket(get_path(r, "player.age")),
@@ -359,8 +357,8 @@ def build_transfer_market_summary(records: Sequence[Dict[str, Any]]) -> Dict[str
     }
 
 
-def flatten_numeric(obj: Any, prefix: str = "") -> Dict[str, float]:
-    out: Dict[str, float] = {}
+def flatten_numeric(obj: Any, prefix: str = "") -> dict[str, float]:
+    out: dict[str, float] = {}
     if isinstance(obj, Mapping):
         for key, value in obj.items():
             key_str = str(key)
@@ -410,12 +408,12 @@ def score_state(record: Mapping[str, Any]) -> str:
     return "unknown"
 
 
-def record_minute(record: Mapping[str, Any]) -> Optional[int]:
+def record_minute(record: Mapping[str, Any]) -> int | None:
     return safe_int(first_path(record, ["minute", "matchMinute", "snapshot.minute", "event.minute", "context.minute"]))
 
 
-def summarize_numeric_records(records: Sequence[Mapping[str, Any]], max_paths: int = 120) -> Dict[str, Any]:
-    buckets: Dict[str, List[float]] = collections.defaultdict(list)
+def summarize_numeric_records(records: Sequence[Mapping[str, Any]], max_paths: int = 120) -> dict[str, Any]:
+    buckets: dict[str, list[float]] = collections.defaultdict(list)
     for rec in records:
         for path, value in flatten_numeric(rec).items():
             if is_interesting_metric_path(path):
@@ -424,9 +422,9 @@ def summarize_numeric_records(records: Sequence[Mapping[str, Any]], max_paths: i
     return {path: compact_stats(buckets[path]) for path in ranked_paths}
 
 
-def build_preset_effects_summary(records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
-    by_preset: Dict[str, List[Mapping[str, Any]]] = collections.defaultdict(list)
-    by_context: Dict[Tuple[str, str, str], List[Mapping[str, Any]]] = collections.defaultdict(list)
+def build_preset_effects_summary(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    by_preset: dict[str, list[Mapping[str, Any]]] = collections.defaultdict(list)
+    by_context: dict[tuple[str, str, str], list[Mapping[str, Any]]] = collections.defaultdict(list)
     for rec in records:
         name = preset_name(rec)
         by_preset[name].append(rec)
@@ -467,9 +465,9 @@ def build_preset_effects_summary(records: Sequence[Dict[str, Any]]) -> Dict[str,
     }
 
 
-def build_preset_events_summary(records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
-    rows: Dict[Tuple[str, str, str], int] = collections.Counter()
-    presets: Dict[str, int] = collections.Counter()
+def build_preset_events_summary(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    rows: dict[tuple[str, str, str], int] = collections.Counter()
+    presets: dict[str, int] = collections.Counter()
     for rec in records:
         name = preset_name(rec)
         presets[name] += 1
@@ -487,7 +485,7 @@ def build_preset_events_summary(records: Sequence[Dict[str, Any]]) -> Dict[str, 
     }
 
 
-def build_player_observations_summary(records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def build_player_observations_summary(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
     by_position = collections.Counter()
     by_team = collections.Counter()
     by_mode = collections.Counter()
@@ -522,7 +520,7 @@ def build_player_observations_summary(records: Sequence[Dict[str, Any]]) -> Dict
     }
 
 
-def build_match_summary(collections: Mapping[str, Sequence[Dict[str, Any]]]) -> Dict[str, Any]:
+def build_match_summary(collections: Mapping[str, Sequence[dict[str, Any]]]) -> dict[str, Any]:
     snapshots = collections.get("match_snapshots_v2", []) or collections.get("match_snapshots", [])
     results = collections.get("match_results_v2", []) or collections.get("match_results", [])
     by_game = collections_counter_path(snapshots, ["gameId", "matchId", "id"])
@@ -551,12 +549,12 @@ def collections_counter_path(records: Sequence[Mapping[str, Any]], paths: Sequen
     return c
 
 
-def counter_rows(counter: collections.Counter, limit: int = 1000) -> List[Dict[str, Any]]:
+def counter_rows(counter: collections.Counter, limit: int = 1000) -> list[dict[str, Any]]:
     return [{"key": k, "count": v} for k, v in counter.most_common(limit)]
 
 
-def build_analytics_summary(collections_map: Mapping[str, Sequence[Dict[str, Any]]]) -> Dict[str, Any]:
-    rows: Dict[str, Any] = {}
+def build_analytics_summary(collections_map: Mapping[str, Sequence[dict[str, Any]]]) -> dict[str, Any]:
+    rows: dict[str, Any] = {}
     for name, records in collections_map.items():
         versions = collections.Counter()
         schemas = collections.Counter()
@@ -609,11 +607,11 @@ def slugify(text: str) -> str:
     return s[:80] or "doc"
 
 
-def chunk_text(text: str, target_chars: int = WIKI_CHUNK_TARGET_CHARS, overlap: int = WIKI_CHUNK_OVERLAP_CHARS) -> List[str]:
+def chunk_text(text: str, target_chars: int = WIKI_CHUNK_TARGET_CHARS, overlap: int = WIKI_CHUNK_OVERLAP_CHARS) -> list[str]:
     text = re.sub(r"\n{3,}", "\n\n", text.strip())
     if not text:
         return []
-    chunks: List[str] = []
+    chunks: list[str] = []
     start = 0
     n = len(text)
     while start < n:
@@ -636,11 +634,11 @@ def chunk_text(text: str, target_chars: int = WIKI_CHUNK_TARGET_CHARS, overlap: 
     return chunks
 
 
-def build_wiki_export(docs: Sequence[Dict[str, Any]], out_base: Path) -> Dict[str, Any]:
+def build_wiki_export(docs: Sequence[dict[str, Any]], out_base: Path) -> dict[str, Any]:
     wiki_dir = out_base / "wiki"
     docs_dir = wiki_dir / "docs"
-    index: List[Dict[str, Any]] = []
-    chunks: List[Dict[str, Any]] = []
+    index: list[dict[str, Any]] = []
+    chunks: list[dict[str, Any]] = []
 
     for doc in docs:
         doc_id = get_doc_id(doc)
@@ -704,7 +702,7 @@ def build_wiki_export(docs: Sequence[Dict[str, Any]], out_base: Path) -> Dict[st
     return wiki_manifest
 
 
-def build_manifest(out_base: Path, files: Mapping[str, str], collection_counts: Mapping[str, int]) -> Dict[str, Any]:
+def build_manifest(out_base: Path, files: Mapping[str, str], collection_counts: Mapping[str, int]) -> dict[str, Any]:
     file_rows = {}
     for key, rel in files.items():
         path = out_base / rel
@@ -740,7 +738,7 @@ def build_manifest(out_base: Path, files: Mapping[str, str], collection_counts: 
     }
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build SLF read-only AI exports from private VPS API collections.")
     parser.add_argument("--api-base", default=os.getenv("SLF_API_BASE", "http://77.105.142.206:5000/api"))
     parser.add_argument("--api-token", default=os.getenv("SLF_API_TOKEN", ""))
@@ -757,11 +755,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     collection_names = [x.strip() for x in args.collections.split(",") if x.strip()]
-    collections_map: Dict[str, List[Dict[str, Any]]] = {}
+    collections_map: dict[str, list[dict[str, Any]]] = {}
 
     for name in collection_names:
         cache_file = cache_dir / f"{name}.json"
-        records: List[Dict[str, Any]] = []
+        records: list[dict[str, Any]] = []
         if args.skip_api:
             if cache_file.exists():
                 records = normalize_api_payload(json.loads(cache_file.read_text(encoding="utf-8")))

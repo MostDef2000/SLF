@@ -39,15 +39,15 @@ import json
 import math
 import os
 import tempfile
-from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any
 
 SCHEMA_VERSION = "slf_stage2_moment_engine_v1"
 DEFAULT_EXPORT_ROOT = "/var/www/html/slf_ai"
 
 
-JsonObject = Dict[str, Any]
+JsonObject = dict[str, Any]
 
 
 def utc_now() -> str:
@@ -64,8 +64,8 @@ def load_json(path: Path, default: Any) -> Any:
         return default
 
 
-def load_jsonl(path: Path, limit: Optional[int] = None) -> List[JsonObject]:
-    rows: List[JsonObject] = []
+def load_jsonl(path: Path, limit: int | None = None) -> list[JsonObject]:
+    rows: list[JsonObject] = []
     if not path.exists():
         return rows
     try:
@@ -120,7 +120,7 @@ def number(value: Any, default: float = 0.0) -> float:
     return default
 
 
-def safe_ratio(a: float, b: float) -> Optional[float]:
+def safe_ratio(a: float, b: float) -> float | None:
     if not b:
         return None
     return a / b
@@ -130,7 +130,7 @@ def clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
     return max(low, min(high, value))
 
 
-def as_list(value: Any) -> List[Any]:
+def as_list(value: Any) -> list[Any]:
     if value is None:
         return []
     if isinstance(value, list):
@@ -138,7 +138,7 @@ def as_list(value: Any) -> List[Any]:
     return [value]
 
 
-def extract_rows(summary: Any, likely_keys: Iterable[str]) -> List[JsonObject]:
+def extract_rows(summary: Any, likely_keys: Iterable[str]) -> list[JsonObject]:
     """Best-effort extraction from summary or raw export shapes.
 
     Existing Stage 1 summaries are compact; future exports may include samples,
@@ -166,7 +166,7 @@ def extract_rows(summary: Any, likely_keys: Iterable[str]) -> List[JsonObject]:
 
     by_game = summary.get("byGame") or summary.get("games") or summary.get("matches")
     if isinstance(by_game, dict):
-        rows: List[JsonObject] = []
+        rows: list[JsonObject] = []
         for game_id, value in by_game.items():
             for row in extract_rows(value, ["rows", "items", "snapshots", "results"]):
                 row.setdefault("gameId", game_id)
@@ -191,7 +191,7 @@ def get_bucket(row: JsonObject) -> str:
     return str(value or "")
 
 
-def get_minute(row: JsonObject) -> Optional[int]:
+def get_minute(row: JsonObject) -> int | None:
     for key in ("minute", "effectiveMinute", "baseMinute"):
         value = row.get(key)
         if value is None:
@@ -211,7 +211,7 @@ def get_minute(row: JsonObject) -> Optional[int]:
     return None
 
 
-def phase_for_minute(minute: Optional[int], bucket: str = "") -> str:
+def phase_for_minute(minute: int | None, bucket: str = "") -> str:
     if minute is None:
         if bucket.startswith("01"):
             return "early"
@@ -229,7 +229,7 @@ def phase_for_minute(minute: Optional[int], bucket: str = "") -> str:
     return "final_5"
 
 
-def score_state(row: JsonObject) -> Tuple[str, int]:
+def score_state(row: JsonObject) -> tuple[str, int]:
     score = row.get("score") or {}
     if isinstance(score, dict):
         home = score.get("home")
@@ -254,7 +254,7 @@ def score_state(row: JsonObject) -> Tuple[str, int]:
     return "unknown", 0
 
 
-def team_stats(row: JsonObject) -> Tuple[JsonObject, JsonObject]:
+def team_stats(row: JsonObject) -> tuple[JsonObject, JsonObject]:
     my_team = str(row.get("myTeam") or "")
     stats = row.get("stats")
     if isinstance(stats, list):
@@ -275,7 +275,7 @@ def team_stats(row: JsonObject) -> Tuple[JsonObject, JsonObject]:
     return my, opp
 
 
-def get_xt(row: JsonObject) -> Tuple[float, float]:
+def get_xt(row: JsonObject) -> tuple[float, float]:
     xt = row.get("xT") or row.get("xt") or {}
     if isinstance(xt, dict):
         home = number(xt.get("home"), 0)
@@ -288,11 +288,11 @@ def get_xt(row: JsonObject) -> Tuple[float, float]:
     return number(row.get("myXT"), 0), number(row.get("oppXT"), 0)
 
 
-def classify_moment(row: JsonObject) -> Tuple[List[str], float, List[str]]:
+def classify_moment(row: JsonObject) -> tuple[list[str], float, list[str]]:
     minute = get_minute(row)
     bucket = get_bucket(row)
     phase = phase_for_minute(minute, bucket)
-    score, diff = score_state(row)
+    score, _diff = score_state(row)
     my_stats, opp_stats = team_stats(row)
     my_xg = number(my_stats.get("xG") or row.get("myXg") or row.get("myXG"), 0)
     opp_xg = number(opp_stats.get("xG") or row.get("oppXg") or row.get("oppXG"), 0)
@@ -301,8 +301,8 @@ def classify_moment(row: JsonObject) -> Tuple[List[str], float, List[str]]:
     opp_press = number(opp_stats.get("pressVector") or opp_stats.get("press_height") or row.get("oppPressVector"), 0)
     opp_def = number(opp_stats.get("defVector") or opp_stats.get("def_height") or row.get("oppDefVector"), 0)
 
-    signals: List[str] = []
-    reasons: List[str] = []
+    signals: list[str] = []
+    reasons: list[str] = []
 
     def add(signal: str, reason: str) -> None:
         if signal not in signals:
@@ -344,7 +344,7 @@ def classify_moment(row: JsonObject) -> Tuple[List[str], float, List[str]]:
     return signals, confidence, reasons
 
 
-def recommend_preset(signals: List[str]) -> Tuple[str, str, str]:
+def recommend_preset(signals: list[str]) -> tuple[str, str, str]:
     s = set(signals)
     if "collect_data" in s:
         return "hold_current", "collect_more_data", "до первого валидного tactical window лучше не делать резких изменений"
@@ -367,11 +367,11 @@ def recommend_preset(signals: List[str]) -> Tuple[str, str, str]:
     return "Pep_StandardControl_bal3", "balanced_control", "баланс без сильного аварийного сигнала"
 
 
-def build_from_snapshots(snapshot_rows: List[JsonObject], generated_at: str) -> Tuple[List[JsonObject], List[JsonObject], List[JsonObject], List[JsonObject]]:
-    moment_events: List[JsonObject] = []
-    recommendations: List[JsonObject] = []
-    preset_decisions: List[JsonObject] = []
-    weak_zones: List[JsonObject] = []
+def build_from_snapshots(snapshot_rows: list[JsonObject], generated_at: str) -> tuple[list[JsonObject], list[JsonObject], list[JsonObject], list[JsonObject]]:
+    moment_events: list[JsonObject] = []
+    recommendations: list[JsonObject] = []
+    preset_decisions: list[JsonObject] = []
+    weak_zones: list[JsonObject] = []
 
     # Deterministic order keeps rebuilds stable.
     snapshot_rows = sorted(
@@ -462,7 +462,7 @@ def build_from_snapshots(snapshot_rows: List[JsonObject], generated_at: str) -> 
     return moment_events, recommendations, preset_decisions, weak_zones
 
 
-def risk_for_signals(signals: List[str]) -> str:
+def risk_for_signals(signals: list[str]) -> str:
     s = set(signals)
     if "late_need_goal" in s or ("under_pressure" in s and "high_bad_actions" in s):
         return "high"
@@ -471,7 +471,7 @@ def risk_for_signals(signals: List[str]) -> str:
     return "low"
 
 
-def infer_weak_zone(row: JsonObject, signals: List[str]) -> Optional[JsonObject]:
+def infer_weak_zone(row: JsonObject, signals: list[str]) -> JsonObject | None:
     # v1 uses existing player/signal hints when present and otherwise emits only
     # high-confidence tactical zone proxies.
     player_signals = row.get("playerSignals") if isinstance(row.get("playerSignals"), dict) else {}
@@ -518,13 +518,13 @@ def infer_weak_zone(row: JsonObject, signals: List[str]) -> Optional[JsonObject]
     return None
 
 
-def build_summary_fallback(match_summary: JsonObject, generated_at: str) -> Tuple[List[JsonObject], List[JsonObject], List[JsonObject], List[JsonObject]]:
+def build_summary_fallback(match_summary: JsonObject, generated_at: str) -> tuple[list[JsonObject], list[JsonObject], list[JsonObject], list[JsonObject]]:
     counts = match_summary.get("counts") if isinstance(match_summary.get("counts"), dict) else {}
     top_games = match_summary.get("topGamesBySnapshotCount") if isinstance(match_summary.get("topGamesBySnapshotCount"), list) else []
     total_snapshots = int(number(counts.get("match_snapshots_v2"), 0))
     total_results = int(number(counts.get("match_results_v2"), 0))
 
-    rows: List[JsonObject] = []
+    rows: list[JsonObject] = []
     for item in top_games[:50]:
         if not isinstance(item, dict):
             continue
@@ -572,7 +572,7 @@ def build_summary_fallback(match_summary: JsonObject, generated_at: str) -> Tupl
     return rows, recs, [], []
 
 
-def update_knowledge_pack(pack_path: Path, recommendations: List[JsonObject], generated_at: str, max_items: int) -> None:
+def update_knowledge_pack(pack_path: Path, recommendations: list[JsonObject], generated_at: str, max_items: int) -> None:
     pack = load_json(pack_path, {})
     if not isinstance(pack, dict):
         pack = {}

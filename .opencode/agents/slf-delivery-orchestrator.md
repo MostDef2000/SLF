@@ -24,6 +24,7 @@ permission:
   task:
     "*": deny
     "profile-worker-*": allow
+    "profile-validator": allow
   external_directory: deny
   webfetch: allow
   websearch: allow

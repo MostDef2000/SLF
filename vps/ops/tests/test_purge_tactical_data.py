@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "purge_tactical_data.py"
 SPEC = importlib.util.spec_from_file_location("purge_tactical_data", MODULE_PATH)

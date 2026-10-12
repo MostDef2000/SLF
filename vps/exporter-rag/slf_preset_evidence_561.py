@@ -9,15 +9,21 @@ import hashlib
 import json
 import math
 import os
+import sys
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 import requests
 
-import sys
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slf_common_utils import first_path, get_path, now_iso, read_json, write_json  # noqa: E402
+from slf_common_utils import (
+    first_path,
+    get_path,
+    now_iso,
+    read_json,
+    write_json,
+)
 
 GENERATOR_VERSION = "5.61"
 GENERATOR_START = dt.datetime(2026, 7, 13, tzinfo=dt.timezone.utc)
