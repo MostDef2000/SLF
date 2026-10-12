@@ -33,3 +33,18 @@ is test-pinned, the fourth workflow is registered in all governance surfaces
 committed and CI-wired, static contract tests are green and CI-wired, and
 every acceptance criterion above has an observed RED or GREEN proof. No
 commits are made by the implementer.
+
+## Battle-test incident log
+
+- 2026-10-12, first live dispatch (run 38207004853, target exporter-rag,
+  deploy_sha b657bbd9…): gate green, bundle verified on-box, launcher
+  resolved previous=d704ff8d… from the exporter's DEPLOYED_GIT_COMMIT,
+  engine invocation failed with sudo "command not found" — both engine
+  scripts were committed as 100644 (non-executable); failure occurred
+  before any mutation (prod untouched, no manifest record, no backup).
+  Root cause never reachable by the sandbox drill (scratch engines were
+  created executable). Fix: exec bits in git index (100755) + pin test
+  `test_engine_scripts_are_executable` (RED-proven). Related dispatch-side
+  defect fixed the same day: GitHub choice-index 422 for never-run
+  workflows (UI dropdown empty) — target input changed to `type: string`
+  with the in-workflow fail-closed whitelist unchanged (PR #340).

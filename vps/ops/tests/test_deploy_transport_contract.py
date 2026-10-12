@@ -51,6 +51,21 @@ class LauncherTransportContractTest(unittest.TestCase):
         result = os.system(f"bash -n {LAUNCHER} 2>/dev/null")
         self.assertEqual(result, 0, "deploy launcher must pass bash -n")
 
+    def test_engine_scripts_are_executable(self):
+        # The launcher invokes both engines directly via sudo
+        # (`sudo -n /opt/slf/slf-repo/vps/ops/{deploy,rollback}-code.sh`).
+        # A non-executable git mode (100644) makes sudo fail with
+        # "command not found" for every deploy — first live dispatch
+        # 2026-10-12 (run 38207004853) failed exactly this way before any
+        # mutation; caught here so it can never ship again.
+        for rel in ("vps/ops/deploy-code.sh", "vps/ops/rollback-code.sh"):
+            path = ROOT / rel
+            self.assertTrue(path.is_file(), f"{rel} missing from the repo")
+            self.assertTrue(
+                os.access(path, os.X_OK),
+                f"{rel} must keep the executable bit (engine is invoked via direct sudo exec)",
+            )
+
     def test_launcher_uses_fail_closed_shell_semantics(self):
         self.assertIn("set -Eeuo pipefail", self.code)
         self.assertIn("trap on_err ERR", self.code)
