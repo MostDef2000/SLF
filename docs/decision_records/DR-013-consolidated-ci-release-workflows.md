@@ -57,3 +57,16 @@ It does not change VPS deployment policy, production data, API/storage schemas, 
 - `data/quality/quality-gates-v1.json`
 
 Related issue: #233
+
+## Supplement 2026-10-12 — four-workflow budget (VPS deploy transport)
+
+> Supplemented on 2026-10-12. The permanent workflow budget is now **four**:
+> `SLF VPS Deploy` joins the topology as a PERMANENT workflow with role
+> `DEPLOY` — a workflow_dispatch-only push transport that carries a
+> trusted-CI-verified commit bundle to the SLF VPS through the on-box
+> `slf-deploy-launcher` (see `contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md`
+> v1.1.0 and `data/quality/workflow-inventory-v1.json`). The single required
+> merge context `SLF CI / ci`, the fail-closed CI semantics, the latest-only
+> release model and all other parts of this decision are unchanged. The
+> original three-workflow budget text above is retained as history and is
+> superseded only on this point.

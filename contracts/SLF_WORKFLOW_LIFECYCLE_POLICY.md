@@ -1,6 +1,6 @@
 # SLF Workflow Lifecycle Policy
 
-Version: 1.0.0
+Version: 1.1.0
 Status: Active
 Applies to: `.github/workflows/**`, CI/release governance, temporary migrations
 
@@ -10,19 +10,20 @@ Keep the GitHub Actions surface small, deterministic, and auditable. Workflow YA
 
 ## 2. Permanent workflow budget
 
-SLF has exactly three permanent workflow roles:
+SLF has exactly four permanent workflow roles:
 
 1. `CI` — one always-created pull-request quality context.
 2. `RELEASE` — source validation and latest-only publication after eligible changes reach `main`, with an idempotent manual fallback.
 3. `MAINTENANCE` — scheduled/manual governance and lifecycle review.
+4. `DEPLOY` — manual production VPS deployment transport, `workflow_dispatch`-only: it must never carry a pull-request, push or schedule trigger, and it must gate on a trusted canonical-CI run for the exact deployed commit.
 
-The permanent workflow budget is three files. Dependabot configuration is not a workflow and is outside this budget.
+The permanent workflow budget is four files. Dependabot configuration is not a workflow and is outside this budget.
 
 ## 3. Lifecycle classes
 
 Every workflow file must be registered in `data/quality/workflow-inventory-v1.json` as one of:
 
-- `PERMANENT` — one of the three roles above;
+- `PERMANENT` — one of the four roles above;
 - `TEMPORARY` — bounded operational helper with an expiry date and cleanup condition;
 - `MIGRATION` — one-time migration orchestration with an expiry date and cleanup condition.
 
@@ -78,12 +79,13 @@ Manual dispatch must execute the same validation/build/publication path, not a v
 
 - every active workflow YAML is registered;
 - every registered path exists;
-- permanent roles are exactly `CI`, `RELEASE`, `MAINTENANCE`;
-- permanent workflow count does not exceed three;
+- permanent roles are exactly `CI`, `RELEASE`, `MAINTENANCE`, `DEPLOY`;
+- permanent workflow count does not exceed four;
 - temporary/migration entries are not expired;
 - the canonical CI workflow is unfiltered at pull-request level;
 - the release workflow exposes both push and manual-dispatch publication paths;
-- maintenance owns the scheduled governance trigger.
+- maintenance owns the scheduled governance trigger;
+- the deploy workflow is `workflow_dispatch`-only and never duplicates pull-request validation.
 
 The validator runs in canonical CI and scheduled maintenance.
 

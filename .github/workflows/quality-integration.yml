@@ -173,6 +173,14 @@ jobs:
           python -m unittest vps/ops/test_slf_tactics_audit_252_digest.py -v
           python -m unittest vps/ops/test_verify_api_deployment.py -v
           python -m unittest vps/ops/tests/test_deploy_files_completeness.py -v
+          python -m unittest vps/ops/tests/test_deploy_transport_contract.py -v
+      - name: VPS deploy transport drill (self-verifying fixture)
+        # End-to-end launcher drill: builds a throwaway git repo with stub
+        # engines and a sudo shim, then exercises refusal paths, byte-exact
+        # markers, provenance restore, drift reporting and lock contention.
+        # The script skips itself (exit 0) when git/flock/sha256sum are
+        # unavailable, so it cannot break CI on a stripped runner.
+        run: bash vps/ops/tests/drill_deploy_transport.sh
 
   property-fuzz-reliability:
     runs-on: ubuntu-24.04
@@ -275,6 +283,7 @@ jobs:
           python3 -m py_compile vps/ops/verify_api_deployment.py
           bash -n vps/ops/deploy-code.sh
           bash -n vps/ops/rollback-code.sh
+          bash -n deploy/vps/slf-deploy-launcher
 
       - name: Build and rebuild exact candidate bytes deterministically
         run: |

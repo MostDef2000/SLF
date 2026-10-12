@@ -16,7 +16,7 @@ const activePaths = fs.readdirSync(workflowsDir, { withFileTypes: true })
 assert.equal(inventory.schema, 'slf_workflow_inventory_v1');
 assert.equal(inventory.repository, 'MostDef2000/SLF');
 assert.equal(inventory.defaultBranch, 'main');
-assert.equal(inventory.maxPermanentWorkflows, 3);
+assert.equal(inventory.maxPermanentWorkflows, 4);
 assert.equal(inventory.canonicalRequiredContext, 'SLF CI / ci');
 assert.ok(Array.isArray(inventory.workflows));
 
@@ -25,8 +25,8 @@ assert.deepEqual(activePaths, registeredPaths, `active workflow files must exact
 
 const permanent = inventory.workflows.filter(item => item.classification === 'PERMANENT');
 assert.ok(permanent.length <= inventory.maxPermanentWorkflows, 'permanent workflow budget exceeded');
-assert.equal(permanent.length, 3, 'SLF requires exactly CI, RELEASE and MAINTENANCE permanent workflows');
-assert.deepEqual(new Set(permanent.map(item => item.role)), new Set(['CI', 'RELEASE', 'MAINTENANCE']));
+assert.equal(permanent.length, 4, 'SLF requires exactly CI, RELEASE, MAINTENANCE and DEPLOY permanent workflows');
+assert.deepEqual(new Set(permanent.map(item => item.role)), new Set(['CI', 'RELEASE', 'MAINTENANCE', 'DEPLOY']));
 
 const names = new Set();
 for (const item of inventory.workflows) {
@@ -74,5 +74,13 @@ assert.match(maintenanceSource, /^name:\s*SLF Maintenance\s*$/m);
 assert.match(maintenanceSource, /^\s*schedule:\s*$/m);
 assert.match(maintenanceSource, /^\s*workflow_dispatch:\s*$/m);
 assert.equal(/pull_request:\s*$/.test(maintenanceSource), false, 'maintenance must not duplicate canonical PR CI');
+
+const deploy = permanent.find(item => item.role === 'DEPLOY');
+const deploySource = read(deploy.path);
+assert.match(deploySource, /^name:\s*SLF VPS Deploy\s*$/m);
+assert.match(deploySource, /^\s*workflow_dispatch:\s*$/m);
+assert.equal(/^(push|pull_request|pull_request_target|schedule):\s*$/m.test(deploySource), false, 'deploy workflow must be workflow_dispatch-only');
+assert.match(deploySource, /deploy_sha:/);
+assert.match(deploySource, /quality-integration\.yml\/runs/);
 
 console.log(`[workflow-inventory] passed active=${activePaths.length} permanent=${permanent.length} context=${inventory.canonicalRequiredContext}`);
