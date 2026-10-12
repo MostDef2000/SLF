@@ -3,6 +3,8 @@ name: SLF CI
 on:
   pull_request:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -170,6 +172,7 @@ jobs:
           python -m unittest vps/ops/test_slf_tactics_audit_252.py -v
           python -m unittest vps/ops/test_slf_tactics_audit_252_digest.py -v
           python -m unittest vps/ops/test_verify_api_deployment.py -v
+          python -m unittest vps/ops/tests/test_deploy_files_completeness.py -v
 
   property-fuzz-reliability:
     runs-on: ubuntu-24.04
