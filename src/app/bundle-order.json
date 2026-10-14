@@ -43,6 +43,9 @@
     "src/modules/strategy-data-recommendations/adaptive-opponent-style-layer.js",
     "src/modules/strategy-data-recommendations/coach-mode-policy.js",
     "src/modules/strategy-data-recommendations/moment-drift-stabilizer.js",
+    "src/modules/strategy-data-recommendations/dave56-etalon-data.js",
+    "src/modules/strategy-data-recommendations/dave56-etalon-mapping.js",
+    "src/modules/strategy-data-recommendations/dave56-etalon-layer.js",
     "src/app/ui-layer.js",
     "src/app/version-badge.js",
     "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
@@ -94,7 +97,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 86,
+    "expectedModuleCount": 89,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -1294,6 +1297,48 @@
         ]
       },
       {
+        "file": "src/modules/strategy-data-recommendations/dave56-etalon-data.js",
+        "declares": [],
+        "public": [],
+        "requires": [],
+        "hostCapabilities": [
+          "window"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/dave56-etalon-mapping.js",
+        "declares": [],
+        "public": [],
+        "requires": [],
+        "hostCapabilities": [
+          "window"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/dave56-etalon-layer.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
+            "symbols": [
+              "CurrentActionHintEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-control-engine.js",
+            "symbols": [
+              "getCurrentTactic"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "window"
+        ]
+      },
+      {
         "file": "src/app/ui-layer.js",
         "declares": [
           "UI"
@@ -1427,6 +1472,13 @@
             "phase": "runtime"
           },
           {
+            "file": "src/modules/tactics-presets/tactic-control-engine.js",
+            "symbols": [
+              "getCurrentTactic"
+            ],
+            "phase": "runtime"
+          },
+          {
             "file": "src/app/ui-layer.js",
             "symbols": [
               "UI"
@@ -1437,7 +1489,8 @@
         "hostCapabilities": [
           "document",
           "location",
-          "console"
+          "console",
+          "setTimeout"
         ]
       },
       {

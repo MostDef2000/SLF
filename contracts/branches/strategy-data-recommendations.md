@@ -102,6 +102,34 @@ For recommendation-engine changes, Strategy Data Agent must explicitly state whi
 
 If API access is unavailable in the current environment, Strategy Data Agent must return BLOCKED or ask the user for a fresh export snapshot. It must not invent game knowledge from memory.
 
+## Etalon recommendation policy (Dave 5.6, issue #348)
+
+The game.php «Подсказка» hint panel may display a Dave 5.6 etalon recommendation
+(defense-12 / buildup-12 situations plus score-play scenarios) computed by
+`dave56-etalon-layer.js` from the transcribed etalon tables in
+`dave56-etalon-data.js` (schema `slf_dave56_etalon_v1`).
+
+Rules:
+
+- **User-initiated application only.** The etalon recommendation is applied to
+  tactic controls exclusively through the explicit «Применить» button rendered
+  next to the hint. There is no automatic apply path: the v11 preset engine
+  keeps `autoApply: false`, and the etalon layer never calls the bridge on its
+  own.
+- **Deliberate execution semantics.** Applying is treated as a deliberate user
+  action with full verification: the button goes through the tactic-control
+  bridge with `strict: true` and a dedicated `etalon:dave56:*` source, shows
+  applying/applied/failed/rolled-back states, is disabled while a previous
+  apply is in flight, and is invalidated when the recommendation token is
+  stale (re-render required).
+- **Etalon data is versioned source data.** The tables are data, not logic:
+  any change must go through `dave56-etalon-data.js` and be re-synced with
+  `tools/sync-dave56-etalon.mjs` into the CI-checked mirror
+  `data/tactics/dave56-etalon-v1.json` (`--check` fails on drift).
+- **No preset replacement.** The etalon block complements the v11 preset
+  recommendation; it never replaces, reorders, or suppresses it, and it does
+  not modify `result.action` of the recommendation engine.
+
 ## Scope
 
 This branch owns:

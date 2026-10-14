@@ -118,6 +118,11 @@ jobs:
           node tools/check-bundle-order.mjs
           node tools/test-security-boundaries.mjs
           node tools/test-tactical-situation-diversity.mjs
+          node tools/test-dave56-etalon-mapping.mjs
+          node tools/test-dave56-etalon-data-sync.mjs
+          node tools/test-dave56-etalon-matcher.mjs
+          node tools/test-dave56-etalon-apply-contract.mjs
+          node tools/test-dave56-etalon-panel.mjs
           node tools/validate-workflow-inventory.mjs
           node tools/validate-quality-governance.mjs
 

@@ -141,7 +141,12 @@ const STATE = {
     lastManualTactic: null,
     manualChangeTimer: null,
     suppressManualWatcherUntil: 0,
-    suppressManualWatcherReason: null
+    suppressManualWatcherReason: null,
+
+    // Dave 5.6 etalon recommendation (#348): token-guarded apply state for
+    // the user-initiated one-click apply in the hint panel.
+    etalonRecommendation: null,
+    etalonApplyStatus: 'idle'
 
 };
 
