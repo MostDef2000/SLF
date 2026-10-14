@@ -89,13 +89,12 @@
     "src/modules/team-management/team4-leadership-upgrade-indicator.js",
     "src/app/header-matches-layout-compatibility.js",
     "src/app/match-rendering-compatibility.js",
-    "src/app/tactics-dropdown-ui-policy.js",
     "src/app/bootstrap.js"
   ],
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 87,
+    "expectedModuleCount": 86,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -129,7 +128,8 @@
           "toNum",
           "num",
           "normalizeTeamText",
-          "aliasMatchesTeamName"
+          "aliasMatchesTeamName",
+          "TACTIC_CONTROL_KEYS"
         ],
         "public": [
           "CONFIG",
@@ -142,7 +142,8 @@
           "debugWarn",
           "toNum",
           "num",
-          "aliasMatchesTeamName"
+          "aliasMatchesTeamName",
+          "TACTIC_CONTROL_KEYS"
         ],
         "requires": [
           {
@@ -297,7 +298,8 @@
               "BASE_PRESETS",
               "CONFIG",
               "DEFAULT_CUSTOM_PRESETS",
-              "debugWarn"
+              "debugWarn",
+              "TACTIC_CONTROL_KEYS"
             ],
             "phase": "runtime"
           },
@@ -403,7 +405,8 @@
           {
             "file": "src/core/config.js",
             "symbols": [
-              "STATE"
+              "STATE",
+              "TACTIC_CONTROL_KEYS"
             ],
             "phase": "runtime"
           },
@@ -648,7 +651,8 @@
               "CONFIG",
               "PresetUsageTracker",
               "STATE",
-              "num"
+              "num",
+              "TACTIC_CONTROL_KEYS"
             ],
             "phase": "runtime"
           },
@@ -1152,7 +1156,8 @@
             "file": "src/core/config.js",
             "symbols": [
               "BASE_LABELS",
-              "BASE_PRESETS"
+              "BASE_PRESETS",
+              "TACTIC_CONTROL_KEYS"
             ],
             "phase": "runtime"
           },
@@ -1445,7 +1450,8 @@
             "symbols": [
               "CONFIG",
               "STATE",
-              "debugWarn"
+              "debugWarn",
+              "TACTIC_CONTROL_KEYS"
             ],
             "phase": "runtime"
           },
@@ -1508,7 +1514,8 @@
               "BASE_PRESETS",
               "CONFIG",
               "STATE",
-              "debugWarn"
+              "debugWarn",
+              "TACTIC_CONTROL_KEYS"
             ],
             "phase": "runtime"
           },
@@ -2564,34 +2571,6 @@
           "location",
           "setInterval",
           "unsafeWindow"
-        ]
-      },
-      {
-        "file": "src/app/tactics-dropdown-ui-policy.js",
-        "declares": [
-          "applyTacticsDropdownUiPolicy"
-        ],
-        "public": [],
-        "requires": [
-          {
-            "file": "src/app/ui-layer.js",
-            "symbols": [
-              "UI"
-            ],
-            "phase": "runtime"
-          },
-          {
-            "file": "src/modules/tactics-presets/preset-storage.js",
-            "symbols": [
-              "PresetStorage"
-            ],
-            "phase": "runtime"
-          }
-        ],
-        "hostCapabilities": [
-          "MutationObserver",
-          "document",
-          "setTimeout"
         ]
       },
       {

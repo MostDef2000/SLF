@@ -66,7 +66,9 @@
 
     window.SLFActivePresetRegistry={fixedLineupProfile:JSON.parse(JSON.stringify(FIXED_FORMATION_PROFILE)),defaultPresetId:"Emery_BalancedBase_v11",legacyAliases:Object.assign({},LEGACY_PRESET_ALIASES),resolvePresetId,suiteVersion:SUITE_VERSION,recommendationSchema:RECOMMENDATION_SCHEMA,generatorVersion:'5.61',defaultRiskAppetite:DEFAULT_RISK_APPETITE,active:ACTIVE_PRESET_NAMES.slice(),removed:REMOVED_PRESET_NAMES.slice(),retiredActive:V8_RETIRED_PRESET_NAMES.slice(),presets:clonePresets(PRESETS),labels:Object.assign({},LABELS),meta:Object.assign({},META),traits:cloneTraits(TRAITS),formations:Object.fromEntries(Object.entries(FORMATIONS).map(([n,p])=>[n,p.slice()])),schemeStates:Object.assign({},SCHEME_STATES),presetSchemeState:Object.assign({},PRESET_SCHEME_STATE),ladders:Object.fromEntries(Object.entries(LADDERS).map(([k,v])=>[k,v.slice()])),displayMeta:Object.assign({},DISPLAY_META),displayOrder:DISPLAY_ORDER.slice(),styleGroups:STYLE_GROUPS.map(x=>Object.assign({},x)),auditTier:AUDIT,fallbackPolicy:'5.61-tactical-suite-v11-hold-current',
         situations:["default_start","pressure_counter","pressure_escape","possession_control","press_cooldown","controlled_chase","positional_siege","width_attack","late_high_pressure","protect_lead","emergency_lock","protect_lead_with_outlet"],
-        controlFields:['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot'],
+        // Canonical control keys live in config.js (TACTIC_CONTROL_KEYS); inline
+        // fallback keeps the registry standalone-safe in bare test sandboxes.
+        controlFields: typeof TACTIC_CONTROL_KEYS !== 'undefined' ? TACTIC_CONTROL_KEYS.slice() : ['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot'],
         inventorySchema:'slf_active_preset_inventory_v3',
         // bounded evidence adjustment — reserved; v10 hypotheses are not outcome evidence
         evidenceAdjustment:function(){return 0;},

@@ -1,7 +1,7 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
-  "reviewedAt": "2026-10-11",
-  "reviewCandidateCount": 50,
+  "reviewedAt": "2026-10-14",
+  "reviewCandidateCount": 59,
   "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains. Issue #333 extension: direct symbol-level review of two active Tactical Suite v10 modules containing exact read-only old preset aliases; no deletion or new runtime behavior authorized by this evidence.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
@@ -25,14 +25,6 @@
       "classification": "ACTIVE",
       "evidence": [
         "Issue #278 verbatim extraction from bootstrap.js; classic match rendering adapter with fail-open invocation, body verified identical.",
-        "Self-installing module loaded immediately before the bootstrap orchestrator; registered in bundle-order dependency audit."
-      ]
-    },
-    {
-      "file": "src/app/tactics-dropdown-ui-policy.js",
-      "classification": "ACTIVE",
-      "evidence": [
-        "Issue #278 verbatim extraction from bootstrap.js; flat sorted tactics dropdown policy applied at load, body verified identical.",
         "Self-installing module loaded immediately before the bootstrap orchestrator; registered in bundle-order dependency audit."
       ]
     },
@@ -537,6 +529,16 @@
         "Issue #333: the active v10 direction-policy patch exports SLFTacticDirectionPolicy, installs current-action scorer and RecommendationEngine guards, and is loaded in bundle order after the canonical registry.",
         "Legacy naming marks the explicit read-time ID compatibility boundary; input-only resolvePresetId maps exactly the three old v10 names before hard-veto/scoreCandidate/shortestStep and prior-progress state is normalized by the audited re-preset-family facade.",
         "Production scoring weights, risk constraints, 12 eligible names, graph reachability and hold_current semantics are unchanged; targeted Node tests verify aliases and browser E2E checks canonical menu names. Never delete the module solely because its documented legacy names appear."
+      ]
+    },
+    {
+      "file": "src/modules/transfer-analyzer/transfer-candidate-scanner.js",
+      "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Module is bundled, has incoming dependencies and external symbol references (active evidence).",
+        "Legacy markers come from the intentional legacy-storage purge: scanner init enumerates and removes localStorage keys v1..v9 with a key!==this.storageKey guard (round-1 audit fix, PR #344).",
+        "No obsolete symbols introduced; the legacy key chain is a cleanup list, not legacy code."
       ]
     }
   ],
