@@ -4,9 +4,20 @@
 
 const TransferCandidateScanner = {
     storageKey: 'slf_transfer_candidate_scanner_v3_meta',
+    // Full legacy chain v1..v9. The later policies (pagination/full-market/
+    // four-ranking) append and re-point this list at load time; declaring the
+    // complete chain here removes the fragile dependency on their load-order
+    // mutation for standalone/edge cases.
     legacyStorageKeys: [
         'slf_transfer_candidate_scanner_v1',
-        'slf_transfer_candidate_scanner_v2'
+        'slf_transfer_candidate_scanner_v2',
+        'slf_transfer_candidate_scanner_v3_meta',
+        'slf_transfer_candidate_scanner_v4_meta',
+        'slf_transfer_candidate_scanner_v5_meta',
+        'slf_transfer_candidate_scanner_v6_meta',
+        'slf_transfer_candidate_scanner_v7_meta',
+        'slf_transfer_candidate_scanner_v8_meta',
+        'slf_transfer_candidate_scanner_v9_meta'
     ],
     schema: 'slf_transfer_candidate_scanner_v3_meta',
     indexCollection: 'transfer_candidate_scan_index_tmp',
@@ -61,7 +72,12 @@ const TransferCandidateScanner = {
     },
 
     cleanupLegacyBrowserStorage() {
-        this.legacyStorageKeys.forEach(key => localStorage.removeItem(key));
+        // Never purge the currently active storage key (mirrors the policy
+        // purge guard); the legacy chain now includes the scanner's own
+        // superseded keys, so the guard is what keeps the active meta intact.
+        this.legacyStorageKeys.forEach(key => {
+            if (key && key !== this.storageKey) localStorage.removeItem(key);
+        });
     },
 
     loadMeta() {

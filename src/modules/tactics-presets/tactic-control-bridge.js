@@ -3,10 +3,14 @@
 
     (function installTacticControlBridge() {
         const controlKeys = [
-            'def_line', 'press_line', 'def_width', 'press_intense',
-            'build_type', 'build_temp', 'build_long', 'build_fast',
-            'style', 'pass_risk', 'dribble', 'cross',
-            'corner', 'shot', 'priority'
+            // Canonical 14 control keys live in config.js (TACTIC_CONTROL_KEYS);
+            // inline fallback keeps this module standalone-safe in test sandboxes.
+            ...(typeof TACTIC_CONTROL_KEYS !== 'undefined' ? TACTIC_CONTROL_KEYS : [
+                'def_line', 'press_line', 'def_width', 'press_intense',
+                'build_type', 'build_temp', 'build_long', 'build_fast',
+                'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
+            ]),
+            'priority'
         ];
 
         // FM2026 controls: authored in Tactical Lab native-domain contract and

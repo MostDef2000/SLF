@@ -63,9 +63,15 @@
         if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
 
         return [
-            'def_line', 'press_line', 'def_width', 'press_intense',
-            'build_type', 'build_temp', 'build_long', 'build_fast',
-            'style', 'pass_risk', 'dribble', 'cross', 'shot', 'priority'
+            // Canonical 14 control keys live in config.js (TACTIC_CONTROL_KEYS);
+            // inline fallback keeps this module standalone-safe in test sandboxes.
+            // Previously this list omitted 'corner'; it now matches the canon.
+            ...(typeof TACTIC_CONTROL_KEYS !== 'undefined' ? TACTIC_CONTROL_KEYS : [
+                'def_line', 'press_line', 'def_width', 'press_intense',
+                'build_type', 'build_temp', 'build_long', 'build_fast',
+                'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
+            ]),
+            'priority'
         ].some(k => Object.prototype.hasOwnProperty.call(obj, k));
     }
 
@@ -104,6 +110,18 @@
     }
 
     const PresetStorage = {
+        // Diagnostics for the last server-sync failure. Sync stays fail-open
+        // (local presets keep working), but failures must not be silent.
+        lastSyncError: null,
+        lastSyncAt: null,
+
+        recordSyncFailure(context, error) {
+            const message = error && error.message ? error.message : String(error || 'unknown error');
+            this.lastSyncError = `${context}: ${message}`;
+            this.lastSyncAt = Date.now();
+            console.warn('[SLF] PresetStorage: preset sync failure —', this.lastSyncError);
+        },
+
         resolvePresetId(name) {
             const key = String(name || '');
             const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
@@ -193,12 +211,17 @@
             const deleteKeys = Object.keys(previous).filter(key => !Object.prototype.hasOwnProperty.call(normalized, key));
             this.saveLocalOnly(normalized);
             deleteKeys.forEach(key => {
-                void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=delete-key`, { key }, 'tactics delete').catch(() => {});
+                void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=delete-key`, { key }, 'tactics delete').catch(error => {
+                    this.recordSyncFailure(`tactics delete-key (${key})`, error);
+                });
             });
-            void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=merge`, normalized, 'tactics merge').catch(() => {});
+            void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=merge`, normalized, 'tactics merge').catch(error => {
+                this.recordSyncFailure('tactics merge', error);
+            });
         },
 
         loadFromServerAndMerge(callback) {
+            let failureRecorded = false;
             return Api.get(
                 CONFIG.COLLECTIONS.TACTICS,
                 data => {
@@ -208,10 +231,19 @@
 
                     if (callback) callback();
                 },
-                () => {
+                (error, response) => {
+                    // Api.get calls onError(error, response) and then the
+                    // promise still rejects; record the server-rejection
+                    // context here and keep the fail-open callback contract.
+                    failureRecorded = true;
+                    this.recordSyncFailure('tactics load (server error)', error);
                     if (callback) callback();
                 }
-            ).catch(() => undefined);
+            ).catch(error => {
+                // Transport-level failures reject without ever reaching onError.
+                if (!failureRecorded) this.recordSyncFailure('tactics load failed', error);
+                return undefined;
+            });
         },
 
         getAllPresets() {

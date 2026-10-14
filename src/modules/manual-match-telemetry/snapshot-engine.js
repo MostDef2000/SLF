@@ -142,7 +142,7 @@ const SnapshotEngine = {
                 page: 'game',
                 url: location.href,
                 collectedAt: Date.now(),
-                scriptVersion: SLF_VERSION_INFO.scriptVersion
+                scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown'
             }
         });
     },
@@ -410,7 +410,7 @@ const SnapshotEngine = {
                 page: 'game',
                 url: location.href,
                 collectedAt: Date.now(),
-                scriptVersion: SLF_VERSION_INFO.scriptVersion
+                scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown'
             }
         });
 

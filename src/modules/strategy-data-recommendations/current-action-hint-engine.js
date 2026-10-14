@@ -16,44 +16,20 @@ const CurrentActionHintEngine = {
     schema: (typeof window !== 'undefined' && window.SLFActivePresetRegistry?.recommendationSchema) || 'slf_rule_decision_v3',
     mode: 'button_on_demand_scored_rules',
 
-    // v9: 10 active presets, same order as window.SLFActivePresetRegistry.active.
-    ACTIVE_PRESETS: [
-        'Arteta_Control433_bal3',
-        'Pep_BoxControl_bal2',
-        'Pep_PressCooldown_bal2',
-        'Pep_ControlledPush_att3',
-        'Pep_TwoThreeFive_att3',
-        'Conte_WingbackWidth_bal4',
-        'Klopp_Gegenpress_att4',
-        'Simeone_Compact442_def4',
-        'Simeone_LowBlock_def5',
-        'Bielsa_ChaosPress_att5'
-    ],
+    // v9 preset list retired: tactic-preset-direction-policy.js overwrites
+    // ACTIVE_PRESETS from the v11 registry at load time. Kept as an empty
+    // array (same shape) so pre-install readers see a valid container.
+    ACTIVE_PRESETS: [],
 
+    // v9 audit tiers retired: active-preset-registry.js overwrites
+    // PRESET_AUDIT_TIER from the v11 registry at load time. Tier keys stay
+    // (runtime code iterates them) with empty arrays.
     PRESET_AUDIT_TIER: {
-        primary: [
-            'Arteta_Control433_bal3',
-            'Pep_BoxControl_bal2',
-            'Pep_PressCooldown_bal2',
-            'Compact_Counter_def3',
-            'Pep_TwoThreeFive_att3'
-        ],
-        conditional: [
-            'Pep_ControlledPush_att3',
-            'Conte_WingbackWidth_bal4',
-            'Simeone_Compact442_def4'
-        ],
-        restricted: ['Klopp_Gegenpress_att4'],
-        emergency: ['Simeone_LowBlock_def5', 'Bielsa_ChaosPress_att5'],
-        removed: [
-            'Mourinho_WeakSide_def3',
-            'Xabi_VerticalBox_att3',
-            'Xabi_BoxMidfield_bal3',
-            'DeZerbi_BaitPress_bal3',
-            'DeZerbi_Release_att4',
-            'Nagelsmann_WidePress_att4',
-            'Henta_LeftTrap_att3'
-        ],
+        primary: [],
+        conditional: [],
+        restricted: [],
+        emergency: [],
+        removed: [],
         needsMoreData: [],
         experimental: [],
         blocked: []
