@@ -1,7 +1,7 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
   "reviewedAt": "2026-10-14",
-  "reviewCandidateCount": 60,
+  "reviewCandidateCount": 59,
   "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains. Issue #333 extension: direct symbol-level review of two active Tactical Suite v10 modules containing exact read-only old preset aliases; no deletion or new runtime behavior authorized by this evidence.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
@@ -25,14 +25,6 @@
       "classification": "ACTIVE",
       "evidence": [
         "Issue #278 verbatim extraction from bootstrap.js; classic match rendering adapter with fail-open invocation, body verified identical.",
-        "Self-installing module loaded immediately before the bootstrap orchestrator; registered in bundle-order dependency audit."
-      ]
-    },
-    {
-      "file": "src/app/tactics-dropdown-ui-policy.js",
-      "classification": "ACTIVE",
-      "evidence": [
-        "Issue #278 verbatim extraction from bootstrap.js; flat sorted tactics dropdown policy applied at load, body verified identical.",
         "Self-installing module loaded immediately before the bootstrap orchestrator; registered in bundle-order dependency audit."
       ]
     },
