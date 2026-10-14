@@ -2282,13 +2282,6 @@
         "public": [],
         "requires": [
           {
-            "file": "src/core/config.js",
-            "symbols": [
-              "debugLog"
-            ],
-            "phase": "runtime"
-          },
-          {
             "file": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
             "symbols": [
               "TMEnrichmentLayer"

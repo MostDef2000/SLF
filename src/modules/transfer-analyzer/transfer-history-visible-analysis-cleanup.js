@@ -9,7 +9,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
 
     function isFm2026() {
         return document.documentElement?.dataset?.slfDesign === 'fm2026' ||
-            !!document.querySelector('.fm-topbar, .fm-stage, .fmx');
+            !!document.querySelector('.fm-topbar, .fm-stage');
     }
 
     function ensureStyle() {
@@ -43,8 +43,6 @@ html[data-slf-design="fm2026"] #${STATUS_ID}>*+*{padding-left:12px;border-left:1
 html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar.slf-transfer-workspace-solo{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:6px!important;width:100%!important;margin:0 0 14px!important;padding:10px 14px!important;background:linear-gradient(180deg,rgba(28,33,50,.98),rgba(23,27,41,.98))!important;border:1px solid var(--slf-border,#38415f)!important;border-radius:14px!important}
 html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar.slf-transfer-workspace-solo #slf-transfer-status{flex:1 1 260px;min-width:180px;margin-left:auto!important;color:var(--slf-muted,#8b93ab)!important;font-size:10.5px!important;text-align:right!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-row.slf-transfer-forecast-layout{grid-template-columns:minmax(0,1fr) minmax(360px,410px)!important;gap:12px!important;margin-bottom:14px!important}
-html[data-slf-design="fm2026"] #slf-purchase-forecast-row>.fmx-info-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important;margin:0!important;min-width:0!important;max-width:none!important;flex:none!important}
-html[data-slf-design="fm2026"] #slf-purchase-forecast-row>.fmx-info-grid>.fmx-card{min-width:0!important;margin:0!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast{width:auto!important;min-width:0!important;max-width:410px!important;margin:0!important;padding:10px 11px!important;background:linear-gradient(135deg,rgba(43,217,124,.09),transparent 42%),var(--slf-bg,#171b29)!important;border:1px solid var(--slf-border,#38415f)!important;border-radius:14px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.035)!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast>div:first-child{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin:0 0 7px!important;color:var(--slf-accent2,#43f58c)!important;font-size:12.5px!important;line-height:1.2!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast>div:first-child::after{content:"VPS History";padding:2px 7px;color:var(--slf-muted,#8b93ab);background:rgba(139,147,171,.08);border:1px solid rgba(139,147,171,.16);border-radius:999px;font-size:9px;font-weight:600}
@@ -55,7 +53,7 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspa
 html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast>div:nth-child(4){grid-template-columns:74px repeat(2,minmax(0,1fr))!important;gap:5px!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast>div:nth-child(4)>div{min-height:46px;padding:5px 7px!important;border-radius:9px!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design="fm2026"] #slf-purchase-forecast-median,html[data-slf-design="fm2026"] #slf-purchase-forecast-p75{font-size:15px!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-note{margin-top:5px!important;font-size:9.5px!important}
 @media(max-width:1220px){html[data-slf-design="fm2026"] #slf-purchase-forecast-row.slf-transfer-forecast-layout{grid-template-columns:minmax(0,1fr)!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast{width:100%!important;max-width:none!important}}
-@media(max-width:900px){html[data-slf-design="fm2026"] #${WORKSPACE_ID}{grid-template-columns:minmax(0,1fr);grid-template-areas:"analyzer" "scanner" "status"}html[data-slf-design="fm2026"] #${WORKSPACE_ID}>#slf-transfer-analyzer-toolbar{border-right:0!important;border-bottom:1px solid rgba(139,147,171,.16)!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-row>.fmx-info-grid{grid-template-columns:minmax(0,1fr)!important}html[data-slf-design="fm2026"] .slf-transfer-workspace-title{width:auto}}
+@media(max-width:900px){html[data-slf-design="fm2026"] #${WORKSPACE_ID}{grid-template-columns:minmax(0,1fr);grid-template-areas:"analyzer" "scanner" "status"}html[data-slf-design="fm2026"] #${WORKSPACE_ID}>#slf-transfer-analyzer-toolbar{border-right:0!important;border-bottom:1px solid rgba(139,147,171,.16)!important}html[data-slf-design="fm2026"] .slf-transfer-workspace-title{width:auto}}
 @media(prefers-reduced-motion:reduce){html[data-slf-design="fm2026"] #${WORKSPACE_ID},html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast{transition:none!important;animation:none!important}}
         `;
         (document.head || document.documentElement).appendChild(style);
@@ -143,25 +141,6 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design
         adaptTimer = setTimeout(adapt, 0);
     }
 
-    // The history VPS layer is evaluated after the FM2026 grid bridge and replaces
-    // findTransferTable()/parseVisibleRows() with legacy table-only implementations.
-    // Reapply the grid boundary here, in the final transfer module, before App.start().
-    const finalLegacyFindTransferTable = TransferMarketAnalyzer.findTransferTable;
-    const finalLegacyParseVisibleRows = TransferMarketAnalyzer.parseVisibleRows;
-    if (
-        typeof TransferMarketAnalyzer.findFm2026MarketSurface === 'function' &&
-        typeof TransferMarketAnalyzer.parseFm2026GridRows === 'function'
-    ) {
-        TransferMarketAnalyzer.findTransferTable = function findTransferSurfaceFinal() {
-            return this.findFm2026MarketSurface(document) || finalLegacyFindTransferTable.apply(this, arguments);
-        };
-        TransferMarketAnalyzer.parseVisibleRows = function parseVisibleRowsFinal() {
-            const surface = this.findFm2026MarketSurface(document);
-            if (surface) return this.parseFm2026GridRows(surface);
-            return finalLegacyParseVisibleRows.apply(this, arguments);
-        };
-    }
-
     const addToolbarOriginal = TransferMarketAnalyzer.addToolbar;
     TransferMarketAnalyzer.addToolbar = function addToolbarWithoutHistoryVisibleAnalysis() {
         const result = addToolbarOriginal.apply(this, arguments);
@@ -171,12 +150,6 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design
     };
     delete TransferMarketAnalyzer.analyzeHistoryVisibleRows;
 
-    const findForecastBoxOriginal = TransferMarketAnalyzer.findPurchaseForecastMarketBox;
-    if (typeof findForecastBoxOriginal === 'function') {
-        TransferMarketAnalyzer.findPurchaseForecastMarketBox = function findFm2026ForecastBox() {
-            return document.querySelector('.fmx > .fmx-info-grid, .fmx-info-grid') || findForecastBoxOriginal.apply(this, arguments);
-        };
-    }
     const addForecastOriginal = TransferMarketAnalyzer.addPurchaseForecastPanel;
     if (typeof addForecastOriginal === 'function') {
         TransferMarketAnalyzer.addPurchaseForecastPanel = function addCompactPurchaseForecastPanel() {
