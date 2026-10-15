@@ -555,7 +555,8 @@ if (!isTacticPage) return;
             } else if (isTeam4TacticPage) {
                 const teamHeader = document.querySelector('.team > .team-head');
                 const matches = teamHeader?.querySelector(':scope > .team-head__matches');
-                if (!teamHeader) {
+                const headerVisible = teamHeader && teamHeader.offsetParent !== null;
+                if (!headerVisible) {
                     target.insertBefore(container, target.firstChild);
                     return;
                 }

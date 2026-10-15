@@ -123,6 +123,7 @@ jobs:
           node tools/test-dave56-etalon-matcher.mjs
           node tools/test-dave56-etalon-apply-contract.mjs
           node tools/test-dave56-etalon-panel.mjs
+          node tools/test-tactic-dropdown-mount.mjs
           node tools/validate-workflow-inventory.mjs
           node tools/validate-quality-governance.mjs
 

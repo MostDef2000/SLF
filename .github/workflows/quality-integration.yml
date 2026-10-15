@@ -120,6 +120,7 @@ jobs:
           node --check tools/test-dave56-etalon-matcher.mjs
           node --check tools/test-dave56-etalon-apply-contract.mjs
           node --check tools/test-dave56-etalon-panel.mjs
+          node --check tools/test-tactic-dropdown-mount.mjs
           node --check tools/test-tactical-record-keys.mjs
           node --check tools/aggregate-tactic-performance.mjs
           node --check tools/enrich-tactic-match-outcomes.mjs
@@ -173,6 +174,7 @@ jobs:
           node tools/test-dave56-etalon-matcher.mjs
           node tools/test-dave56-etalon-apply-contract.mjs
           node tools/test-dave56-etalon-panel.mjs
+          node tools/test-tactic-dropdown-mount.mjs
 
       - name: Run VPS API and deployment contract tests
         run: |
