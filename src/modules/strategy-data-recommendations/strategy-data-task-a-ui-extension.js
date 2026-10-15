@@ -208,29 +208,37 @@
     }
 
     // ============================================================
-    // Dave 5.6 etalon block (#348): user-initiated one-click apply.
-    // The block is display-only here; the button is the ONLY trigger and
-    // the v11 preset engine / direction policy (autoApply:false) is untouched.
+    // Final merged tactic recommendation (#350): the v11 preset (base)
+    // merged with the Dave 5.6 etalon (situational overrides) into ONE
+    // «Рекомендация» block with a single «Применить» button. The block is
+    // display-only here; the button is the ONLY trigger and the v11 preset
+    // engine / direction policy (autoApply:false) is untouched.
     // ============================================================
 
-    const ETALON_CONTROL_LABELS = {
+    const FINAL_CONTROL_LABELS = {
         def_line: 'линия', press_line: 'прессинг', def_width: 'ширина', press_intense: 'интенс',
         build_type: 'выход', build_temp: 'темп', build_long: 'диаг', build_fast: 'касание',
-        style: 'стиль', priority: 'фланги'
+        style: 'стиль', pass_risk: 'риск', dribble: 'дриблинг', cross: 'кроссы',
+        corner: 'угловые', shot: 'удары', priority: 'фланги'
     };
-    const ETALON_GROUP_LABELS = {
-        defense: 'линия/прессинг/ширина/интенс',
-        buildup: 'выход/темп/диаг/касание'
+    const FINAL_GROUP_KEYS = {
+        defense: ['def_line', 'press_line', 'def_width', 'press_intense'],
+        buildup: ['build_type', 'build_temp', 'build_long', 'build_fast'],
+        style: ['style'],
+        attack: ['pass_risk', 'dribble', 'cross', 'corner', 'shot']
     };
-    const ETALON_INSUFFICIENT_LABELS = {
+    const FINAL_GROUP_LABELS = { defense: 'оборона', buildup: 'построение', style: 'стиль', attack: 'атака' };
+    const FINAL_INSUFFICIENT_LABELS = {
         score_state: 'счёт не определён',
         def_press_vectors: 'векторы об/пр недоступны',
         fouls: 'фолы недоступны',
         xg: 'xG недоступен',
         b10_lane_play: 'игра через «столба» не распознаётся',
-        exception: 'ошибка вычисления'
+        exception: 'ошибка вычисления',
+        etalon_layer_absent: 'эталон недоступен',
+        stale_preset_name: 'пресет не найден в реестре'
     };
-    const ETALON_LANE_LABELS = { left: 'Л', center: 'Ц', right: 'П' };
+    const FINAL_LANE_LABELS = { left: 'Л', center: 'Ц', right: 'П' };
 
     function etalonEscape(value) {
         return RecommendationEngine.escapeHtml ? RecommendationEngine.escapeHtml(value) : String(value ?? '');
@@ -256,8 +264,8 @@
             : String(current[key] ?? '') === String(value));
     }
 
-    function etalonApplyVector(etalon) {
-        const vector = etalon?.applyVector;
+    function finalTacticApplyVector(rec) {
+        const vector = rec?.vector;
         if (!vector || typeof vector !== 'object' || !Object.keys(vector).length) return null;
         const copy = {};
         for (const [key, value] of Object.entries(vector)) {
@@ -266,31 +274,82 @@
         return copy;
     }
 
-    function etalonVectorSummary(etalon) {
+    function finalTacticSourceMissing(rec) {
+        return rec?.schema !== 'slf_final_tactic_v1';
+    }
+
+    function finalTacticVectorSummary(rec) {
+        const vector = rec?.vector || {};
         const parts = [];
-        const groups = { defense: etalon?.defenseVector, buildup: etalon?.buildupVector };
-        for (const [block, vector] of Object.entries(groups)) {
-            if (!vector || typeof vector !== 'object') continue;
-            const keys = Object.keys(vector).filter(key => key !== 'style');
-            if (!keys.length) continue;
-            const labels = keys.map(key => ETALON_CONTROL_LABELS[key] || key).join('/');
-            const values = keys.map(key => vector[key]).join('/');
-            parts.push(`${labels}: ${values}`);
+        for (const [group, keys] of Object.entries(FINAL_GROUP_KEYS)) {
+            const present = keys.filter(key => vector[key] !== undefined && vector[key] !== null);
+            if (!present.length) continue;
+            const label = FINAL_GROUP_LABELS[group] || group;
+            if (present.length === 1) {
+                parts.push(`${label}: ${vector[present[0]]}`);
+            } else {
+                const names = present.map(key => FINAL_CONTROL_LABELS[key] || key).join('/');
+                const values = present.map(key => vector[key]).join('/');
+                parts.push(`${label} ${names}: ${values}`);
+            }
         }
-        const style = etalon?.buildupVector?.style;
-        if (style !== undefined && style !== null) parts.push(`стиль: ${style}`);
-        const lanes = Array.isArray(etalon?.priorityLanes) && etalon.priorityLanes.length
-            ? etalon.priorityLanes.map(lane => ETALON_LANE_LABELS[lane] || lane).join('+')
+        const lanes = Array.isArray(vector.priority) && vector.priority.length
+            ? vector.priority.map(lane => FINAL_LANE_LABELS[lane] || lane).join('+')
             : null;
         if (lanes) parts.push(`фланги: ${lanes}`);
         return parts.join(' · ');
     }
 
-    function etalonDeltaText(etalon, snapshot) {
-        let delta = Array.isArray(etalon?.deltaVsCurrent) ? etalon.deltaVsCurrent : null;
+    function finalTacticProvenanceText(rec) {
+        const overrides = rec?.overrides || {};
+        const etalonText = `эталон ${(Array.isArray(rec?.etalonIds) ? rec.etalonIds : []).join('+')}`;
+        const presetText = `пресет ${rec?.presetId || '?'}`;
+        const render = value => {
+            if (typeof value === 'string' && value.startsWith('etalon')) return etalonText;
+            if (value === 'current') return 'текущая тактика';
+            return presetText;
+        };
+        const groups = [
+            ['оборона', overrides.defense],
+            ['построение', overrides.buildup],
+            ['стиль', overrides.style],
+            ['атака', overrides.attack]
+        ];
+        const parts = [];
+        let currentText = null;
+        let bucket = [];
+        for (const [label, value] of groups) {
+            const text = render(value);
+            if (!currentText) {
+                currentText = text;
+                bucket = [label];
+            } else if (text === currentText) {
+                bucket.push(label);
+            } else {
+                parts.push(`${bucket.join('/')} ← ${currentText}`);
+                currentText = text;
+                bucket = [label];
+            }
+        }
+        if (bucket.length) parts.push(`${bucket.join('/')} ← ${currentText}`);
+        return parts.join(' · ');
+    }
+
+    function finalTacticInsufficientText(rec) {
+        const keys = Array.isArray(rec?.insufficientData) ? rec.insufficientData : [];
+        // b10_lane_play is a permanent known limitation of the etalon data —
+        // it is pushed unconditionally by the etalon layer; surfacing it on
+        // every recommendation (even a confident T5) is noise. Telemetry keeps
+        // the full list; display filters it.
+        return keys.filter(key => key !== 'b10_lane_play')
+            .map(key => FINAL_INSUFFICIENT_LABELS[key] || key).filter(Boolean).join(', ');
+    }
+
+    function finalTacticDeltaText(rec, snapshot) {
+        let delta = Array.isArray(rec?.deltaVsCurrent) ? rec.deltaVsCurrent : null;
         if (!delta) {
             const current = safeGetCurrentTactic();
-            const vector = etalonApplyVector(etalon);
+            const vector = finalTacticApplyVector(rec);
             if (current && vector) {
                 delta = Object.entries(vector)
                     .filter(([key, value]) => key === 'priority'
@@ -304,16 +363,16 @@
             }
         }
         if (!delta || !delta.length) return '';
-        return delta.map(item => `${ETALON_CONTROL_LABELS[item.key] || item.key} ${item.from ?? '?'}→${item.to}`).join(' · ');
+        return delta.map(item => `${FINAL_CONTROL_LABELS[item.key] || item.key} ${item.from ?? '?'}→${item.to}`).join(' · ');
     }
 
-    function etalonRenderState(snapshot, etalon) {
-        const vector = etalonApplyVector(etalon);
+    function finalTacticRenderState(snapshot, rec) {
+        const vector = finalTacticApplyVector(rec);
         if (!vector) return null;
 
         const current = safeGetCurrentTactic();
         if (current && etalonVectorMatchesCurrent(vector, current)) {
-            return { status: 'already_applied', label: 'Уже применено', disabled: true, title: 'Эталонный вектор уже совпадает с текущей тактикой' };
+            return { status: 'already_applied', label: 'Уже применено', disabled: true, title: 'Рекомендованный вектор уже совпадает с текущей тактикой' };
         }
         if (snapshot?.matchOwnership === 'foreign') {
             return { status: 'idle', label: 'Применить', disabled: true, title: 'Чужой матч — применение тактики недоступно' };
@@ -324,102 +383,100 @@
         if (typeof STATE !== 'undefined' && STATE?.tacticControlBridgeApplyInProgress) {
             return { status: 'idle', label: 'Применить', disabled: true, title: 'Идёт применение тактики — подождите' };
         }
-        return { status: 'idle', label: 'Применить', disabled: false, title: 'Применить эталонную рекомендацию Dave 5.6 одним кликом' };
+        return { status: 'idle', label: 'Применить', disabled: false, title: 'Применить итоговую рекомендацию одним кликом' };
     }
 
-    function rememberEtalonRecommendation(snapshot, etalon) {
+    function rememberFinalTacticRecommendation(snapshot, rec) {
         if (typeof STATE === 'undefined' || !STATE) return null;
-        const vector = etalonApplyVector(etalon);
+        const vector = finalTacticApplyVector(rec);
         if (!vector) {
-            STATE.etalonRecommendation = null;
+            STATE.finalTacticRecommendation = null;
             return null;
         }
         const recommendation = {
             token: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
             vector,
-            ids: Array.isArray(etalon.ids) ? etalon.ids.filter(Boolean).slice() : [],
+            source: String(rec.source || ''),
+            ids: Array.isArray(rec.etalonIds) ? rec.etalonIds.filter(Boolean).slice() : [],
             gameId: snapshot?.gameId ?? null,
             minute: snapshot?.minute ?? snapshot?.effectiveMinute ?? null,
             ts: Date.now()
         };
-        STATE.etalonRecommendation = recommendation;
+        STATE.finalTacticRecommendation = recommendation;
         return recommendation;
     }
 
-    function buildEtalonBlockHtml(snapshot) {
+    function buildFinalTacticTitle(rec) {
+        if (rec?.base === 'current_tactic' || !rec?.presetId) return 'оставить текущую тактику';
+        const title = RecommendationEngine.getPresetTitle(rec.presetId) || rec.presetId;
+        const scheme = RecommendationEngine.getPresetScheme(rec.presetId);
+        return scheme ? `${title}. Схема: ${scheme}.` : `${title}.`;
+    }
+
+    function buildFinalTacticBlockHtml(snapshot) {
         try {
-            const etalon = snapshot?.ruleDecision?.etalon;
-            if (!etalon || etalonSourceMissing(etalon)) return '';
+            const rec = snapshot?.ruleDecision?.finalTactic;
+            if (!rec || finalTacticSourceMissing(rec)) return null;
+            if (!finalTacticApplyVector(rec)) return null;
 
-            const title = '<b style="color:#7ad9ff;">Эталон (Dave 5.6):</b> ';
+            const recommendation = rememberFinalTacticRecommendation(snapshot, rec);
+            if (!recommendation) return null;
 
-            if (!etalonApplyVector(etalon)) {
-                const reasons = (Array.isArray(etalon.insufficientData) ? etalon.insufficientData : [])
-                    .map(key => ETALON_INSUFFICIENT_LABELS[key] || key)
-                    .filter(Boolean)
-                    .join(', ');
-                return `<div style="line-height:1.4;margin-top:5px;border-top:1px solid #333;padding-top:5px;">`
-                    + `${title}Недостаточно данных${reasons ? ` (${etalonEscape(reasons)})` : ''}</div>`;
-            }
-
-            const recommendation = rememberEtalonRecommendation(snapshot, etalon);
-            if (!recommendation) return '';
-
-            const state = etalonRenderState(snapshot, etalon);
+            const state = finalTacticRenderState(snapshot, rec);
             if (typeof STATE !== 'undefined' && STATE) {
-                STATE.etalonApplyStatus = state?.status === 'already_applied' ? 'already_applied' : 'idle';
+                STATE.finalTacticApplyStatus = state?.status === 'already_applied' ? 'already_applied' : 'idle';
             }
 
-            const labels = [etalon.labels?.defense, etalon.labels?.buildup].filter(Boolean).join(' / ');
-            const summary = etalonVectorSummary(etalon);
-            const delta = etalonDeltaText(etalon, snapshot);
-            const scenarioRows = (Array.isArray(etalon.scenarios) ? etalon.scenarios : [])
-                .map(item => item?.label || item?.slug || item?.id)
-                .filter(Boolean);
-            const notes = Array.isArray(etalon.notes) ? etalon.notes.filter(Boolean) : [];
+            const title = '<b style="color:#75ff75;">Рекомендация:</b> ';
+            const summary = finalTacticVectorSummary(rec);
+            const delta = finalTacticDeltaText(rec, snapshot);
+            const provenance = finalTacticProvenanceText(rec);
+            const referenceLine = typeof rec.referenceLine === 'string' ? rec.referenceLine : '';
+            const insufficientText = finalTacticInsufficientText(rec);
+            const notes = Array.isArray(rec.notes) ? rec.notes.filter(Boolean) : [];
 
             const btnStyle = 'padding:4px 8px;background:#345;color:#fff;border:1px solid #79a;'
                 + 'border-radius:3px;cursor:pointer;margin-top:5px;'
                 + (state?.disabled ? 'opacity:.55;cursor:not-allowed;' : '');
-            const button = `<button id="slf-etalon-apply-btn" type="button" data-token="${etalonEscape(recommendation.token)}"`
+            const button = `<button id="slf-final-tactic-apply-btn" type="button" data-token="${etalonEscape(recommendation.token)}"`
                 + ` title="${etalonEscape(state?.title || '')}"`
                 + `${state?.disabled ? ' disabled' : ''} style="${btnStyle}">${etalonEscape(state?.label || 'Применить')}</button>`;
 
             return `<div style="line-height:1.4;margin-top:5px;border-top:1px solid #333;padding-top:5px;">`
-                + `${title}${etalonEscape(labels || 'ситуации не определены')}`
+                + `${title}${etalonEscape(buildFinalTacticTitle(rec))}`
                 + `${summary ? `<div>Вектор: ${etalonEscape(summary)}</div>` : ''}`
                 + `${delta ? `<div>Δ: ${etalonEscape(delta)}</div>` : ''}`
-                + `${scenarioRows.length ? `<div>Сценарий: ${etalonEscape(scenarioRows.join('; '))}</div>` : ''}`
+                + `${provenance ? `<div style="opacity:.9;">${etalonEscape(provenance)}</div>` : ''}`
+                + `${referenceLine ? `<div style="opacity:.9;">${etalonEscape(referenceLine)}</div>` : ''}`
+                + `${insufficientText ? `<div>Эталон: недостаточно данных${insufficientText ? ` (${etalonEscape(insufficientText)})` : ''}</div>` : ''}`
                 + `${notes.length ? `<div style="opacity:.9;">Совет: ${etalonEscape(notes.join('; '))}</div>` : ''}`
                 + `${button}</div>`;
         } catch (_) {
-            return '';
+            return null;
         }
     }
 
-    function etalonSourceMissing(etalon) {
-        return etalon?.source !== 'dave56_etalon';
-    }
-
-    async function applyEtalonRecommendation(btn) {
+    async function applyFinalTactic(btn) {
         if (typeof STATE === 'undefined' || !STATE) return;
-        const rec = STATE.etalonRecommendation;
+        const rec = STATE.finalTacticRecommendation;
 
         if (!rec || !btn || btn.dataset.token !== rec.token) {
             if (btn) {
                 btn.disabled = true;
                 btn.textContent = 'Данные устарели — ↻ Подсказка';
             }
-            UI.addParserLog('Эталон: данные устарели — обновите подсказку (↻ Подсказка)');
+            UI.addParserLog('Рекомендация: данные устарели — обновите подсказку (↻ Подсказка)');
             return;
         }
         if (STATE.tacticControlBridgeApplyInProgress) {
-            UI.addParserLog('Эталон: применение тактики уже выполняется — подождите');
+            UI.addParserLog('Рекомендация: применение тактики уже выполняется — подождите');
             return;
         }
 
-        const source = `etalon:dave56:${(rec.ids || []).join('+')}`;
-        STATE.etalonApplyStatus = 'applying';
+        // The merged vector carries all 14 controls + priority; the source
+        // names the etalon ids and the base preset/current tactic.
+        const source = rec.source;
+        STATE.finalTacticApplyStatus = 'applying';
         btn.disabled = true;
         btn.textContent = 'Применяю…';
 
@@ -427,15 +484,15 @@
         try {
             result = await STATE.tacticControlBridge.applyTacticObject(rec.vector, { strict: true, source });
         } catch (error) {
-            console.error('[SLF] Etalon apply failed', error);
+            console.error('[SLF] Final tactic apply failed', error);
             result = { ok: false, reason: 'exception', failures: [], mismatches: [], rolledBack: false };
         }
 
         const reenableAfterRollbackNote = () => {
             // Keep the rollback notice visible for 5s, then restore the idle button.
             setTimeout(() => {
-                if (STATE.etalonApplyStatus === 'failed_rolled_back' && btn.isConnected
-                    && btn.dataset.token === (STATE.etalonRecommendation?.token || null)) {
+                if (STATE.finalTacticApplyStatus === 'failed_rolled_back' && btn.isConnected
+                    && btn.dataset.token === (STATE.finalTacticRecommendation?.token || null)) {
                     btn.disabled = false;
                     btn.textContent = 'Применить';
                 }
@@ -443,11 +500,11 @@
         };
 
         if (result?.ok && !result.failures?.length && !result.mismatches?.length) {
-            STATE.etalonApplyStatus = 'applied';
+            STATE.finalTacticApplyStatus = 'applied';
             btn.textContent = 'Применено ✓';
             btn.disabled = true;
-            UI.addParserLog('Эталон применён (readback подтверждён)');
-            UI.updateParserStatus('Эталон применён (readback подтверждён)');
+            UI.addParserLog('Рекомендация применена (readback подтверждён)');
+            UI.updateParserStatus('Рекомендация применена (readback подтверждён)');
             return;
         }
 
@@ -457,17 +514,17 @@
 
         if (reason === 'preflight_failed') {
             // Nothing was changed — allow an immediate retry.
-            STATE.etalonApplyStatus = 'failed_rolled_back';
+            STATE.finalTacticApplyStatus = 'failed_rolled_back';
             btn.disabled = false;
             btn.textContent = 'Применить';
             UI.addParserLog(`Не удалось: нет элементов ${failureKeys || '?'} — ничего не менялось`);
-            UI.updateParserStatus('Эталон: предпроверка не пройдена, ничего не менялось');
+            UI.updateParserStatus('Рекомендация: предпроверка не пройдена, ничего не менялось');
             return;
         }
 
         if (reason === 'post_apply_rolled_back' || reason === 'exception_rolled_back'
             || applicationStatus === 'apply_failed_rolled_back') {
-            STATE.etalonApplyStatus = 'failed_rolled_back';
+            STATE.finalTacticApplyStatus = 'failed_rolled_back';
             btn.textContent = 'Отклонено — откачено';
             btn.disabled = true;
             UI.addParserLog('Изменение отклонено страницей, тактика откачена');
@@ -478,7 +535,7 @@
 
         if (reason === 'rollback_unverified' || applicationStatus === 'apply_failed_unverified') {
             // Unsafe state: keep the button disabled until a fresh hint render.
-            STATE.etalonApplyStatus = 'failed_unverified';
+            STATE.finalTacticApplyStatus = 'failed_unverified';
             btn.textContent = '⚠ Откат не подтверждён';
             btn.disabled = true;
             UI.addParserLog('⚠ Откат не подтверждён — проверьте тактику вручную');
@@ -487,27 +544,27 @@
         }
 
         if (reason === 'apply_in_progress') {
-            STATE.etalonApplyStatus = 'idle';
+            STATE.finalTacticApplyStatus = 'idle';
             btn.disabled = false;
             btn.textContent = 'Применить';
-            UI.addParserLog('Эталон: применение тактики уже выполняется — попробуйте ещё раз');
+            UI.addParserLog('Рекомендация: применение тактики уже выполняется — попробуйте ещё раз');
             return;
         }
 
-        STATE.etalonApplyStatus = 'failed_rolled_back';
+        STATE.finalTacticApplyStatus = 'failed_rolled_back';
         btn.disabled = false;
         btn.textContent = 'Применить';
-        UI.addParserLog(`Эталон: применение не подтверждено (${reason})`);
-        UI.updateParserStatus('Эталон: применение не подтверждено');
+        UI.addParserLog(`Рекомендация: применение не подтверждено (${reason})`);
+        UI.updateParserStatus('Рекомендация: применение не подтверждено');
     }
 
-    function bindEtalonApplyDelegation() {
-        if (typeof document === 'undefined' || document.__slfEtalonApplyDelegation) return;
-        document.__slfEtalonApplyDelegation = true;
+    function bindFinalTacticApplyDelegation() {
+        if (typeof document === 'undefined' || document.__slfFinalTacticApplyDelegation) return;
+        document.__slfFinalTacticApplyDelegation = true;
         document.addEventListener('click', event => {
-            const btn = event?.target?.closest ? event.target.closest('#slf-etalon-apply-btn') : null;
+            const btn = event?.target?.closest ? event.target.closest('#slf-final-tactic-apply-btn') : null;
             if (!btn) return;
-            void applyEtalonRecommendation(btn);
+            void applyFinalTactic(btn);
         });
     }
 
@@ -521,14 +578,19 @@
             const actionText = buildRecommendedAction(snapshot, primaryPresetName);
             const decisionText = buildDecisionExplanation(snapshot);
             const candidateText = buildCandidateSummary(snapshot);
+            // #350: one merged «Рекомендация» block (preset base + etalon
+            // overrides + ONE apply button). Falls back to the legacy
+            // «Действие» row when the merge layer is unavailable.
+            const finalTacticHtml = buildFinalTacticBlockHtml(snapshot);
 
             return `
                 <div data-slf-rec-priority="1" data-slf-rec-section="combined" style="margin:5px 0;background:#151515;border:1px solid #444;border-radius:5px;color:#ddd;padding:9px;">
                     <div style="font-weight:bold;color:#75ff75;text-align:center;margin-bottom:7px;">Подсказка</div>
                     ${context ? `<div style="line-height:1.4;"><b style="color:#8fd3ff;">Ситуация:</b> ${this.escapeHtml(context)}</div>` : ''}
                     ${signalText ? `<div style="line-height:1.4;margin-top:5px;"><b style="color:#c8ff7a;">Сигналы:</b> ${this.escapeHtml(signalText)}</div>` : ''}
-                    <div style="line-height:1.4;margin-top:5px;"><b style="color:#75ff75;">Действие:</b> ${this.escapeHtml(actionText)}</div>
-                    ${buildEtalonBlockHtml(snapshot)}
+                    ${finalTacticHtml !== null
+                        ? finalTacticHtml
+                        : `<div style="line-height:1.4;margin-top:5px;"><b style="color:#75ff75;">Действие:</b> ${this.escapeHtml(actionText)}</div>`}
                     ${decisionText ? `<div style="line-height:1.4;margin-top:5px;"><b style="color:#ffd76a;">Решение:</b> ${this.escapeHtml(decisionText)}</div>` : ''}
                     ${candidateText ? `<div style="line-height:1.4;margin-top:5px;opacity:.85;"><b>Кандидаты:</b> ${this.escapeHtml(candidateText)}</div>` : ''}
                 </div>`;
@@ -666,7 +728,7 @@
         patchCompactCoachMode();
         mountManualButton();
         mountForeignSelector();
-        bindEtalonApplyDelegation();
+        bindFinalTacticApplyDelegation();
     }
 
     const originalAddMatchParserPanel = UI.addMatchParserPanel;

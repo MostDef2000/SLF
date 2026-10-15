@@ -46,6 +46,7 @@
     "src/modules/strategy-data-recommendations/dave56-etalon-data.js",
     "src/modules/strategy-data-recommendations/dave56-etalon-mapping.js",
     "src/modules/strategy-data-recommendations/dave56-etalon-layer.js",
+    "src/modules/strategy-data-recommendations/final-tactic-merge-layer.js",
     "src/app/ui-layer.js",
     "src/app/version-badge.js",
     "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
@@ -97,7 +98,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 89,
+    "expectedModuleCount": 90,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -1316,6 +1317,30 @@
       },
       {
         "file": "src/modules/strategy-data-recommendations/dave56-etalon-layer.js",
+        "declares": [],
+        "public": [],
+        "requires": [
+          {
+            "file": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
+            "symbols": [
+              "CurrentActionHintEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/tactic-control-engine.js",
+            "symbols": [
+              "getCurrentTactic"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "window"
+        ]
+      },
+      {
+        "file": "src/modules/strategy-data-recommendations/final-tactic-merge-layer.js",
         "declares": [],
         "public": [],
         "requires": [

@@ -102,33 +102,51 @@ For recommendation-engine changes, Strategy Data Agent must explicitly state whi
 
 If API access is unavailable in the current environment, Strategy Data Agent must return BLOCKED or ask the user for a fresh export snapshot. It must not invent game knowledge from memory.
 
-## Etalon recommendation policy (Dave 5.6, issue #348)
+## Merged recommendation policy (v11 preset + Dave 5.6 etalon, issues #348/#350)
 
-The game.php «Подсказка» hint panel may display a Dave 5.6 etalon recommendation
-(defense-12 / buildup-12 situations plus score-play scenarios) computed by
-`dave56-etalon-layer.js` from the transcribed etalon tables in
-`dave56-etalon-data.js` (schema `slf_dave56_etalon_v1`).
+The game.php «Подсказка» hint panel shows ONE merged recommendation
+(`result.finalTactic`, schema `slf_final_tactic_v1`): the v11 preset
+recommendation is the base, the Dave 5.6 etalon (defense-12 / buildup-12
+situations plus score-play scenarios, computed by `dave56-etalon-layer.js` from
+`dave56-etalon-data.js`) overrides the affected blocks. The merge itself is
+computed by `final-tactic-merge-layer.js` (outermost engine wrapper, after
+`dave56-etalon-layer.js`).
+
+Decision table (block strength: defense/buildup are strong when the final
+situation id is non-default (d2–d12 / b2–b12) or a scenario replaced/shifted
+the block; s1/s2@≥60/s4/s5 replace blocks, s2 pre-60 does not, s3 shifts
+press_line→defense and the rest→buildup, s6 shifts buildup only):
+
+- **T1 insufficient** — no scoreState / `etalon.ok === false` / empty applyVector (or the etalon layer absent): pure preset vector; pure current tactic on hold_current.
+- **T2 generic-only** — only d1/b1 defaults, no strong scenario (incl. s2 pre-60): preset base, etalon shown as a reference line, no override.
+- **T3 defense strong** — etalon defenseVector overrides present keys; preset fills the gaps.
+- **T4 buildup strong** — etalon buildupVector overrides present keys (style may be absent → preset); priority = etalon priorityLanes when non-null, else preset.
+- **T5 both strong** — full etalon override of present keys across both blocks.
+- **T6 hold_current** (`action.preset === null`) — base = `getCurrentTactic()` (strings); override rules unchanged.
 
 Rules:
 
-- **User-initiated application only.** The etalon recommendation is applied to
-  tactic controls exclusively through the explicit «Применить» button rendered
-  next to the hint. There is no automatic apply path: the v11 preset engine
-  keeps `autoApply: false`, and the etalon layer never calls the bridge on its
-  own.
+- **Single merged «Применить» button.** The merged recommendation is applied to
+  tactic controls exclusively through the one «Применить» button of the merged
+  «Рекомендация» block (`#slf-final-tactic-apply-btn`), which sends the full
+  merged vector (all 14 controls as string ordinals + priority) through the
+  tactic-control bridge with `strict: true` and the merged
+  `merged:etalon:<ids>+presets:<preset>` / `merged:current:<ids>` source. There
+  is no automatic apply path: the v11 preset engine keeps `autoApply: false`,
+  and the merge layer never calls the bridge on its own.
 - **Deliberate execution semantics.** Applying is treated as a deliberate user
-  action with full verification: the button goes through the tactic-control
-  bridge with `strict: true` and a dedicated `etalon:dave56:*` source, shows
-  applying/applied/failed/rolled-back states, is disabled while a previous
-  apply is in flight, and is invalidated when the recommendation token is
-  stale (re-render required).
+  action with full verification: the button goes through the applying/applied/
+  failed/rolled-back state machine, is disabled while a previous apply is in
+  flight, and is invalidated when the recommendation token is stale
+  (re-render required).
 - **Etalon data is versioned source data.** The tables are data, not logic:
   any change must go through `dave56-etalon-data.js` and be re-synced with
   `tools/sync-dave56-etalon.mjs` into the CI-checked mirror
   `data/tactics/dave56-etalon-v1.json` (`--check` fails on drift).
-- **No preset replacement.** The etalon block complements the v11 preset
-  recommendation; it never replaces, reorders, or suppresses it, and it does
-  not modify `result.action` of the recommendation engine.
+- **No preset replacement.** The merge never reorders or suppresses the v11
+  preset ranking and does not modify `result.action` (or `result.etalon`) of
+  the recommendation engine; the single merged recommendation replaces the
+  previous two-block display/apply surface only.
 
 ## Scope
 
