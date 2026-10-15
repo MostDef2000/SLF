@@ -1,18 +1,22 @@
 #!/usr/bin/env node
-// SLF issue #348 — etalon hint-panel block rendering + button state machine.
-// Loads the FULL chain + re-html-utils + task-a UI extension in one vm bundle
-// (production order) with a MINIMAL DOM stub (getElementById/addEventListener
-// only — no DOM library). Pins:
-//   - bold «Эталон (Dave 5.6)» label, situation labels, vector summary line,
-//     Δ line when deltaVsCurrent is non-empty, scenario + advice rows;
-//   - #slf-etalon-apply-btn rendered with a data-token when a vector exists,
-//     enabled for a live own match;
-//   - insufficient-data case renders WITHOUT any button (no vector to apply);
+// SLF issue #350 (evolves #348) — merged «Рекомендация» panel block + button
+// state machine. Loads the FULL chain + final-tactic-merge-layer + re-html-utils
+// + task-a UI extension in one vm bundle (production order) with a MINIMAL DOM
+// stub (getElementById/addEventListener only — no DOM library). Pins:
+//   - bold «Рекомендация» label + preset title, grouped vector line
+//     (оборона/построение/стиль/атака + фланги), Δ line when deltaVsCurrent is
+//     non-empty, provenance line (etalon blocks vs preset), T2 reference line,
+//     scenario advice row, insufficient-data line;
+//   - ONE #slf-final-tactic-apply-btn rendered with a data-token, enabled for
+//     a live own match; the legacy etalon block/button are gone;
+//   - STATE.finalTacticRecommendation carries the MERGED string vector +
+//     merged source; the legacy STATE.etalonRecommendation/etalonApplyStatus
+//     pair is removed;
 //   - foreign match / finished match / bridge apply-in-progress → button
 //     present but disabled with the matching title;
-//   - already-applied vector → «Уже применено», disabled, no Δ line;
-//   - foreign-source or missing etalon → no block at all;
-//   - window.SLFDave56EtalonLayer.autoApply === false (and the direction
+//   - already-applied merged vector → «Уже применено», disabled, no Δ line;
+//   - missing or degraded finalTactic → legacy «Действие» row, no button;
+//   - window.SLFFinalTacticMergeLayer.autoApply === false (and the direction
 //     policy autoApply stays false) — the button is the ONLY apply trigger.
 
 import assert from 'node:assert/strict';
@@ -40,13 +44,15 @@ const FILES = [
   'src/modules/strategy-data-recommendations/dave56-etalon-data.js',
   'src/modules/strategy-data-recommendations/dave56-etalon-mapping.js',
   'src/modules/strategy-data-recommendations/dave56-etalon-layer.js',
+  'src/modules/strategy-data-recommendations/final-tactic-merge-layer.js',
   'src/modules/strategy-data-recommendations/re-html-utils.js',
   'src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js'
 ];
 
 let currentTactic = {
   def_line: '3', press_line: '3', def_width: '3', press_intense: '4',
-  build_type: '3', build_temp: '3', build_long: '3', build_fast: '3', style: '4', priority: []
+  build_type: '3', build_temp: '3', build_long: '3', build_fast: '3', style: '4',
+  pass_risk: '3', dribble: '2', cross: '3', corner: '2', shot: '2', priority: []
 };
 const listeners = [];
 const sandbox = {
@@ -75,7 +81,7 @@ const sandbox = {
   },
   SnapshotEngine: { build: () => null },
   MatchStateParser: { getGameId: () => 'g1' },
-  getCurrentTactic: () => Object.assign({}, currentTactic, { priority: currentTactic.priority.slice() })
+  getCurrentTactic: () => Object.assign({}, currentTactic, { priority: (currentTactic.priority || []).slice() })
 };
 sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
@@ -84,16 +90,20 @@ vm.runInContext(
   FILES.map(rel => fs.readFileSync(path.join(root, rel), 'utf8')).join('\n;\n')
     + '\n;this.__STATE = (typeof STATE !== "undefined") ? STATE : undefined;',
   sandbox,
-  { filename: 'slf-348-panel-bundle.js' }
+  { filename: 'slf-350-panel-bundle.js' }
 );
 const STATE = sandbox.__STATE;
 const engine = sandbox.window.SLFCurrentActionHintEngine;
 
 // --- installation invariants --------------------------------------------------
-assert.equal(sandbox.window.SLFDave56EtalonLayer.autoApply, false, 'etalon layer autoApply is false — the button is the only trigger');
+assert.equal(sandbox.window.SLFFinalTacticMergeLayer.autoApply, false, 'merge layer autoApply is false — the button is the only trigger');
 assert.equal(sandbox.window.SLFTacticDirectionPolicy.autoApply, false, 'direction policy autoApply unchanged');
 assert.ok(listeners.some(entry => entry.type === 'click'), 'apply click delegation bound once');
 assert.equal(typeof sandbox.RecommendationEngine.compactPlan, 'function', 'task-a compactPlan patched');
+assert.equal(STATE.finalTacticRecommendation, null, 'STATE.finalTacticRecommendation initialized to null');
+assert.equal(STATE.finalTacticApplyStatus, 'idle', 'STATE.finalTacticApplyStatus initialized to idle');
+assert.equal(STATE.etalonRecommendation, undefined, 'legacy STATE.etalonRecommendation pair removed');
+assert.equal(STATE.etalonApplyStatus, undefined, 'legacy STATE.etalonApplyStatus pair removed');
 
 const mkSnapshot = (score, over = {}) => Object.assign({
   gameId: 'g1', myTeam: 101, teams: [101, 202], minute: 75, status: 'live',
@@ -119,68 +129,107 @@ const LEAD_CONTEXT = {
   myPossession: 45, oppPossession: 55, oppPressVector: 5, oppDefVector: 20,
   strengthContext: { known: true, mode: 'equal', bucket: 'near_equal', strengthGap: 100 }
 };
-const BUTTON_RE = /<button id="slf-etalon-apply-btn" type="button" data-token="([^"]*)"/;
+const BUTTON_RE = /<button id="slf-final-tactic-apply-btn" type="button" data-token="([^"]*)"/;
 
-// --- (1) vector case: bold label, summary, Δ line, enabled button + token ----
+// --- (1) merged block: title, grouped vector, Δ, provenance, ONE button ------
 {
   currentTactic = {
     def_line: '3', press_line: '3', def_width: '3', press_intense: '4',
-    build_type: '3', build_temp: '3', build_long: '3', build_fast: '3', style: '4', priority: []
+    build_type: '3', build_temp: '3', build_long: '3', build_fast: '3', style: '4',
+    pass_risk: '3', dribble: '2', cross: '3', corner: '2', shot: '2', priority: []
   };
   const html = render(mkSnapshot({ home: 2, away: 1, diff: 1 }), LEAD_CONTEXT);
-  assert.ok(html.includes('<b style="color:#7ad9ff;">Эталон (Dave 5.6):</b>'), 'bold etalon label rendered');
-  assert.ok(html.includes('d5 Нужно удержать / b5 Нужно удержать'), 'situation labels rendered');
-  assert.ok(html.includes('<div>Вектор: линия/прессинг/ширина/интенс: 1/1/1/2 · выход/темп/диаг/касание: 1/1/1/1 · стиль: 1 · фланги: Л+П</div>'), 'vector summary line with lane labels');
-  assert.ok(html.includes('<div>Δ: линия 3→1 · прессинг 3→1 · ширина 3→1 · интенс 4→2 · выход 3→1 · темп 3→1 · диаг 3→1 · касание 3→1 · стиль 4→1 · фланги →left+right</div>'), 'Δ line rendered when deltaVsCurrent is non-empty');
-  assert.ok(html.includes('<div>Сценарий: lead10_equal</div>'), 'scenario row rendered');
-  assert.ok(html.includes('Совет: атаковать фланг, где соперник не играет'), 'advice note rendered');
+  assert.ok(html.includes('<b style="color:#75ff75;">Рекомендация:</b> '), 'merged recommendation title rendered');
+  const titleMatch = html.match(/Рекомендация:<\/b> ([^<]*)/);
+  assert.ok(titleMatch, 'preset title present');
+  assert.equal(titleMatch[1], 'Simeone_CompactLead_v11.', 'preset title = engine action preset');
+  assert.ok(html.includes('<div>Вектор: оборона линия/прессинг/ширина/интенс: 1/1/1/2 · построение выход/темп/диаг/касание: 1/1/1/1 · стиль: 1 · атака риск/дриблинг/кроссы/угловые/удары: 2/1/2/1/1 · фланги: Л+П</div>'),
+    'grouped vector line (оборона/построение/стиль/атака + фланги)');
+  assert.ok(html.includes('<div>Δ: линия 3→1 · прессинг 3→1 · ширина 3→1 · интенс 4→2 · выход 3→1 · темп 3→1 · диаг 3→1 · касание 3→1 · стиль 4→1 · риск 3→2 · дриблинг 2→1 · кроссы 3→2 · угловые 2→1 · удары 2→1 · фланги →left+right</div>'),
+    'Δ line over all 14 controls + priority vs current');
+  assert.ok(html.includes('оборона/построение/стиль ← эталон d5+b5+s1'), 'provenance line: etalon blocks');
+  assert.ok(html.includes('атака ← пресет Simeone_CompactLead_v11'), 'provenance line: attack from preset');
+  assert.ok(html.includes('<div style="opacity:.9;">Совет: атаковать фланг, где соперник не играет</div>'), 'scenario advice note rendered');
   const button = html.match(BUTTON_RE);
-  assert.ok(button, '#slf-etalon-apply-btn present with data-token');
+  assert.ok(button, '#slf-final-tactic-apply-btn present with data-token');
   assert.ok(button[1].length > 0, 'data-token is non-empty');
-  assert.equal(button[1], STATE.etalonRecommendation.token, 'rendered token matches the remembered recommendation');
+  assert.equal(button[1], STATE.finalTacticRecommendation.token, 'rendered token matches the remembered recommendation');
   assert.ok(html.includes('>Применить</button>'), 'live own match → enabled «Применить» button');
   assert.equal(html.includes(' disabled'), false, 'no disabled attribute for the enabled case');
-  assert.equal(STATE.etalonApplyStatus, 'idle');
-  jeq(STATE.etalonRecommendation.ids, ['d5', 'b5', 's1']);
-  jeq(STATE.etalonRecommendation.vector, {
-    def_line: 1, press_line: 1, def_width: 1, press_intense: 2,
-    build_type: 1, build_temp: 1, build_long: 1, build_fast: 1, style: 1,
+  assert.equal(STATE.finalTacticApplyStatus, 'idle');
+  jeq(STATE.finalTacticRecommendation.ids, ['d5', 'b5', 's1']);
+  const recVector = STATE.finalTacticRecommendation.vector;
+  jeq(recVector, {
+    def_line: '1', press_line: '1', def_width: '1', press_intense: '2',
+    build_type: '1', build_temp: '1', build_long: '1', build_fast: '1', style: '1',
+    pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1',
     priority: ['left', 'right']
-  }, 'remembered vector equals the etalon applyVector');
+  }, 'remembered vector is the full MERGED string vector');
+  assert.equal(recVector.def_line, '1', 'merged vector: etalon defense value as STRING');
+  assert.equal(recVector.pass_risk, '2', 'merged vector: attack from the preset');
+  jeq(recVector.priority, ['left', 'right'], 'merged vector carries etalon priority lanes');
+  assert.equal(STATE.finalTacticRecommendation.source, 'merged:etalon:d5+b5+s1+presets:Simeone_CompactLead_v11', 'rec.source names etalon ids + preset');
+  assert.equal(html.includes('<b style="color:#75ff75;">Действие:</b>'), false, 'legacy «Действие» row replaced by the merged block');
+  assert.equal(html.includes('Эталон (Dave 5.6)'), false, 'legacy etalon-only block markup is gone');
+  assert.equal(html.includes('slf-etalon-apply-btn'), false, 'legacy #slf-etalon-apply-btn is gone');
+  assert.equal((html.match(/<button/g) || []).length, 1, 'exactly ONE button in the panel block');
 }
 
-// --- (2) already-applied: no Δ line, «Уже применено», disabled ----------------
+// --- (2) T2 generic-only: reference line + full-preset provenance -------------
+{
+  currentTactic = {
+    def_line: '3', press_line: '3', def_width: '3', press_intense: '4',
+    build_type: '3', build_temp: '3', build_long: '3', build_fast: '3', style: '4',
+    pass_risk: '3', dribble: '2', cross: '3', corner: '2', shot: '2', priority: []
+  };
+  const html = render(mkSnapshot({ home: 1, away: 1, diff: 0 }, { minute: 30 }), {
+    tags: [], score: { state: 'draw', diff: 0, myGoals: 1, oppGoals: 1, known: true },
+    minute: 30, myBad: 10, myFouls: 1, myXg: 1.0, oppXg: 1.0,
+    myPossession: 50, oppPossession: 50, oppPressVector: 5, oppDefVector: 5,
+    strengthContext: { known: true, mode: 'equal', bucket: 'near_equal', strengthGap: 100 }
+  });
+  assert.ok(html.includes('<div style="opacity:.9;">Эталон: d1/b1 — равный матч, применён пресет</div>'), 'T2 reference line rendered');
+  assert.ok(html.includes('оборона/построение/стиль/атака ← пресет Emery_BalancedBase_v11'), 'T2 provenance: every group from the preset');
+  assert.equal(html.includes('← эталон'), false, 'T2 has no etalon override in provenance');
+  assert.ok(html.match(BUTTON_RE), 'T2 still renders the apply button (preset vector is applicable)');
+  assert.equal(STATE.finalTacticRecommendation.source, 'merged:etalon:d1+b1+presets:Emery_BalancedBase_v11');
+}
+
+// --- (3) already-applied on the merged vector ---------------------------------
 {
   currentTactic = {
     def_line: '1', press_line: '1', def_width: '1', press_intense: '2',
     build_type: '1', build_temp: '1', build_long: '1', build_fast: '1', style: '1',
+    pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1',
     priority: ['left', 'right']
   };
   const html = render(mkSnapshot({ home: 2, away: 1, diff: 1 }), LEAD_CONTEXT);
-  assert.equal(html.includes('<div>Δ:'), false, 'empty deltaVsCurrent → no Δ line');
+  assert.equal(html.includes('<div>Δ:'), false, 'no Δ line when merged vector matches current');
   assert.ok(html.includes('>Уже применено</button>'), 'matching current tactic → «Уже применено»');
   assert.ok(html.includes(' disabled'), 'already-applied button is disabled');
-  assert.equal(STATE.etalonApplyStatus, 'already_applied');
+  assert.equal(STATE.finalTacticApplyStatus, 'already_applied');
 }
 
-// --- (3) insufficient data: block WITHOUT any button --------------------------
+// --- (4) insufficient data (T1): merged block still renders, pure preset ------
 {
   currentTactic = {
     def_line: '3', press_line: '3', def_width: '3', press_intense: '4',
-    build_type: '3', build_temp: '3', build_long: '3', build_fast: '3', style: '4', priority: []
+    build_type: '3', build_temp: '3', build_long: '3', build_fast: '3', style: '4',
+    pass_risk: '3', dribble: '2', cross: '3', corner: '2', shot: '2', priority: []
   };
   const snapshot = mkSnapshot(undefined, { minute: 10 });
-  const recBefore = STATE.etalonRecommendation;
   const html = render(snapshot, { tags: [], minute: 10, score: { state: 'unknown' } });
-  assert.ok(html.includes('Эталон (Dave 5.6)'), 'etalon block still renders without data');
-  assert.ok(html.includes('Недостаточно данных'), 'insufficient-data text rendered');
+  assert.ok(html.includes('Эталон: недостаточно данных'), 'T1 insufficient line rendered');
   assert.ok(html.includes('счёт не определён'), 'score_state reason translated');
-  assert.ok(html.includes('игра через «столба» не распознаётся'), 'b10 marker surfaced');
-  assert.equal(html.includes('slf-etalon-apply-btn'), false, 'no vector → NO apply button at all');
-  assert.equal(STATE.etalonRecommendation, recBefore, 'insufficient render mints no new recommendation (the previous one becomes unreachable: no button, token-guarded click)');
+  assert.equal(html.includes('игра через «столба» не распознаётся'), false, 'b10 marker filtered (permanent limitation, not per-recommendation noise)');
+  const button = html.match(BUTTON_RE);
+  assert.ok(button, 'T1 still renders the apply button (pure preset vector)');
+  assert.equal(STATE.finalTacticRecommendation.source, 'merged:etalon:+presets:Emery_BalancedBase_v11', 'T1 source: empty ids + preset (engine picked Emery without a score)');
+  assert.equal(STATE.finalTacticRecommendation.vector.def_line, '2', 'T1 vector is the pure preset (Emery def_line=2)');
+  jeq(STATE.finalTacticRecommendation.ids, [], 'T1 remembers no etalon ids');
 }
 
-// --- (4) foreign match → button disabled --------------------------------------
+// --- (5) foreign match → button disabled --------------------------------------
 {
   const snapshot = mkSnapshot({ home: 2, away: 1, diff: 1 });
   snapshot.matchOwnership = 'foreign';
@@ -190,7 +239,7 @@ const BUTTON_RE = /<button id="slf-etalon-apply-btn" type="button" data-token="(
   assert.ok(html.includes('Чужой матч — применение тактики недоступно'), 'foreign match title');
 }
 
-// --- (5) finished snapshot → button disabled ----------------------------------
+// --- (6) finished snapshot → button disabled ----------------------------------
 {
   const snapshot = mkSnapshot({ home: 2, away: 1, diff: 1 });
   snapshot.status = 'finished';
@@ -200,7 +249,7 @@ const BUTTON_RE = /<button id="slf-etalon-apply-btn" type="button" data-token="(
   assert.ok(html.includes('Матч завершён — применение недоступно'), 'finished match title');
 }
 
-// --- (6) bridge apply in progress → button disabled ----------------------------
+// --- (7) bridge apply in progress → button disabled ----------------------------
 {
   STATE.tacticControlBridgeApplyInProgress = true;
   const html = render(mkSnapshot({ home: 2, away: 1, diff: 1 }), LEAD_CONTEXT);
@@ -209,20 +258,33 @@ const BUTTON_RE = /<button id="slf-etalon-apply-btn" type="button" data-token="(
   STATE.tacticControlBridgeApplyInProgress = false;
 }
 
-// --- (7) missing / foreign-source etalon → no block ----------------------------
+// --- (8) missing or degraded finalTactic → legacy «Действие» row ---------------
 {
   const bare = mkSnapshot({ home: 2, away: 1, diff: 1 });
   bare.ruleDecision = { action: { preset: 'X_v11', decision: 'hold_current', reason: 'r' }, candidates: [], confidence: { level: 'low' }, margin: 0 };
   const html = sandbox.RecommendationEngine.compactPlan({}, bare, '');
-  assert.equal(html.includes('Эталон (Dave 5.6)'), false, 'no etalon → no block');
+  assert.ok(html.includes('<b style="color:#75ff75;">Действие:</b>'), 'no finalTactic → legacy «Действие» row');
+  assert.equal(html.includes('slf-final-tactic-apply-btn'), false, 'no finalTactic → no apply button');
+  assert.equal(html.includes('Рекомендация:'), false, 'no finalTactic → no merged block');
+
+  const degraded = mkSnapshot({ home: 2, away: 1, diff: 1 });
+  degraded.ruleDecision = {
+    action: { preset: 'X_v11', decision: 'active_control', reason: 'r' },
+    candidates: [], confidence: { level: 'low' }, margin: 0,
+    finalTactic: { schema: 'slf_final_tactic_v1', source: 'final_tactic_merge', ok: false, error: 'final_tactic_computation_failed', vector: null }
+  };
+  const html2 = sandbox.RecommendationEngine.compactPlan({}, degraded, '');
+  assert.ok(html2.includes('<b style="color:#75ff75;">Действие:</b>'), 'degraded finalTactic (vector:null) → legacy «Действие» row');
+  assert.equal(html2.includes('slf-final-tactic-apply-btn'), false, 'degraded finalTactic → no apply button');
+
   const foreign = mkSnapshot({ home: 2, away: 1, diff: 1 });
   foreign.ruleDecision = {
     action: { preset: 'X_v11', decision: 'hold_current', reason: 'r' },
     candidates: [], confidence: { level: 'low' }, margin: 0,
     etalon: { source: 'someone_elses_hint', applyVector: { def_line: 1 } }
   };
-  const html2 = sandbox.RecommendationEngine.compactPlan({}, foreign, '');
-  assert.equal(html2.includes('Эталон (Dave 5.6)'), false, 'etalon with a foreign source is ignored');
+  const html3 = sandbox.RecommendationEngine.compactPlan({}, foreign, '');
+  assert.equal(html3.includes('Рекомендация:'), false, 'a hand-stamped ruleDecision without finalTactic renders no merged block even with a foreign etalon');
 }
 
-console.log('dave56 etalon panel: block rendering, Δ line, button states (foreign/finished/in-progress/insufficient), autoApply=false: OK');
+console.log('final tactic merged panel: «Рекомендация» block, grouped vector, Δ, provenance, reference line, ONE button states, legacy fallback, autoApply=false: OK');

@@ -1,18 +1,21 @@
 #!/usr/bin/env node
-// SLF issue #348 — panel one-click apply contract (token-guarded, single call).
-// Loads the FULL chain + re-html-utils + task-a UI extension in one vm bundle
+// SLF issue #350 (evolves #348) — merged «Рекомендация» one-click apply
+// contract (token-guarded, single call). Loads the FULL chain + the final
+// tactic merge layer + re-html-utils + task-a UI extension in one vm bundle
 // (production order), drives the real click delegation path and asserts the
-// contract between the «Применить» button and STATE.tacticControlBridge:
+// contract between the #slf-final-tactic-apply-btn button and
+// STATE.tacticControlBridge:
 //   - exactly ONE applyTacticObject call per user click;
-//   - called with the exact partial etalon vector (only etalon-defined keys;
-//     priority only when lanes are defined; never pass_risk/dribble/cross/
-//     corner/shot);
-//   - opts {strict:true, source:'etalon:dave56:<ids>'};
+//   - called with the exact MERGED vector: all 14 controls as STRING
+//     ordinals + priority array (preset base overridden by etalon blocks per
+//     the merge-layer semantics), never a partial etalon-only vector;
+//   - opts {strict:true, source:'merged:etalon:<ids>+presets:<preset>'};
 //   - reason→status mapping: preflight_failed / post_apply_rolled_back /
 //     rollback_unverified / apply_in_progress / success;
 //   - stale token → button disabled, NO bridge call;
 //   - reentrancy: while STATE.tacticControlBridgeApplyInProgress is set the
-//     panel never reaches the bridge.
+//     panel never reaches the bridge;
+//   - already-applied is detected on the MERGED vector.
 // Note: engine.run does not stamp snapshot.ruleDecision itself (production
 // selectRawPreset does — tactic-preset-direction-policy.js:221); the harness
 // stamps it the same way before rendering.
@@ -42,6 +45,7 @@ const FILES = [
   'src/modules/strategy-data-recommendations/dave56-etalon-data.js',
   'src/modules/strategy-data-recommendations/dave56-etalon-mapping.js',
   'src/modules/strategy-data-recommendations/dave56-etalon-layer.js',
+  'src/modules/strategy-data-recommendations/final-tactic-merge-layer.js',
   'src/modules/strategy-data-recommendations/re-html-utils.js',
   'src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js'
 ];
@@ -54,7 +58,7 @@ function panelHarness() {
   const calls = [];
   let bridgeResult = { ok: true, failures: [], mismatches: [], applicationStatus: 'ui_readback_confirmed' };
   let bridgeThrows = false;
-  const currentTactic = {
+  let currentTactic = {
     def_line: '3', press_line: '3', def_width: '3', press_intense: '4',
     build_type: '3', build_temp: '3', build_long: '3', build_fast: '3', style: '4', priority: []
   };
@@ -89,7 +93,7 @@ function panelHarness() {
     },
     SnapshotEngine: { build: () => null },
     MatchStateParser: { getGameId: () => 'g1' },
-    getCurrentTactic: () => Object.assign({}, currentTactic, { priority: currentTactic.priority.slice() })
+    getCurrentTactic: () => Object.assign({}, currentTactic, { priority: (currentTactic.priority || []).slice() })
   };
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
@@ -98,7 +102,7 @@ function panelHarness() {
     FILES.map(rel => fs.readFileSync(path.join(root, rel), 'utf8')).join('\n;\n')
       + '\n;this.__STATE = (typeof STATE !== "undefined") ? STATE : undefined;',
     sandbox,
-    { filename: 'slf-348-apply-contract-bundle.js' }
+    { filename: 'slf-350-apply-contract-bundle.js' }
   );
   const STATE = sandbox.__STATE;
   assert.ok(STATE, 'STATE exported from the bundle scope');
@@ -111,7 +115,7 @@ function panelHarness() {
   };
   const engine = sandbox.window.SLFCurrentActionHintEngine;
   const clickListener = listeners.find(entry => entry.type === 'click');
-  assert.ok(clickListener, 'panel bound the #slf-etalon-apply-btn click delegation');
+  assert.ok(clickListener, 'panel bound the #slf-final-tactic-apply-btn click delegation');
 
   const mkSnapshot = (score, over = {}) => Object.assign({
     gameId: 'g1', myTeam: 101, teams: [101, 202], minute: 75, status: 'live',
@@ -123,7 +127,7 @@ function panelHarness() {
   }, over);
 
   // Render a fresh hint: engine run → production-style ruleDecision stamp →
-  // compactPlan → STATE.etalonRecommendation with a fresh token.
+  // compactPlan → STATE.finalTacticRecommendation with a fresh token.
   function render(snapshot, context) {
     const result = engine.run(snapshot, context);
     snapshot.ruleDecision = result;
@@ -132,7 +136,7 @@ function panelHarness() {
   }
 
   async function click(btn) {
-    clickListener.fn({ target: { closest: selector => (selector === '#slf-etalon-apply-btn' ? btn : null) } });
+    clickListener.fn({ target: { closest: selector => (selector === '#slf-final-tactic-apply-btn' ? btn : null) } });
     for (let i = 0; i < 4; i += 1) await new Promise(resolve => setImmediate(resolve));
   }
 
@@ -160,6 +164,7 @@ function panelHarness() {
   };
 
   const h = { sandbox, STATE, calls, logs, statuses, timers, render, click, freshBtn, LEAD, FAVOURITE,
+    setCurrentTactic(value) { currentTactic = value; },
     setBridge(result) { bridgeResult = result; bridgeThrows = false; },
     setBridgeThrows() { bridgeThrows = true; } };
   return h;
@@ -167,49 +172,69 @@ function panelHarness() {
 
 const h = panelHarness();
 
-// --- (1) success: exactly ONE call, exact partial vector, source string ------
+// --- (1) success: exactly ONE call, exact MERGED vector, merged source -------
 {
   h.setBridge({ ok: true, failures: [], mismatches: [], applicationStatus: 'ui_readback_confirmed' });
   const callsBefore = h.calls.length;
   const html = h.render(h.LEAD.snapshot(), JSON.parse(JSON.stringify(h.LEAD.context)));
-  assert.match(html, /id="slf-etalon-apply-btn"/, 'button rendered for a live own match');
-  const token = h.STATE.etalonRecommendation.token;
-  assert.ok(token, 'fresh recommendation token');
+  assert.match(html, /id="slf-final-tactic-apply-btn"/, 'merged apply button rendered for a live own match');
+  const token = h.STATE.finalTacticRecommendation.token;
+  assert.ok(token, 'fresh merged recommendation token');
   const btn = h.freshBtn(token);
   await h.click(btn);
   assert.equal(h.calls.length - callsBefore, 1, 'exactly ONE applyTacticObject call per click');
   const call = h.calls[h.calls.length - 1];
+  // Simeone_CompactLead_v11 base + etalon d5/b5/s1 overrides (defense+buildup+
+  // style+lanes from the etalon, attack from the preset) — all 14 STRING
+  // ordinals + priority.
   jeq(call.vector, {
-    def_line: 1, press_line: 1, def_width: 1, press_intense: 2,
-    build_type: 1, build_temp: 1, build_long: 1, build_fast: 1, style: 1,
+    def_line: '1', press_line: '1', def_width: '1', press_intense: '2',
+    build_type: '1', build_temp: '1', build_long: '1', build_fast: '1', style: '1',
+    pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1',
     priority: ['left', 'right']
-  }, 'called with the exact etalon partial vector');
-  jeq(Object.keys(call.vector).sort(), ['build_fast', 'build_long', 'build_temp', 'build_type', 'def_line', 'def_width', 'press_intense', 'press_line', 'priority', 'style'], 'only etalon-defined keys are applied');
-  for (const forbidden of ['pass_risk', 'dribble', 'cross', 'corner', 'shot']) {
-    assert.equal(forbidden in call.vector, false, `forbidden control '${forbidden}' never enters the apply vector`);
+  }, 'called with the exact merged vector (14 strings + priority)');
+  jeq(Object.keys(call.vector).sort(), [
+    'build_fast', 'build_long', 'build_temp', 'build_type', 'corner', 'cross',
+    'def_line', 'def_width', 'dribble', 'pass_risk', 'press_intense', 'press_line',
+    'priority', 'shot', 'style'
+  ], 'the merged vector carries ALL 14 controls + priority (attack keys included)');
+  for (const key of Object.keys(call.vector)) {
+    if (key === 'priority') continue;
+    assert.equal(typeof call.vector[key], 'string', `merged vector.${key} is a STRING`);
   }
   assert.equal(call.opts.strict, true, 'strict apply (preflight + rollback)');
-  assert.ok(String(call.opts.source).startsWith('etalon:dave56:'), 'source starts with etalon:dave56:');
-  assert.equal(call.opts.source, 'etalon:dave56:d5+b5+s1', 'source names the matched ids in order');
-  assert.equal(h.STATE.etalonApplyStatus, 'applied', 'success → applied');
+  assert.ok(String(call.opts.source).startsWith('merged:'), 'source starts with merged:');
+  assert.equal(call.opts.source, 'merged:etalon:d5+b5+s1+presets:Simeone_CompactLead_v11', 'source names the etalon ids and the base preset');
+  assert.equal(call.opts.source, h.STATE.finalTacticRecommendation.source, 'bridge source equals the remembered recommendation source');
+  assert.equal(h.STATE.finalTacticApplyStatus, 'applied', 'success → applied');
   assert.equal(btn.textContent, 'Применено ✓');
   assert.equal(btn.disabled, true, 'applied button stays disabled until the next render');
-  jeq(h.STATE.etalonRecommendation.ids, ['d5', 'b5', 's1']);
+  jeq(h.STATE.finalTacticRecommendation.ids, ['d5', 'b5', 's1']);
 }
 
-// --- (2) priority only when lanes are defined (b2 «все направления») --------
+// --- (2) lane-less etalon (b2 «все направления»): preset priority survives ---
 {
   h.setBridge({ ok: true, failures: [], mismatches: [] });
   const callsBefore = h.calls.length;
   h.render(h.FAVOURITE.snapshot(), JSON.parse(JSON.stringify(h.FAVOURITE.context)));
-  const btn = h.freshBtn(h.STATE.etalonRecommendation.token);
+  const btn = h.freshBtn(h.STATE.finalTacticRecommendation.token);
   await h.click(btn);
   assert.equal(h.calls.length - callsBefore, 1, 'one call for the lane-less recommendation too');
   const call = h.calls[h.calls.length - 1];
-  assert.equal('priority' in call.vector, false, 'lane-less etalon omits priority entirely');
-  jeq(Object.keys(call.vector).sort(), ['build_fast', 'build_long', 'build_temp', 'build_type', 'def_line', 'def_width', 'press_intense', 'press_line', 'style'], 'exactly the 9 etalon controls');
-  jeq(call.vector, { def_line: 3, press_line: 3, def_width: 2, press_intense: 3, build_type: 3, build_temp: 2, build_long: 2, build_fast: 2, style: 3 }, 'd2/b2 conservative vector');
-  assert.equal(call.opts.source, 'etalon:dave56:d2+b2');
+  // Emery_BalancedBase_v11 base + etalon d2/b2 overrides; b2 lanes omitted →
+  // the preset priority [] survives (still present as an array key).
+  jeq(call.vector, {
+    def_line: '3', press_line: '3', def_width: '2', press_intense: '3',
+    build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3',
+    pass_risk: '2', dribble: '2', cross: '2', corner: '1', shot: '2',
+    priority: []
+  }, 'd2/b2 merged vector over the Emery preset');
+  jeq(Object.keys(call.vector).sort(), [
+    'build_fast', 'build_long', 'build_temp', 'build_type', 'corner', 'cross',
+    'def_line', 'def_width', 'dribble', 'pass_risk', 'press_intense', 'press_line',
+    'priority', 'shot', 'style'
+  ], 'the merged vector always carries the full 15-key shape');
+  assert.equal(call.opts.source, 'merged:etalon:d2+b2+presets:Emery_BalancedBase_v11');
 }
 
 // --- (3) reason → status mapping ----------------------------------------------
@@ -217,10 +242,10 @@ async function scenario(bridge, expect) {
   h.setBridge(bridge);
   const callsBefore = h.calls.length;
   h.render(h.LEAD.snapshot(), JSON.parse(JSON.stringify(h.LEAD.context)));
-  const btn = h.freshBtn(h.STATE.etalonRecommendation.token);
+  const btn = h.freshBtn(h.STATE.finalTacticRecommendation.token);
   await h.click(btn);
   assert.equal(h.calls.length - callsBefore, 1, 'bridge consulted exactly once');
-  assert.equal(h.STATE.etalonApplyStatus, expect.status, `status for reason=${bridge.reason || 'ok'}`);
+  assert.equal(h.STATE.finalTacticApplyStatus, expect.status, `status for reason=${bridge.reason || 'ok'}`);
   assert.equal(btn.disabled, expect.disabled, `disabled flag for ${bridge.reason || 'ok'}`);
   assert.equal(btn.textContent, expect.text, `button label for ${bridge.reason || 'ok'}`);
   return btn;
@@ -281,7 +306,7 @@ await scenario(
   const logsBefore = h.logs.length;
   h.STATE.tacticControlBridgeApplyInProgress = true;
   h.render(h.LEAD.snapshot(), JSON.parse(JSON.stringify(h.LEAD.context)));
-  const btn = h.freshBtn(h.STATE.etalonRecommendation.token);
+  const btn = h.freshBtn(h.STATE.finalTacticRecommendation.token);
   await h.click(btn);
   assert.equal(h.calls.length, callsBefore, 'reentrancy guard blocks the bridge call');
   assert.ok(h.logs.slice(logsBefore).some(log => log.includes('применение тактики уже выполняется')), 'waiting message logged');
@@ -293,11 +318,30 @@ await scenario(
   h.setBridgeThrows();
   const callsBefore = h.calls.length;
   h.render(h.LEAD.snapshot(), JSON.parse(JSON.stringify(h.LEAD.context)));
-  const btn = h.freshBtn(h.STATE.etalonRecommendation.token);
+  const btn = h.freshBtn(h.STATE.finalTacticRecommendation.token);
   await h.click(btn);
   assert.equal(h.calls.length - callsBefore, 1, 'throwing bridge was consulted exactly once');
-  assert.equal(h.STATE.etalonApplyStatus, 'failed_rolled_back', 'exception maps to the retry-safe failure status');
+  assert.equal(h.STATE.finalTacticApplyStatus, 'failed_rolled_back', 'exception maps to the retry-safe failure status');
   assert.equal(btn.disabled, false, 'exception leaves the button retryable');
 }
 
-console.log('dave56 etalon apply contract: single call, exact vector, source, status mapping, token + reentrancy guards: OK');
+// --- (7) already-applied is detected on the MERGED vector --------------------
+{
+  h.setCurrentTactic({
+    def_line: '1', press_line: '1', def_width: '1', press_intense: '2',
+    build_type: '1', build_temp: '1', build_long: '1', build_fast: '1', style: '1',
+    pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1',
+    priority: ['left', 'right']
+  });
+  const html = h.render(h.LEAD.snapshot(), JSON.parse(JSON.stringify(h.LEAD.context)));
+  assert.ok(html.includes('>Уже применено</button>'), 'current tactic equals the MERGED vector → «Уже применено»');
+  assert.ok(html.includes(' disabled'), 'already-applied button is disabled');
+  assert.equal(h.STATE.finalTacticApplyStatus, 'already_applied');
+  assert.equal(html.includes('<div>Δ:'), false, 'no Δ line when the merged vector equals the current tactic');
+  h.setCurrentTactic({
+    def_line: '3', press_line: '3', def_width: '3', press_intense: '4',
+    build_type: '3', build_temp: '3', build_long: '3', build_fast: '3', style: '4', priority: []
+  });
+}
+
+console.log('final tactic merged apply contract: single call, exact merged vector, merged source, status mapping, token + reentrancy + already-applied guards: OK');
