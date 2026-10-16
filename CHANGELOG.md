@@ -1,5 +1,246 @@
 # Changelog
 
+## 4.4.346
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- .github/workflows/quality-integration.yml
+- specs/slf-356-boot-hardening/plan.md
+- specs/slf-356-boot-hardening/spec.md
+- specs/slf-356-boot-hardening/tasks.md
+- src/app/bootstrap.js
+- src/modules/team-management/team4-leadership-upgrade-indicator.js
+- src/modules/team-management/training-reference-guide.js
+- tools/test-boot-continuation.mjs
+
+Approved base commit:
+- e775f72aaa8cc8b33b4cf20452d8dfca8cf5dba6
+
+Approved commit:
+- 1e58d38e1887c043be2d27360e75c5bd02815ba9
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.345
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- .github/workflows/quality-integration.yml
+- data/audit/runtime-reachability-review-v1.json
+- specs/slf-353-loan-limit-fm2026/plan.md
+- specs/slf-353-loan-limit-fm2026/spec.md
+- specs/slf-353-loan-limit-fm2026/tasks.md
+- src/modules/team-management/team-loan-limit-helper.js
+- tools/test-loan-limit-fm2026.mjs
+
+Approved base commit:
+- 71478b01e6067104478cd3e61f8646e6b3e9106f
+
+Approved commit:
+- e775f72aaa8cc8b33b4cf20452d8dfca8cf5dba6
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.344
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- .github/workflows/quality-integration.yml
+- contracts/branches/strategy-data-recommendations.md
+- data/quality/reliability-budget-v1.json
+- specs/350-final-tactic-merge/plan.md
+- specs/350-final-tactic-merge/spec.md
+- specs/350-final-tactic-merge/tasks.md
+- src/app/bundle-order.json
+- src/core/config.js
+- src/modules/strategy-data-recommendations/final-tactic-merge-layer.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/test-dave56-etalon-apply-contract.mjs
+- tools/test-dave56-etalon-panel.mjs
+- tools/test-final-tactic-merge.mjs
+
+Approved base commit:
+- 422027e62ee5275f69f508a938156d3f2b7992ea
+
+Approved commit:
+- 71478b01e6067104478cd3e61f8646e6b3e9106f
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.343
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- .github/workflows/quality-integration.yml
+- src/app/ui-layer.js
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- 49b3663a8e5456ef909b58513d3f4116375a05d5
+
+Approved commit:
+- 422027e62ee5275f69f508a938156d3f2b7992ea
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.342
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- .github/workflows/quality-integration.yml
+- contracts/branches/strategy-data-recommendations.md
+- data/quality/reliability-budget-v1.json
+- data/tactics/dave56-etalon-v1.json
+- specs/348-dave56-etalon-hint/plan.md
+- specs/348-dave56-etalon-hint/spec.md
+- specs/348-dave56-etalon-hint/tasks.md
+- specs/slf-342-game-acceptance/plan.md
+- specs/slf-342-game-acceptance/spec.md
+- specs/slf-342-game-acceptance/tasks.md
+- src/app/bundle-order.json
+- src/core/config.js
+- src/modules/strategy-data-recommendations/dave-engine-knowledge.js
+- src/modules/strategy-data-recommendations/dave56-etalon-data.js
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- src/modules/strategy-data-recommendations/dave56-etalon-mapping.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/sync-dave56-etalon.mjs
+- tools/test-dave56-etalon-apply-contract.mjs
+- tools/test-dave56-etalon-data-sync.mjs
+- tools/test-dave56-etalon-mapping.mjs
+- tools/test-dave56-etalon-matcher.mjs
+- tools/test-dave56-etalon-panel.mjs
+
+Approved base commit:
+- a46e9699fa11ca069738602f29ac7a5f8bdb9bf5
+
+Approved commit:
+- 49b3663a8e5456ef909b58513d3f4116375a05d5
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.341
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/bundle-order.json
+- src/modules/transfer-analyzer/transfer-candidate-full-market-policy.js
+- src/modules/transfer-analyzer/transfer-history-visible-analysis-cleanup.js
+- src/modules/transfer-analyzer/transfer-tm-profile-guard.js
+- tests/browser/fixtures/fm2026-transfer-market.html
+
+Approved base commit:
+- b6c1340cc9e8c3b180a991dab63392fdac6f9be6
+
+Approved commit:
+- a46e9699fa11ca069738602f29ac7a5f8bdb9bf5
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.340
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/deploy-vps.yml
+- .github/workflows/quality-integration.yml
+- contracts/SLF_GOVERNANCE.md
+- contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md
+- contracts/branches/server-api-operations.md
+- data/audit/runtime-reachability-review-v1.json
+- data/quality/reliability-budget-v1.json
+- data/quality/workflow-inventory-v1.json
+- deploy/vps/slf-deploy-launcher
+- docs/decision_records/DR-013-consolidated-ci-release-workflows.md
+- specs/336-vps-deploy-transport/plan.md
+- specs/336-vps-deploy-transport/spec.md
+- specs/336-vps-deploy-transport/tasks.md
+- src/app/bundle-order.json
+- src/app/tactics-dropdown-ui-policy.js
+- src/core/config.js
+- src/modules/manual-match-telemetry/event-tracker.js
+- src/modules/manual-match-telemetry/manual-match-runtime.js
+- src/modules/manual-match-telemetry/manual-state-integrity.js
+- src/modules/manual-match-telemetry/snapshot-engine.js
+- src/modules/strategy-data-recommendations/current-action-hint-engine.js
+- src/modules/tactics-presets/active-preset-registry.js
+- src/modules/tactics-presets/preset-storage.js
+- src/modules/tactics-presets/tactic-control-bridge.js
+- src/modules/tactics-presets/tactic-preset-library.js
+- src/modules/transfer-analyzer/transfer-candidate-scanner.js
+- src/modules/transfer-analyzer/transfer-history-vps-sync.js
+- tests/test-preset-storage-sync-status.mjs
+- tests/test-preset-usage-tracker-quota.mjs
+- tests/test-scanner-legacy-storage-purge.mjs
+- tools/validate-quality-governance.mjs
+- tools/validate-workflow-inventory.mjs
+- vps/ops/deploy-code.sh
+- vps/ops/rollback-code.sh
+- vps/ops/tests/drill_deploy_transport.sh
+- vps/ops/tests/test_deploy_files_completeness.py
+- vps/ops/tests/test_deploy_transport_contract.py
+
+Approved base commit:
+- 4fd7aed02b25befefdad17274b7eb2c896fda051
+
+Approved commit:
+- b6c1340cc9e8c3b180a991dab63392fdac6f9be6
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.339
 
 ### Automatic latest-only build

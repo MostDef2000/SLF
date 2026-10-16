@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.339
+// @version      4.4.346
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.339',
-        scriptVersion: '4.4.339',
+        version: '4.4.346',
+        scriptVersion: '4.4.346',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.339',
+        scriptVersion: '4.4.346',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -173,203 +173,24 @@ const BASE_PRESETS = {
         priority: ["right"]
     },
 
-    // Defensive / hold score. Built from SLF wiki/manual principles:
-    // compact block, do not overraise line when opponent creates danger, avoid chaos when leading.
-    Simeone_LowBlock_def5: {
-        def_line: "1", press_line: "1", def_width: "1", press_intense: "2",
-        build_type: "1", build_temp: "1", build_long: "2", build_fast: "1",
-        style: "1", pass_risk: "1", dribble: "1", cross: "1",
-        corner: "1", shot: "1",
-        priority: ["right"]
-    },
-    Simeone_Compact442_def4: {
-        def_line: "1", press_line: "2", def_width: "1", press_intense: "3",
-        build_type: "2", build_temp: "1", build_long: "2", build_fast: "1",
-        style: "2", pass_risk: "2", dribble: "1", cross: "2",
-        corner: "1", shot: "1",
-        priority: ["left", "right"]
-    },
-    Mourinho_WeakSide_def3: {
-        def_line: "1", press_line: "2", def_width: "2", press_intense: "3",
-        build_type: "1", build_temp: "2", build_long: "3", build_fast: "3",
-        style: "2", pass_risk: "2", dribble: "2", cross: "3",
-        corner: "1", shot: "2",
-        priority: ["left", "right"]
-    },
-    Henta_Hold_def3: {
-        def_line: "1", press_line: "1", def_width: "1", press_intense: "4",
-        build_type: "1", build_temp: "1", build_long: "2", build_fast: "2",
-        style: "2", pass_risk: "1", dribble: "2", cross: "2",
-        corner: "1", shot: "1",
-        priority: ["left", "right"]
-    },
-
-    // Balance / control. Wiki/manual logic: keep structure first, tune risk by score/context.
-    Pep_StandardControl_bal3: {
-        def_line: "2", press_line: "2", def_width: "2", press_intense: "3",
-        build_type: "2", build_temp: "2", build_long: "2", build_fast: "2",
-        style: "3", pass_risk: "3", dribble: "2", cross: "2",
-        corner: "1", shot: "2",
-        priority: ["center"]
-    },
-    Xabi_BoxMidfield_bal3: {
-        def_line: "2", press_line: "2", def_width: "2", press_intense: "3",
-        build_type: "2", build_temp: "2", build_long: "1", build_fast: "2",
-        style: "3", pass_risk: "3", dribble: "2", cross: "1",
-        corner: "1", shot: "2",
-        priority: ["center"]
-    },
-    Pep_BoxControl_bal2: {
-        def_line: "2", press_line: "2", def_width: "1", press_intense: "2",
-        build_type: "2", build_temp: "1", build_long: "1", build_fast: "1",
-        style: "3", pass_risk: "2", dribble: "1", cross: "1",
-        corner: "1", shot: "1",
-        priority: ["center"]
-    },
-    Pep_ControlledPush_att3: {
-        def_line: "2", press_line: "2", def_width: "2", press_intense: "3",
-        build_type: "2", build_temp: "3", build_long: "1", build_fast: "3",
-        style: "4", pass_risk: "3", dribble: "3", cross: "2",
-        corner: "1", shot: "2",
-        priority: ["center"]
-    },
-    Xabi_VerticalBox_att3: {
-        def_line: "2", press_line: "2", def_width: "2", press_intense: "3",
-        build_type: "2", build_temp: "3", build_long: "2", build_fast: "3",
-        style: "4", pass_risk: "4", dribble: "2", cross: "1",
-        corner: "1", shot: "2",
-        priority: ["center"]
-    },
-    Pep_PressCooldown_bal2: {
-        def_line: "2", press_line: "2", def_width: "2", press_intense: "2",
-        build_type: "2", build_temp: "2", build_long: "1", build_fast: "2",
-        style: "3", pass_risk: "2", dribble: "1", cross: "1",
-        corner: "1", shot: "1",
-        priority: ["center", "right"]
-    },
-    Compact_Counter_def3: {
-        def_line: "1", press_line: "2", def_width: "2", press_intense: "3",
-        build_type: "1", build_temp: "2", build_long: "3", build_fast: "4",
-        style: "3", pass_risk: "2", dribble: "3", cross: "3",
-        corner: "1", shot: "2",
-        priority: ["left", "right"]
-    },
-    DeZerbi_BaitPress_bal3: {
-        def_line: "2", press_line: "2", def_width: "2", press_intense: "2",
-        build_type: "1", build_temp: "1", build_long: "1", build_fast: "2",
-        style: "3", pass_risk: "3", dribble: "2", cross: "1",
-        corner: "1", shot: "2",
-        priority: ["center"]
-    },
-    Conte_WingbackWidth_bal4: {
-        def_line: "2", press_line: "2", def_width: "3", press_intense: "3",
-        build_type: "2", build_temp: "2", build_long: "2", build_fast: "3",
-        style: "3", pass_risk: "3", dribble: "3", cross: "4",
-        corner: "1", shot: "2",
-        priority: ["left", "right"]
-    },
-
-    // Attack / chase. Wiki/manual logic: raise risk by score and minute, but separate controlled pressure from chaos.
-    Klopp_Gegenpress_att4: {
-        def_line: "3", press_line: "4", def_width: "3", press_intense: "5",
-        build_type: "3", build_temp: "4", build_long: "2", build_fast: "4",
-        style: "5", pass_risk: "4", dribble: "4", cross: "3",
-        corner: "1", shot: "3",
-        priority: ["left", "right"]
-    },
-    Bielsa_ChaosPress_att5: {
-        def_line: "4", press_line: "5", def_width: "4", press_intense: "5",
-        build_type: "3", build_temp: "5", build_long: "3", build_fast: "5",
-        style: "5", pass_risk: "5", dribble: "5", cross: "4",
-        corner: "1", shot: "4",
-        priority: ["left", "center", "right"]
-    },
-    Pep_TwoThreeFive_att3: {
-        def_line: "3", press_line: "3", def_width: "3", press_intense: "4",
-        build_type: "2", build_temp: "3", build_long: "1", build_fast: "3",
-        style: "5", pass_risk: "4", dribble: "3", cross: "2",
-        corner: "1", shot: "3",
-        priority: ["center"]
-    },
-    DeZerbi_Release_att4: {
-        def_line: "2", press_line: "3", def_width: "2", press_intense: "3",
-        build_type: "1", build_temp: "2", build_long: "2", build_fast: "4",
-        style: "4", pass_risk: "4", dribble: "3", cross: "2",
-        corner: "1", shot: "3",
-        priority: ["center", "right"]
-    },
-    Klopp_WideTrap_att4: {
-        def_line: "3", press_line: "4", def_width: "4", press_intense: "5",
-        build_type: "3", build_temp: "4", build_long: "2", build_fast: "4",
-        style: "5", pass_risk: "4", dribble: "4", cross: "4",
-        corner: "1", shot: "3",
-        priority: ["left", "right"]
-    },
-
-    // Henta variants: lower block + aggressive recovery, with exact attack lane separated.
-    Henta_LeftTrap_att3: {
-        def_line: "1", press_line: "2", def_width: "2", press_intense: "4",
-        build_type: "1", build_temp: "2", build_long: "3", build_fast: "3",
-        style: "3", pass_risk: "2", dribble: "3", cross: "3",
-        corner: "1", shot: "2",
-        priority: ["left"]
-    },
-    Henta_RightTrap_att3: {
-        def_line: "1", press_line: "2", def_width: "2", press_intense: "4",
-        build_type: "1", build_temp: "2", build_long: "3", build_fast: "3",
-        style: "3", pass_risk: "2", dribble: "3", cross: "3",
-        corner: "1", shot: "2",
-        priority: ["right"]
-    },
-    Henta_WideTrap_att3: {
-        def_line: "1", press_line: "2", def_width: "3", press_intense: "4",
-        build_type: "1", build_temp: "2", build_long: "3", build_fast: "3",
-        style: "3", pass_risk: "2", dribble: "3", cross: "4",
-        corner: "1", shot: "2",
-        priority: ["left", "right"]
-    },
-    Henta_CounterTrap_att4: {
-        def_line: "1", press_line: "2", def_width: "2", press_intense: "4",
-        build_type: "1", build_temp: "3", build_long: "4", build_fast: "4",
-        style: "4", pass_risk: "3", dribble: "3", cross: "3",
-        corner: "1", shot: "3",
-        priority: ["left", "right"]
-    },
-    Henta_CentralTrap_att3: {
-        def_line: "1", press_line: "2", def_width: "1", press_intense: "4",
-        build_type: "2", build_temp: "2", build_long: "1", build_fast: "2",
-        style: "3", pass_risk: "3", dribble: "2", cross: "1",
-        corner: "1", shot: "2",
-        priority: ["center"]
-    }
+    // v10 preset bodies retired: the active preset registry (see
+    // active-preset-registry.js) installs the canonical v11 suite into
+    // BASE_PRESETS/BASE_LABELS at load time. 'standard' stays live here
+    // because the registry does not provide it.
 };
 
 const BASE_LABELS = {
-    standard: "Стандартная",
-    Simeone_LowBlock_def5: "Simeone Low Block",
-    Simeone_Compact442_def4: "Simeone Compact",
-    Mourinho_WeakSide_def3: "Mourinho Weak Side",
-    Henta_Hold_def3: "Henta Hold",
-    Pep_StandardControl_bal3: "Pep Standard Control",
-    Xabi_BoxMidfield_bal3: "Xabi Box Midfield",
-    Pep_BoxControl_bal2: "Pep Box Control",
-    Pep_ControlledPush_att3: "Pep Controlled Push",
-    Xabi_VerticalBox_att3: "Xabi Vertical Box",
-    Pep_PressCooldown_bal2: "Pep Press Cooldown",
-    Compact_Counter_def3: "Compact Counter",
-    DeZerbi_BaitPress_bal3: "De Zerbi Bait Press",
-    Conte_WingbackWidth_bal4: "Conte Wingback Width",
-    Klopp_Gegenpress_att4: "Klopp Gegenpress",
-    Bielsa_ChaosPress_att5: "Bielsa Chaos Press",
-    Pep_TwoThreeFive_att3: "Pep Positional Attack",
-    DeZerbi_Release_att4: "De Zerbi Release",
-    Klopp_WideTrap_att4: "Klopp Wide Trap",
-    Henta_LeftTrap_att3: "Henta Left Trap",
-    Henta_RightTrap_att3: "Henta Right Trap",
-    Henta_WideTrap_att3: "Henta Wide Trap",
-    Henta_CounterTrap_att4: "Henta Counter Trap",
-    Henta_CentralTrap_att3: "Henta Central Trap"
+    standard: "Стандартная"
 };
+
+// Canonical tactic control keys (14, including 'corner'; 'priority' is
+// appended separately by consumers that treat it as a control).
+const TACTIC_CONTROL_KEYS = [
+    'def_line', 'press_line', 'def_width', 'press_intense',
+    'build_type', 'build_temp', 'build_long', 'build_fast',
+    'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
+];
+
 
 const DEFAULT_CUSTOM_PRESETS = {
     balanced: {
@@ -408,7 +229,12 @@ const STATE = {
     lastManualTactic: null,
     manualChangeTimer: null,
     suppressManualWatcherUntil: 0,
-    suppressManualWatcherReason: null
+    suppressManualWatcherReason: null,
+
+    // Final merged tactic recommendation (#350): token-guarded apply state for
+    // the user-initiated one-click apply in the hint panel.
+    finalTacticRecommendation: null,
+    finalTacticApplyStatus: 'idle'
 
 };
 
@@ -453,11 +279,21 @@ const PresetUsageTracker = {
             source: details.source || 'preset_apply'
         };
 
-        localStorage.setItem(LAST_PRESET_STORAGE_KEY, JSON.stringify(entry));
+        // Quota/serialization failures in the usage tracker must never abort
+        // the preset apply path; each write is guarded independently.
+        try {
+            localStorage.setItem(LAST_PRESET_STORAGE_KEY, JSON.stringify(entry));
+        } catch (e) {
+            debugWarn('[SLF] PresetUsageTracker: failed to persist last preset', e);
+        }
 
         const recent = this.getRecentNames().filter(x => x !== presetName);
         recent.unshift(presetName);
-        localStorage.setItem(RECENT_PRESETS_STORAGE_KEY, JSON.stringify(recent.slice(0, 8)));
+        try {
+            localStorage.setItem(RECENT_PRESETS_STORAGE_KEY, JSON.stringify(recent.slice(0, 8)));
+        } catch (e) {
+            debugWarn('[SLF] PresetUsageTracker: failed to persist recent presets', e);
+        }
 
         if (typeof UI !== 'undefined' && UI.updateLastPresetBox) {
             UI.updateLastPresetBox();
@@ -1208,9 +1044,15 @@ const DomUtils = {
         if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
 
         return [
-            'def_line', 'press_line', 'def_width', 'press_intense',
-            'build_type', 'build_temp', 'build_long', 'build_fast',
-            'style', 'pass_risk', 'dribble', 'cross', 'shot', 'priority'
+            // Canonical 14 control keys live in config.js (TACTIC_CONTROL_KEYS);
+            // inline fallback keeps this module standalone-safe in test sandboxes.
+            // Previously this list omitted 'corner'; it now matches the canon.
+            ...(typeof TACTIC_CONTROL_KEYS !== 'undefined' ? TACTIC_CONTROL_KEYS : [
+                'def_line', 'press_line', 'def_width', 'press_intense',
+                'build_type', 'build_temp', 'build_long', 'build_fast',
+                'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
+            ]),
+            'priority'
         ].some(k => Object.prototype.hasOwnProperty.call(obj, k));
     }
 
@@ -1249,6 +1091,18 @@ const DomUtils = {
     }
 
     const PresetStorage = {
+        // Diagnostics for the last server-sync failure. Sync stays fail-open
+        // (local presets keep working), but failures must not be silent.
+        lastSyncError: null,
+        lastSyncAt: null,
+
+        recordSyncFailure(context, error) {
+            const message = error && error.message ? error.message : String(error || 'unknown error');
+            this.lastSyncError = `${context}: ${message}`;
+            this.lastSyncAt = Date.now();
+            console.warn('[SLF] PresetStorage: preset sync failure —', this.lastSyncError);
+        },
+
         resolvePresetId(name) {
             const key = String(name || '');
             const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
@@ -1338,12 +1192,17 @@ const DomUtils = {
             const deleteKeys = Object.keys(previous).filter(key => !Object.prototype.hasOwnProperty.call(normalized, key));
             this.saveLocalOnly(normalized);
             deleteKeys.forEach(key => {
-                void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=delete-key`, { key }, 'tactics delete').catch(() => {});
+                void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=delete-key`, { key }, 'tactics delete').catch(error => {
+                    this.recordSyncFailure(`tactics delete-key (${key})`, error);
+                });
             });
-            void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=merge`, normalized, 'tactics merge').catch(() => {});
+            void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=merge`, normalized, 'tactics merge').catch(error => {
+                this.recordSyncFailure('tactics merge', error);
+            });
         },
 
         loadFromServerAndMerge(callback) {
+            let failureRecorded = false;
             return Api.get(
                 CONFIG.COLLECTIONS.TACTICS,
                 data => {
@@ -1353,10 +1212,19 @@ const DomUtils = {
 
                     if (callback) callback();
                 },
-                () => {
+                (error, response) => {
+                    // Api.get calls onError(error, response) and then the
+                    // promise still rejects; record the server-rejection
+                    // context here and keep the fail-open callback contract.
+                    failureRecorded = true;
+                    this.recordSyncFailure('tactics load (server error)', error);
                     if (callback) callback();
                 }
-            ).catch(() => undefined);
+            ).catch(error => {
+                // Transport-level failures reject without ever reaching onError.
+                if (!failureRecorded) this.recordSyncFailure('tactics load failed', error);
+                return undefined;
+            });
         },
 
         getAllPresets() {
@@ -1569,10 +1437,14 @@ const DomUtils = {
 
     (function installTacticControlBridge() {
         const controlKeys = [
-            'def_line', 'press_line', 'def_width', 'press_intense',
-            'build_type', 'build_temp', 'build_long', 'build_fast',
-            'style', 'pass_risk', 'dribble', 'cross',
-            'corner', 'shot', 'priority'
+            // Canonical 14 control keys live in config.js (TACTIC_CONTROL_KEYS);
+            // inline fallback keeps this module standalone-safe in test sandboxes.
+            ...(typeof TACTIC_CONTROL_KEYS !== 'undefined' ? TACTIC_CONTROL_KEYS : [
+                'def_line', 'press_line', 'def_width', 'press_intense',
+                'build_type', 'build_temp', 'build_long', 'build_fast',
+                'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
+            ]),
+            'priority'
         ];
 
         // FM2026 controls: authored in Tactical Lab native-domain contract and
@@ -3307,7 +3179,7 @@ const SnapshotEngine = {
                 page: 'game',
                 url: location.href,
                 collectedAt: Date.now(),
-                scriptVersion: SLF_VERSION_INFO.scriptVersion
+                scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown'
             }
         });
     },
@@ -3575,7 +3447,7 @@ const SnapshotEngine = {
                 page: 'game',
                 url: location.href,
                 collectedAt: Date.now(),
-                scriptVersion: SLF_VERSION_INFO.scriptVersion
+                scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown'
             }
         });
 
@@ -3948,7 +3820,16 @@ const SnapshotEngine = {
         };
         const fingerprint = tactic => {
             if (!tactic || typeof tactic !== 'object') return '';
-            const keys = ['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot','priority'];
+            // Canonical 14 control keys live in config.js (TACTIC_CONTROL_KEYS);
+            // inline fallback keeps this module standalone-safe in test sandboxes.
+            const keys = [
+                ...(typeof TACTIC_CONTROL_KEYS !== 'undefined' ? TACTIC_CONTROL_KEYS : [
+                    'def_line', 'press_line', 'def_width', 'press_intense',
+                    'build_type', 'build_temp', 'build_long', 'build_fast',
+                    'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
+                ]),
+                'priority'
+            ];
             return keys.map(key => `${key}:${JSON.stringify(tactic[key] ?? null)}`).join('|');
         };
         const detectPreset = tactic => {
@@ -4796,6 +4677,12 @@ const DaveEngineKnowledge = {
             topic: 'Генератор 5.6',
             tags: ['scheme', 'formation', 'pi'],
             text: 'Схема в обороне определяется количеством игроков по линиям; роль ПИ может поднять игрока на линию выше.'
+        },
+        {
+            id: 'dave56_etalon_source',
+            topic: 'Генератор 5.6',
+            tags: ['etalon', 'recommendation', 'provenance'],
+            text: 'Dave 5.6 «эталонные» таблицы рекомендаций (оборона-12, развитие-12, сценарии по счёту) транскрибированы из схем генератора (issue #348): данные — dave56-etalon-data.js, зеркальная копия для проверки целостности — data/tactics/dave56-etalon-v1.json; рекомендации показываются в панели «Подсказка», применение — только по явному действию пользователя (кнопка), автоматической замены пресетов нет.'
         }
     ],
 
@@ -4825,299 +4712,17 @@ const TacticPresetLibrary = {
         return registry?.resolvePresetId?.(name) || name;
     },
 
-    meta: {
-        // ----------------------------
-        // DEFENSIVE
-        // ----------------------------
-        Simeone_LowBlock_def5: {
-            group: 'defensive',
-            rank: 5,
-            title: 'Simeone Low Block',
-            idea: 'максимально низкий и компактный блок, минимум риска, приоритет — не раскрыться',
-            use: 'когда ведём в концовке, соперник давит, xGA растёт или нужно просто пережить отрезок',
-            risk: 'можно слишком отдать инициативу и перестать выходить из обороны'
-        },
+    // v10 preset metadata retired: the active preset registry installs the
+    // canonical v11 meta/traits/schemeStates/presetSchemeState at load time
+    // (see active-preset-registry.js and tactic-preset-direction-policy.js).
+    // Containers stay present (edge paths iterate them) but start empty.
+    meta: {},
 
-        Simeone_Compact442_def4: {
-            group: 'defensive',
-            rank: 4,
-            title: 'Simeone Compact',
-            idea: 'компактная оборона без полной посадки назад, фланги как безопасный выход',
-            use: 'когда соперник опаснее, но ещё не нужно уходить в глухую защиту',
-            risk: 'если совсем отказаться от продвижения, давление соперника будет накапливаться'
-        },
+    schemeStates: {},
 
-        Mourinho_WeakSide_def3: {
-            group: 'defensive',
-            rank: 3,
-            title: 'Mourinho Weak Side',
-            idea: 'низкий/средний блок и быстрый выход в слабую сторону соперника',
-            use: 'когда соперник давит, а у нас есть пространство за его линиями или слабый фланг',
-            risk: 'если нет скорости и точного первого паса, контратаки будут срываться'
-        },
+    presetSchemeState: {},
 
-        Henta_Hold_def3: {
-            group: 'defensive',
-            rank: 3,
-            title: 'Henta Hold',
-            idea: 'низкий блок как у Henta, но осторожнее с мячом; агрессия остаётся в отборах',
-            use: 'когда нужно удерживать счёт, но обычная защита слишком пассивная',
-            risk: 'может не хватить угрозы впереди'
-        },
-
-        // ----------------------------
-        // BALANCE / CONTROL
-        // ----------------------------
-        Pep_StandardControl_bal3: {
-            group: 'balance',
-            rank: 3,
-            title: 'Pep Standard Control',
-            idea: 'стандартный контроль с умеренным риском и без перекоса в одну зону',
-            use: 'когда игра равная, нет явных сигналов менять структуру или нужно вернуться к базе',
-            risk: 'может быть слишком нейтрально, если срочно нужен гол'
-        },
-
-        Xabi_BoxMidfield_bal3: {
-            group: 'balance',
-            rank: 3,
-            title: 'Xabi Box Midfield',
-            idea: 'перегруз центра, контроль переходов, умный прессинг через CM/DM/AM',
-            use: 'когда нужен контроль центра, есть игроки в средней линии и брак не высокий',
-            risk: 'при закрытом центре лучше не форсировать — можно упереться в плотный блок'
-        },
-
-        Pep_BoxControl_bal2: {
-            group: 'balance',
-            rank: 2,
-            title: 'Pep Box Control',
-            idea: 'спокойный контроль через центр, короткий розыгрыш и минимум хаоса',
-            use: 'когда нужно успокоить игру, снизить брак или вскрывать низкий блок терпением',
-            risk: 'против высокого прессинга можно застрять в розыгрыше'
-        },
-
-        Pep_ControlledPush_att3: {
-            group: 'attack',
-            rank: 3,
-            title: 'Pep Controlled Push',
-            idea: 'аккуратно усилить атаку без ломки работающей обороны: выше темп, больше продвижения, умеренный риск',
-            use: 'когда оборона по генератору работает, а атака недобирает xG относительно ожидаемого',
-            risk: 'если брак уже высокий, усиление атаки может превратиться в потери'
-        },
-
-        Xabi_VerticalBox_att3: {
-            group: 'attack',
-            rank: 3,
-            title: 'Xabi Vertical Box',
-            idea: 'более вертикальный box-midfield: центр сохраняет контроль, но быстрее ищет вход между линиями',
-            use: 'когда центр доступен, брак низкий, атака недобирает, а оборонительная структура не должна ломаться',
-            risk: 'при закрытом центре или высоком прессинге соперника вертикальность даст брак'
-        },
-
-        Pep_PressCooldown_bal2: {
-            group: 'balance',
-            rank: 2,
-            title: 'Pep Press Cooldown',
-            idea: 'снизить цену прессинга, вернуть контроль и сохранить структуру без посадки в автобус',
-            use: 'когда высокий прессинг выматывает: сила на поле падает, растёт брак/фолы или ухудшается xT',
-            risk: 'если срочно нужен гол, может не хватить давления'
-        },
-
-        Compact_Counter_def3: {
-            group: 'defensive',
-            rank: 3,
-            title: 'Compact Counter',
-            idea: 'закрыть переходы и сохранить быстрый выход, не превращая матч в полный низкий блок',
-            use: 'когда атака что-то создаёт, но оборона недобирает или соперник опасен в переходах',
-            risk: 'если слишком рано уйти в компактность, атака потеряет давление'
-        },
-
-        DeZerbi_BaitPress_bal3: {
-            group: 'balance',
-            rank: 3,
-            title: 'De Zerbi Bait Press',
-            idea: 'заманить прессинг соперника, вытянуть его линии и открыть пространство выше',
-            use: 'когда соперник высоко прессингует, а у нас достаточно качества паса',
-            risk: 'при слабых защитниках/DM можно привезти опасный момент'
-        },
-
-        Conte_WingbackWidth_bal4: {
-            group: 'balance',
-            rank: 4,
-            title: 'Conte Wingback Width',
-            idea: 'ширина через фланги, растягивание обороны, давление коридорами',
-            use: 'когда центр закрыт, но фланги доступны или есть сильные ML/MR/DL/DR',
-            risk: 'если фланги слабые, атака станет навесным шумом'
-        },
-
-        // ----------------------------
-        // ATTACK
-        // ----------------------------
-        Klopp_Gegenpress_att4: {
-            group: 'attack',
-            rank: 4,
-            title: 'Klopp Gegenpress',
-            idea: 'высокий прессинг, быстрый темп, давление после потерь и агрессивные атаки',
-            use: 'когда нужно переломить матч, соперник ошибается под давлением или мы проигрываем после 60-й',
-            risk: 'усталость, фолы и пространство за спиной защитников'
-        },
-
-        Bielsa_ChaosPress_att5: {
-            group: 'attack',
-            rank: 5,
-            title: 'Bielsa Chaos Press',
-            idea: 'максимальный темп, максимальное давление, высокий риск ради спасения матча',
-            use: 'когда 80+ минута, проигрываем и терять уже почти нечего',
-            risk: 'может полностью развалить оборону'
-        },
-
-        Pep_TwoThreeFive_att3: {
-            group: 'attack',
-            rank: 3,
-            title: 'Pep Positional Attack',
-            idea: 'территориальное давление, высокая линия и постоянное присутствие в атакующих зонах',
-            use: 'когда мы сильнее по xG/xT и нужно дожать без полного хаоса',
-            risk: 'опасно против быстрых контратак'
-        },
-
-        DeZerbi_Release_att4: {
-            group: 'attack',
-            rank: 4,
-            title: 'De Zerbi Release',
-            idea: 'после заманивания прессинга быстро выпускать атаку в свободные зоны',
-            use: 'когда соперник вышел высоко, а за его линиями есть пространство',
-            risk: 'если пространство не появляется, риск паса станет пустым'
-        },
-
-        Klopp_WideTrap_att4: {
-            group: 'attack',
-            rank: 4,
-            title: 'Klopp Wide Trap',
-            idea: 'высокий прессинг и атака через оба фланга, обход закрытого центра',
-            use: 'когда движок советует убрать центр или логичны оба фланга',
-            risk: 'если нет флангового преимущества, атаки могут стать предсказуемыми'
-        },
-
-        // ----------------------------
-        // HENTA EXPERIMENTAL
-        // ----------------------------
-        Henta_LeftTrap_att3: {
-            group: 'henta',
-            rank: 3,
-            title: 'Henta Left Trap',
-            idea: 'низкий блок, агрессивный отбор и левофланговая атака',
-            use: 'когда слабый правый фланг соперника или твой левый фланг хорошо продвигает мяч',
-            risk: 'перекос влево может стать читаемым'
-        },
-
-        Henta_RightTrap_att3: {
-            group: 'henta',
-            rank: 3,
-            title: 'Henta Right Trap',
-            idea: 'зеркальная Henta через правый фланг',
-            use: 'когда слабый левый фланг соперника или твой правый фланг сильнее',
-            risk: 'перекос вправо может стать читаемым'
-        },
-
-        Henta_WideTrap_att3: {
-            group: 'henta',
-            rank: 3,
-            title: 'Henta Wide Trap',
-            idea: 'низкий блок, агрессивные отборы и атака через оба фланга',
-            use: 'когда центр закрыт, высокий прессинг мешает розыгрышу или движок советует убрать центр',
-            risk: 'если фланги не дают качества, xG может не расти'
-        },
-
-        Henta_CounterTrap_att4: {
-            group: 'henta',
-            rank: 4,
-            title: 'Henta Counter Trap',
-            idea: 'Henta с более резким выходом: низко отбираем и быстрее бьём в свободное пространство',
-            use: 'когда соперник давит и оставляет зоны за спиной',
-            risk: 'при высоком браке контратаки будут теряться'
-        },
-
-        Henta_CentralTrap_att3: {
-            group: 'henta',
-            rank: 3,
-            title: 'Henta Central Trap',
-            idea: 'экспериментальная Henta через центр, если соперник слаб в DM/CM/DC',
-            use: 'когда у соперника проседает центр, а у нас низкий брак и есть контроль',
-            risk: 'если центр закрыт, лучше не форсировать'
-        }
-    },
-
-    schemeStates: {
-        base_balance: '4-2-3-1 / GK-LD-CD1-CD3-RD / CM2-DM2 / LW-AM2-RW / ST2',
-        stable_control: '4-2-3-1 / GK-LD-CD1-CD3-RD / DM2-CM2 / LM-AM2-RM / ST2',
-        controlled_push: '4-2-3-1 / GK-LD-CD1-CD3-RD / DM2-CM2 / LW-AM2-RW / ST2',
-        vertical_box: '4-2-3-1 / GK-LD-CD1-CD3-RD / DM2-CM2 / LM-AM2-RM / ST2',
-        press_cooldown: '4-2-3-1 / GK-LD-CD1-CD3-RD / DM2-CM2 / LM-AM2-RM / ST2',
-        compact_counter: '4-5-1 / GK-LD-CD1-CD3-RD / LM-DM2-CM2-CM3-RM / ST2',
-        hold_score: '4-5-1 / GK-LD-CD1-CD3-RD / LM-DM2-CM2-CM3-RM / ST2',
-        under_pressure: '4-5-1 / GK-LD-CD1-CD3-RD / LM-DM1-CM2-DM3-RM / ST2',
-        late_protect_lead: '5-4-1 / GK-LB-CD1-CD2-CD3-RB / LM-DM2-CM2-RM / ST2',
-        need_goal_55_75: '4-2-3-1 / GK-LD-CD1-CD3-RD / CM2-DM2 / LW-AM2-RW / ST2',
-        late_need_goal: '4-2-4 / GK-LD-CD1-CD3-RD / DM2-CM2 / LW-AM2-RW-ST2',
-        center_closed: '4-5-1 / GK-LD-CD1-CD3-RD / LM-DM2-CM2-CM3-RM / ST2',
-        center_weak: '4-2-3-1 / GK-LD-CD1-CD3-RD / DM2-CM2 / LM-AM2-RM / ST2',
-        low_block_sterile: '4-2-3-1 / GK-LD-CD1-CD3-RD / CM1-DM2 / LW-AM2-RW / ST2',
-        wingback_width: '4-2-3-1 / GK-LB-CD1-CD3-RB / DM2-CM2 / LW-AM2-RW / ST2',
-        counter_trap: '4-5-1 / GK-LD-CD1-CD3-RD / LM-DM2-CM2-CM3-RM / ST2'
-    },
-
-    presetSchemeState: {
-        standard: 'base_balance',
-        Simeone_LowBlock_def5: 'late_protect_lead',
-        Simeone_Compact442_def4: 'hold_score',
-        Mourinho_WeakSide_def3: 'counter_trap',
-        Henta_Hold_def3: 'under_pressure',
-        Pep_StandardControl_bal3: 'base_balance',
-        Xabi_BoxMidfield_bal3: 'center_weak',
-        Pep_BoxControl_bal2: 'stable_control',
-        Pep_ControlledPush_att3: 'controlled_push',
-        Xabi_VerticalBox_att3: 'vertical_box',
-        Pep_PressCooldown_bal2: 'press_cooldown',
-        Compact_Counter_def3: 'compact_counter',
-        DeZerbi_BaitPress_bal3: 'stable_control',
-        Conte_WingbackWidth_bal4: 'wingback_width',
-        Klopp_Gegenpress_att4: 'need_goal_55_75',
-        Bielsa_ChaosPress_att5: 'late_need_goal',
-        Pep_TwoThreeFive_att3: 'low_block_sterile',
-        DeZerbi_Release_att4: 'counter_trap',
-        Klopp_WideTrap_att4: 'center_closed',
-        Henta_LeftTrap_att3: 'counter_trap',
-        Henta_RightTrap_att3: 'counter_trap',
-        Henta_WideTrap_att3: 'center_closed',
-        Henta_CounterTrap_att4: 'counter_trap',
-        Henta_CentralTrap_att3: 'center_weak'
-    },
-
-    traits: {
-        standard: { attackLanes: ['right'], build: 'balanced', tempo: 'medium', press: 'medium', risk: 'medium', strengths: ['baseline'], requires: [], avoids: [] },
-        Simeone_LowBlock_def5: { attackLanes: ['right'], build: 'low_block', tempo: 'low', press: 'low', risk: 'very_low', strengths: ['compactness', 'protect_lead', 'low_transition_risk'], requires: ['lead_or_pressure_context'], avoids: ['urgent_chase', 'need_high_volume_attack'] },
-        Simeone_Compact442_def4: { attackLanes: ['left', 'right'], build: 'compact', tempo: 'low', press: 'medium', risk: 'low', strengths: ['compactness', 'safe_wide_outlet', 'transition_control'], requires: ['defensive_stability'], avoids: ['full_low_block_when_goal_needed'] },
-        Mourinho_WeakSide_def3: { attackLanes: ['left', 'right'], build: 'counter', tempo: 'medium', press: 'medium', risk: 'low_medium', strengths: ['weak_side_attack', 'compact_counter', 'low_risk_exit'], requires: ['space_behind_opponent', 'first_pass_quality'], avoids: ['slow_no_outlet_attack'] },
-        Henta_Hold_def3: { attackLanes: ['left', 'right'], build: 'hold_counter', tempo: 'low', press: 'medium_high', risk: 'medium', strengths: ['low_block', 'aggressive_recovery', 'hold_score'], requires: ['defensive_workrate'], avoids: ['sterile_no_threat'] },
-        Pep_StandardControl_bal3: { attackLanes: ['center'], build: 'control', tempo: 'medium', press: 'medium', risk: 'medium', strengths: ['structure', 'central_control', 'baseline_reset'], requires: ['stable_possession'], avoids: ['late_emergency_chase'] },
-        Xabi_BoxMidfield_bal3: { attackLanes: ['center'], build: 'box_midfield', tempo: 'medium', press: 'medium', risk: 'medium', strengths: ['central_overload', 'transition_control', 'half_space_entry'], requires: ['midfield_quality', 'low_bad_actions'], avoids: ['center_closed'] },
-        Pep_BoxControl_bal2: { attackLanes: ['center'], build: 'control', tempo: 'low', press: 'medium_low', risk: 'low', strengths: ['low_chaos', 'safe_possession', 'central_progression'], requires: ['need_stability'], avoids: ['urgent_chase', 'need_fast_goal'] },
-        Pep_ControlledPush_att3: { attackLanes: ['center'], build: 'controlled_attack', tempo: 'medium_high', press: 'medium', risk: 'medium', strengths: ['controlled_pressure', 'attacking_upgrade_without_breaking_shape'], requires: ['defense_working'], avoids: ['very_high_bad_actions'] },
-        Xabi_VerticalBox_att3: { attackLanes: ['center'], build: 'vertical_box', tempo: 'medium_high', press: 'medium', risk: 'medium_high', strengths: ['vertical_entry', 'between_lines_attack', 'central_progression'], requires: ['center_available', 'low_bad_actions'], avoids: ['center_closed', 'high_press_with_bad_actions'] },
-        Pep_PressCooldown_bal2: { attackLanes: ['center', 'right'], build: 'cooldown_control', tempo: 'medium', press: 'medium_low', risk: 'low', strengths: ['fatigue_control', 'reduce_press_cost', 'restore_structure'], requires: ['press_fatigue_or_bad_actions'], avoids: ['late_emergency_chase'] },
-        Compact_Counter_def3: { attackLanes: ['left', 'right'], build: 'compact_counter', tempo: 'medium_high', press: 'medium', risk: 'medium', strengths: ['transition_protection', 'fast_outlet', 'defensive_reset'], requires: ['opponent_transition_threat'], avoids: ['need_sustained_positional_attack'] },
-        DeZerbi_BaitPress_bal3: { attackLanes: ['center'], build: 'bait_press', tempo: 'low_medium', press: 'medium_low', risk: 'medium', strengths: ['draw_press', 'open_space_higher', 'positional_bait'], requires: ['passing_quality', 'low_bad_actions'], avoids: ['weak_defenders_under_press'] },
-        Conte_WingbackWidth_bal4: { attackLanes: ['left', 'right'], build: 'wide', tempo: 'medium', press: 'medium', risk: 'medium', strengths: ['width', 'wingback_overload', 'wide_corridors', 'cross_volume'], requires: ['wing_quality', 'center_closed_or_wide_available'], avoids: ['own_crosses_bad', 'weak_flanks', 'opponent_crosses_dangerous'] },
-        Klopp_Gegenpress_att4: { attackLanes: ['left', 'right'], build: 'gegenpress', tempo: 'high', press: 'high', risk: 'high', strengths: ['counterpress', 'high_pressure', 'fast_attack'], requires: ['fitness', 'need_pressure'], avoids: ['press_fatigue_risk', 'high_bad_actions', 'large_space_behind'] },
-        Bielsa_ChaosPress_att5: { attackLanes: ['left', 'center', 'right'], build: 'chaos_press', tempo: 'very_high', press: 'very_high', risk: 'very_high', strengths: ['max_pressure', 'late_chase', 'volume_attack'], requires: ['emergency_need_goal'], avoids: ['protect_lead', 'early_match', 'press_fatigue_risk'] },
-        Pep_TwoThreeFive_att3: { attackLanes: ['center'], build: 'positional_attack', tempo: 'medium_high', press: 'medium_high', risk: 'medium_high', strengths: ['territorial_pressure', 'final_third_presence', 'positional_overload'], requires: ['attacking_momentum', 'transition_control'], avoids: ['opponent_fast_counter_threat'] },
-        DeZerbi_Release_att4: { attackLanes: ['center', 'right'], build: 'release_space', tempo: 'high', press: 'medium_high', risk: 'high', strengths: ['release_after_bait', 'attack_space_behind', 'fast_vertical_exit'], requires: ['opponent_high_line_or_press', 'passing_quality'], avoids: ['no_space_behind', 'high_bad_actions'] },
-        Klopp_WideTrap_att4: { attackLanes: ['left', 'right'], build: 'wide_press', tempo: 'high', press: 'high', risk: 'high', strengths: ['wide_pressure', 'bypass_closed_center', 'counterpress'], requires: ['wide_advantage'], avoids: ['weak_flanks', 'own_crosses_bad', 'press_fatigue_risk'] },
-        Henta_LeftTrap_att3: { attackLanes: ['left'], build: 'left_trap', tempo: 'medium', press: 'medium_high', risk: 'medium', strengths: ['left_lane_focus', 'aggressive_recovery', 'weak_right_side_attack'], requires: ['opponent_right_weak_or_own_left_strong'], avoids: ['left_lane_blocked', 'predictable_single_lane'] },
-        Henta_RightTrap_att3: { attackLanes: ['right'], build: 'right_trap', tempo: 'medium', press: 'medium_high', risk: 'medium', strengths: ['right_lane_focus', 'aggressive_recovery', 'weak_left_side_attack'], requires: ['opponent_left_weak_or_own_right_strong'], avoids: ['right_lane_blocked', 'predictable_single_lane'] },
-        Henta_WideTrap_att3: { attackLanes: ['left', 'right'], build: 'wide_trap', tempo: 'medium', press: 'medium_high', risk: 'medium', strengths: ['wide_attack', 'aggressive_recovery', 'bypass_center'], requires: ['center_closed_or_wide_available'], avoids: ['weak_flanks', 'own_crosses_bad'] },
-        Henta_CounterTrap_att4: { attackLanes: ['left', 'right'], build: 'counter_trap', tempo: 'high', press: 'medium_high', risk: 'medium_high', strengths: ['fast_counter', 'space_attack', 'low_recovery_block'], requires: ['opponent_pressure_or_space_behind'], avoids: ['high_bad_actions', 'no_space_behind'] },
-        Henta_CentralTrap_att3: { attackLanes: ['center'], build: 'central_trap', tempo: 'medium', press: 'medium_high', risk: 'medium', strengths: ['central_attack', 'weak_dm_cm_dc_attack', 'low_cross_dependence'], requires: ['opponent_center_weak', 'low_bad_actions'], avoids: ['center_closed'] }
-    },
+    traits: {},
 
     getSchemeForPreset(name) {
         name = this.resolvePresetId(name);
@@ -6816,44 +6421,20 @@ const CurrentActionHintEngine = {
     schema: (typeof window !== 'undefined' && window.SLFActivePresetRegistry?.recommendationSchema) || 'slf_rule_decision_v3',
     mode: 'button_on_demand_scored_rules',
 
-    // v9: 10 active presets, same order as window.SLFActivePresetRegistry.active.
-    ACTIVE_PRESETS: [
-        'Arteta_Control433_bal3',
-        'Pep_BoxControl_bal2',
-        'Pep_PressCooldown_bal2',
-        'Pep_ControlledPush_att3',
-        'Pep_TwoThreeFive_att3',
-        'Conte_WingbackWidth_bal4',
-        'Klopp_Gegenpress_att4',
-        'Simeone_Compact442_def4',
-        'Simeone_LowBlock_def5',
-        'Bielsa_ChaosPress_att5'
-    ],
+    // v9 preset list retired: tactic-preset-direction-policy.js overwrites
+    // ACTIVE_PRESETS from the v11 registry at load time. Kept as an empty
+    // array (same shape) so pre-install readers see a valid container.
+    ACTIVE_PRESETS: [],
 
+    // v9 audit tiers retired: active-preset-registry.js overwrites
+    // PRESET_AUDIT_TIER from the v11 registry at load time. Tier keys stay
+    // (runtime code iterates them) with empty arrays.
     PRESET_AUDIT_TIER: {
-        primary: [
-            'Arteta_Control433_bal3',
-            'Pep_BoxControl_bal2',
-            'Pep_PressCooldown_bal2',
-            'Compact_Counter_def3',
-            'Pep_TwoThreeFive_att3'
-        ],
-        conditional: [
-            'Pep_ControlledPush_att3',
-            'Conte_WingbackWidth_bal4',
-            'Simeone_Compact442_def4'
-        ],
-        restricted: ['Klopp_Gegenpress_att4'],
-        emergency: ['Simeone_LowBlock_def5', 'Bielsa_ChaosPress_att5'],
-        removed: [
-            'Mourinho_WeakSide_def3',
-            'Xabi_VerticalBox_att3',
-            'Xabi_BoxMidfield_bal3',
-            'DeZerbi_BaitPress_bal3',
-            'DeZerbi_Release_att4',
-            'Nagelsmann_WidePress_att4',
-            'Henta_LeftTrap_att3'
-        ],
+        primary: [],
+        conditional: [],
+        restricted: [],
+        emergency: [],
+        removed: [],
         needsMoreData: [],
         experimental: [],
         blocked: []
@@ -8024,7 +7605,9 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
 
     window.SLFActivePresetRegistry={fixedLineupProfile:JSON.parse(JSON.stringify(FIXED_FORMATION_PROFILE)),defaultPresetId:"Emery_BalancedBase_v11",legacyAliases:Object.assign({},LEGACY_PRESET_ALIASES),resolvePresetId,suiteVersion:SUITE_VERSION,recommendationSchema:RECOMMENDATION_SCHEMA,generatorVersion:'5.61',defaultRiskAppetite:DEFAULT_RISK_APPETITE,active:ACTIVE_PRESET_NAMES.slice(),removed:REMOVED_PRESET_NAMES.slice(),retiredActive:V8_RETIRED_PRESET_NAMES.slice(),presets:clonePresets(PRESETS),labels:Object.assign({},LABELS),meta:Object.assign({},META),traits:cloneTraits(TRAITS),formations:Object.fromEntries(Object.entries(FORMATIONS).map(([n,p])=>[n,p.slice()])),schemeStates:Object.assign({},SCHEME_STATES),presetSchemeState:Object.assign({},PRESET_SCHEME_STATE),ladders:Object.fromEntries(Object.entries(LADDERS).map(([k,v])=>[k,v.slice()])),displayMeta:Object.assign({},DISPLAY_META),displayOrder:DISPLAY_ORDER.slice(),styleGroups:STYLE_GROUPS.map(x=>Object.assign({},x)),auditTier:AUDIT,fallbackPolicy:'5.61-tactical-suite-v11-hold-current',
         situations:["default_start","pressure_counter","pressure_escape","possession_control","press_cooldown","controlled_chase","positional_siege","width_attack","late_high_pressure","protect_lead","emergency_lock","protect_lead_with_outlet"],
-        controlFields:['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot'],
+        // Canonical control keys live in config.js (TACTIC_CONTROL_KEYS); inline
+        // fallback keeps the registry standalone-safe in bare test sandboxes.
+        controlFields: typeof TACTIC_CONTROL_KEYS !== 'undefined' ? TACTIC_CONTROL_KEYS.slice() : ['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot'],
         inventorySchema:'slf_active_preset_inventory_v3',
         // bounded evidence adjustment — reserved; v10 hypotheses are not outcome evidence
         evidenceAdjustment:function(){return 0;},
@@ -8881,6 +8464,1021 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
 // <<< src/modules/strategy-data-recommendations/moment-drift-stabilizer.js
 
 
+// >>> src/modules/strategy-data-recommendations/dave56-etalon-data.js
+// Dave 5.6 Etalon Data (issue #348)
+// ============================================================
+// Authoritative Dave 5.6 etalon tables for the «Подсказка» hint panel:
+// defense-12 and buildup-12 situations, score-play scenarios and
+// calibration constants. Pure data module — no logic, no DOM access.
+//
+// Provenance: transcribed 2026-10-14 from shared/slf-wiki-diagrams/
+// defense-12.jpg and buildup-12.jpg (Dave 5.6 generator knowledge).
+// The word order inside each situation line follows the canonical
+// control order below; a slash pair ("Широкая / средняя") is ONE slot
+// holding two candidate words. Preference inside a pair is resolved by
+// the mapping layer (dave56-etalon-mapping.js): the conservative pick is
+// the lower ordinal on the domain's defensive axis, the alternate is the
+// aggressive pick.
+
+(function dave56EtalonData() {
+    'use strict';
+
+    const DATA = {
+        schema: 'slf_dave56_etalon_v1',
+        title: 'Dave 5.6 etalon recommendation tables',
+        // Canonical control order per block; etalon vectors are partial and
+        // only ever cover these keys (pass_risk/dribble/cross/corner/shot are
+        // NOT part of the etalon tables and are never applied).
+        controlOrder: {
+            defense: ['def_line', 'press_line', 'def_width', 'press_intense'],
+            buildup: ['build_type', 'build_temp', 'build_long', 'build_fast', 'style']
+        },
+
+        provenance: {
+            source: 'Dave 5.6 generator knowledge (etalon tables)',
+            transcribedFrom: [
+                'shared/slf-wiki-diagrams/defense-12.jpg',
+                'shared/slf-wiki-diagrams/buildup-12.jpg'
+            ],
+            transcribedAt: '2026-10-14',
+            controlDomainsVerifiedAt: '2026-10-14',
+            controlDomainsVerifiedVia: 'live tactic radios (hard ordinals below)',
+            provisional: true,
+            provisionalNote: 'Calibration constants are provisional markers pending match evidence.'
+        },
+
+        // Hard ordinals (verified live 2026-10-14 via tactic radios).
+        wordMap: {
+            def_line: { 'низкая': 1, 'средняя': 2, 'высокая': 3 },
+            press_line: { 'низкая': 1, 'низкий': 1, 'средняя': 2, 'средний': 2, 'высокая': 3, 'высокий': 3 },
+            def_width: { 'узкая': 1, 'средняя': 2, 'широкая': 3 },
+            press_intense: { 'мин': 1, 'низкая': 2, 'средняя': 3, 'высокая': 4, 'макс': 5 },
+            build_type: { 'выносы': 1, 'смешанный': 2, 'позиционный': 3 },
+            build_temp: { 'низкий': 1, 'средний': 2, 'высокий': 3 },
+            build_long: { 'редко': 1, 'умеренно': 2, 'часто': 3 },
+            build_fast: { 'редко': 1, 'умеренно': 2, 'часто': 3 },
+            style: { 'защ+': 1, 'защита+': 1, 'защита': 2, 'обычный': 3, 'атака': 4, 'атака+': 5 }
+        },
+
+        // Inclusive ordinal domains for clamping (mirror of the native contract).
+        domains: {
+            def_line: [1, 3],
+            press_line: [1, 3],
+            def_width: [1, 3],
+            press_intense: [1, 5],
+            build_type: [1, 3],
+            build_temp: [1, 3],
+            build_long: [1, 3],
+            build_fast: [1, 3],
+            style: [1, 5]
+        },
+
+        // Priority lanes (checkboxes priority_l/c/r). Lane words that do not
+        // resolve to one unambiguous checkbox set are omitted from the vector.
+        laneWords: {
+            'все направления': null,          // omit entirely (all lanes enabled)
+            'фланги': ['left', 'right'],
+            'фланг + центр': ['left', 'center', 'right'],
+            'центр': ['center']
+        },
+
+        // Slash-pair lane words and non-lane words are ambiguous in v1.
+        ambiguousLaneWords: ['по силе команд', 'фланги / фланг+центр', 'все направления / центр'],
+
+        defense: {
+            d1: { id: 'd1', label: 'Равный матч', words: { def_line: ['Средняя'], press_line: ['Средний'], def_width: ['Средняя'], press_intense: ['Средняя'] } },
+            d2: { id: 'd2', label: 'Ты фаворит', words: { def_line: ['Высокая'], press_line: ['Высокий'], def_width: ['Широкая', 'средняя'], press_intense: ['Средняя', 'высокая'] } },
+            d3: { id: 'd3', label: 'Ты андердог', words: { def_line: ['Низкая'], press_line: ['Низкий', 'средний'], def_width: ['Узкая'], press_intense: ['Низкая', 'средняя'] } },
+            d4: { id: 'd4', label: 'Нужно отыграться', words: { def_line: ['Высокая'], press_line: ['Высокий'], def_width: ['Широкая'], press_intense: ['Высокая'] } },
+            d5: { id: 'd5', label: 'Нужно удержать', words: { def_line: ['Низкая'], press_line: ['Низкий'], def_width: ['Узкая'], press_intense: ['Средняя', 'низкая'] } },
+            d6: { id: 'd6', label: 'Высокий вектор обороны', words: { def_line: ['Высокая'], press_line: ['Средний', 'высокий'], def_width: ['Широкая'], press_intense: ['Средняя', 'высокая'] } },
+            d7: { id: 'd7', label: 'Низкий вектор обороны', words: { def_line: ['Низкая'], press_line: ['Средний', 'низкий'], def_width: ['Узкая'], press_intense: ['Средняя', 'низкая'] } },
+            d8: { id: 'd8', label: 'Высокий вектор прессинга', words: { def_line: ['Средняя', 'высокая'], press_line: ['Высокий'], def_width: ['Средняя'], press_intense: ['Средняя', 'высокая'] } },
+            d9: { id: 'd9', label: 'Низкий вектор прессинга', words: { def_line: ['Средняя', 'низкая'], press_line: ['Низкий'], def_width: ['Средняя', 'узкая'], press_intense: ['Средняя', 'низкая'] } },
+            d10: { id: 'd10', label: 'Соперник через фланги/кроссы', words: { def_line: ['Низкая', 'средняя'], press_line: ['Низкий'], def_width: ['Широкая'], press_intense: ['Средняя'] } },
+            d11: { id: 'd11', label: 'Соперник через центр', words: { def_line: ['Высокая', 'средняя'], press_line: ['Высокий', 'средний'], def_width: ['Узкая'], press_intense: ['Средняя', 'высокая'] } },
+            d12: { id: 'd12', label: 'Много фолов/ЖК', words: { def_line: ['Средняя', 'низкая'], press_line: ['Средний', 'низкий'], def_width: ['Средняя'], press_intense: ['Низкая'] } }
+        },
+
+        buildup: {
+            b1: { id: 'b1', label: 'Равный матч', lanes: 'все направления', words: { build_type: ['Смешанный'], build_temp: ['Средний'], build_long: ['Умеренно'], build_fast: ['Умеренно'], style: ['Обычный'] } },
+            b2: { id: 'b2', label: 'Ты фаворит', lanes: 'все направления', words: { build_type: ['Позиционный'], build_temp: ['Средний'], build_long: ['Умеренно'], build_fast: ['Умеренно', 'часто'], style: ['Обычный', 'атака'] } },
+            b3: { id: 'b3', label: 'Ты андердог', lanes: 'фланги', words: { build_type: ['Смешанный'], build_temp: ['Средний'], build_long: ['Редко'], build_fast: ['Редко'], style: ['Защита', 'обычный'] } },
+            b4: { id: 'b4', label: 'Нужно забить', lanes: 'фланг + центр', words: { build_type: ['Позиционный'], build_temp: ['Средний', 'высокий'], build_long: ['Умеренно'], build_fast: ['Умеренно', 'часто'], style: ['Атака', 'атака+'] } },
+            b5: { id: 'b5', label: 'Нужно удержать', lanes: 'фланги', words: { build_type: ['Смешанный', 'выносы'], build_temp: ['Низкий', 'средний'], build_long: ['Редко'], build_fast: ['Редко', 'умеренно'], style: ['Защита', 'защита+'] } },
+            b6: { id: 'b6', label: 'Соперник сильно прессингует', lanes: 'фланги', words: { build_type: ['Смешанный'], build_temp: ['Средний', 'высокий'], build_long: ['Редко'], build_fast: ['Редко'], style: ['По силе команд'] } },
+            b7: { id: 'b7', label: 'Соперник почти не прессингует', lanes: 'все направления / центр', words: { build_type: ['Позиционный'], build_temp: ['Низкий', 'средний'], build_long: ['Умеренно', 'часто'], build_fast: ['Умеренно', 'часто'], style: ['Обычный', 'атака'] } },
+            b8: { id: 'b8', label: 'Взлом автобуса', lanes: 'все направления', words: { build_type: ['Позиционный'], build_temp: ['Низкий', 'средний'], build_long: ['Умеренно', 'часто'], build_fast: ['Умеренно', 'часто'], style: ['Обычный', 'атака'] } },
+            b9: { id: 'b9', label: 'Хаотичный матч', lanes: 'фланги', words: { build_type: ['Смешанный'], build_temp: ['Средний'], build_long: ['Редко'], build_fast: ['Редко'], style: ['Обычный'] } },
+            b10: { id: 'b10', label: 'Игра через «столба»', lanes: 'фланги', words: { build_type: ['Выносы'], build_temp: ['Средний'], build_long: ['Редко'], build_fast: ['Редко'], style: ['Обычный', 'защита'] } },
+            b11: { id: 'b11', label: 'Схема контроля', lanes: 'все направления', words: { build_type: ['Позиционный'], build_temp: ['Низкий'], build_long: ['Умеренно'], build_fast: ['Умеренно', 'часто'], style: ['Обычный'] } },
+            b12: { id: 'b12', label: 'Самолёт/много атаки', lanes: 'фланги / фланг+центр', words: { build_type: ['Смешанный', 'выносы'], build_temp: ['Высокий'], build_long: ['Редко', 'умеренно'], build_fast: ['Редко'], style: ['Обычный', 'атака'] } }
+        },
+
+        // Score-play scenarios: deltas applied over the matched base
+        // situations when the conditions hold. Deltas are numeric shifts
+        // clamped to the domain of each control; override scenarios replace
+        // the matched base situations with d5/b5.
+        scenarios: {
+            s1: {
+                id: 's1', slug: 'lead10_equal', label: 'Ведём 1:0 при равных силах',
+                requires: { scoreState: 'winning', diff: 1, strength: 'equal' },
+                override: { defense: 'd5', buildup: 'b5' },
+                notes: ['атаковать фланг, где соперник не играет']
+            },
+            s2: {
+                id: 's2', slug: 'lead10_dominating', label: 'Ведём 1:0 и доминируем',
+                requires: { scoreState: 'winning', diff: 1, anyTag: ['attacking_momentum', 'generator_attack_working'] },
+                overrideMinute: 60,
+                override: { defense: 'd5', buildup: 'b5' },
+                notes: ['сначала 2-0 — потом сушка']
+            },
+            s3: {
+                id: 's3', slug: 'playing_better_losing', label: 'Играем лучше, но проигрываем',
+                requires: { scoreState: 'losing', diff: -1, tags: ['attacking_momentum'] },
+                delta: { style: 1, build_temp: 1, build_long: 1, build_fast: 1, press_line: 1 },
+                notes: ['атаковать его активный фланг']
+            },
+            s4: {
+                id: 's4', slug: 'stronger_losing', label: 'Мы сильнее, но проигрываем',
+                requires: { scoreState: 'losing', tags: ['strength_advantage_clear'] },
+                override: { defense: 'd5', buildup: 'b5' },
+                lateMinute: 80,
+                lateDelta: { press_intense: 1 },
+                lateNote: 'навал'
+            },
+            s5: {
+                id: 's5', slug: 'stronger_00', label: '0:0 при явном преимуществе',
+                requires: { scoreState: 'draw', tags: ['strength_advantage_clear'] },
+                override: { defense: 'd5', buildup: 'b5' },
+                notes: ['сушка']
+            },
+            s6: {
+                id: 's6', slug: 'equal_low_01', label: 'Проигрываем 0:1 при низком xG',
+                requires: { scoreState: 'losing', diff: -1, xgMax: 0.35 },
+                forceBase: { defense: 'd1', buildup: 'b1' },
+                delta: { style: 1 }
+            }
+        },
+
+        // Calibration constants (PROVISIONAL markers — not yet tuned by
+        // match evidence; they are shipped as data for future calibration
+        // work and are not consulted by the v1 matcher except where noted).
+        calibration: {
+            intensityThresholds: [50, 45, 40, 35, 30],
+            intensityStepPct: 5,
+            aggressionPerPoint: 2,
+            ycDefender: { threshold: 5, chance: -5 },
+            foulsNormPerMatch: 5,
+            foulRateReduceMin: 15,
+            crossesWidthSignalPerMatch: 5,
+            vectorCompassPct: 20,
+            neighborOptionPhysicsPct: [15, 20],
+            stylePressurePct: 2,
+            styleDefenseAttackPct: 4,
+            busPoints: { LD: 1, CD: 1, RD: 1, DM: 0.5, LB: 0.5, RB: 0.5 },
+            busMin: 5,
+            pressRatioFormula: 'опекуны = розыгрыш соперника − 1'
+        }
+    };
+
+    if (typeof window !== 'undefined') {
+        window.SLFDave56EtalonData = DATA;
+    }
+})();
+
+// ============================================================
+// <<< src/modules/strategy-data-recommendations/dave56-etalon-data.js
+
+
+// >>> src/modules/strategy-data-recommendations/dave56-etalon-mapping.js
+// Dave 5.6 Etalon Mapping (issue #348)
+// ============================================================
+// Word→ordinal mapper over the dave56-etalon-data tables. Pure logic:
+// no DOM, no engine calls. Exposes window.SLFDave56EtalonMapping with
+// mapWords() (per-situation numeric partial vector + [preferred,
+// alternate] resolution) and pickVector() (defense+buildup vectors,
+// conservative pick policy, lane resolution, clamping, unknown flags).
+//
+// Conservative policy: the preferred element of a slash pair is the more
+// conservative/middle/defensive word — the lower ordinal on the domain's
+// defensive axis (e.g. Обычный/атака→Обычный, Средняя/высокая→Средняя,
+// Низкий/средний→Низкий, Широкая/средняя→средняя). pickVector
+// ({conservative:false}) resolves the aggressive alternate (max ordinal).
+
+(function dave56EtalonMapping() {
+    'use strict';
+
+    const data = typeof window !== 'undefined' ? window.SLFDave56EtalonData : null;
+    if (!data || data.schema !== 'slf_dave56_etalon_v1') return;
+
+    const WORD_MAP = data.wordMap;
+    const DOMAINS = data.domains;
+    const CONTROL_ORDER = data.controlOrder;
+
+    const clamp = (key, value) => {
+        const domain = DOMAINS[key];
+        if (!domain || !Number.isFinite(Number(value))) return null;
+        return Math.min(domain[1], Math.max(domain[0], Math.round(Number(value))));
+    };
+
+    // Slash pair resolution: PREFERRED = conservative (min ordinal on the
+    // defensive axis), alternate = aggressive (max ordinal). Unresolvable
+    // words are skipped; a pair with no resolvable word yields null.
+    function resolvePair(words, key, options = {}) {
+        const conservative = options.conservative !== false;
+        const ordinals = words
+            .map(word => ({ word, ordinal: lookupWord(key, word) }))
+            .filter(item => item.ordinal !== null && item.ordinal !== undefined)
+            .sort((a, b) => a.ordinal - b.ordinal);
+        if (!ordinals.length) return null;
+        return { preferred: conservative ? ordinals[0].ordinal : ordinals[ordinals.length - 1].ordinal, alternateWords: words };
+    }
+
+    function lookupWord(key, word) {
+        const map = WORD_MAP[key];
+        if (!map) return null;
+        const normalized = String(word || '').trim().toLowerCase();
+        return Object.prototype.hasOwnProperty.call(map, normalized) ? map[normalized] : null;
+    }
+
+    // mapWords(situation, block, {conservative}) →
+    //   { vector, resolved: {key: {preferred, alternateWords}}, unknownWords: [] }
+    function mapWords(situation, block, options = {}) {
+        const vector = {};
+        const resolved = {};
+        const unknownWords = [];
+        if (!situation || !situation.words) return { vector, resolved, unknownWords };
+
+        for (const key of CONTROL_ORDER[block] || []) {
+            const words = situation.words[key];
+            if (!Array.isArray(words) || !words.length) continue;
+
+            let ordinal = null;
+            if (words.length === 1) {
+                ordinal = lookupWord(key, words[0]);
+            } else {
+                const pair = resolvePair(words, key, options);
+                if (pair) {
+                    ordinal = pair.preferred;
+                    resolved[key] = pair;
+                }
+            }
+
+            if (ordinal === null) {
+                unknownWords.push(`${key}:${words.join('/')}`);
+                continue; // unknown word → omitted from the vector + flagged
+            }
+            const clamped = clamp(key, ordinal);
+            if (clamped === null) {
+                unknownWords.push(`${key}:${words.join('/')}`);
+                continue;
+            }
+            vector[key] = clamped;
+        }
+
+        return { vector, resolved, unknownWords };
+    }
+
+    // Lane resolution: unambiguous lane word → checkbox lanes array;
+    // «все направления» → { defined: false } (omit entirely, all enabled);
+    // anything else (slash pairs, «по силе команд») → null + ambiguous flag.
+    function resolveLanes(lanesWord) {
+        const normalized = String(lanesWord || '').trim().toLowerCase();
+        if (!normalized) return { defined: false, lanes: null, ambiguous: false };
+        if (Object.prototype.hasOwnProperty.call(data.laneWords, normalized)) {
+            return { defined: data.laneWords[normalized] !== null, lanes: data.laneWords[normalized], ambiguous: false };
+        }
+        return { defined: false, lanes: null, ambiguous: true };
+    }
+
+    // pickVector(situationIds, {conservative}) →
+    //   { defenseVector, buildupVector, mergedVector, priorityLanes,
+    //     priorityDefined, unknownWords, labels }
+    // situationIds: { defense: 'd5'|null, buildup: 'b5'|null }
+    function pickVector(situationIds, options = {}) {
+        const defenseSituation = situationIds?.defense ? data.defense[situationIds.defense] : null;
+        const buildupSituation = situationIds?.buildup ? data.buildup[situationIds.buildup] : null;
+        const defenseMapped = mapWords(defenseSituation, 'defense', options);
+        const buildupMapped = mapWords(buildupSituation, 'buildup', options);
+
+        const lanes = buildupSituation ? resolveLanes(buildupSituation.lanes) : { defined: false, lanes: null, ambiguous: false };
+
+        return {
+            defenseVector: defenseMapped.vector,
+            buildupVector: buildupMapped.vector,
+            mergedVector: Object.assign({}, defenseMapped.vector, buildupMapped.vector),
+            priorityLanes: lanes.defined && Array.isArray(lanes.lanes) ? lanes.lanes.slice() : null,
+            priorityDefined: lanes.defined,
+            unknownWords: [...defenseMapped.unknownWords, ...buildupMapped.unknownWords],
+            labels: {
+                defense: defenseSituation ? `${defenseSituation.id} ${defenseSituation.label}` : null,
+                buildup: buildupSituation ? `${buildupSituation.id} ${buildupSituation.label}` : null
+            }
+        };
+    }
+
+    const api = {
+        schema: data.schema,
+        WORD_MAP,
+        DOMAINS,
+        clamp,
+        lookupWord,
+        resolvePair,
+        resolveLanes,
+        mapWords,
+        pickVector
+    };
+
+    if (typeof window !== 'undefined') {
+        window.SLFDave56EtalonMapping = api;
+    }
+})();
+
+// ============================================================
+// <<< src/modules/strategy-data-recommendations/dave56-etalon-mapping.js
+
+
+// >>> src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+// Dave 5.6 Etalon Layer (issue #348)
+// ============================================================
+// Outermost CurrentActionHintEngine.run wrapper (installed after
+// moment-drift-stabilizer in bundle order). Reads the engine result,
+// matches the Dave 5.6 etalon situations (dave56-etalon-data.js) via
+// the word→ordinal mapper (dave56-etalon-mapping.js), applies score-play
+// scenarios and assigns result.etalon. NEVER modifies result.action and
+// never applies anything automatically — the hint-panel button is the
+// only trigger (direction policy autoApply stays false).
+
+(function dave56EtalonLayer() {
+    'use strict';
+
+    if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
+    if (CurrentActionHintEngine.__dave56EtalonApplied) return;
+
+    // Stale-registry guard (same pattern as tactic-preset-direction-policy):
+    // install only on the v11 tactical suite registry, never on a stale one.
+    const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+    const data = typeof window !== 'undefined' ? window.SLFDave56EtalonData : null;
+    const mapping = typeof window !== 'undefined' ? window.SLFDave56EtalonMapping : null;
+    if (!registry || registry.suiteVersion !== 'slf_tactic_suite_561_v11') return;
+    if (!data || data.schema !== 'slf_dave56_etalon_v1' || !mapping || mapping.schema !== data.schema) return;
+
+    const VERSION = 'slf_dave56_etalon_v1';
+    const has = (tags, tag) => Array.isArray(tags) && tags.includes(tag);
+    const numOrNull = value => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : null;
+    };
+
+    function findStats(snapshot, teamId) {
+        const rows = Array.isArray(snapshot?.stats) ? snapshot.stats : [];
+        const id = Number(teamId);
+        const row = rows.find(item => Number(item?.teamId) === id);
+        return row?.stats || null;
+    }
+
+    function pickNumber(...values) {
+        for (const value of values) {
+            const n = numOrNull(value);
+            if (n !== null) return n;
+        }
+        return null;
+    }
+
+    // Snapshot → signals/metrics. Reuses existing signals only; no new DOM
+    // parsing is introduced in v1.
+    function collectContext(snapshot, context, result) {
+        const tags = [];
+        const addTag = tag => {
+            const value = String(tag || '').trim();
+            if (value && !tags.includes(value)) tags.push(value);
+        };
+        (Array.isArray(context?.tags) ? context.tags : []).forEach(addTag);
+        (Array.isArray(snapshot?.tags) ? snapshot.tags : []).forEach(addTag);
+        (Array.isArray(result?.moment?.signals) ? result.moment.signals : []).forEach(addTag);
+        (Array.isArray(result?.moment?.context?.signals) ? result.moment.context.signals : []).forEach(addTag);
+        const lastContext = typeof window !== 'undefined' ? window.SLFLastCoachHintContext : null;
+        if (String(lastContext?.gameId || '') === String(snapshot?.gameId || '') && Array.isArray(lastContext?.signals)) {
+            lastContext.signals.forEach(addTag);
+        }
+
+        const myTeam = Number(snapshot?.myTeam || 0) || null;
+        const teams = (Array.isArray(snapshot?.teams) ? snapshot.teams : []).map(Number);
+        const oppTeam = myTeam !== null ? (teams.find(id => id !== myTeam) ?? null) : null;
+        const myStats = myTeam !== null ? findStats(snapshot, myTeam) : null;
+        const oppStats = oppTeam !== null ? findStats(snapshot, oppTeam) : null;
+        const mc = result?.moment?.context || {};
+        const lastMetrics = lastContext?.metrics || {};
+
+        const score = context?.score || null;
+        const scoreState = score?.state || result?.moment?.score || null;
+        const scoreDiff = score && Number.isFinite(Number(score.diff)) ? Number(score.diff)
+            : (snapshot?.score && Number.isFinite(Number(snapshot.score.diff)) ? Number(snapshot.score.diff) : null);
+
+        return {
+            tags,
+            scoreState: ['winning', 'losing', 'draw'].includes(scoreState) ? scoreState : null,
+            scoreDiff,
+            minute: pickNumber(context?.minute, result?.moment?.minute, snapshot?.minute, lastContext?.minute),
+            myDef: pickNumber(myStats?.defVector),
+            myPress: pickNumber(myStats?.pressVector, lastMetrics.myPress),
+            oppDef: pickNumber(context?.oppDefVector, oppStats?.defVector),
+            oppPress: pickNumber(context?.oppPressVector, oppStats?.pressVector, lastMetrics.oppPress),
+            myBad: pickNumber(context?.myBad, lastMetrics.myBad),
+            myFouls: pickNumber(context?.myFouls),
+            myXg: pickNumber(context?.myXg, lastMetrics.myXg),
+            oppXg: pickNumber(context?.oppXg, lastMetrics.oppXg),
+            myPossession: pickNumber(context?.myPossession, mc.myPossession, myStats?.possession),
+            oppPossession: pickNumber(context?.oppPossession, mc.oppPossession, oppStats?.possession),
+            oppCrossTotal: pickNumber(context?.oppCrossSummary?.total),
+            strengthMode: context?.strengthContext?.mode || null,
+            strengthKnown: context?.strengthContext?.known === true
+        };
+    }
+
+    // Situation matching: first match wins per block; the numeric value is
+    // the matched-signals count (confidence). Defaults are evaluated last.
+    const DEFENSE_RULES = [
+        { id: 'd4', when: c => (has(c.tags, 'losing') && has(c.tags, 'need_goal')) ? 2 : null },
+        { id: 'd5', when: c => (has(c.tags, 'winning') && has(c.tags, 'late_protect_lead')) ? 2 : null },
+        { id: 'd2', when: c => has(c.tags, 'strength_advantage_clear') ? 1 : null },
+        { id: 'd3', when: c => has(c.tags, 'strength_disadvantage_clear') ? 1 : null },
+        { id: 'd6', when: c => (c.myDef !== null && c.myDef >= 20) ? 1 : null },
+        { id: 'd7', when: c => (c.myDef !== null && c.myDef <= -20) ? 1 : null },
+        { id: 'd8', when: c => (c.myPress !== null && c.myPress >= 20) ? 1 : null },
+        { id: 'd9', when: c => (c.myPress !== null && c.myPress <= -20) ? 1 : null },
+        { id: 'd10', when: c => {
+            const hits = [has(c.tags, 'opponent_crosses_dangerous'), has(c.tags, 'wide_cross_team'), c.oppCrossTotal !== null && c.oppCrossTotal > 5]
+                .filter(Boolean).length;
+            return hits ? hits : null;
+        } },
+        { id: 'd11', when: c => (c.oppDef !== null && c.oppDef >= 65 && (has(c.tags, 'center_closed') || has(c.tags, 'center_weak'))) ? 2 : null },
+        { id: 'd12', when: c => (c.myFouls !== null && c.minute !== null && c.minute >= 15 && c.myFouls * 15 >= c.minute) ? 2 : null },
+        { id: 'd1', when: c => 1 } // default when no strong tags
+    ];
+
+    const BUILDUP_RULES = [
+        { id: 'b4', when: c => (has(c.tags, 'losing') && has(c.tags, 'need_goal')) ? 2 : null },
+        { id: 'b5', when: c => (has(c.tags, 'winning') && has(c.tags, 'late_protect_lead')) ? 2 : null },
+        { id: 'b2', when: c => has(c.tags, 'strength_advantage_clear') ? 1 : null },
+        { id: 'b3', when: c => has(c.tags, 'strength_disadvantage_clear') ? 1 : null },
+        { id: 'b6', when: c => has(c.tags, 'opponent_high_press') ? 1 : null },
+        { id: 'b7', when: c => (c.oppPress !== null && c.oppPress <= 45 && has(c.tags, 'low_bad_actions')) ? 2 : null },
+        { id: 'b8', when: c => has(c.tags, 'opponent_low_block') ? 1 : null },
+        { id: 'b9', when: c => (has(c.tags, 'high_bad_actions') || (c.myBad !== null && c.myBad >= 20)) ? 1 : null },
+        { id: 'b11', when: c => {
+            if (has(c.tags, 'generator_defense_working') && has(c.tags, 'generator_attack_working')) return 2;
+            if (c.myPossession !== null && c.oppPossession !== null && c.myPossession > c.oppPossession) return 1;
+            return null;
+        } },
+        { id: 'b12', when: c => {
+            const oppMomentum = has(c.tags, 'under_pressure')
+                || (c.myXg !== null && c.oppXg !== null && c.oppXg > c.myXg + 0.3);
+            return (oppMomentum && has(c.tags, 'need_goal')) ? 2 : null;
+        } },
+        // b10 (игра через «столба») has no reliable signal in v1 — never
+        // matched; reported as insufficient data instead.
+        { id: 'b1', when: c => 1 } // default when no strong tags
+    ];
+
+    function matchBlock(rules, ctx) {
+        for (const rule of rules) {
+            let confidence = null;
+            try { confidence = rule.when(ctx); } catch (_) { confidence = null; }
+            if (confidence !== null && confidence !== undefined) {
+                return { id: rule.id, confidence: Number(confidence) || 1 };
+            }
+        }
+        return null;
+    }
+
+    function isStrengthEqual(ctx) {
+        if (ctx.strengthKnown) return ctx.strengthMode === 'equal';
+        return false;
+    }
+
+    function applyDelta(vector, delta) {
+        const out = Object.assign({}, vector);
+        for (const [key, shift] of Object.entries(delta || {})) {
+            const current = numOrNull(out[key]);
+            if (current === null) continue; // control not defined by the etalon → skip
+            const clamped = mapping.clamp(key, current + Number(shift));
+            if (clamped !== null) out[key] = clamped;
+        }
+        return out;
+    }
+
+    // Score-play scenarios. Override scenarios (s2/s1/s4/s5) and delta
+    // scenarios (s3/s6) are mutually exclusive: first match in the order
+    // s2 → s1 → s4 → s5 → s3 → s6 wins (a dominating 2:0 gates the s1
+    // sweep before minute 60; s4's сушка excludes s3's extra attack).
+    function evaluateScenarios(ctx, baseIds) {
+        const S = data.scenarios;
+        const active = [];
+        const notes = [];
+        let defenseId = baseIds.defense;
+        let buildupId = baseIds.buildup;
+        let defenseVectorDelta = null;
+        let buildupVectorDelta = null;
+        let forcedBase = null;
+
+        if (ctx.scoreState === 'winning' && ctx.scoreDiff === 1
+            && (has(ctx.tags, 'attacking_momentum') || has(ctx.tags, 'generator_attack_working'))) {
+            active.push({ id: 's2', slug: S.s2.slug });
+            S.s2.notes.forEach(note => notes.push(note));
+            if (ctx.minute !== null && ctx.minute >= S.s2.overrideMinute) {
+                defenseId = S.s2.override.defense;
+                buildupId = S.s2.override.buildup;
+            }
+        } else if (ctx.scoreState === 'winning' && ctx.scoreDiff === 1 && isStrengthEqual(ctx)) {
+            active.push({ id: 's1', slug: S.s1.slug });
+            S.s1.notes.forEach(note => notes.push(note));
+            defenseId = S.s1.override.defense;
+            buildupId = S.s1.override.buildup;
+        } else if (ctx.scoreState === 'losing' && has(ctx.tags, 'strength_advantage_clear')) {
+            active.push({ id: 's4', slug: S.s4.slug });
+            defenseId = S.s4.override.defense;
+            buildupId = S.s4.override.buildup;
+            if (ctx.minute !== null && ctx.minute >= S.s4.lateMinute) {
+                defenseVectorDelta = S.s4.lateDelta;
+                notes.push(S.s4.lateNote);
+            }
+        } else if (ctx.scoreState === 'draw' && has(ctx.tags, 'strength_advantage_clear')) {
+            active.push({ id: 's5', slug: S.s5.slug });
+            S.s5.notes.forEach(note => notes.push(note));
+            defenseId = S.s5.override.defense;
+            buildupId = S.s5.override.buildup;
+        } else if (ctx.scoreState === 'losing' && ctx.scoreDiff === -1 && has(ctx.tags, 'attacking_momentum')) {
+            active.push({ id: 's3', slug: S.s3.slug });
+            S.s3.notes.forEach(note => notes.push(note));
+            buildupVectorDelta = Object.fromEntries(Object.entries(S.s3.delta).filter(([key]) => key !== 'press_line'));
+            defenseVectorDelta = Object.fromEntries(Object.entries(S.s3.delta).filter(([key]) => key === 'press_line'));
+        } else if (ctx.scoreState === 'losing' && ctx.scoreDiff === -1
+            && ctx.myXg !== null && ctx.oppXg !== null
+            && ctx.myXg < S.s6.requires.xgMax && ctx.oppXg < S.s6.requires.xgMax) {
+            active.push({ id: 's6', slug: S.s6.slug });
+            forcedBase = S.s6.forceBase;
+            buildupVectorDelta = S.s6.delta;
+        }
+
+        return { active, notes, defenseId, buildupId, defenseVectorDelta, buildupVectorDelta, forcedBase };
+    }
+
+    function computeDeltaVsCurrent(applyVector) {
+        try {
+            if (typeof getCurrentTactic !== 'function' || !applyVector) return null;
+            const current = getCurrentTactic();
+            if (!current || typeof current !== 'object') return null;
+            const delta = [];
+            for (const [key, value] of Object.entries(applyVector)) {
+                if (key === 'priority') continue;
+                if (String(current[key] ?? '') !== String(value)) {
+                    delta.push({ key, from: current[key] ?? null, to: value });
+                }
+            }
+            if (applyVector.priority) {
+                const norm = value => (Array.isArray(value) ? value : []).map(String).sort().join(',');
+                if (norm(current.priority) !== norm(applyVector.priority)) {
+                    delta.push({ key: 'priority', from: (current.priority || []).join('+'), to: applyVector.priority.join('+') });
+                }
+            }
+            return delta;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function computeEtalon(snapshot, context, result) {
+        const ctx = collectContext(snapshot, context, result);
+        const insufficientData = [];
+
+        if (!ctx.scoreState) {
+            insufficientData.push('score_state');
+        }
+        if (ctx.myDef === null || ctx.myPress === null) insufficientData.push('def_press_vectors');
+        if (ctx.myFouls === null) insufficientData.push('fouls');
+        if (ctx.myXg === null || ctx.oppXg === null) insufficientData.push('xg');
+        insufficientData.push('b10_lane_play'); // столб not detectable in v1
+
+        let defenseMatch = null;
+        let buildupMatch = null;
+        if (ctx.scoreState) {
+            defenseMatch = matchBlock(DEFENSE_RULES, ctx);
+            buildupMatch = matchBlock(BUILDUP_RULES, ctx);
+        }
+
+        const scenarioResult = evaluateScenarios(
+            ctx,
+            { defense: defenseMatch?.id || null, buildup: buildupMatch?.id || null }
+        );
+
+        const defenseId = scenarioResult.defenseId;
+        const buildupId = scenarioResult.buildupId;
+        const picked = mapping.pickVector(
+            { defense: defenseId, buildup: buildupId },
+            { conservative: true }
+        );
+
+        let defenseVector = picked.defenseVector;
+        let buildupVector = picked.buildupVector;
+        if (scenarioResult.forcedBase) {
+            const forced = mapping.pickVector(
+                { defense: scenarioResult.forcedBase.defense, buildup: scenarioResult.forcedBase.buildup },
+                { conservative: true }
+            );
+            defenseVector = forced.defenseVector;
+            buildupVector = forced.buildupVector;
+        }
+        if (scenarioResult.defenseVectorDelta) defenseVector = applyDelta(defenseVector, scenarioResult.defenseVectorDelta);
+        if (scenarioResult.buildupVectorDelta) buildupVector = applyDelta(buildupVector, scenarioResult.buildupVectorDelta);
+
+        const mergedVector = Object.assign({}, defenseVector, buildupVector);
+        const applyVector = Object.assign({}, mergedVector);
+        if (picked.priorityLanes) applyVector.priority = picked.priorityLanes.slice();
+
+        const ids = [defenseId, buildupId, ...scenarioResult.active.map(item => item.id)].filter(Boolean);
+
+        return {
+            schema: VERSION,
+            source: 'dave56_etalon',
+            situationIds: {
+                defense: defenseId,
+                buildup: buildupId,
+                scenarios: scenarioResult.active.map(item => item.id)
+            },
+            ids,
+            labels: picked.labels,
+            defenseVector,
+            buildupVector,
+            mergedVector,
+            applyVector,
+            priorityLanes: picked.priorityLanes,
+            priorityOmitted: !picked.priorityDefined,
+            deltaVsCurrent: computeDeltaVsCurrent(applyVector),
+            confidence: (defenseMatch?.confidence || 0) + (buildupMatch?.confidence || 0),
+            insufficientData,
+            scenarios: scenarioResult.active,
+            notes: scenarioResult.notes,
+            conservative: true
+        };
+    }
+
+    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
+    CurrentActionHintEngine.run = function runWithDave56Etalon(snapshot, context = {}) {
+        const result = originalRun(snapshot, context) || {};
+        try {
+            result.etalon = computeEtalon(snapshot, context, result);
+        } catch (error) {
+            result.etalon = {
+                schema: VERSION,
+                source: 'dave56_etalon',
+                ok: false,
+                error: 'etalon_computation_failed',
+                insufficientData: ['exception'],
+                defenseVector: null,
+                buildupVector: null,
+                mergedVector: null,
+                applyVector: null,
+                priorityLanes: null,
+                deltaVsCurrent: null,
+                confidence: 0,
+                scenarios: [],
+                notes: []
+            };
+        }
+        return result;
+    };
+
+    CurrentActionHintEngine.__dave56EtalonApplied = true;
+
+    if (typeof window !== 'undefined') {
+        window.SLFDave56EtalonLayer = {
+            version: VERSION,
+            suiteVersion: registry.suiteVersion,
+            source: 'dave56_etalon',
+            autoApply: false,
+            computeEtalon
+        };
+    }
+})();
+
+// ============================================================
+// <<< src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+
+
+// >>> src/modules/strategy-data-recommendations/final-tactic-merge-layer.js
+// Final Tactic Merge Layer (issue #350)
+// ============================================================
+// Outermost CurrentActionHintEngine.run wrapper (installed after
+// dave56-etalon-layer in bundle order). Merges the v11 preset
+// recommendation (base) with the Dave 5.6 etalon (situational overrides)
+// into ONE final recommended tactic and assigns result.finalTactic.
+// NEVER modifies result.action or result.etalon and never applies
+// anything automatically — the single merged hint-panel button is the
+// only trigger (direction policy autoApply stays false).
+
+(function finalTacticMergeLayer() {
+    'use strict';
+
+    if (typeof CurrentActionHintEngine === 'undefined' || !CurrentActionHintEngine) return;
+    if (CurrentActionHintEngine.__finalTacticMergeApplied) return;
+
+    // Stale-registry guard (same pattern as dave56-etalon-layer): install
+    // only on the v11 tactical suite registry, never on a stale one.
+    const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+    if (!registry || registry.suiteVersion !== 'slf_tactic_suite_561_v11') return;
+
+    const VERSION = 'slf_final_tactic_v1';
+    const SOURCE = 'final_tactic_merge';
+
+    // The 14 tactic controls grouped by etalon block. The etalon never
+    // covers the attack keys; style belongs to the buildup block but is
+    // tracked separately for provenance display.
+    const DEFENSE_KEYS = ['def_line', 'press_line', 'def_width', 'press_intense'];
+    const BUILDUP_KEYS = ['build_type', 'build_temp', 'build_long', 'build_fast'];
+    const STYLE_KEY = 'style';
+    const ATTACK_KEYS = ['pass_risk', 'dribble', 'cross', 'corner', 'shot'];
+    const CONTROL_KEYS = DEFENSE_KEYS.concat(BUILDUP_KEYS, [STYLE_KEY], ATTACK_KEYS);
+
+    const STRONG_DEFENSE_ID = /^d([2-9]|1[0-2])$/; // d2..d12 (d1 is the default)
+    const STRONG_BUILDUP_ID = /^b([2-9]|1[0-2])$/; // b2..b12 (b1 is the default)
+
+    function hasOwn(vector, key) {
+        return !!vector && typeof vector === 'object' && Object.prototype.hasOwnProperty.call(vector, key);
+    }
+
+    function isInsufficientEtalon(etalon) {
+        // T1: the etalon carries no applicable vector — pure preset/current.
+        if (!etalon || etalon.ok === false) return true;
+        if (Array.isArray(etalon.insufficientData) && etalon.insufficientData.includes('score_state')) return true;
+        const applyVector = etalon.applyVector;
+        if (!applyVector || typeof applyVector !== 'object' || !Object.keys(applyVector).length) return true;
+        return false;
+    }
+
+    // Scenario strength detail: s1/s2@≥60/s4/s5 REPLACE blocks (visible as
+    // non-default defense/buildup ids); s2 before minute 60 does not. Delta
+    // scenarios (s3/s6) are strong only for the keys their delta actually
+    // shifts: s3 splits press_line→defense, the rest→buildup; s6 shifts the
+    // buildup block only. The shifted keys are read from the versioned
+    // etalon data (read-only) instead of being hardcoded here.
+    function collectScenarioStrength(etalon) {
+        const result = { scenario: null, defenseKeys: [], buildupKeys: [] };
+        const scenarios = Array.isArray(etalon?.scenarios) ? etalon.scenarios : [];
+        if (scenarios.length) result.scenario = String(scenarios[0]?.id || scenarios[0]?.slug || '') || null;
+
+        const data = typeof window !== 'undefined' ? window.SLFDave56EtalonData : null;
+        const known = data && data.schema === 'slf_dave56_etalon_v1' && data.scenarios ? data.scenarios : null;
+        if (!known) return result;
+
+        for (const item of scenarios) {
+            const scenario = known[String(item?.id || '')];
+            const delta = scenario && !scenario.override && scenario.delta && typeof scenario.delta === 'object'
+                ? scenario.delta
+                : null;
+            if (!delta) continue; // replacement scenarios act via their ids
+            for (const key of Object.keys(delta)) {
+                if (DEFENSE_KEYS.includes(key)) result.defenseKeys.push(key);
+                else result.buildupKeys.push(key); // buildup keys + style
+            }
+        }
+        return result;
+    }
+
+    function computeStrength(etalon) {
+        const defenseId = etalon?.situationIds?.defense || null;
+        const buildupId = etalon?.situationIds?.buildup || null;
+        const shifted = collectScenarioStrength(etalon);
+        return {
+            defenseBlock: STRONG_DEFENSE_ID.test(String(defenseId || '')),
+            buildupBlock: STRONG_BUILDUP_ID.test(String(buildupId || '')),
+            defenseKeys: shifted.defenseKeys,
+            buildupKeys: shifted.buildupKeys,
+            scenario: shifted.scenario
+        };
+    }
+
+    // All 14 values normalized to STRING ordinals (registry/current are
+    // strings, etalon vectors are numbers — mixed types would split
+    // telemetry fingerprints on 1 vs "1").
+    function normalizeBaseVector(raw) {
+        const out = {};
+        for (const key of CONTROL_KEYS) {
+            if (raw && raw[key] !== undefined && raw[key] !== null) out[key] = String(raw[key]);
+        }
+        out.priority = Array.isArray(raw?.priority) ? raw.priority.map(String) : [];
+        return out;
+    }
+
+    function resolveBase(snapshot, result) {
+        const action = result?.action || null;
+        const presetId = action?.preset || null;
+        if (presetId && hasOwn(registry.presets, presetId) && registry.presets[presetId]) {
+            return {
+                base: `preset:${presetId}`,
+                presetId,
+                vector: normalizeBaseVector(registry.presets[presetId]),
+                fromCurrent: false
+            };
+        }
+        // T6 hold_current (or a stale preset name): base = current tactic.
+        let current = null;
+        try {
+            current = typeof getCurrentTactic === 'function' ? getCurrentTactic() : null;
+        } catch (_) {
+            current = null;
+        }
+        if (!current || typeof current !== 'object') return null;
+        return {
+            base: 'current_tactic',
+            presetId: null,
+            vector: normalizeBaseVector(current),
+            fromCurrent: true,
+            stalePreset: Boolean(presetId)
+        };
+    }
+
+    function applyEtalonOverrides(vector, etalon, strength, overrides) {
+        const defenseVector = etalon?.defenseVector;
+        const buildupVector = etalon?.buildupVector;
+        const defenseId = etalon?.situationIds?.defense || null;
+        const buildupId = etalon?.situationIds?.buildup || null;
+
+        // Defense block: strong → etalon overrides present keys; preset/current fills gaps.
+        if (strength.defenseBlock || strength.defenseKeys.length) {
+            const keys = strength.defenseBlock ? DEFENSE_KEYS : strength.defenseKeys;
+            for (const key of keys) {
+                if (hasOwn(defenseVector, key)) vector[key] = String(defenseVector[key]);
+            }
+            if (defenseId) overrides.defense = `etalon:${defenseId}`;
+        }
+
+        // Buildup block (style may be absent, e.g. b6 → base keeps it).
+        if (strength.buildupBlock || strength.buildupKeys.length) {
+            const keys = strength.buildupBlock ? BUILDUP_KEYS.concat([STYLE_KEY]) : strength.buildupKeys;
+            for (const key of keys) {
+                if (hasOwn(buildupVector, key)) vector[key] = String(buildupVector[key]);
+            }
+            if (buildupId) overrides.buildup = `etalon:${buildupId}`;
+        }
+
+        // Style provenance follows the buildup override only when the etalon
+        // actually supplied the key.
+        if (hasOwn(buildupVector, STYLE_KEY) && (strength.buildupBlock || strength.buildupKeys.includes(STYLE_KEY))) {
+            overrides.style = buildupId ? `etalon:${buildupId}` : overrides.style;
+        }
+
+        // Priority: etalon lanes win when the buildup block is strong and
+        // lanes are defined; otherwise the base priority survives.
+        if ((strength.buildupBlock || strength.buildupKeys.length)
+            && Array.isArray(etalon?.priorityLanes) && etalon.priorityLanes.length) {
+            vector.priority = etalon.priorityLanes.map(String);
+            overrides.priority = buildupId ? `etalon:${buildupId}` : overrides.priority;
+        }
+
+        return vector;
+    }
+
+    function computeDeltaVsCurrent(vector) {
+        try {
+            if (typeof getCurrentTactic !== 'function' || !vector) return null;
+            const current = getCurrentTactic();
+            if (!current || typeof current !== 'object') return null;
+            const delta = [];
+            for (const key of CONTROL_KEYS) {
+                if (vector[key] === undefined) continue;
+                if (String(current[key] ?? '') !== String(vector[key])) {
+                    delta.push({ key, from: current[key] ?? null, to: vector[key] });
+                }
+            }
+            const norm = value => (Array.isArray(value) ? value : []).map(String).sort().join(',');
+            if (norm(current.priority) !== norm(vector.priority)) {
+                delta.push({ key: 'priority', from: (current.priority || []).join('+'), to: (vector.priority || []).join('+') });
+            }
+            return delta;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function buildReferenceLine(base, etalon) {
+        const defenseId = etalon?.situationIds?.defense || 'd1';
+        const buildupId = etalon?.situationIds?.buildup || 'b1';
+        const tail = base === 'current_tactic' ? 'оставлена текущая тактика' : 'применён пресет';
+        return `Эталон: ${defenseId}/${buildupId} — равный матч, ${tail}`;
+    }
+
+    function computeFinalTactic(snapshot, context, result) {
+        const etalon = result?.etalon || null;
+        const baseInfo = resolveBase(snapshot, result);
+        if (!baseInfo) return null; // no preset and no readable current tactic
+
+        const overrides = {
+            defense: baseInfo.fromCurrent ? 'current' : 'preset',
+            buildup: baseInfo.fromCurrent ? 'current' : 'preset',
+            style: baseInfo.fromCurrent ? 'current' : 'preset',
+            attack: baseInfo.fromCurrent ? 'current' : 'preset',
+            priority: baseInfo.fromCurrent ? 'current' : 'preset'
+        };
+
+        const vector = Object.assign({}, baseInfo.vector);
+        const etalonIds = Array.isArray(etalon?.ids) ? etalon.ids.filter(Boolean).map(String) : [];
+        const insufficientData = Array.isArray(etalon?.insufficientData)
+            ? etalon.insufficientData.map(String)
+            : ['etalon_layer_absent'];
+        const notes = Array.isArray(etalon?.notes) ? etalon.notes.filter(Boolean).map(String) : [];
+
+        let referenceLine = null;
+        let strong = { defense: false, buildup: false, scenario: null };
+
+        if (baseInfo.stalePreset) {
+            insufficientData.push('stale_preset_name');
+        }
+
+        if (!isInsufficientEtalon(etalon)) {
+            const strength = computeStrength(etalon);
+            strong = { defense: strength.defenseBlock || strength.defenseKeys.length > 0,
+                buildup: strength.buildupBlock || strength.buildupKeys.length > 0,
+                scenario: strength.scenario };
+
+            if (strong.defense || strong.buildup) {
+                applyEtalonOverrides(vector, etalon, strength, overrides);
+            } else {
+                // T2 generic-only: preset/current base, etalon as a reference line.
+                referenceLine = buildReferenceLine(baseInfo.base, etalon);
+            }
+        }
+
+        // Provenance of the merged recommendation: etalon ids + base preset,
+        // or the etalon ids over the current tactic (hold_current).
+        const source = baseInfo.fromCurrent
+            ? `merged:current:${etalonIds.join('+')}`
+            : `merged:etalon:${etalonIds.join('+')}+presets:${baseInfo.presetId}`;
+
+        return {
+            schema: VERSION,
+            vector,
+            base: baseInfo.base,
+            overrides,
+            source,
+            strong,
+            deltaVsCurrent: computeDeltaVsCurrent(vector),
+            presetId: baseInfo.presetId,
+            etalonIds,
+            insufficientData,
+            notes,
+            referenceLine
+        };
+    }
+
+    function degradedFinalTactic() {
+        return {
+            schema: VERSION,
+            source: SOURCE,
+            ok: false,
+            error: 'final_tactic_computation_failed',
+            vector: null,
+            base: null,
+            overrides: null,
+            strong: { defense: false, buildup: false, scenario: null },
+            deltaVsCurrent: null,
+            presetId: null,
+            etalonIds: [],
+            insufficientData: ['exception'],
+            notes: [],
+            referenceLine: null
+        };
+    }
+
+    const originalRun = CurrentActionHintEngine.run.bind(CurrentActionHintEngine);
+    CurrentActionHintEngine.run = function runWithFinalTacticMerge(snapshot, context = {}) {
+        const result = originalRun(snapshot, context) || {};
+        try {
+            result.finalTactic = computeFinalTactic(snapshot, context, result);
+        } catch (error) {
+            result.finalTactic = degradedFinalTactic();
+        }
+        return result;
+    };
+
+    CurrentActionHintEngine.__finalTacticMergeApplied = true;
+
+    if (typeof window !== 'undefined') {
+        window.SLFFinalTacticMergeLayer = {
+            version: VERSION,
+            suiteVersion: registry.suiteVersion,
+            source: SOURCE,
+            autoApply: false,
+            computeFinalTactic
+        };
+    }
+})();
+
+// ============================================================
+// <<< src/modules/strategy-data-recommendations/final-tactic-merge-layer.js
+
+
 // >>> src/app/ui-layer.js
     // 11. UI Layer
     // ============================================================
@@ -9439,7 +10037,8 @@ if (!isTacticPage) return;
             } else if (isTeam4TacticPage) {
                 const teamHeader = document.querySelector('.team > .team-head');
                 const matches = teamHeader?.querySelector(':scope > .team-head__matches');
-                if (!teamHeader) {
+                const headerVisible = teamHeader && teamHeader.offsetParent !== null;
+                if (!headerVisible) {
                     target.insertBefore(container, target.firstChild);
                     return;
                 }
@@ -9999,6 +10598,367 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
         }).join(' · ');
     }
 
+    // ============================================================
+    // Final merged tactic recommendation (#350): the v11 preset (base)
+    // merged with the Dave 5.6 etalon (situational overrides) into ONE
+    // «Рекомендация» block with a single «Применить» button. The block is
+    // display-only here; the button is the ONLY trigger and the v11 preset
+    // engine / direction policy (autoApply:false) is untouched.
+    // ============================================================
+
+    const FINAL_CONTROL_LABELS = {
+        def_line: 'линия', press_line: 'прессинг', def_width: 'ширина', press_intense: 'интенс',
+        build_type: 'выход', build_temp: 'темп', build_long: 'диаг', build_fast: 'касание',
+        style: 'стиль', pass_risk: 'риск', dribble: 'дриблинг', cross: 'кроссы',
+        corner: 'угловые', shot: 'удары', priority: 'фланги'
+    };
+    const FINAL_GROUP_KEYS = {
+        defense: ['def_line', 'press_line', 'def_width', 'press_intense'],
+        buildup: ['build_type', 'build_temp', 'build_long', 'build_fast'],
+        style: ['style'],
+        attack: ['pass_risk', 'dribble', 'cross', 'corner', 'shot']
+    };
+    const FINAL_GROUP_LABELS = { defense: 'оборона', buildup: 'построение', style: 'стиль', attack: 'атака' };
+    const FINAL_INSUFFICIENT_LABELS = {
+        score_state: 'счёт не определён',
+        def_press_vectors: 'векторы об/пр недоступны',
+        fouls: 'фолы недоступны',
+        xg: 'xG недоступен',
+        b10_lane_play: 'игра через «столба» не распознаётся',
+        exception: 'ошибка вычисления',
+        etalon_layer_absent: 'эталон недоступен',
+        stale_preset_name: 'пресет не найден в реестре'
+    };
+    const FINAL_LANE_LABELS = { left: 'Л', center: 'Ц', right: 'П' };
+
+    function etalonEscape(value) {
+        return RecommendationEngine.escapeHtml ? RecommendationEngine.escapeHtml(value) : String(value ?? '');
+    }
+
+    function safeGetCurrentTactic() {
+        try {
+            return typeof getCurrentTactic === 'function' ? getCurrentTactic() : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function etalonPriorityEquals(a, b) {
+        const norm = value => (Array.isArray(value) ? value : []).map(String).sort().join(',');
+        return norm(a) === norm(b);
+    }
+
+    function etalonVectorMatchesCurrent(vector, current) {
+        if (!vector || !current) return false;
+        return Object.entries(vector).every(([key, value]) => key === 'priority'
+            ? etalonPriorityEquals(value, current.priority)
+            : String(current[key] ?? '') === String(value));
+    }
+
+    function finalTacticApplyVector(rec) {
+        const vector = rec?.vector;
+        if (!vector || typeof vector !== 'object' || !Object.keys(vector).length) return null;
+        const copy = {};
+        for (const [key, value] of Object.entries(vector)) {
+            copy[key] = key === 'priority' ? (Array.isArray(value) ? value.slice() : value) : value;
+        }
+        return copy;
+    }
+
+    function finalTacticSourceMissing(rec) {
+        return rec?.schema !== 'slf_final_tactic_v1';
+    }
+
+    function finalTacticVectorSummary(rec) {
+        const vector = rec?.vector || {};
+        const parts = [];
+        for (const [group, keys] of Object.entries(FINAL_GROUP_KEYS)) {
+            const present = keys.filter(key => vector[key] !== undefined && vector[key] !== null);
+            if (!present.length) continue;
+            const label = FINAL_GROUP_LABELS[group] || group;
+            if (present.length === 1) {
+                parts.push(`${label}: ${vector[present[0]]}`);
+            } else {
+                const names = present.map(key => FINAL_CONTROL_LABELS[key] || key).join('/');
+                const values = present.map(key => vector[key]).join('/');
+                parts.push(`${label} ${names}: ${values}`);
+            }
+        }
+        const lanes = Array.isArray(vector.priority) && vector.priority.length
+            ? vector.priority.map(lane => FINAL_LANE_LABELS[lane] || lane).join('+')
+            : null;
+        if (lanes) parts.push(`фланги: ${lanes}`);
+        return parts.join(' · ');
+    }
+
+    function finalTacticProvenanceText(rec) {
+        const overrides = rec?.overrides || {};
+        const etalonText = `эталон ${(Array.isArray(rec?.etalonIds) ? rec.etalonIds : []).join('+')}`;
+        const presetText = `пресет ${rec?.presetId || '?'}`;
+        const render = value => {
+            if (typeof value === 'string' && value.startsWith('etalon')) return etalonText;
+            if (value === 'current') return 'текущая тактика';
+            return presetText;
+        };
+        const groups = [
+            ['оборона', overrides.defense],
+            ['построение', overrides.buildup],
+            ['стиль', overrides.style],
+            ['атака', overrides.attack]
+        ];
+        const parts = [];
+        let currentText = null;
+        let bucket = [];
+        for (const [label, value] of groups) {
+            const text = render(value);
+            if (!currentText) {
+                currentText = text;
+                bucket = [label];
+            } else if (text === currentText) {
+                bucket.push(label);
+            } else {
+                parts.push(`${bucket.join('/')} ← ${currentText}`);
+                currentText = text;
+                bucket = [label];
+            }
+        }
+        if (bucket.length) parts.push(`${bucket.join('/')} ← ${currentText}`);
+        return parts.join(' · ');
+    }
+
+    function finalTacticInsufficientText(rec) {
+        const keys = Array.isArray(rec?.insufficientData) ? rec.insufficientData : [];
+        // b10_lane_play is a permanent known limitation of the etalon data —
+        // it is pushed unconditionally by the etalon layer; surfacing it on
+        // every recommendation (even a confident T5) is noise. Telemetry keeps
+        // the full list; display filters it.
+        return keys.filter(key => key !== 'b10_lane_play')
+            .map(key => FINAL_INSUFFICIENT_LABELS[key] || key).filter(Boolean).join(', ');
+    }
+
+    function finalTacticDeltaText(rec, snapshot) {
+        let delta = Array.isArray(rec?.deltaVsCurrent) ? rec.deltaVsCurrent : null;
+        if (!delta) {
+            const current = safeGetCurrentTactic();
+            const vector = finalTacticApplyVector(rec);
+            if (current && vector) {
+                delta = Object.entries(vector)
+                    .filter(([key, value]) => key === 'priority'
+                        ? !etalonPriorityEquals(value, current.priority)
+                        : String(current[key] ?? '') !== String(value))
+                    .map(([key, value]) => ({
+                        key,
+                        from: key === 'priority' ? (current.priority || []).join('+') : current[key] ?? null,
+                        to: key === 'priority' ? value.join('+') : value
+                    }));
+            }
+        }
+        if (!delta || !delta.length) return '';
+        return delta.map(item => `${FINAL_CONTROL_LABELS[item.key] || item.key} ${item.from ?? '?'}→${item.to}`).join(' · ');
+    }
+
+    function finalTacticRenderState(snapshot, rec) {
+        const vector = finalTacticApplyVector(rec);
+        if (!vector) return null;
+
+        const current = safeGetCurrentTactic();
+        if (current && etalonVectorMatchesCurrent(vector, current)) {
+            return { status: 'already_applied', label: 'Уже применено', disabled: true, title: 'Рекомендованный вектор уже совпадает с текущей тактикой' };
+        }
+        if (snapshot?.matchOwnership === 'foreign') {
+            return { status: 'idle', label: 'Применить', disabled: true, title: 'Чужой матч — применение тактики недоступно' };
+        }
+        if (snapshot?.status === 'finished') {
+            return { status: 'idle', label: 'Применить', disabled: true, title: 'Матч завершён — применение недоступно' };
+        }
+        if (typeof STATE !== 'undefined' && STATE?.tacticControlBridgeApplyInProgress) {
+            return { status: 'idle', label: 'Применить', disabled: true, title: 'Идёт применение тактики — подождите' };
+        }
+        return { status: 'idle', label: 'Применить', disabled: false, title: 'Применить итоговую рекомендацию одним кликом' };
+    }
+
+    function rememberFinalTacticRecommendation(snapshot, rec) {
+        if (typeof STATE === 'undefined' || !STATE) return null;
+        const vector = finalTacticApplyVector(rec);
+        if (!vector) {
+            STATE.finalTacticRecommendation = null;
+            return null;
+        }
+        const recommendation = {
+            token: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+            vector,
+            source: String(rec.source || ''),
+            ids: Array.isArray(rec.etalonIds) ? rec.etalonIds.filter(Boolean).slice() : [],
+            gameId: snapshot?.gameId ?? null,
+            minute: snapshot?.minute ?? snapshot?.effectiveMinute ?? null,
+            ts: Date.now()
+        };
+        STATE.finalTacticRecommendation = recommendation;
+        return recommendation;
+    }
+
+    function buildFinalTacticTitle(rec) {
+        if (rec?.base === 'current_tactic' || !rec?.presetId) return 'оставить текущую тактику';
+        const title = RecommendationEngine.getPresetTitle(rec.presetId) || rec.presetId;
+        const scheme = RecommendationEngine.getPresetScheme(rec.presetId);
+        return scheme ? `${title}. Схема: ${scheme}.` : `${title}.`;
+    }
+
+    function buildFinalTacticBlockHtml(snapshot) {
+        try {
+            const rec = snapshot?.ruleDecision?.finalTactic;
+            if (!rec || finalTacticSourceMissing(rec)) return null;
+            if (!finalTacticApplyVector(rec)) return null;
+
+            const recommendation = rememberFinalTacticRecommendation(snapshot, rec);
+            if (!recommendation) return null;
+
+            const state = finalTacticRenderState(snapshot, rec);
+            if (typeof STATE !== 'undefined' && STATE) {
+                STATE.finalTacticApplyStatus = state?.status === 'already_applied' ? 'already_applied' : 'idle';
+            }
+
+            const title = '<b style="color:#75ff75;">Рекомендация:</b> ';
+            const summary = finalTacticVectorSummary(rec);
+            const delta = finalTacticDeltaText(rec, snapshot);
+            const provenance = finalTacticProvenanceText(rec);
+            const referenceLine = typeof rec.referenceLine === 'string' ? rec.referenceLine : '';
+            const insufficientText = finalTacticInsufficientText(rec);
+            const notes = Array.isArray(rec.notes) ? rec.notes.filter(Boolean) : [];
+
+            const btnStyle = 'padding:4px 8px;background:#345;color:#fff;border:1px solid #79a;'
+                + 'border-radius:3px;cursor:pointer;margin-top:5px;'
+                + (state?.disabled ? 'opacity:.55;cursor:not-allowed;' : '');
+            const button = `<button id="slf-final-tactic-apply-btn" type="button" data-token="${etalonEscape(recommendation.token)}"`
+                + ` title="${etalonEscape(state?.title || '')}"`
+                + `${state?.disabled ? ' disabled' : ''} style="${btnStyle}">${etalonEscape(state?.label || 'Применить')}</button>`;
+
+            return `<div style="line-height:1.4;margin-top:5px;border-top:1px solid #333;padding-top:5px;">`
+                + `${title}${etalonEscape(buildFinalTacticTitle(rec))}`
+                + `${summary ? `<div>Вектор: ${etalonEscape(summary)}</div>` : ''}`
+                + `${delta ? `<div>Δ: ${etalonEscape(delta)}</div>` : ''}`
+                + `${provenance ? `<div style="opacity:.9;">${etalonEscape(provenance)}</div>` : ''}`
+                + `${referenceLine ? `<div style="opacity:.9;">${etalonEscape(referenceLine)}</div>` : ''}`
+                + `${insufficientText ? `<div>Эталон: недостаточно данных${insufficientText ? ` (${etalonEscape(insufficientText)})` : ''}</div>` : ''}`
+                + `${notes.length ? `<div style="opacity:.9;">Совет: ${etalonEscape(notes.join('; '))}</div>` : ''}`
+                + `${button}</div>`;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    async function applyFinalTactic(btn) {
+        if (typeof STATE === 'undefined' || !STATE) return;
+        const rec = STATE.finalTacticRecommendation;
+
+        if (!rec || !btn || btn.dataset.token !== rec.token) {
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Данные устарели — ↻ Подсказка';
+            }
+            UI.addParserLog('Рекомендация: данные устарели — обновите подсказку (↻ Подсказка)');
+            return;
+        }
+        if (STATE.tacticControlBridgeApplyInProgress) {
+            UI.addParserLog('Рекомендация: применение тактики уже выполняется — подождите');
+            return;
+        }
+
+        // The merged vector carries all 14 controls + priority; the source
+        // names the etalon ids and the base preset/current tactic.
+        const source = rec.source;
+        STATE.finalTacticApplyStatus = 'applying';
+        btn.disabled = true;
+        btn.textContent = 'Применяю…';
+
+        let result = null;
+        try {
+            result = await STATE.tacticControlBridge.applyTacticObject(rec.vector, { strict: true, source });
+        } catch (error) {
+            console.error('[SLF] Final tactic apply failed', error);
+            result = { ok: false, reason: 'exception', failures: [], mismatches: [], rolledBack: false };
+        }
+
+        const reenableAfterRollbackNote = () => {
+            // Keep the rollback notice visible for 5s, then restore the idle button.
+            setTimeout(() => {
+                if (STATE.finalTacticApplyStatus === 'failed_rolled_back' && btn.isConnected
+                    && btn.dataset.token === (STATE.finalTacticRecommendation?.token || null)) {
+                    btn.disabled = false;
+                    btn.textContent = 'Применить';
+                }
+            }, 5000);
+        };
+
+        if (result?.ok && !result.failures?.length && !result.mismatches?.length) {
+            STATE.finalTacticApplyStatus = 'applied';
+            btn.textContent = 'Применено ✓';
+            btn.disabled = true;
+            UI.addParserLog('Рекомендация применена (readback подтверждён)');
+            UI.updateParserStatus('Рекомендация применена (readback подтверждён)');
+            return;
+        }
+
+        const reason = String(result?.reason || 'unknown');
+        const applicationStatus = String(result?.applicationStatus || '');
+        const failureKeys = (Array.isArray(result?.failures) ? result.failures : []).join(', ');
+
+        if (reason === 'preflight_failed') {
+            // Nothing was changed — allow an immediate retry.
+            STATE.finalTacticApplyStatus = 'failed_rolled_back';
+            btn.disabled = false;
+            btn.textContent = 'Применить';
+            UI.addParserLog(`Не удалось: нет элементов ${failureKeys || '?'} — ничего не менялось`);
+            UI.updateParserStatus('Рекомендация: предпроверка не пройдена, ничего не менялось');
+            return;
+        }
+
+        if (reason === 'post_apply_rolled_back' || reason === 'exception_rolled_back'
+            || applicationStatus === 'apply_failed_rolled_back') {
+            STATE.finalTacticApplyStatus = 'failed_rolled_back';
+            btn.textContent = 'Отклонено — откачено';
+            btn.disabled = true;
+            UI.addParserLog('Изменение отклонено страницей, тактика откачена');
+            UI.updateParserStatus('Изменение отклонено страницей, тактика откачена');
+            reenableAfterRollbackNote();
+            return;
+        }
+
+        if (reason === 'rollback_unverified' || applicationStatus === 'apply_failed_unverified') {
+            // Unsafe state: keep the button disabled until a fresh hint render.
+            STATE.finalTacticApplyStatus = 'failed_unverified';
+            btn.textContent = '⚠ Откат не подтверждён';
+            btn.disabled = true;
+            UI.addParserLog('⚠ Откат не подтверждён — проверьте тактику вручную');
+            UI.updateParserStatus('⚠ Откат не подтверждён — проверьте тактику вручную');
+            return;
+        }
+
+        if (reason === 'apply_in_progress') {
+            STATE.finalTacticApplyStatus = 'idle';
+            btn.disabled = false;
+            btn.textContent = 'Применить';
+            UI.addParserLog('Рекомендация: применение тактики уже выполняется — попробуйте ещё раз');
+            return;
+        }
+
+        STATE.finalTacticApplyStatus = 'failed_rolled_back';
+        btn.disabled = false;
+        btn.textContent = 'Применить';
+        UI.addParserLog(`Рекомендация: применение не подтверждено (${reason})`);
+        UI.updateParserStatus('Рекомендация: применение не подтверждено');
+    }
+
+    function bindFinalTacticApplyDelegation() {
+        if (typeof document === 'undefined' || document.__slfFinalTacticApplyDelegation) return;
+        document.__slfFinalTacticApplyDelegation = true;
+        document.addEventListener('click', event => {
+            const btn = event?.target?.closest ? event.target.closest('#slf-final-tactic-apply-btn') : null;
+            if (!btn) return;
+            void applyFinalTactic(btn);
+        });
+    }
+
     function patchCompactCoachMode() {
         if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__compactCoachModePatchedV4) return;
 
@@ -10009,13 +10969,19 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
             const actionText = buildRecommendedAction(snapshot, primaryPresetName);
             const decisionText = buildDecisionExplanation(snapshot);
             const candidateText = buildCandidateSummary(snapshot);
+            // #350: one merged «Рекомендация» block (preset base + etalon
+            // overrides + ONE apply button). Falls back to the legacy
+            // «Действие» row when the merge layer is unavailable.
+            const finalTacticHtml = buildFinalTacticBlockHtml(snapshot);
 
             return `
                 <div data-slf-rec-priority="1" data-slf-rec-section="combined" style="margin:5px 0;background:#151515;border:1px solid #444;border-radius:5px;color:#ddd;padding:9px;">
                     <div style="font-weight:bold;color:#75ff75;text-align:center;margin-bottom:7px;">Подсказка</div>
                     ${context ? `<div style="line-height:1.4;"><b style="color:#8fd3ff;">Ситуация:</b> ${this.escapeHtml(context)}</div>` : ''}
                     ${signalText ? `<div style="line-height:1.4;margin-top:5px;"><b style="color:#c8ff7a;">Сигналы:</b> ${this.escapeHtml(signalText)}</div>` : ''}
-                    <div style="line-height:1.4;margin-top:5px;"><b style="color:#75ff75;">Действие:</b> ${this.escapeHtml(actionText)}</div>
+                    ${finalTacticHtml !== null
+                        ? finalTacticHtml
+                        : `<div style="line-height:1.4;margin-top:5px;"><b style="color:#75ff75;">Действие:</b> ${this.escapeHtml(actionText)}</div>`}
                     ${decisionText ? `<div style="line-height:1.4;margin-top:5px;"><b style="color:#ffd76a;">Решение:</b> ${this.escapeHtml(decisionText)}</div>` : ''}
                     ${candidateText ? `<div style="line-height:1.4;margin-top:5px;opacity:.85;"><b>Кандидаты:</b> ${this.escapeHtml(candidateText)}</div>` : ''}
                 </div>`;
@@ -10153,6 +11119,7 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
         patchCompactCoachMode();
         mountManualButton();
         mountForeignSelector();
+        bindFinalTacticApplyDelegation();
     }
 
     const originalAddMatchParserPanel = UI.addMatchParserPanel;
@@ -10190,11 +11157,15 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
     const manualStateSchema = 'slf_manual_match_state_v1';
     const manualStatePrefix = 'slf_manual_match_state_v1';
     const legacyStatePrefix = 'slf_live_parser_state_v2';
-    const tacticalInputNames = new Set([
-        'def_line', 'press_line', 'def_width', 'press_intense',
-        'build_type', 'build_temp', 'build_long', 'build_fast',
-        'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
-    ]);
+    const tacticalInputNames = new Set(
+        // Canonical 14 control keys live in config.js (TACTIC_CONTROL_KEYS);
+        // inline fallback keeps this module standalone-safe in test sandboxes.
+        typeof TACTIC_CONTROL_KEYS !== 'undefined' ? TACTIC_CONTROL_KEYS : [
+            'def_line', 'press_line', 'def_width', 'press_intense',
+            'build_type', 'build_temp', 'build_long', 'build_fast',
+            'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
+        ]
+    );
 
     function hasOwn(object, key) {
         return !!object && Object.prototype.hasOwnProperty.call(object, key);
@@ -10488,7 +11459,7 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
                 tacticTelemetry: snapshot.tacticTelemetry || null,
                 beforeSnapshot,
                 snapshot,
-                source: { page: 'game', trigger: 'manual_tactic_control', collectedAt: ts, scriptVersion: SLF_VERSION_INFO.scriptVersion }
+                source: { page: 'game', trigger: 'manual_tactic_control', collectedAt: ts, scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown' }
             };
             // Legacy pending preset effect must not claim that an unsaved DOM
             // edit was accepted by the game's match engine.
@@ -10545,9 +11516,14 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
     const MIN_PHASE_COMPLETENESS = 0.55;
     const AUTO_POLL_MS = 15000;
     const TACTIC_KEYS = [
-        'def_line', 'press_line', 'def_width', 'press_intense',
-        'build_type', 'build_temp', 'build_long', 'build_fast',
-        'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot', 'priority'
+        // Canonical 14 control keys live in config.js (TACTIC_CONTROL_KEYS);
+        // inline fallback keeps this module standalone-safe in test sandboxes.
+        ...(typeof TACTIC_CONTROL_KEYS !== 'undefined' ? TACTIC_CONTROL_KEYS : [
+            'def_line', 'press_line', 'def_width', 'press_intense',
+            'build_type', 'build_temp', 'build_long', 'build_fast',
+            'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
+        ]),
+        'priority'
     ];
 
     const legacyStateApi = SnapshotEngine.manualMatchState;
@@ -15250,7 +16226,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
                 page: 'transfers_history',
                 url: location.href,
                 collectedAt: Date.now(),
-                scriptVersion: SLF_VERSION_INFO.scriptVersion
+                scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown'
             },
 
             transfer: {
@@ -18609,9 +19585,20 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
 
 const TransferCandidateScanner = {
     storageKey: 'slf_transfer_candidate_scanner_v3_meta',
+    // Full legacy chain v1..v9. The later policies (pagination/full-market/
+    // four-ranking) append and re-point this list at load time; declaring the
+    // complete chain here removes the fragile dependency on their load-order
+    // mutation for standalone/edge cases.
     legacyStorageKeys: [
         'slf_transfer_candidate_scanner_v1',
-        'slf_transfer_candidate_scanner_v2'
+        'slf_transfer_candidate_scanner_v2',
+        'slf_transfer_candidate_scanner_v3_meta',
+        'slf_transfer_candidate_scanner_v4_meta',
+        'slf_transfer_candidate_scanner_v5_meta',
+        'slf_transfer_candidate_scanner_v6_meta',
+        'slf_transfer_candidate_scanner_v7_meta',
+        'slf_transfer_candidate_scanner_v8_meta',
+        'slf_transfer_candidate_scanner_v9_meta'
     ],
     schema: 'slf_transfer_candidate_scanner_v3_meta',
     indexCollection: 'transfer_candidate_scan_index_tmp',
@@ -18666,7 +19653,12 @@ const TransferCandidateScanner = {
     },
 
     cleanupLegacyBrowserStorage() {
-        this.legacyStorageKeys.forEach(key => localStorage.removeItem(key));
+        // Never purge the currently active storage key (mirrors the policy
+        // purge guard); the legacy chain now includes the scanner's own
+        // superseded keys, so the guard is what keeps the active meta intact.
+        this.legacyStorageKeys.forEach(key => {
+            if (key && key !== this.storageKey) localStorage.removeItem(key);
+        });
     },
 
     loadMeta() {
@@ -20005,145 +20997,9 @@ if (typeof TransferCandidateScanner !== 'undefined' && TransferCandidateScanner 
         element.textContent = `Этап: ${this.state.phase} · Страницы: ${this.state.scannedPages || 0}/${this.state.totalPages || '?'} · На VPS: ${this.state.indexedPlayers || 0} · Проанализировано: ${this.state.enrichedPlayers || 0}`;
     };
 
-    // The 2026 market is a CSS grid made of div.fmx-row elements, not an HTML table.
-    // Keep the legacy table parser intact and branch only when the real FM2026 grid is present.
-    const findTableBeforeFm2026Grid = TransferCandidateScanner.findTable;
-    const headerMapBeforeFm2026Grid = TransferCandidateScanner.headerMap;
-    const parsePageBeforeFm2026Grid = TransferCandidateScanner.parsePage;
-
-    TransferCandidateScanner.findFm2026MarketSurface = function findFm2026MarketSurface(doc = document) {
-        const header = doc?.querySelector?.('.fmx-rows__head.fmx-tmarket');
-        if (!header) return null;
-        const card = header.closest?.('.fmx-card') || header.parentElement;
-        if (!card?.querySelector?.('.fmx-row.fmx-tmarket')) return null;
-        return card;
-    };
-
-    TransferCandidateScanner.isFm2026MarketSurface = function isFm2026MarketSurface(surface) {
-        return !!(
-            surface?.querySelector?.('.fmx-rows__head.fmx-tmarket') &&
-            surface?.querySelector?.('.fmx-row.fmx-tmarket')
-        );
-    };
-
-    TransferCandidateScanner.findTable = function findTableWithFm2026Grid(doc) {
-        return this.findFm2026MarketSurface(doc) || findTableBeforeFm2026Grid.apply(this, arguments);
-    };
-
-    TransferCandidateScanner.headerMap = function headerMapWithFm2026Grid(surface) {
-        if (this.isFm2026MarketSurface(surface)) {
-            return {
-                pos: 0,
-                name: 1,
-                club: 2,
-                age: 3,
-                talent: 4,
-                potential: 5,
-                skill: 6,
-                nominal: 7,
-                price: 8,
-                end: 9,
-                bids: 10,
-                actions: 11
-            };
-        }
-        return headerMapBeforeFm2026Grid.apply(this, arguments);
-    };
-
-    TransferCandidateScanner.getFm2026GridCells = function getFm2026GridCells(rowElement) {
-        return [...(rowElement?.children || [])].filter(node => String(node.tagName || '').toLowerCase() === 'span');
-    };
-
-    TransferCandidateScanner.fm2026GridCellText = function fm2026GridCellText(cells, index) {
-        return this.text(cells?.[index]?.textContent || '');
-    };
-
-    TransferCandidateScanner.parseFm2026GridRow = function parseFm2026GridRow(rowElement, index, page, pageUrl) {
-        const cells = this.getFm2026GridCells(rowElement);
-        if (cells.length < 11) return null;
-
-        const direct = typeof this.findDirectPlayerAnchor === 'function'
-            ? this.findDirectPlayerAnchor(rowElement)
-            : null;
-        const directAnchor = direct?.anchor || rowElement.querySelector('a[href*="player.php"][href*="id="]');
-        const directHref = directAnchor?.getAttribute('href') || '';
-        const directPlayerId = direct?.playerId ||
-            (typeof this.playerIdFromHref === 'function' ? this.playerIdFromHref(directHref) : '') ||
-            (directHref.match(/[?&]id=(\d+)/)?.[1] || '');
-
-        const detail = typeof this.findTransferDetailAnchor === 'function'
-            ? this.findTransferDetailAnchor(rowElement)
-            : null;
-        const detailAnchor = detail?.anchor || rowElement.querySelector('a.fmx-goto[href*="transfer_id="]');
-        const detailHref = detailAnchor?.getAttribute('href') || '';
-        const rowTransferId = (rowElement.id || '').match(/(?:tl|transfer)[-_]?(\d+)/i)?.[1] || '';
-        const detailTransferId = detail?.transferId ||
-            (typeof this.transferIdFromHref === 'function' ? this.transferIdFromHref(detailHref) : '') ||
-            (detailHref.match(/[?&]transfer_id=(\d+)/)?.[1] || '');
-        const transferId = detailTransferId || rowTransferId;
-        if (!directPlayerId && !transferId) return null;
-
-        const wideName = this.text(directAnchor?.querySelector?.('.wide_format')?.textContent || '');
-        const directName = this.text(directAnchor?.getAttribute?.('title') || directAnchor?.textContent || '');
-        const fallbackName = this.fm2026GridCellText(cells, 1);
-        const name = wideName || directName || fallbackName || directPlayerId || (transferId ? `Трансфер #${transferId}` : 'Игрок');
-
-        const positionText = this.fm2026GridCellText(cells, 0).toUpperCase();
-        const positions = positionText.match(/\b(GK|LD|CD|RD|DM|CM|AM|LM|RM|LW|RW|ST)\b/g) || [];
-        const clubAnchor = cells[2]?.querySelector?.('a[href*="roster.php"]');
-        const potentialCell = cells[5];
-        const potentialLevel = Number((potentialCell?.querySelector?.('img[src*="/potencial/"]')?.getAttribute('src') || '').match(/potencial\/(\d+)/)?.[1]) || null;
-        const skillText = this.text(cells[6]?.querySelector?.('.fmx-rating')?.textContent || this.fm2026GridCellText(cells, 6));
-        const priceText = this.fm2026GridCellText(cells, 8);
-        const endDateText = this.text(cells[9]?.querySelector?.('.wide_format')?.textContent || this.fm2026GridCellText(cells, 9));
-        const bidsText = this.text(cells[10]?.querySelector?.('.fmx-bets__count')?.textContent || this.fm2026GridCellText(cells, 10));
-        const tm = rowElement.querySelector('.tm_field a[href*="transfermarkt"], a[href*="transfermarkt."]');
-        const playerUrl = directPlayerId
-            ? new URL(`/player.php?action=view&id=${encodeURIComponent(directPlayerId)}`, location.origin).toString()
-            : '';
-        const transferDetailUrl = detailHref
-            ? new URL(detailHref, location.origin).toString()
-            : transferId
-                ? new URL(`/transfers.php?action=view&transfer_id=${encodeURIComponent(transferId)}`, location.origin).toString()
-                : '';
-
-        const row = {
-            key: transferId ? `transfer:${transferId}` : `player:${directPlayerId}`,
-            transferId,
-            transferDetailUrl,
-            playerId: String(directPlayerId || ''),
-            page,
-            pageUrl,
-            originalIndex: index,
-            name,
-            playerUrl,
-            positions: [...new Set(positions)],
-            club: this.text(clubAnchor?.textContent || this.fm2026GridCellText(cells, 2)),
-            age: this.number(this.fm2026GridCellText(cells, 3)),
-            talent: this.number(this.fm2026GridCellText(cells, 4)),
-            potentialLevel,
-            potentialText: this.text(potentialCell?.querySelector?.('[title]')?.getAttribute('title') || ''),
-            scoutSkill: this.number(skillText),
-            price: this.money(priceText),
-            bids: this.number(bidsText),
-            endDateText,
-            tmUrl: tm?.href || '',
-            tmDisplayedValueEur: this.money(tm?.textContent || '')
-        };
-        row.preScore = this.preScore(row);
-        return row;
-    };
-
-    TransferCandidateScanner.parsePage = function parsePageWithRealFm2026Grid(doc, page, pageUrl) {
-        const surface = this.findFm2026MarketSurface(doc);
-        if (!surface) return parsePageBeforeFm2026Grid.apply(this, arguments);
-
-        const rows = [...surface.querySelectorAll('.fmx-row.fmx-tmarket')]
-            .map((rowElement, index) => this.parseFm2026GridRow(rowElement, index, page, pageUrl))
-            .filter(Boolean);
-
-        return rows;
-    };
+    // The 2026 redesign ships the market as the same legacy table; the fmx-grid
+    // variant never shipped to production (audit 2026-10-14). The scanner table
+    // path (findTable/headerMap/parsePage) is the only market surface.
 }
 // <<< src/modules/transfer-analyzer/transfer-candidate-full-market-policy.js
 
@@ -20599,19 +21455,13 @@ if (typeof TMEnrichmentLayer !== 'undefined' && TMEnrichmentLayer && !TMEnrichme
 }
 
 // Real FM2026 transfer-market compatibility.
-// The redesigned market is a 12-column CSS grid of div.fmx-row elements, while the
-// legacy runtime expects table/tr/td. Adapt the DOM boundary and keep all enrichment,
-// scoring, cache and ranking logic in the existing Analyzer implementation.
+// The 2026 redesign ships the market as the same legacy table; the fmx-grid variant
+// never shipped to production (audit 2026-10-14). This bridge only supplies the
+// market row identity helpers used by the legacy table path.
 if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !TransferMarketAnalyzer.fm2026VisibleRowIdentityBridgeApplied) {
     TransferMarketAnalyzer.fm2026VisibleRowIdentityBridgeApplied = true;
 
     const findTransferTableBeforeRealFm2026Grid = TransferMarketAnalyzer.findTransferTable;
-    const ensureAnalysisHeaderBeforeRealFm2026Grid = TransferMarketAnalyzer.ensureAnalysisHeader;
-    const parseVisibleRowsBeforeRealFm2026Grid = TransferMarketAnalyzer.parseVisibleRows;
-    const getOrCreateBadgeCellBeforeRealFm2026Grid = TransferMarketAnalyzer.getOrCreateBadgeCell;
-    const sortRowsInTableByDatasetBeforeRealFm2026Grid = TransferMarketAnalyzer.sortRowsInTableByDataset;
-    const resetOrderBeforeRealFm2026Grid = TransferMarketAnalyzer.resetOrder;
-    const clearAllTransferAnalysisStateBeforeRealFm2026Grid = TransferMarketAnalyzer.clearAllTransferAnalysisState;
 
     TransferMarketAnalyzer.playerIdFromMarketHref = function playerIdFromMarketHref(value) {
         if (!value) return '';
@@ -20672,206 +21522,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer && !
         };
     };
 
-    TransferMarketAnalyzer.findFm2026MarketSurface = function findFm2026MarketSurface(doc = document) {
-        const header = doc?.querySelector?.('.fmx-rows__head.fmx-tmarket');
-        if (!header) return null;
-        const card = header.closest?.('.fmx-card') || header.parentElement;
-        if (!card?.querySelector?.('.fmx-row.fmx-tmarket')) return null;
-        return card;
-    };
-
-    TransferMarketAnalyzer.isFm2026MarketSurface = function isFm2026MarketSurface(surface) {
-        return !!(
-            surface?.querySelector?.('.fmx-rows__head.fmx-tmarket') &&
-            surface?.querySelector?.('.fmx-row.fmx-tmarket')
-        );
-    };
-
-    TransferMarketAnalyzer.findTransferTable = function findTransferSurfaceWithRealFm2026Grid() {
-        return this.findFm2026MarketSurface(document) || findTransferTableBeforeRealFm2026Grid.apply(this, arguments);
-    };
-
-    TransferMarketAnalyzer.ensureAnalysisHeader = function ensureAnalysisHeaderWithRealFm2026Grid(surface) {
-        if (this.isFm2026MarketSurface(surface)) return;
-        return ensureAnalysisHeaderBeforeRealFm2026Grid.apply(this, arguments);
-    };
-
-    TransferMarketAnalyzer.getFm2026GridCells = function getFm2026GridCells(rowElement) {
-        return [...(rowElement?.children || [])].filter(node => String(node.tagName || '').toLowerCase() === 'span');
-    };
-
-    TransferMarketAnalyzer.getFm2026GridCellText = function getFm2026GridCellText(cells, index) {
-        return this.normalizeText(cells?.[index]?.textContent || '');
-    };
-
-    TransferMarketAnalyzer.parseFm2026GridRow = function parseFm2026GridRow(rowElement, index) {
-        const cells = this.getFm2026GridCells(rowElement);
-        if (cells.length < 11) return null;
-
-        const identity = this.findMarketRowIdentity(rowElement);
-        if (!identity.playerId && !identity.transferId) return null;
-
-        const directAnchor = identity.playerAnchor;
-        const wideName = this.normalizeText(directAnchor?.querySelector?.('.wide_format')?.textContent || '');
-        const directName = this.normalizeText(directAnchor?.getAttribute?.('title') || directAnchor?.textContent || '');
-        const fallbackName = this.getFm2026GridCellText(cells, 1);
-        const name = this.cleanPlayerName(wideName || directName || fallbackName || identity.playerId || (identity.transferId ? `Трансфер #${identity.transferId}` : 'Игрок'));
-
-        const positionText = this.getFm2026GridCellText(cells, 0);
-        const ageText = this.getFm2026GridCellText(cells, 3);
-        const talentText = this.getFm2026GridCellText(cells, 4);
-        const potentialCell = cells[5];
-        const potentialText = this.normalizeText(
-            potentialCell?.querySelector?.('[title]')?.getAttribute('title') ||
-            potentialCell?.querySelector?.('img[title]')?.getAttribute('title') ||
-            potentialCell?.textContent || ''
-        );
-        const skillText = this.normalizeText(cells[6]?.querySelector?.('.fmx-rating')?.textContent || this.getFm2026GridCellText(cells, 6));
-        const nominalText = this.getFm2026GridCellText(cells, 7);
-        const nominalRatio = this.parseNominalRatio(nominalText);
-        const priceText = this.getFm2026GridCellText(cells, 8);
-        const price = this.parseMoney(priceText);
-        const endDateText = this.normalizeText(cells[9]?.querySelector?.('.wide_format')?.textContent || this.getFm2026GridCellText(cells, 9));
-        const bidsText = this.normalizeText(cells[10]?.querySelector?.('.fmx-bets__count')?.textContent || this.getFm2026GridCellText(cells, 10));
-        const tm = rowElement.querySelector('.tm_field a[href*="transfermarkt"], a[href*="transfermarkt."]');
-
-        const row = {
-            rowEl: rowElement,
-            originalIndex: index,
-            playerId: String(identity.playerId || ''),
-            playerUrl: identity.playerId
-                ? new URL(`/player.php?action=view&id=${encodeURIComponent(identity.playerId)}`, location.origin).toString()
-                : '',
-            transferId: identity.transferId,
-            transferDetailUrl: identity.transferDetailUrl,
-            name,
-            positions: this.parsePositions(positionText),
-            age: this.parseNumber(ageText),
-            talent: this.parseNumber(talentText),
-            potentialText,
-            scoutSkill: this.parseNumber(skillText),
-            slfPriceText: priceText,
-            slfPriceCellText: `${nominalText} ${priceText}`.trim(),
-            slfPrice: price,
-            slfSecondaryPriceText: '',
-            slfSecondaryPrice: null,
-            nominalRatio,
-            nominalBase: price && nominalRatio ? Math.round(price / nominalRatio) : null,
-            slfPriceSource: 'fm2026_grid_value_cell',
-            slfPriceCellIndex: 8,
-            slfBids: this.parseNumber(bidsText),
-            endDateText,
-            tmUrl: tm?.href || '',
-            tmProfile: null,
-            tmValueEur: 0
-        };
-
-        rowElement.dataset.slfOriginalIndex = String(index);
-        rowElement.dataset.slfPlayerId = row.playerId;
-        if (row.transferId) rowElement.dataset.slfTransferId = String(row.transferId);
-        return row;
-    };
-
-    TransferMarketAnalyzer.parseFm2026GridRows = function parseFm2026GridRows(surface = this.findFm2026MarketSurface(document)) {
-        if (!surface) return [];
-        return [...surface.querySelectorAll('.fmx-row.fmx-tmarket')]
-            .map((rowElement, index) => this.parseFm2026GridRow(rowElement, index))
-            .filter(Boolean);
-    };
-
-    TransferMarketAnalyzer.parseVisibleRows = function parseVisibleRowsWithRealFm2026Grid() {
-        const surface = this.findFm2026MarketSurface(document);
-        if (surface) {
-            const parsed = this.parseFm2026GridRows(surface);
-            debugLog('[SLF Transfer Analyzer] parseVisibleRows FM2026 grid', parsed);
-            return parsed;
-        }
-        return parseVisibleRowsBeforeRealFm2026Grid.apply(this, arguments);
-    };
-
-    TransferMarketAnalyzer.getOrCreateBadgeCell = function getOrCreateBadgeCellWithRealFm2026Grid(row) {
-        const rowElement = row?.rowEl;
-        if (!rowElement?.matches?.('.fmx-row.fmx-tmarket')) {
-            return getOrCreateBadgeCellBeforeRealFm2026Grid.apply(this, arguments);
-        }
-
-        let box = rowElement.querySelector(':scope > .slf-transfer-analysis-badge');
-        if (!box) {
-            box = document.createElement('div');
-            box.className = 'slf-transfer-analysis-badge slf-transfer-analysis-badge--fmx';
-            box.style.cssText = `
-                grid-column:1 / -1;
-                box-sizing:border-box;
-                min-width:0;
-                width:100%;
-                margin:2px 0 0;
-                padding:4px 6px;
-                border-top:1px solid rgba(139,147,171,.18);
-                font-size:11px;
-                line-height:1.15;
-                white-space:normal;
-                position:relative;
-                overflow:visible;
-                display:flex;
-                flex-wrap:wrap;
-                align-items:flex-start;
-                gap:3px 4px;
-            `;
-            rowElement.appendChild(box);
-        }
-        return box;
-    };
-
-    TransferMarketAnalyzer.sortRowsInTableByDataset = function sortRowsWithRealFm2026Grid(surface, datasetKey, direction = 'desc') {
-        if (!this.isFm2026MarketSurface(surface)) {
-            return sortRowsInTableByDatasetBeforeRealFm2026Grid.apply(this, arguments);
-        }
-
-        const rows = [...surface.querySelectorAll('.fmx-row.fmx-tmarket')];
-        if (!rows.length) return;
-        const sorted = rows.slice().sort((a, b) => {
-            const av = Number(a.dataset?.[datasetKey]);
-            const bv = Number(b.dataset?.[datasetKey]);
-            const aValid = Number.isFinite(av);
-            const bValid = Number.isFinite(bv);
-            if (aValid && bValid && av !== bv) return direction === 'asc' ? av - bv : bv - av;
-            if (aValid !== bValid) return aValid ? -1 : 1;
-            return Number(a.dataset.slfOriginalIndex || 0) - Number(b.dataset.slfOriginalIndex || 0);
-        });
-        const parent = rows[0].parentElement;
-        if (!parent) return;
-        const pagination = [...parent.children].find(node => node.classList?.contains('transfers-ui__pages')) || null;
-        sorted.forEach(rowElement => parent.insertBefore(rowElement, pagination));
-    };
-
-    TransferMarketAnalyzer.resetOrder = function resetOrderWithRealFm2026Grid() {
-        const surface = this.findFm2026MarketSurface(document);
-        if (!surface) return resetOrderBeforeRealFm2026Grid.apply(this, arguments);
-
-        const rows = [...surface.querySelectorAll('.fmx-row.fmx-tmarket')]
-            .sort((a, b) => Number(a.dataset.slfOriginalIndex || 0) - Number(b.dataset.slfOriginalIndex || 0));
-        if (!rows.length) return;
-        const parent = rows[0].parentElement;
-        const pagination = parent ? [...parent.children].find(node => node.classList?.contains('transfers-ui__pages')) || null : null;
-        rows.forEach(rowElement => parent?.insertBefore(rowElement, pagination));
-        this.setStatus?.('Исходный порядок восстановлен.');
-    };
-
-    if (typeof clearAllTransferAnalysisStateBeforeRealFm2026Grid === 'function') {
-        TransferMarketAnalyzer.clearAllTransferAnalysisState = function clearAllTransferAnalysisStateWithRealFm2026Grid() {
-            const result = clearAllTransferAnalysisStateBeforeRealFm2026Grid.apply(this, arguments);
-            document.querySelectorAll('.fmx-row.fmx-tmarket').forEach(rowElement => {
-                ['slfAnalyzerScore', 'slfSkillDelta', 'slfMinutesPct', 'slfTalentUp', 'slfTmValue', 'slfMktBargain', 'slfMktOverpriced']
-                    .forEach(key => { delete rowElement.dataset[key]; });
-            });
-            return result;
-        };
-    }
-
     TransferMarketAnalyzer.parseVisibleRowsCompat = function parseVisibleRowsCompat() {
-        const surface = this.findFm2026MarketSurface(document);
-        if (surface) return this.parseFm2026GridRows(surface);
-
         const table = document.querySelector('table.trans_market_offers, table[data-slf-transfer-table]') || findTransferTableBeforeRealFm2026Grid.call(this);
         if (!table) return [];
         this.ensureAnalysisHeader(table);
@@ -22196,7 +22847,7 @@ if (typeof TransferMarketAnalyzer !== 'undefined' && TransferMarketAnalyzer) {
 
     function isFm2026() {
         return document.documentElement?.dataset?.slfDesign === 'fm2026' ||
-            !!document.querySelector('.fm-topbar, .fm-stage, .fmx');
+            !!document.querySelector('.fm-topbar, .fm-stage');
     }
 
     function ensureStyle() {
@@ -22230,8 +22881,6 @@ html[data-slf-design="fm2026"] #${STATUS_ID}>*+*{padding-left:12px;border-left:1
 html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar.slf-transfer-workspace-solo{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:6px!important;width:100%!important;margin:0 0 14px!important;padding:10px 14px!important;background:linear-gradient(180deg,rgba(28,33,50,.98),rgba(23,27,41,.98))!important;border:1px solid var(--slf-border,#38415f)!important;border-radius:14px!important}
 html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar.slf-transfer-workspace-solo #slf-transfer-status{flex:1 1 260px;min-width:180px;margin-left:auto!important;color:var(--slf-muted,#8b93ab)!important;font-size:10.5px!important;text-align:right!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-row.slf-transfer-forecast-layout{grid-template-columns:minmax(0,1fr) minmax(360px,410px)!important;gap:12px!important;margin-bottom:14px!important}
-html[data-slf-design="fm2026"] #slf-purchase-forecast-row>.fmx-info-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important;margin:0!important;min-width:0!important;max-width:none!important;flex:none!important}
-html[data-slf-design="fm2026"] #slf-purchase-forecast-row>.fmx-info-grid>.fmx-card{min-width:0!important;margin:0!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast{width:auto!important;min-width:0!important;max-width:410px!important;margin:0!important;padding:10px 11px!important;background:linear-gradient(135deg,rgba(43,217,124,.09),transparent 42%),var(--slf-bg,#171b29)!important;border:1px solid var(--slf-border,#38415f)!important;border-radius:14px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.035)!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast>div:first-child{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin:0 0 7px!important;color:var(--slf-accent2,#43f58c)!important;font-size:12.5px!important;line-height:1.2!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast>div:first-child::after{content:"VPS History";padding:2px 7px;color:var(--slf-muted,#8b93ab);background:rgba(139,147,171,.08);border:1px solid rgba(139,147,171,.16);border-radius:999px;font-size:9px;font-weight:600}
@@ -22242,7 +22891,7 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspa
 html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast>div:nth-child(4){grid-template-columns:74px repeat(2,minmax(0,1fr))!important;gap:5px!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast>div:nth-child(4)>div{min-height:46px;padding:5px 7px!important;border-radius:9px!important}
 html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design="fm2026"] #slf-purchase-forecast-median,html[data-slf-design="fm2026"] #slf-purchase-forecast-p75{font-size:15px!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-note{margin-top:5px!important;font-size:9.5px!important}
 @media(max-width:1220px){html[data-slf-design="fm2026"] #slf-purchase-forecast-row.slf-transfer-forecast-layout{grid-template-columns:minmax(0,1fr)!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast{width:100%!important;max-width:none!important}}
-@media(max-width:900px){html[data-slf-design="fm2026"] #${WORKSPACE_ID}{grid-template-columns:minmax(0,1fr);grid-template-areas:"analyzer" "scanner" "status"}html[data-slf-design="fm2026"] #${WORKSPACE_ID}>#slf-transfer-analyzer-toolbar{border-right:0!important;border-bottom:1px solid rgba(139,147,171,.16)!important}html[data-slf-design="fm2026"] #slf-purchase-forecast-row>.fmx-info-grid{grid-template-columns:minmax(0,1fr)!important}html[data-slf-design="fm2026"] .slf-transfer-workspace-title{width:auto}}
+@media(max-width:900px){html[data-slf-design="fm2026"] #${WORKSPACE_ID}{grid-template-columns:minmax(0,1fr);grid-template-areas:"analyzer" "scanner" "status"}html[data-slf-design="fm2026"] #${WORKSPACE_ID}>#slf-transfer-analyzer-toolbar{border-right:0!important;border-bottom:1px solid rgba(139,147,171,.16)!important}html[data-slf-design="fm2026"] .slf-transfer-workspace-title{width:auto}}
 @media(prefers-reduced-motion:reduce){html[data-slf-design="fm2026"] #${WORKSPACE_ID},html[data-slf-design="fm2026"] #slf-purchase-forecast-panel.slf-transfer-workspace-forecast{transition:none!important;animation:none!important}}
         `;
         (document.head || document.documentElement).appendChild(style);
@@ -22330,25 +22979,6 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design
         adaptTimer = setTimeout(adapt, 0);
     }
 
-    // The history VPS layer is evaluated after the FM2026 grid bridge and replaces
-    // findTransferTable()/parseVisibleRows() with legacy table-only implementations.
-    // Reapply the grid boundary here, in the final transfer module, before App.start().
-    const finalLegacyFindTransferTable = TransferMarketAnalyzer.findTransferTable;
-    const finalLegacyParseVisibleRows = TransferMarketAnalyzer.parseVisibleRows;
-    if (
-        typeof TransferMarketAnalyzer.findFm2026MarketSurface === 'function' &&
-        typeof TransferMarketAnalyzer.parseFm2026GridRows === 'function'
-    ) {
-        TransferMarketAnalyzer.findTransferTable = function findTransferSurfaceFinal() {
-            return this.findFm2026MarketSurface(document) || finalLegacyFindTransferTable.apply(this, arguments);
-        };
-        TransferMarketAnalyzer.parseVisibleRows = function parseVisibleRowsFinal() {
-            const surface = this.findFm2026MarketSurface(document);
-            if (surface) return this.parseFm2026GridRows(surface);
-            return finalLegacyParseVisibleRows.apply(this, arguments);
-        };
-    }
-
     const addToolbarOriginal = TransferMarketAnalyzer.addToolbar;
     TransferMarketAnalyzer.addToolbar = function addToolbarWithoutHistoryVisibleAnalysis() {
         const result = addToolbarOriginal.apply(this, arguments);
@@ -22358,12 +22988,6 @@ html[data-slf-design="fm2026"] #slf-purchase-forecast-count,html[data-slf-design
     };
     delete TransferMarketAnalyzer.analyzeHistoryVisibleRows;
 
-    const findForecastBoxOriginal = TransferMarketAnalyzer.findPurchaseForecastMarketBox;
-    if (typeof findForecastBoxOriginal === 'function') {
-        TransferMarketAnalyzer.findPurchaseForecastMarketBox = function findFm2026ForecastBox() {
-            return document.querySelector('.fmx > .fmx-info-grid, .fmx-info-grid') || findForecastBoxOriginal.apply(this, arguments);
-        };
-    }
     const addForecastOriginal = TransferMarketAnalyzer.addPurchaseForecastPanel;
     if (typeof addForecastOriginal === 'function') {
         TransferMarketAnalyzer.addPurchaseForecastPanel = function addCompactPurchaseForecastPanel() {
@@ -22669,7 +23293,16 @@ const TrainingGuidePanel = {
     }
 };
 
-TrainingGuidePanel.mount();
+// 2026-10-16 sweep (#356): the userscript declares no @run-at, so bundle eval
+// can run at document-start while document.body is still null — mount()'s
+// fallback `(document.querySelector('.pad2')||document.body).appendChild(panel)`
+// would throw and kill the rest of the bundle. Defer to DOMContentLoaded;
+// mount()'s own panelId check keeps the idempotence semantics.
+if (document.body) {
+    TrainingGuidePanel.mount();
+} else {
+    document.addEventListener('DOMContentLoaded', () => TrainingGuidePanel.mount(), { once: true });
+}
 // <<< src/modules/team-management/training-reference-guide.js
 
 
@@ -22698,12 +23331,37 @@ const LoanLimitPanel = {
         return style.display !== 'none' && style.visibility !== 'hidden';
     },
 
+    // Loan-row anchoring re-verified live on team4.php (default squad page),
+    // 2026-10-16, in BOTH design states (design=0 and design=1):
+    //   - #generallist is alive with tr.view-team__player rows; loaned players
+    //     are marked by span.player-loan INSIDE their row (text «аренда»,
+    //     title «Взят в аренду у клуба …») — stable in both designs;
+    //   - the old anchors are dead SITE-WIDE: tr.view-team__player.pl--1
+    //     matches nothing (line classes are now pl-0/pl-1/pl--3) and the
+    //     .tpanel-a[data-tp="-1"] loan tab is absent (only data-tp="0"
+    //     «Основная команда») — the panel used to mount but stay display:none;
+    //   - traps: /аренд/i text matching also hits the «аренд. номинал» table
+    //     header, and tablesorter duplicates a header row (direct th children)
+    //     inside tbody — those are never loan rows (structural exclusion);
+    //   - age header «Воз» (#generallist thead th, index 10) and the mount
+    //     point (#generallist → box after the table) are unchanged.
     isLoanTabActive() {
         const activeTab = document.querySelector('.tpanel-a[data-tp="-1"]');
-        if (activeTab && /аренд/i.test(activeTab.textContent || '')) return true;
+        if (activeTab) {
+            // Tab structure present ⇒ tab governs (pre-#353 behaviour):
+            // active iff its text matches; a PRESENT non-matching tab must
+            // NOT be overridden by the new row anchor — visible legacy
+            // pl--1 rows are the only fallback here.
+            if (/аренд/i.test(activeTab.textContent || '')) return true;
+            return [...document.querySelectorAll('tr.view-team__player.pl--1')]
+                .some(row => this.isVisible(row));
+        }
 
-        return [...document.querySelectorAll('tr.view-team__player.pl--1')]
-            .some(row => this.isVisible(row));
+        // No loan tab in the tab bar AT ALL (current site state, both
+        // designs): activity is row-based — visible loan rows exist.
+        // Fail-closed: no #generallist / no matching rows → false → panel
+        // stays hidden.
+        return this.getLoanRows().length > 0;
     },
 
     getAgeColumnIndex() {
@@ -22719,10 +23377,30 @@ const LoanLimitPanel = {
     },
 
     getLoanRows() {
-        if (!this.isLoanTabActive()) return [];
+        const rows = new Set();
 
-        return [...document.querySelectorAll('tr.view-team__player.pl--1')]
-            .filter(row => this.isVisible(row));
+        // Legacy anchor (old design): loaned players carry the pl--1 line class.
+        for (const row of document.querySelectorAll('tr.view-team__player.pl--1')) {
+            if (this.isVisible(row)) rows.add(row);
+        }
+
+        // Current anchor: visible tbody rows of #generallist marked with
+        // span.player-loan inside the row. Tablesorter duplicates a header
+        // row inside tbody (direct th children, text includes
+        // «аренд. номинал») — excluded structurally, never by text matching.
+        const table = document.querySelector('#generallist');
+        if (table) {
+            for (const row of table.querySelectorAll('tbody tr')) {
+                if (rows.has(row)) continue;
+                if (!this.isVisible(row)) continue;
+                const isHeaderRow = [...row.children].some(
+                    child => String(child.tagName || '').toLowerCase() === 'th');
+                if (isHeaderRow) continue;
+                if (row.querySelector('span.player-loan')) rows.add(row);
+            }
+        }
+
+        return [...rows];
     },
 
     readLoanState() {
@@ -22868,6 +23546,24 @@ const LoanLimitPanel = {
             if (!tab) return;
             setTimeout(() => this.render(), 90);
         }, true);
+
+        // Current markup has no loan tab to click: #generallist mutations
+        // (design filter switches, loan state changes) must re-render the
+        // panel. render() only writes its own box AFTER the table and never
+        // mutates table children, so the observer cannot feed back into
+        // itself. Debounced ~200ms to coalesce bursts of mutations.
+        const table = document.querySelector('#generallist');
+        if (table && typeof MutationObserver === 'function') {
+            let timer = null;
+            this.loanTableObserver = new MutationObserver(() => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                    timer = null;
+                    this.render();
+                }, 200);
+            });
+            this.loanTableObserver.observe(table, { childList: true, subtree: true });
+        }
     },
 
     mount() {
@@ -23858,7 +24554,11 @@ if (false) {
         if (!node) return;
         node.classList.add('slf-ui');
         if (panel) node.classList.add('slf-panel');
-        if (mount) node.dataset.slfMount = isFm2026() ? mount : 'legacy';
+        // Single owner for data-slf-mount (#356): when another module already
+        // stamped the node (bootstrap marks the training guide panel
+        // `fm2026-training-before-champ`), that marker must win over this
+        // adapter's generic re-decoration value.
+        if (mount && !node.dataset.slfMount) node.dataset.slfMount = isFm2026() ? mount : 'legacy';
         node.querySelectorAll('button').forEach(item => item.classList.add('slf-button'));
         node.querySelectorAll('input,select').forEach(item => item.classList.add('slf-control'));
     }
@@ -24335,112 +25035,6 @@ try {
 // <<< src/app/match-rendering-compatibility.js
 
 
-// >>> src/app/tactics-dropdown-ui-policy.js
-// ============================================================
-// 16c. Tactics Dropdown UI Policy
-// ============================================================
-// Verbatim extraction from src/app/bootstrap.js (issue #278).
-// Loaded immediately before the final bootstrap orchestrator.
-
-function applyTacticsDropdownUiPolicy() {
-    if (typeof UI === 'undefined' || !UI?.addDropdown || UI.__flatSortedTacticDropdownApplied) return;
-
-    function getTrainerSortKey(key, label) {
-        const text = `${label || ''} ${key || ''}`.toLowerCase();
-        if (text.includes('allegri')) return 'allegri';
-        if (text.includes('arteta')) return 'arteta';
-        if (text.includes('bielsa')) return 'bielsa';
-        if (text.includes('compact counter')) return 'compact';
-        if (text.includes('conte')) return 'conte';
-        if (text.includes('emery')) return 'emery';
-        if (text.includes('de zerbi') || text.includes('dezerbi')) return 'de zerbi';
-        if (text.includes('henta')) return 'henta';
-        if (text.includes('klopp')) return 'klopp';
-        if (text.includes('mourinho')) return 'mourinho';
-        if (text.includes('nagelsmann')) return 'nagelsmann';
-        if (text.includes('pep')) return 'pep';
-        if (text.includes('simeone')) return 'simeone';
-        if (text.includes('xabi')) return 'xabi';
-        if (text.includes('стандарт') || text.includes('standard')) return 'standard';
-        return String(label || key || '').toLowerCase();
-    }
-
-    function getSortedTacticItems() {
-        const labels = typeof PresetStorage !== 'undefined' && PresetStorage.getAllLabels
-            ? PresetStorage.getAllLabels()
-            : {};
-        return Object.entries(labels)
-            .map(([key, label]) => ({
-                key,
-                label: String(label || key),
-                trainer: getTrainerSortKey(key, label)
-            }))
-            .sort((a, b) => {
-                const trainerCmp = a.trainer.localeCompare(b.trainer, 'ru', { sensitivity: 'base' });
-                if (trainerCmp !== 0) return trainerCmp;
-                return a.label.localeCompare(b.label, 'ru', { sensitivity: 'base' });
-            });
-    }
-
-    function hasSameFlatOptions(select, items) {
-        if (!select || select.children.length !== items.length) return false;
-        return items.every((item, index) => {
-            const option = select.children[index];
-            return option && option.tagName === 'OPTION' && option.value === item.key && option.textContent === item.label;
-        });
-    }
-
-    function rewriteSelectFlat(select) {
-        if (!select || select.dataset.slfFlatPresetRewrite === '1') return;
-        const items = getSortedTacticItems();
-        const current = select.value;
-        if (hasSameFlatOptions(select, items)) return;
-
-        select.dataset.slfFlatPresetRewrite = '1';
-        select.innerHTML = '';
-        items.forEach(item => {
-            const option = document.createElement('option');
-            option.value = item.key;
-            option.textContent = item.label;
-            select.appendChild(option);
-        });
-
-        const canonicalCurrent = PresetStorage.resolvePresetId?.(current) || current;
-        if (items.some(item => item.key === canonicalCurrent)) select.value = canonicalCurrent;
-        else if (items.length) select.value = items[0].key;
-
-        setTimeout(() => {
-            delete select.dataset.slfFlatPresetRewrite;
-        }, 0);
-    }
-
-    function normalizeDropdown() {
-        const select = document.querySelector('#slf-tactics-dropdown select');
-        if (!select) return;
-        rewriteSelectFlat(select);
-
-        if (select.dataset.slfFlatPresetObserver === '1') return;
-        const observer = new MutationObserver(() => {
-            if (select.dataset.slfFlatPresetRewrite === '1') return;
-            setTimeout(() => rewriteSelectFlat(select), 0);
-        });
-        observer.observe(select, { childList: true, subtree: false });
-        select.dataset.slfFlatPresetObserver = '1';
-    }
-
-    const originalAddDropdown = UI.addDropdown.bind(UI);
-    UI.addDropdown = async function addFlatSortedTacticDropdown() {
-        const result = await originalAddDropdown.apply(UI, arguments);
-        normalizeDropdown();
-        return result;
-    };
-    UI.__flatSortedTacticDropdownApplied = true;
-}
-
-applyTacticsDropdownUiPolicy();
-// <<< src/app/tactics-dropdown-ui-policy.js
-
-
 // >>> src/app/bootstrap.js
 // 15. App Bootstrap
 // ============================================================
@@ -24537,20 +25131,49 @@ const App = {
     },
 
     mountUI() {
-    UI.addMatchParserPanel();
+    // Boot hardening (#356, 2026-10-16): every init step is guarded separately —
+    // one synchronous failure must not abort the rest of the chain on this pass,
+    // because the body observer re-runs mountUI after every mutation batch.
+    // debugWarn is in the shared bundle scope, but referencing it here would
+    // require a bundle-order.json dependency-audit edit, so the fail-open log
+    // uses console.warn with the established message format.
+    try {
+        UI.addMatchParserPanel();
+    } catch (error) {
+        console.warn('[SLF] match-parser-panel failed; continuing startup', error);
+    }
     // Manual-only Coach Hint mode:
     // - no live parser auto-resume;
     // - no manual tactic watcher freeze/status loop;
     // - tactical blocks are rebuilt only when the user presses "Подсказка".
     // Keep the library module loaded for preset metadata, but do not mount its visible reference panel.
-    void TacticPresetLibraryPanel;
-    TrainingGuidePanel.mount();
-    this.placeTrainingGuideBeforeChampAverages();
-    LoanLimitPanel.mount();
+    try {
+        void TacticPresetLibraryPanel;
+    } catch (error) {
+        console.warn('[SLF] tactic-preset-library failed; continuing startup', error);
+    }
+    try {
+        TrainingGuidePanel.mount();
+    } catch (error) {
+        console.warn('[SLF] training-guide-mount failed; continuing startup', error);
+    }
+    try {
+        this.placeTrainingGuideBeforeChampAverages();
+    } catch (error) {
+        console.warn('[SLF] training-benchmarks-card failed; continuing startup', error);
+    }
+    try {
+        LoanLimitPanel.mount();
+    } catch (error) {
+        console.warn('[SLF] loan-limit-panel failed; continuing startup', error);
+    }
 
-
-    if (!document.getElementById('slf-tactics-dropdown')) {
-        UI.addDropdown();
+    try {
+        if (!document.getElementById('slf-tactics-dropdown')) {
+            UI.addDropdown();
+        }
+    } catch (error) {
+        console.warn('[SLF] tactics-dropdown failed; continuing startup', error);
     }
 },
 
@@ -24581,15 +25204,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.339',
-        scriptVersion: '4.4.339',
+        version: '4.4.346',
+        scriptVersion: '4.4.346',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.339',
+        scriptVersion: '4.4.346',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
