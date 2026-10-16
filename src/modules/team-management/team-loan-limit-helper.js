@@ -38,11 +38,20 @@ const LoanLimitPanel = {
     //     point (#generallist → box after the table) are unchanged.
     isLoanTabActive() {
         const activeTab = document.querySelector('.tpanel-a[data-tp="-1"]');
-        if (activeTab && /аренд/i.test(activeTab.textContent || '')) return true;
+        if (activeTab) {
+            // Tab structure present ⇒ tab governs (pre-#353 behaviour):
+            // active iff its text matches; a PRESENT non-matching tab must
+            // NOT be overridden by the new row anchor — visible legacy
+            // pl--1 rows are the only fallback here.
+            if (/аренд/i.test(activeTab.textContent || '')) return true;
+            return [...document.querySelectorAll('tr.view-team__player.pl--1')]
+                .some(row => this.isVisible(row));
+        }
 
-        // No loan tab in the tab bar (current site state, both designs):
-        // activity is row-based — visible loan rows exist. Fail-closed:
-        // no #generallist / no matching rows → false → panel stays hidden.
+        // No loan tab in the tab bar AT ALL (current site state, both
+        // designs): activity is row-based — visible loan rows exist.
+        // Fail-closed: no #generallist / no matching rows → false → panel
+        // stays hidden.
         return this.getLoanRows().length > 0;
     },
 

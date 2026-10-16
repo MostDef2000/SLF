@@ -548,7 +548,7 @@
       "evidence": [
         "Issue #353: the \"legacy\" mentions in this module are the deliberately retained tr.view-team__player.pl--1 fallback anchor (old-design compatibility), not dead code; the active path is the span.player-loan anchor verified live on team4.php in both design states on 2026-10-16 (3/3 loaned players matched).",
         "Panel mount (#generallist afterend), LIMIT constants and fail-closed no-op unchanged; registered in bundle-order (90 modules, check-bundle-order OK).",
-        "Unit-covered by tools/test-loan-limit-fm2026.mjs T1-T7 (incl. dual-anchor dedupe union and tablesorter header-row trap); independent peer review pass on fix/loan-limit-fm2026 (base 71478b0); live probe under owner session shows the panel visible with live counts in both designs."
+        "Unit-covered by tools/test-loan-limit-fm2026.mjs T1-T8 (incl. dual-anchor dedupe union, tablesorter header-row trap and the tab-gating boundary with legacy pl--1 fallback pin); independent peer review pass on fix/loan-limit-fm2026 (base 71478b0); live probe under owner session shows the panel visible with live counts in both designs."
       ]
     }
   ],

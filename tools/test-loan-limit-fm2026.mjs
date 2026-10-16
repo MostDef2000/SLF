@@ -18,6 +18,19 @@
 // pins the NEW union semantics (a row matching BOTH anchors counted exactly
 // once, span.player-loan-only rows included, visibility:hidden excluded),
 // not the dead-panel symptom.
+// T8 FAILS pre-fix at its union-count pins only (observed map, base helper):
+// the main case fails at "loan rows ARE detected by the union" (the base
+// tab-gates getLoanRows() itself → [] under an inactive tab, so the rows the
+// fixture plants are invisible to it), and the companion fails the «1/10»
+// count pin (base renders «0/10» — legacy-only row collection under an
+// active tab). T8's tab-GATING pins pass pre-fix by design (non-matching
+// present tab → inactive/hidden; matching present tab → active/visible):
+// they pin the PRESERVED pre-#353 boundary, not new behaviour. T8's third
+// block (the legacy pl--1 fallback positive pin) also passes pre-fix: the
+// base helper still carries the pre-#353 fallback line (visible pl--1 rows
+// under a present non-matching tab → active) — the block pins its
+// RESTORATION in the re-anchored helper, and is the only test that fails if
+// that fallback line regresses to `return false;`.
 //
 // Pins:
 //   T1 old design: .tpanel-a[data-tp="-1"] «Аренды» tab + legacy
@@ -34,7 +47,22 @@
 //      span.player-loan child) and is counted exactly ONCE (Set union, not a
 //      concatenation); a visibility:hidden loan row is NOT counted
 //      (isVisible checks display AND visibility — fixtures previously
-//      covered display:none only).
+//      covered display:none only);
+//   T8 tab-gating boundary: a PRESENT .tpanel-a[data-tp="-1"] tab with
+//      non-matching text («Основная команда») is NOT overridden by the new
+//      span.player-loan row anchor — isLoanTabActive() false, panel
+//      display:none (visible pl--1 rows are the only fallback when the tab
+//      exists; here none); companion: the same present tab WITH matching
+//      text («Аренды») wins (active, visible, union rows still counted)
+//      even though the new anchor is also present; third block (positive
+//      legacy fallback pin): the same present NON-matching tab with NO
+//      span.player-loan rows but VISIBLE legacy tr.view-team__player.pl--1
+//      rows → isLoanTabActive() true, panel visible with the exact legacy
+//      totals («1/10», «1/5») computed from those rows — pins the restored
+//      pre-#353 fallback line inside the tab-present branch (a regression
+//      replacing it with `return false;` fails this block only). Row-based
+//      detection is reserved for the tab being ABSENT from the DOM
+//      (T2/T5/T6).
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -265,12 +293,12 @@ function makeHeaderTrapRow(doc) {
   return tr;
 }
 
-function addSquadTable(doc, { tab = false, withTable = true, rows = [] } = {}) {
+function addSquadTable(doc, { tab = false, tabText = 'Аренды', withTable = true, rows = [] } = {}) {
   if (tab) {
     const tabEl = doc.createElement('a');
     tabEl.classList.add('tpanel-a');
     tabEl.attrs = { 'data-tp': '-1' };
-    tabEl.textContent = 'Аренды';
+    tabEl.textContent = tabText;
     doc.body.appendChild(tabEl);
   }
   let table = null;
@@ -536,4 +564,95 @@ function loadHelper(sandbox) {
   console.log('T7 ok: dedupe union (both-anchor row counted once) + visibility:hidden row not counted');
 }
 
-console.log('loan limit fm2026: T1-T7 (old design, new markup, header trap, no-op, fail-closed, observer, dedupe union): OK');
+// ============================================================================
+// T8 — tab-gating boundary: a PRESENT .tpanel-a[data-tp="-1"] tab with
+//      NON-matching text is NOT overridden by the new row anchor (legacy
+//      pl--1 fallback only → inactive); companion: a present MATCHING tab
+//      wins (active) even when the new row anchor is also present;
+//      third block: the same present NON-matching tab with visible legacy
+//      pl--1 rows (no span.player-loan rows) → ACTIVE via the pre-#353
+//      fallback line (positive pin: regression to `return false;` fails here)
+// ============================================================================
+
+{
+  // Main case: tab exists with non-loan text «Основная команда» + visible
+  // span.player-loan rows, legacy pl--1 rows ABSENT. Tab-based decision:
+  // /аренд/i does not match the tab text, the legacy pl--1 fallback finds
+  // nothing → isLoanTabActive() false → panel display:none, even though
+  // getLoanRows() would find span.player-loan rows.
+  const doc = createDocument();
+  addSquadTable(doc, {
+    tab: true,
+    tabText: 'Основная команда',
+    rows: [
+      makePlayerRow(doc, { name: 'LoanA', age: 21, loan: true }),
+      makePlayerRow(doc, { name: 'LoanB', age: 26, loan: true })
+    ]
+  });
+  const LLP = loadHelper(makeSandbox(doc));
+  LLP.mount();
+
+  const box = doc.getElementById(BOX_ID);
+  assert.ok(box, 'T8: panel box mounted');
+  assert.equal(LLP.isLoanTabActive(), false, 'T8: present non-matching tab → inactive (new row anchor must NOT override the tab gate)');
+  assert.equal(box.style.display, 'none', 'T8: panel stays display:none (legacy tab-gating preserved)');
+  assert.ok(LLP.getLoanRows().length > 0, 'T8: loan rows ARE detected by the union — the tab gate is what keeps the panel hidden');
+  console.log('T8 ok: present non-matching tab («Основная команда») + span.player-loan rows, no pl--1 → inactive, display:none');
+}
+
+{
+  // Companion: same present tab WITH matching «аренда» text → tab branch
+  // wins (legacy active behaviour) even though the new span.player-loan
+  // anchor is also present in the fixture.
+  const doc = createDocument();
+  addSquadTable(doc, {
+    tab: true,
+    tabText: 'Аренды',
+    rows: [makePlayerRow(doc, { name: 'LoanNew', age: 21, loan: true })]
+  });
+  const LLP = loadHelper(makeSandbox(doc));
+  LLP.mount();
+
+  const box = doc.getElementById(BOX_ID);
+  assert.ok(box, 'T8: companion panel box mounted');
+  assert.equal(LLP.isLoanTabActive(), true, 'T8: matching tab text → active (tab branch wins over the row anchor)');
+  assert.equal(box.style.display, 'block', 'T8: companion panel visible (legacy tab behaviour)');
+  assert.ok(box.innerHTML.includes('<b>1/10</b>'), `T8: union anchor still counted under an active tab (1/10), got: ${box.innerHTML}`);
+  console.log('T8 ok: companion — present matching tab («Аренды») wins even with the new anchor present → active, visible');
+}
+
+{
+  // Third block — POSITIVE pin on the legacy pl--1 fallback line inside the
+  // tab-present branch (peer-review gap F2). Tab exists with NON-matching
+  // text, NO span.player-loan rows anywhere, but VISIBLE legacy
+  // tr.view-team__player.pl--1 rows (one visible, one display:none — legacy
+  // row shape, age in the «Воз» cell). The pre-#353 fallback
+  // (`[...document.querySelectorAll('tr.view-team__player.pl--1')]
+  // .some(isVisible)`) must activate the panel and the exact legacy totals
+  // must be rendered from those rows. Replacing the fallback line with
+  // `return false;` keeps the two T8 gating blocks green — only this block
+  // catches that regression.
+  const doc = createDocument();
+  addSquadTable(doc, {
+    tab: true,
+    tabText: 'Основная команда',
+    rows: [
+      makePlayerRow(doc, { name: 'LegacyLoan', age: 25, legacyClass: true }),
+      makePlayerRow(doc, { name: 'LegacyHidden', age: 30, legacyClass: true, hidden: true }),
+      makePlayerRow(doc, { name: 'Plain1', age: 24 })
+    ]
+  });
+  const LLP = loadHelper(makeSandbox(doc));
+  LLP.mount();
+
+  const box = doc.getElementById(BOX_ID);
+  assert.ok(box, 'T8: legacy-fallback panel box mounted');
+  assert.equal(LLP.isLoanTabActive(), true, 'T8: present non-matching tab + visible legacy pl--1 rows → ACTIVE (pre-#353 fallback line restored)');
+  assert.equal(box.style.display, 'block', 'T8: legacy fallback path leaves the panel visible, not fail-closed');
+  assert.equal(LLP.getLoanRows().length, 1, 'T8: exactly the visible pl--1 row counted (hidden pl--1 row excluded, no span.player-loan rows planted)');
+  assert.ok(box.innerHTML.includes('<b>1/10</b>'), `T8: legacy totals 1/10 from the pl--1 rows, got: ${box.innerHTML}`);
+  assert.ok(box.innerHTML.includes('<b>1/5</b>'), `T8: legacy over-23 1/5 (visible age 25; hidden age 30 excluded), got: ${box.innerHTML}`);
+  console.log('T8 ok: legacy fallback pin — present non-matching tab + visible pl--1 rows, no span.player-loan → ACTIVE, 1/10, 1/5');
+}
+
+console.log('loan limit fm2026: T1-T8 (old design, new markup, header trap, no-op, fail-closed, observer, dedupe union, tab-gating boundary + legacy pl--1 fallback pin): OK');
