@@ -125,6 +125,7 @@ jobs:
           node tools/test-dave56-etalon-panel.mjs
           node tools/test-final-tactic-merge.mjs
           node tools/test-tactic-dropdown-mount.mjs
+          node tools/test-loan-limit-fm2026.mjs
           node tools/validate-workflow-inventory.mjs
           node tools/validate-quality-governance.mjs
 

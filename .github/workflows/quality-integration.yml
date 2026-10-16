@@ -122,6 +122,7 @@ jobs:
           node --check tools/test-dave56-etalon-panel.mjs
           node --check tools/test-final-tactic-merge.mjs
           node --check tools/test-tactic-dropdown-mount.mjs
+          node --check tools/test-loan-limit-fm2026.mjs
           node --check tools/test-tactical-record-keys.mjs
           node --check tools/aggregate-tactic-performance.mjs
           node --check tools/enrich-tactic-match-outcomes.mjs
@@ -177,6 +178,7 @@ jobs:
           node tools/test-dave56-etalon-panel.mjs
           node tools/test-final-tactic-merge.mjs
           node tools/test-tactic-dropdown-mount.mjs
+          node tools/test-loan-limit-fm2026.mjs
 
       - name: Run VPS API and deployment contract tests
         run: |
