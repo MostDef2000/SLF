@@ -21,4 +21,4 @@ Checklist with Definition of Done. All items verified by the implementing agent 
 - [x] `git diff --stat` → only allowed paths changed.
 - [x] No build scripts run, no commit, no push, no git lifecycle operations.
 
-Note: `data/audit/runtime-reachability-review-v1.json` (committed in 7757a70) still records the T1–T7 test set; it is to be synced to T1–T8 (incl. the T8 legacy-fallback pin) in the governance follow-up already recorded in [A10] — `data/**` is outside this amendment's allowed paths.
+Note: `data/audit/runtime-reachability-review-v1.json` was synced to T1–T8 (incl. the T8 legacy-fallback pin) in commit 172be81; the [A10] governance follow-up now covers only the `bundle-order.json` `hostCapabilities` metadata for this module (MutationObserver/clearTimeout) — a manifest-only change outside this PR's scope.
