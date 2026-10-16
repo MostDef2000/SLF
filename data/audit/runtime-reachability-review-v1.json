@@ -1,7 +1,7 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
-  "reviewedAt": "2026-10-14",
-  "reviewCandidateCount": 59,
+  "reviewedAt": "2026-10-16",
+  "reviewCandidateCount": 60,
   "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains. Issue #333 extension: direct symbol-level review of two active Tactical Suite v10 modules containing exact read-only old preset aliases; no deletion or new runtime behavior authorized by this evidence.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
@@ -539,6 +539,16 @@
         "Module is bundled, has incoming dependencies and external symbol references (active evidence).",
         "Legacy markers come from the intentional legacy-storage purge: scanner init enumerates and removes localStorage keys v1..v9 with a key!==this.storageKey guard (round-1 audit fix, PR #344).",
         "No obsolete symbols introduced; the legacy key chain is a cleanup list, not legacy code."
+      ]
+    },
+    {
+      "file": "src/modules/team-management/team-loan-limit-helper.js",
+      "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
+      "classification": "MIXED_ACTIVE_LEGACY",
+      "evidence": [
+        "Issue #353: the \"legacy\" mentions in this module are the deliberately retained tr.view-team__player.pl--1 fallback anchor (old-design compatibility), not dead code; the active path is the span.player-loan anchor verified live on team4.php in both design states on 2026-10-16 (3/3 loaned players matched).",
+        "Panel mount (#generallist afterend), LIMIT constants and fail-closed no-op unchanged; registered in bundle-order (90 modules, check-bundle-order OK).",
+        "Unit-covered by tools/test-loan-limit-fm2026.mjs T1-T8 (incl. dual-anchor dedupe union, tablesorter header-row trap and the tab-gating boundary with legacy pl--1 fallback pin); independent peer review pass on fix/loan-limit-fm2026 (base 71478b0); live probe under owner session shows the panel visible with live counts in both designs."
       ]
     }
   ],
