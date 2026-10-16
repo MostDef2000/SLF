@@ -42,7 +42,11 @@ if (false) {
         if (!node) return;
         node.classList.add('slf-ui');
         if (panel) node.classList.add('slf-panel');
-        if (mount) node.dataset.slfMount = isFm2026() ? mount : 'legacy';
+        // Single owner for data-slf-mount (#356): when another module already
+        // stamped the node (bootstrap marks the training guide panel
+        // `fm2026-training-before-champ`), that marker must win over this
+        // adapter's generic re-decoration value.
+        if (mount && !node.dataset.slfMount) node.dataset.slfMount = isFm2026() ? mount : 'legacy';
         node.querySelectorAll('button').forEach(item => item.classList.add('slf-button'));
         node.querySelectorAll('input,select').forEach(item => item.classList.add('slf-control'));
     }
