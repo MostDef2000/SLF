@@ -126,6 +126,7 @@ jobs:
           node tools/test-final-tactic-merge.mjs
           node tools/test-tactic-dropdown-mount.mjs
           node tools/test-loan-limit-fm2026.mjs
+          node tools/test-boot-continuation.mjs
           node tools/validate-workflow-inventory.mjs
           node tools/validate-quality-governance.mjs
 

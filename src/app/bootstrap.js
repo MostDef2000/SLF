@@ -93,20 +93,49 @@ const App = {
     },
 
     mountUI() {
-    UI.addMatchParserPanel();
+    // Boot hardening (#356, 2026-10-16): every init step is guarded separately —
+    // one synchronous failure must not abort the rest of the chain on this pass,
+    // because the body observer re-runs mountUI after every mutation batch.
+    // debugWarn is in the shared bundle scope, but referencing it here would
+    // require a bundle-order.json dependency-audit edit, so the fail-open log
+    // uses console.warn with the established message format.
+    try {
+        UI.addMatchParserPanel();
+    } catch (error) {
+        console.warn('[SLF] match-parser-panel failed; continuing startup', error);
+    }
     // Manual-only Coach Hint mode:
     // - no live parser auto-resume;
     // - no manual tactic watcher freeze/status loop;
     // - tactical blocks are rebuilt only when the user presses "Подсказка".
     // Keep the library module loaded for preset metadata, but do not mount its visible reference panel.
-    void TacticPresetLibraryPanel;
-    TrainingGuidePanel.mount();
-    this.placeTrainingGuideBeforeChampAverages();
-    LoanLimitPanel.mount();
+    try {
+        void TacticPresetLibraryPanel;
+    } catch (error) {
+        console.warn('[SLF] tactic-preset-library failed; continuing startup', error);
+    }
+    try {
+        TrainingGuidePanel.mount();
+    } catch (error) {
+        console.warn('[SLF] training-guide-mount failed; continuing startup', error);
+    }
+    try {
+        this.placeTrainingGuideBeforeChampAverages();
+    } catch (error) {
+        console.warn('[SLF] training-benchmarks-card failed; continuing startup', error);
+    }
+    try {
+        LoanLimitPanel.mount();
+    } catch (error) {
+        console.warn('[SLF] loan-limit-panel failed; continuing startup', error);
+    }
 
-
-    if (!document.getElementById('slf-tactics-dropdown')) {
-        UI.addDropdown();
+    try {
+        if (!document.getElementById('slf-tactics-dropdown')) {
+            UI.addDropdown();
+        }
+    } catch (error) {
+        console.warn('[SLF] tactics-dropdown failed; continuing startup', error);
     }
 },
 

@@ -276,4 +276,13 @@ const TrainingGuidePanel = {
     }
 };
 
-TrainingGuidePanel.mount();
+// 2026-10-16 sweep (#356): the userscript declares no @run-at, so bundle eval
+// can run at document-start while document.body is still null — mount()'s
+// fallback `(document.querySelector('.pad2')||document.body).appendChild(panel)`
+// would throw and kill the rest of the bundle. Defer to DOMContentLoaded;
+// mount()'s own panelId check keeps the idempotence semantics.
+if (document.body) {
+    TrainingGuidePanel.mount();
+} else {
+    document.addEventListener('DOMContentLoaded', () => TrainingGuidePanel.mount(), { once: true });
+}
