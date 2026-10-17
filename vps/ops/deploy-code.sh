@@ -114,7 +114,7 @@ case "$COMPONENT" in
     EXPORT_DIR='/opt/slf_ai_exporter_v2/slf_ai_exporter_v2'
     VENV_PY="$EXPORT_DIR/.venv/bin/python"
     VENV_PIP="$EXPORT_DIR/.venv/bin/pip"
-    FILES='slf_ai_export.py slf_rag_build.py slf_generator_update_rag.py slf_preset_evidence_561.py slf_tactical_lab_v1.py slf_common_utils.py slf_manifest_integrity.py generator_updates.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
+    FILES='slf_ai_export.py slf_rag_build.py slf_generator_update_rag.py slf_preset_evidence_561.py slf_tactical_lab_v1.py slf_common_utils.py slf_manifest_integrity.py generator_updates.json dave56_supplement.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
     [ -d "$EXPORT_DIR" ] || { echo "Missing exporter directory: $EXPORT_DIR" >&2; exit 1; }
     [ -x "$VENV_PY" ] || { echo "Missing exporter Python: $VENV_PY" >&2; exit 1; }
     [ -x "$VENV_PIP" ] || { echo "Missing exporter pip: $VENV_PIP" >&2; exit 1; }
@@ -131,6 +131,7 @@ case "$COMPONENT" in
       "$STAGE_DIR/slf_common_utils.py" \
       "$STAGE_DIR/slf_manifest_integrity.py"
     "$VENV_PY" -c 'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); assert p.get("schema") == "slf_generator_update_pack_v1"; assert p.get("generatorVersion") == "5.61"; assert p.get("rules")' "$STAGE_DIR/generator_updates.json"
+    "$VENV_PY" -c 'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); assert p.get("schema") == "dave56_wiki_supplement_v1"; assert len(p.get("records", [])) == 10; assert all(r.get("markdown", "").strip() for r in p["records"])' "$STAGE_DIR/dave56_supplement.json"
     bash -n "$STAGE_DIR/run_daily_export.sh"
 
     create_backup_dir
@@ -149,6 +150,7 @@ case "$COMPONENT" in
     install -m 0644 "$STAGE_DIR/slf_common_utils.py" "$EXPORT_DIR/slf_common_utils.py"
     install -m 0644 "$STAGE_DIR/slf_manifest_integrity.py" "$EXPORT_DIR/slf_manifest_integrity.py"
     install -m 0644 "$STAGE_DIR/generator_updates.json" "$EXPORT_DIR/generator_updates.json"
+    install -m 0644 "$STAGE_DIR/dave56_supplement.json" "$EXPORT_DIR/dave56_supplement.json"
     install -m 0755 "$STAGE_DIR/run_daily_export.sh" "$EXPORT_DIR/run_daily_export.sh"
     install -m 0644 "$STAGE_DIR/slf_drive_filter.txt" "$EXPORT_DIR/slf_drive_filter.txt"
     install -m 0644 "$STAGE_DIR/requirements.txt" "$EXPORT_DIR/requirements.txt"
@@ -162,6 +164,7 @@ case "$COMPONENT" in
     [ -s /var/www/html/slf_ai/data/tactical_lab_quality.json ] || { echo 'Tactical Lab quality verification failed' >&2; exit 1; }
     "$VENV_PY" -c 'import json; c=json.load(open("/var/www/html/slf_ai/rag/catalog.json", encoding="utf-8")); assert c.get("generatorContext", {}).get("version") == "5.61"; ids={s.get("id") for s in c.get("sources", [])}; assert "generator_updates" in ids; assert "preset_evidence_561" in ids; assert "tactical_lab_summary" in ids; assert "tactical_lab_quality" in ids'
     "$VENV_PY" -c 'import json; m=json.load(open("/var/www/html/slf_ai/manifest.json", encoding="utf-8")); f=m.get("files", {}); assert f.get("tacticalLabSummary", {}).get("exists") is True; assert f.get("tacticalLabQuality", {}).get("exists") is True; assert m.get("recommendedReadOrder", [])[:2] == ["data/tactical_lab_quality.json", "data/tactical_lab_summary.json"]'
+    "$VENV_PY" -c 'import json; idx=json.load(open("/var/www/html/slf_ai/wiki/index.json", encoding="utf-8")); docs={str(d.get("postId")): int(d.get("charCount") or 0) for d in idx.get("documents", [])}; required={"238","241","243","244","245","246","249","252","254","255"}; missing=sorted(required - set(docs)); assert not missing, f"dave56 supplement posts missing from wiki index: {missing}"; short=[p for p in sorted(required) if docs[p] < 2000]; assert not short, f"dave56 supplement posts look truncated: {short}"'
     printf '%s\n' "$RESOLVED_COMMIT" > "$EXPORT_DIR/DEPLOYED_GIT_COMMIT"
     ;;
 esac

@@ -56,7 +56,7 @@ case "$component" in
     EXPORT_DIR='/opt/slf_ai_exporter_v2/slf_ai_exporter_v2'
     VENV_PY="$EXPORT_DIR/.venv/bin/python"
     VENV_PIP="$EXPORT_DIR/.venv/bin/pip"
-    FILES='slf_ai_export.py slf_rag_build.py slf_generator_update_rag.py slf_preset_evidence_561.py slf_tactical_lab_v1.py slf_common_utils.py slf_manifest_integrity.py generator_updates.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
+    FILES='slf_ai_export.py slf_rag_build.py slf_generator_update_rag.py slf_preset_evidence_561.py slf_tactical_lab_v1.py slf_common_utils.py slf_manifest_integrity.py generator_updates.json dave56_supplement.json run_daily_export.sh slf_drive_filter.txt requirements.txt'
     [ -x "$VENV_PY" ] || { echo "Missing exporter Python: $VENV_PY" >&2; exit 1; }
     [ -x "$VENV_PIP" ] || { echo "Missing exporter pip: $VENV_PIP" >&2; exit 1; }
 

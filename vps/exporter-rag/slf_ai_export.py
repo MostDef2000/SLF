@@ -593,7 +593,8 @@ def get_doc_id(doc: Mapping[str, Any]) -> str:
 
 
 def get_doc_text(doc: Mapping[str, Any]) -> str:
-    value = first_path(doc, ["markdown", "text", "content", "body", "plainText"])
+    # "articleText" is the body key used by May-era wiki scrape records.
+    value = first_path(doc, ["markdown", "text", "content", "body", "articleText", "plainText"])
     if value is None:
         return ""
     return str(value)
@@ -634,6 +635,108 @@ def chunk_text(text: str, target_chars: int = WIKI_CHUNK_TARGET_CHARS, overlap: 
         if len(chunks) >= MAX_WIKI_CHUNKS_PER_DOC:
             break
     return chunks
+
+
+SUPPLEMENT_SCHEMA = "dave56_wiki_supplement_v1"
+SUPPLEMENT_FILENAME = "dave56_supplement.json"
+
+
+def _load_supplement_docs(path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """Load the Dave 5.6 wiki supplement shipped next to this script.
+
+    The supplement carries full article texts for wiki posts the May-era
+    wiki_docs scrape truncated to stubs. Fail-open by design: a missing
+    file, unreadable file, bad JSON, unsupported schema or malformed record
+    logs a warning and yields [] so the daily export never breaks because
+    of the supplement. Records are converted to the exact key names the
+    doc getters read (postId/title/section/url/markdown). The
+    expectedChunkCharCounts/expectedChunkCount fields are test-only pins
+    and are deliberately not read in production code.
+    """
+    supplement_path = Path(path) if path is not None else Path(__file__).resolve().with_name(SUPPLEMENT_FILENAME)
+    try:
+        # utf-8-sig tolerates a leading BOM from hand-edited copies.
+        payload = json.loads(supplement_path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as exc:
+        print(f"WARN: dave56 supplement not loaded from {supplement_path}: {exc}", file=sys.stderr)
+        return []
+    if not isinstance(payload, dict) or payload.get("schema") != SUPPLEMENT_SCHEMA:
+        print(f"WARN: dave56 supplement at {supplement_path} has unsupported schema; ignoring it", file=sys.stderr)
+        return []
+    records = payload.get("records")
+    if not isinstance(records, list) or not records:
+        print(f"WARN: dave56 supplement at {supplement_path} has no records; ignoring it", file=sys.stderr)
+        return []
+    required_keys = ("postId", "title", "section", "url", "markdown")
+    docs: List[Dict[str, Any]] = []
+    for position, record in enumerate(records):
+        if not isinstance(record, dict) or any(key not in record for key in required_keys):
+            print(f"WARN: dave56 supplement record #{position} is malformed; ignoring the whole supplement", file=sys.stderr)
+            return []
+        markdown = record["markdown"]
+        if not isinstance(markdown, str) or not markdown.strip():
+            print(f"WARN: dave56 supplement record #{position} has empty markdown; ignoring the whole supplement", file=sys.stderr)
+            return []
+        docs.append({
+            "postId": record["postId"],
+            "title": record["title"],
+            "section": record["section"],
+            "url": record["url"],
+            "markdown": markdown,
+        })
+    return docs
+
+
+def _supplement_sort_key(doc: Mapping[str, Any]) -> Tuple[int, int, str]:
+    post_id = safe_int(first_path(doc, ["postId", "id", "source.postId", "docId"]))
+    if post_id is None:
+        return (1, 0, get_doc_id(doc))
+    return (0, post_id, "")
+
+
+def _supplement_id_keys(doc: Mapping[str, Any]) -> Tuple[str, ...]:
+    """Dedup keys for one doc id.
+
+    The raw str(get_doc_id()) is always included. When the id embeds a
+    digit run (e.g. '241', 'wiki_241', '241.0') the first digit run is
+    added as an extra key, so a wiki_docs stub whose id is prefixed or
+    float-rendered still dedups against the supplement's numeric postId.
+    Ids without digits ('abc') carry only the raw key.
+    """
+    raw = str(get_doc_id(doc))
+    match = re.search(r"\d+", raw)
+    return (raw, match.group(0)) if match else (raw,)
+
+
+def _merge_supplement_docs(fetched: Sequence[Dict[str, Any]], supplement: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Splice supplement docs into the fetched wiki_docs list.
+
+    Dedup keys come from _supplement_id_keys (raw id + first digit run).
+    For a doc id present in both lists the supplement record replaces the
+    fetched one at the same position (full text wins over a truncated
+    stub). Fetched records with other ids pass through unchanged in fetched
+    order; supplement-only records are appended after them, sorted by
+    numeric postId ascending, so the merged order is deterministic
+    regardless of supplement file order. Running the merge on its own
+    output is a no-op (idempotent). Neither input list is mutated.
+    """
+    supplement_by_key: Dict[str, Dict[str, Any]] = {}
+    for doc in supplement:
+        for key in _supplement_id_keys(doc):
+            supplement_by_key[key] = doc
+    merged: List[Dict[str, Any]] = []
+    seen_keys = set()
+    for doc in fetched:
+        keys = _supplement_id_keys(doc)
+        replacement = next((supplement_by_key[key] for key in keys if key in supplement_by_key), None)
+        merged.append(replacement if replacement is not None else doc)
+        seen_keys.update(keys)
+    supplement_only = sorted(
+        (doc for doc in supplement if all(key not in seen_keys for key in _supplement_id_keys(doc))),
+        key=_supplement_sort_key,
+    )
+    merged.extend(supplement_only)
+    return merged
 
 
 def build_wiki_export(docs: Sequence[Dict[str, Any]], out_base: Path) -> Dict[str, Any]:
@@ -802,7 +905,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     write_json(data_dir / "player_observations_summary.json", player_summary)
     write_json(data_dir / "match_data_summary.json", match_summary)
 
-    wiki_manifest = build_wiki_export(collections_map.get("wiki_docs", []), out_base)
+    # Single merge point for the dave56 wiki supplement: the collection loop
+    # above finalizes collections_map["wiki_docs"] on the API-fetch path, the
+    # cache-fallback path and --skip-api alike, so splicing here covers all of
+    # them and runs exactly once per export. The merged list feeds only the
+    # wiki export; analytics summaries and manifest collectionCounts keep
+    # reporting the fetched-only collection.
+    supplement_docs = _load_supplement_docs()
+    wiki_docs_records = _merge_supplement_docs(collections_map.get("wiki_docs", []), supplement_docs)
+    if supplement_docs:
+        print(f"wiki_docs: merged {len(supplement_docs)} dave56 supplement records")
+    wiki_manifest = build_wiki_export(wiki_docs_records, out_base)
 
     files = {
         "analyticsSummary": "data/analytics_summary.json",
