@@ -298,6 +298,7 @@ def assert_owned_live(page: Page):
         "Klopp_LateGegenpress_v11",
         "Arteta_SafePossession_v11",
         "Emery_BalancedBase_v11",
+        "Flick_LeadPressHold_v12",
         "Guardiola_PressEscape_v11",
         "Mourinho_CleanCounter_v11",
         "Henta abuse",
@@ -316,6 +317,7 @@ def assert_owned_live(page: Page):
         ("Mourinho_CleanCounter_v11", "Mourinho"),
         ("Allegri_LeadOutlet_v11", "Allegri"),
         ("Arteta_SafePossession_v11", "Arteta"),
+        ("Flick_LeadPressHold_v12", "Flick"),
         ]:
         assert any(x["value"] == identity and trainer in x["text"] for x in coach_labels), coach_labels
 

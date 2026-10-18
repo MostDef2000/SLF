@@ -56,7 +56,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(custom['Own Original Preset'])),
     {def_line:'2',press_line:'2',priority:['left']});
 assert.equal(saved.length,1,'one bounded local retired-key cleanup');
 assert.deepEqual(Object.keys(JSON.parse(persisted)),['Own Original Preset']);
-assert.equal(registry.active.length,12);
+assert.equal(registry.active.length,13);
 for(const [oldId,newId] of Object.entries(aliases)){
     assert.equal(storage.isRetiredBuiltInPreset(oldId),true,'retired generic ID hidden');
     assert.equal(storage.resolvePresetId(oldId),newId,'old stored selection resolves');
@@ -66,11 +66,11 @@ for(const [oldId,newId] of Object.entries(aliases)){
     assert.equal(storage.getAllPresets()[oldId],undefined,'no duplicate menu item');
     assert.equal(storage.getAllLabels()[oldId],undefined,'no duplicate display label');
     assert.deepEqual(JSON.parse(JSON.stringify(storage.getAllPresets()[storage.resolvePresetId(oldId)])),
-        JSON.parse(JSON.stringify(registry.presets[newId])),'legacy selection resolves to canonical v11 controls');
+        JSON.parse(JSON.stringify(registry.presets[newId])),'legacy selection resolves to canonical v12 controls');
 }
 assert.equal(storage.resolvePresetId('Own Original Preset'),'Own Original Preset');
 assert.equal(storage.resolvePresetId('not-a-preset'),'not-a-preset');
 assert.equal(storage.isRetiredBuiltInPreset('Own Original Preset'),false);
 assert.ok(storage.getAllPresets()['Own Original Preset']);
-assert.equal(new Set(registry.active).size,12);
+assert.equal(new Set(registry.active).size,13);
 console.log('coach preset alias migration: OK');

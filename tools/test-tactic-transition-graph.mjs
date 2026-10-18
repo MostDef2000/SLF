@@ -3,7 +3,7 @@
 // Regression layer for the v9 progression graph (base c5ca7de + R1).
 //
 // The direction policy keeps STEP module-local and only exposes shortestStep().
-// This test therefore carries a static mirror of the v11 STEP graph (kept in sync
+// This test therefore carries a static mirror of the v12 STEP graph (kept in sync
 // with src/modules/tactics-presets/tactic-preset-direction-policy.js) and validates
 // the live graph through shortestStep() behavior + registry.active.
 //
@@ -51,8 +51,8 @@ const P = sandbox.window.SLFTacticDirectionPolicy;
 const E = sandbox.window.SLFCurrentActionHintEngine;
 const RE = sandbox.RecommendationEngine;
 assert.ok(R && P && E, 'registry and policy installed in the v10 sandbox');
-assert.equal(R.suiteVersion, 'slf_tactic_suite_561_v11');
-assert.equal(P.version, '5.61-tactical-suite-v11.0');
+assert.equal(R.suiteVersion, 'slf_tactic_suite_561_v12');
+assert.equal(P.version, '5.61-tactical-suite-v12.0');
 assert.deepEqual([...P.activePresets], [...R.active], 'policy active set mirrors the registry');
 
 const active = R.active;
@@ -94,7 +94,8 @@ const STEP = {
   ],
   "Simeone_CompactLead_v11": [
     "Allegri_LeadOutlet_v11",
-    "Simeone_EmergencyBlock_v11"
+    "Simeone_EmergencyBlock_v11",
+    "Flick_LeadPressHold_v12"
   ],
   "Simeone_EmergencyBlock_v11": [
     "Simeone_CompactLead_v11",
@@ -116,12 +117,17 @@ const STEP = {
   "Allegri_LeadOutlet_v11": [
     "Simeone_CompactLead_v11",
     "Emery_BalancedBase_v11",
-    "Guardiola_PressCooldown_v11"
+    "Guardiola_PressCooldown_v11",
+    "Flick_LeadPressHold_v12"
+  ],
+  "Flick_LeadPressHold_v12": [
+    "Allegri_LeadOutlet_v11",
+    "Simeone_CompactLead_v11"
   ]
 };
 
 // Every active preset is a STEP node and nothing else is.
-assert.deepEqual(Object.keys(STEP).sort(), [...active].sort(), 'STEP node set equals the 12 active presets');
+assert.deepEqual(Object.keys(STEP).sort(), [...active].sort(), 'STEP node set equals the 13 active presets');
 for (const [from, targets] of Object.entries(STEP)) {
   for (const to of targets) {
     assert.ok(active.includes(to), `edge ${from} -> ${to} targets an active preset`);
@@ -132,7 +138,7 @@ for (const [from, targets] of Object.entries(STEP)) {
 }
 assert.ok(!STEP.Simeone_EmergencyBlock_v11.includes('Bielsa_ChaosPress_att5'), 'no LowBlock -> ChaosPress edge (emergency lock must not chain straight into final all-in)');
 
-// Undirected connectivity: BFS from Arteta reaches all 12 active presets.
+// Undirected connectivity: BFS from Arteta reaches all 13 active presets.
 const undirected = new Map(active.map(name => [name, new Set()]));
 for (const [from, targets] of Object.entries(STEP)) {
   for (const to of targets) { undirected.get(from).add(to); undirected.get(to).add(from); }
@@ -145,7 +151,7 @@ while (queue.length) {
     if (!reached.has(next)) { reached.add(next); queue.push(next); }
   }
 }
-assert.equal(reached.size, active.length, 'undirected graph connected: BFS from Arteta reaches all 12');
+assert.equal(reached.size, active.length, 'undirected graph connected: BFS from Arteta reaches all 13');
 
 // Directed reachability mirror (used to scope the non-adjacent checks below).
 function mirrorReachable(from, to) {
@@ -244,4 +250,4 @@ const selected = RE.selectRawPreset({}, {});
 assert.equal(selected.name, null, 'selectRawPreset never emits a removed preset');
 assert.equal(selected.fallbackReason, 'invalid_preset');
 
-console.log('tactical suite v11 transition graph invariants: OK');
+console.log('tactical suite v12 transition graph invariants: OK');

@@ -184,13 +184,14 @@ const h = panelHarness();
   await h.click(btn);
   assert.equal(h.calls.length - callsBefore, 1, 'exactly ONE applyTacticObject call per click');
   const call = h.calls[h.calls.length - 1];
-  // Simeone_CompactLead_v11 base + etalon d5/b5/s1 overrides (defense+buildup+
-  // style+lanes from the etalon, attack from the preset) — all 14 STRING
-  // ordinals + priority.
+  // Emery_BalancedBase_v11 base (v12 dribble guard: protect_lead no longer
+  // picks Simeone_CompactLead_v11) + etalon d5/b5/s1 overrides (defense+
+  // buildup+style+lanes from the etalon, attack from the preset) — all 14
+  // STRING ordinals + priority.
   jeq(call.vector, {
     def_line: '1', press_line: '1', def_width: '1', press_intense: '2',
     build_type: '1', build_temp: '1', build_long: '1', build_fast: '1', style: '1',
-    pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1',
+    pass_risk: '2', dribble: '2', cross: '2', corner: '1', shot: '2',
     priority: ['left', 'right']
   }, 'called with the exact merged vector (14 strings + priority)');
   jeq(Object.keys(call.vector).sort(), [
@@ -204,7 +205,7 @@ const h = panelHarness();
   }
   assert.equal(call.opts.strict, true, 'strict apply (preflight + rollback)');
   assert.ok(String(call.opts.source).startsWith('merged:'), 'source starts with merged:');
-  assert.equal(call.opts.source, 'merged:etalon:d5+b5+s1+presets:Simeone_CompactLead_v11', 'source names the etalon ids and the base preset');
+  assert.equal(call.opts.source, 'merged:etalon:d5+b5+s1+presets:Emery_BalancedBase_v11', 'source names the etalon ids and the base preset');
   assert.equal(call.opts.source, h.STATE.finalTacticRecommendation.source, 'bridge source equals the remembered recommendation source');
   assert.equal(h.STATE.finalTacticApplyStatus, 'applied', 'success → applied');
   assert.equal(btn.textContent, 'Применено ✓');
@@ -330,7 +331,7 @@ await scenario(
   h.setCurrentTactic({
     def_line: '1', press_line: '1', def_width: '1', press_intense: '2',
     build_type: '1', build_temp: '1', build_long: '1', build_fast: '1', style: '1',
-    pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1',
+    pass_risk: '2', dribble: '2', cross: '2', corner: '1', shot: '2',
     priority: ['left', 'right']
   });
   const html = h.render(h.LEAD.snapshot(), JSON.parse(JSON.stringify(h.LEAD.context)));

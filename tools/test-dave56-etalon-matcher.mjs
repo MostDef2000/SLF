@@ -74,7 +74,7 @@ assert.equal(engineBase.__dave56EtalonApplied, undefined, 'base chain has no eta
 const full = harness(BASE_FILES.concat(ETALON_FILES));
 const engine = full.window.SLFCurrentActionHintEngine;
 assert.equal(engine.__dave56EtalonApplied, true, 'etalon layer wraps the outermost run');
-assert.equal(full.window.SLFActivePresetRegistry.suiteVersion, 'slf_tactic_suite_561_v11', 'layer installs only on the v11 registry');
+assert.equal(full.window.SLFActivePresetRegistry.suiteVersion, 'slf_tactic_suite_561_v12', 'layer installs on the current v12 registry (#361 accept-list: v11 + v12)');
 assert.equal(full.window.SLFDave56EtalonLayer.autoApply, false, 'etalon layer never auto-applies');
 assert.equal(full.window.SLFTacticDirectionPolicy.autoApply, false, 'direction policy autoApply unchanged');
 
