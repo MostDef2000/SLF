@@ -80,21 +80,20 @@ html[data-slf-design="fm2026"] #slf-team4-championship-table th,html[data-slf-de
 html[data-slf-design="fm2026"] #slf-team4-championship-table .slf-champ-title a{color:var(--slf-accent2)!important}
 html[data-slf-design="fm2026"] #slf-team4-championship-table tr.slf-active-team{background:rgba(43,217,124,.14)!important;color:var(--slf-text)!important}
 html[data-slf-design="fm2026"] .team .roster-scroll{overflow-x:hidden!important;max-width:100%!important}
-html[data-slf-design="fm2026"] .team #generallist{width:100%!important;min-width:0!important;max-width:100%!important;table-layout:fixed!important}
+/* Issue #365: the roster table must stay in auto layout. The former
+   table-layout:fixed + per-column px budget (638px across 15 columns) left 0-24px
+   for the name column on every team4 column-set tab: in the fixed algorithm Chrome
+   ignores min-width on cells, so the name column could not defend itself. In auto
+   layout the name column takes the space the numeric columns do not need, and
+   min-width on .player-column-name works as a readable floor. The 4px->3px cell
+   padding keeps the compacted table inside the content column (16 columns x 2px
+   saved >= the 12px overflow measured when switching to auto layout). */
+html[data-slf-design="fm2026"] .team #generallist{width:100%!important;min-width:0!important;max-width:100%!important}
 html[data-slf-design="fm2026"] .team #generallist th,html[data-slf-design="fm2026"] .team #generallist td{box-sizing:border-box!important;overflow:hidden!important;text-overflow:ellipsis!important}
-html[data-slf-design="fm2026"] .team #generallist thead th{padding-left:4px!important;padding-right:4px!important}
-html[data-slf-design="fm2026"] .team #generallist tbody td{padding-left:4px!important;padding-right:4px!important;font-size:12px!important}
-html[data-slf-design="fm2026"] .team #generallist .player-column-name{min-width:0!important;width:auto!important}
+html[data-slf-design="fm2026"] .team #generallist thead th{padding-left:3px!important;padding-right:3px!important}
+html[data-slf-design="fm2026"] .team #generallist tbody td{padding-left:3px!important;padding-right:3px!important;font-size:12px!important}
+html[data-slf-design="fm2026"] .team #generallist .player-column-name{min-width:140px!important}
 html[data-slf-design="fm2026"] .team #generallist .rstat{display:block!important;width:100%!important;min-width:0!important;box-sizing:border-box!important;padding-left:2px!important;padding-right:2px!important}
-html[data-slf-design="fm2026"] .team #generallist th:nth-child(1),html[data-slf-design="fm2026"] .team #generallist td:nth-child(1){width:26px!important}
-html[data-slf-design="fm2026"] .team #generallist th:nth-child(2),html[data-slf-design="fm2026"] .team #generallist td:nth-child(2),html[data-slf-design="fm2026"] .team #generallist th:nth-child(3),html[data-slf-design="fm2026"] .team #generallist td:nth-child(3){width:34px!important}
-html[data-slf-design="fm2026"] .team #generallist th:nth-child(5),html[data-slf-design="fm2026"] .team #generallist td:nth-child(5){width:24px!important}
-html[data-slf-design="fm2026"] .team #generallist th:nth-child(6),html[data-slf-design="fm2026"] .team #generallist td:nth-child(6){width:52px!important}
-html[data-slf-design="fm2026"] .team #generallist th:nth-child(7),html[data-slf-design="fm2026"] .team #generallist td:nth-child(7),html[data-slf-design="fm2026"] .team #generallist th:nth-child(8),html[data-slf-design="fm2026"] .team #generallist td:nth-child(8),html[data-slf-design="fm2026"] .team #generallist th:nth-child(9),html[data-slf-design="fm2026"] .team #generallist td:nth-child(9),html[data-slf-design="fm2026"] .team #generallist th:nth-child(10),html[data-slf-design="fm2026"] .team #generallist td:nth-child(10){width:54px!important}
-html[data-slf-design="fm2026"] .team #generallist th:nth-child(11),html[data-slf-design="fm2026"] .team #generallist td:nth-child(11){width:36px!important}
-html[data-slf-design="fm2026"] .team #generallist th:nth-child(12),html[data-slf-design="fm2026"] .team #generallist td:nth-child(12),html[data-slf-design="fm2026"] .team #generallist th:nth-child(13),html[data-slf-design="fm2026"] .team #generallist td:nth-child(13),html[data-slf-design="fm2026"] .team #generallist th:nth-child(14),html[data-slf-design="fm2026"] .team #generallist td:nth-child(14){width:34px!important}
-html[data-slf-design="fm2026"] .team #generallist th:nth-child(15),html[data-slf-design="fm2026"] .team #generallist td:nth-child(15){width:54px!important}
-html[data-slf-design="fm2026"] .team #generallist th:nth-child(16),html[data-slf-design="fm2026"] .team #generallist td:nth-child(16){width:60px!important}
 @media (max-width:1180px){html[data-slf-design="fm2026"] #slf-training-guide-layout,html[data-slf-design="fm2026"] .team_general_content.slf-team4-championship-layout{grid-template-columns:minmax(0,1fr)!important}html[data-slf-design="fm2026"] #slf-training-guide-panel .slf-source{grid-template-columns:minmax(70px,1fr) minmax(84px,1fr) repeat(2,minmax(72px,.8fr))!important}html[data-slf-design="fm2026"] #slf-training-guide-panel .slf-source-state{grid-column:1/-1!important}}
         `;
         (document.head || document.documentElement).appendChild(style);

@@ -15,7 +15,7 @@
     *{box-sizing:border-box}body{margin:0;background:#0d1018;color:var(--fm-text);font-family:var(--fm-font)}
     .fm-topbar{height:42px;background:#111522;display:flex;justify-content:flex-end;align-items:center;padding:0 18px}
     .fm-deck{padding:10px 18px;background:#141827}.fm-card--club{display:flex;gap:10px;align-items:center}.team-name{font-weight:700}.champ-url{margin-top:3px}
-    .fm-stage{display:grid;grid-template-columns:76px minmax(0,1fr);gap:16px;padding:16px}.fm-slots{min-height:620px;background:#121624;border-radius:12px;padding:10px}
+    .fm-stage{display:grid;grid-template-columns:160px minmax(0,1fr);gap:16px;padding:16px}.fm-slots{min-height:620px;background:#121624;border-radius:12px;padding:10px}
     .content-ui__wrapper{min-width:0;background:#101522;border-radius:14px;padding:16px;overflow:hidden}
     .team{color:var(--pc-text)}.team-head{margin-bottom:14px}.team-head__links{display:flex;gap:8px;flex-wrap:wrap}.team-head__links a{color:var(--fm-muted)}
     .team-body{display:grid;gap:16px;align-items:start;grid-template-columns:366px minmax(0,1fr)}.team-dash{display:grid;gap:14px;align-content:start}.team-content{min-width:0}
@@ -31,7 +31,7 @@
     .roster-scroll{max-width:100%;overflow-x:auto}
     #generallist{width:100%;border-collapse:collapse;background:var(--pc-card)}
     #generallist th,#generallist td{padding:9px 8px;border-bottom:1px solid var(--pc-border);text-align:left;white-space:nowrap}
-    #generallist th{color:var(--pc-muted);background:var(--pc-soft)}
+    #generallist th{color:var(--pc-muted);background:var(--pc-soft);font-size:12px}
     #generallist .player-column-name{min-width:200px}
     #generallist .rstat{display:inline-block;min-width:34px;padding:3px 8px;text-align:center;border-radius:999px;background:rgba(43,217,124,.14)}
     #generallist .center{text-align:center}
@@ -107,10 +107,10 @@
                         </thead>
                         <tbody>
                           <tr id="pltr-3001" class="view-team__player pl--1">
-                            <td>30</td><td>AM</td><td>CM</td><td class="player-column-name"><a href="/player.php?action=view&id=3001">Арендованный Старший с длинной фамилией</a></td><td>А</td><td><span class="rstat">6.62</span></td><td><span class="rstat">100</span></td><td><span class="rstat">0</span></td><td><span class="rstat">100</span></td><td><span class="rstat">100</span></td><td class="center">24</td><td class="center">3</td><td class="center">↗</td><td class="center">0</td><td class="center">152.4</td><td class="center">167.9</td>
+                            <td>30</td><td>AM</td><td>CM</td><td class="player-column-name"><a href="/player.php?action=view&id=3001">Мелихар Мартин</a></td><td>А</td><td><span class="rstat">6.62</span></td><td><span class="rstat">100</span></td><td><span class="rstat">0</span></td><td><span class="rstat">100</span></td><td><span class="rstat">100</span></td><td class="center">24</td><td class="center">3</td><td class="center">↗</td><td class="center">0</td><td class="center">152.4</td><td class="center">167.9</td>
                           </tr>
                           <tr id="pltr-3002" class="view-team__player pl--1">
-                            <td>72</td><td>LD</td><td>CD</td><td class="player-column-name"><a href="/player.php?action=view&id=3002">Арендованный Молодой</a></td><td>А</td><td><span class="rstat">6.47</span></td><td><span class="rstat">100</span></td><td><span class="rstat">0</span></td><td><span class="rstat">100</span></td><td><span class="rstat">100</span></td><td class="center">21</td><td class="center">2</td><td class="center">→</td><td class="center">0</td><td class="center">148.1</td><td class="center">151.3</td>
+                            <td>72</td><td>LD</td><td>CD</td><td class="player-column-name"><a href="/player.php?action=view&id=3002">Иванов Пётр</a></td><td>А</td><td><span class="rstat">6.47</span></td><td><span class="rstat">100</span></td><td><span class="rstat">0</span></td><td><span class="rstat">100</span></td><td><span class="rstat">100</span></td><td class="center">21</td><td class="center">2</td><td class="center">→</td><td class="center">0</td><td class="center">148.1</td><td class="center">151.3</td>
                           </tr>
                         </tbody>
                       </table>
@@ -150,6 +150,21 @@
         const panelRect = panel.getBoundingClientRect();
         const badgeStyle = getComputedStyle(badge);
         const fieldRect = lineupField.getBoundingClientRect();
+        // Issue #365: the «Игрок» name column must stay readable — the fixed-layout
+        // px budget collapsed it to 1-24px on every column-set tab.
+        const nameTh = table.tHead.rows[0].querySelector('.player-column-name');
+        const nameTd = table.tBodies[0].rows[0].querySelector('.player-column-name');
+        const nameThRect = nameTh ? nameTh.getBoundingClientRect() : {width:0};
+        const nameTdRect = nameTd ? nameTd.getBoundingClientRect() : {left:0,right:0,width:0};
+        const nameTextRect = (() => {
+          if (!nameTd) return {width:0,left:0,right:0};
+          const range = document.createRange();
+          range.selectNodeContents(nameTd);
+          return range.getBoundingClientRect();
+        })();
+        const nameTextVisible = nameTextRect.width >= 40
+          && nameTextRect.left >= nameTdRect.left - 1
+          && nameTextRect.right <= nameTdRect.right + 1;
         const lineupEvidence = lineupNames.map(node => {
           const style = getComputedStyle(node);
           const rect = node.getBoundingClientRect();
@@ -176,6 +191,9 @@
           tableRight: tableRect.right,
           wrapperRight: wrapperRect.right,
           nameMinWidth: getComputedStyle(table.querySelector('.player-column-name')).minWidth,
+          nameThWidth: nameThRect.width,
+          nameTdWidth: nameTdRect.width,
+          nameTextVisible,
           panelParent: panel.parentElement?.className || '',
           panelPlacement: panel.dataset.slfTeamPlacement || '',
           panelLeft: panelRect.left,
@@ -198,11 +216,15 @@
         const expectedNames = ['Уоррен-Смит', 'Палмер-Джонсон', 'Букенен-Младший', 'Харрисон', 'Суарес'];
         const passed = evidence.headerColumns === 16
           && evidence.bodyColumns.every(count => count === 16)
-          && evidence.tableLayout === 'fixed'
+          // Issue #365: the compaction block no longer forces table-layout:fixed —
+          // auto layout lets the name column defend its space (min-width floor).
+          && evidence.tableLayout === 'auto'
           && evidence.overflowX === 'hidden'
           && evidence.scrollWidth <= evidence.clientWidth + 1
           && evidence.tableRight <= evidence.wrapperRight + 1
           && evidence.nameMinWidth !== '200px'
+          && evidence.nameThWidth >= 120
+          && evidence.nameTextVisible
           && evidence.panelParent.includes('team-body')
           && placementOk
           && evidence.badgeParent.includes('fm-topbar__right')
