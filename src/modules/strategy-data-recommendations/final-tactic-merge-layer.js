@@ -15,9 +15,11 @@
     if (CurrentActionHintEngine.__finalTacticMergeApplied) return;
 
     // Stale-registry guard (same pattern as dave56-etalon-layer): install
-    // only on the v11 tactical suite registry, never on a stale one.
+    // only on a known-current tactical suite registry, never on a stale one.
+    // Accept-list: v11 (historical) and v12 (#361).
     const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
-    if (!registry || registry.suiteVersion !== 'slf_tactic_suite_561_v11') return;
+    const SUPPORTED_SUITES = ['slf_tactic_suite_561_v11', 'slf_tactic_suite_561_v12'];
+    if (!registry || !SUPPORTED_SUITES.includes(registry.suiteVersion)) return;
 
     const VERSION = 'slf_final_tactic_v1';
     const SOURCE = 'final_tactic_merge';

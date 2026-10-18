@@ -142,13 +142,13 @@ const BUTTON_RE = /<button id="slf-final-tactic-apply-btn" type="button" data-to
   assert.ok(html.includes('<b style="color:#75ff75;">Рекомендация:</b> '), 'merged recommendation title rendered');
   const titleMatch = html.match(/Рекомендация:<\/b> ([^<]*)/);
   assert.ok(titleMatch, 'preset title present');
-  assert.equal(titleMatch[1], 'Simeone_CompactLead_v11.', 'preset title = engine action preset');
-  assert.ok(html.includes('<div>Вектор: оборона линия/прессинг/ширина/интенс: 1/1/1/2 · построение выход/темп/диаг/касание: 1/1/1/1 · стиль: 1 · атака риск/дриблинг/кроссы/угловые/удары: 2/1/2/1/1 · фланги: Л+П</div>'),
+  assert.equal(titleMatch[1], 'Emery_BalancedBase_v11.', 'preset title = engine action preset');
+  assert.ok(html.includes('<div>Вектор: оборона линия/прессинг/ширина/интенс: 1/1/1/2 · построение выход/темп/диаг/касание: 1/1/1/1 · стиль: 1 · атака риск/дриблинг/кроссы/угловые/удары: 2/2/2/1/2 · фланги: Л+П</div>'),
     'grouped vector line (оборона/построение/стиль/атака + фланги)');
-  assert.ok(html.includes('<div>Δ: линия 3→1 · прессинг 3→1 · ширина 3→1 · интенс 4→2 · выход 3→1 · темп 3→1 · диаг 3→1 · касание 3→1 · стиль 4→1 · риск 3→2 · дриблинг 2→1 · кроссы 3→2 · угловые 2→1 · удары 2→1 · фланги →left+right</div>'),
-    'Δ line over all 14 controls + priority vs current');
+  assert.ok(html.includes('<div>Δ: линия 3→1 · прессинг 3→1 · ширина 3→1 · интенс 4→2 · выход 3→1 · темп 3→1 · диаг 3→1 · касание 3→1 · стиль 4→1 · риск 3→2 · кроссы 3→2 · угловые 2→1 · фланги →left+right</div>'),
+    'Δ line over changed controls + priority vs current (dribble/shot equal under v12 → omitted by the renderer)');
   assert.ok(html.includes('оборона/построение/стиль ← эталон d5+b5+s1'), 'provenance line: etalon blocks');
-  assert.ok(html.includes('атака ← пресет Simeone_CompactLead_v11'), 'provenance line: attack from preset');
+  assert.ok(html.includes('атака ← пресет Emery_BalancedBase_v11'), 'provenance line: attack from preset');
   assert.ok(html.includes('<div style="opacity:.9;">Совет: атаковать фланг, где соперник не играет</div>'), 'scenario advice note rendered');
   const button = html.match(BUTTON_RE);
   assert.ok(button, '#slf-final-tactic-apply-btn present with data-token');
@@ -162,13 +162,13 @@ const BUTTON_RE = /<button id="slf-final-tactic-apply-btn" type="button" data-to
   jeq(recVector, {
     def_line: '1', press_line: '1', def_width: '1', press_intense: '2',
     build_type: '1', build_temp: '1', build_long: '1', build_fast: '1', style: '1',
-    pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1',
+    pass_risk: '2', dribble: '2', cross: '2', corner: '1', shot: '2',
     priority: ['left', 'right']
   }, 'remembered vector is the full MERGED string vector');
   assert.equal(recVector.def_line, '1', 'merged vector: etalon defense value as STRING');
   assert.equal(recVector.pass_risk, '2', 'merged vector: attack from the preset');
   jeq(recVector.priority, ['left', 'right'], 'merged vector carries etalon priority lanes');
-  assert.equal(STATE.finalTacticRecommendation.source, 'merged:etalon:d5+b5+s1+presets:Simeone_CompactLead_v11', 'rec.source names etalon ids + preset');
+  assert.equal(STATE.finalTacticRecommendation.source, 'merged:etalon:d5+b5+s1+presets:Emery_BalancedBase_v11', 'rec.source names etalon ids + preset');
   assert.equal(html.includes('<b style="color:#75ff75;">Действие:</b>'), false, 'legacy «Действие» row replaced by the merged block');
   assert.equal(html.includes('Эталон (Dave 5.6)'), false, 'legacy etalon-only block markup is gone');
   assert.equal(html.includes('slf-etalon-apply-btn'), false, 'legacy #slf-etalon-apply-btn is gone');
@@ -200,7 +200,7 @@ const BUTTON_RE = /<button id="slf-final-tactic-apply-btn" type="button" data-to
   currentTactic = {
     def_line: '1', press_line: '1', def_width: '1', press_intense: '2',
     build_type: '1', build_temp: '1', build_long: '1', build_fast: '1', style: '1',
-    pass_risk: '2', dribble: '1', cross: '2', corner: '1', shot: '1',
+    pass_risk: '2', dribble: '2', cross: '2', corner: '1', shot: '2',
     priority: ['left', 'right']
   };
   const html = render(mkSnapshot({ home: 2, away: 1, diff: 1 }), LEAD_CONTEXT);

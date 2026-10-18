@@ -15,11 +15,13 @@
     if (CurrentActionHintEngine.__dave56EtalonApplied) return;
 
     // Stale-registry guard (same pattern as tactic-preset-direction-policy):
-    // install only on the v11 tactical suite registry, never on a stale one.
+    // install only on a known-current tactical suite registry, never on a
+    // stale/unknown one. Accept-list: v11 (historical) and v12 (#361).
     const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
     const data = typeof window !== 'undefined' ? window.SLFDave56EtalonData : null;
     const mapping = typeof window !== 'undefined' ? window.SLFDave56EtalonMapping : null;
-    if (!registry || registry.suiteVersion !== 'slf_tactic_suite_561_v11') return;
+    const SUPPORTED_SUITES = ['slf_tactic_suite_561_v11', 'slf_tactic_suite_561_v12'];
+    if (!registry || !SUPPORTED_SUITES.includes(registry.suiteVersion)) return;
     if (!data || data.schema !== 'slf_dave56_etalon_v1' || !mapping || mapping.schema !== data.schema) return;
 
     const VERSION = 'slf_dave56_etalon_v1';
