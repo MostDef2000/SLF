@@ -7,6 +7,13 @@ Sub-tab switch (column-set switcher .sub-panel-*/squad switcher .tpanel-*) => th
 `.team-content` regains the site-native full width; returning to the roster sub-tab
 («Основная команда» + «основные») re-applies the layout.
 
+Issue #365 regression (same harness, real browser measurement): on the roster view the
+fm2026 compaction CSS must not collapse the «Игрок» name column. The 16-column roster
+fixture (tests/browser/fixtures/fm2026-team-main.html, content column ~656px — the live
+688px regime at a 1280px viewport) must keep the name th >= 120px with the cell text
+rendered, not clipped to invisibility. The old table-layout:fixed + per-column px budget
+collapses it to < 30px — the fixture's inline verify encodes the same gate.
+
 Run artifact override for local runs: SLF_TEST_ARTIFACT=/path/to/latest.user.js
 (CI default stays releases/latest.user.js, built from the approved source commit).
 """
@@ -23,6 +30,7 @@ from playwright.sync_api import Browser, Page, sync_playwright
 
 ROOT = Path.cwd()
 ARTIFACT = Path(os.environ.get("SLF_TEST_ARTIFACT") or (ROOT / "releases" / "latest.user.js"))
+FIXTURE_TEAM = ROOT / "tests" / "browser" / "fixtures" / "fm2026-team-main.html"
 VERSION = json.loads((ROOT / "data" / "version.json").read_text(encoding="utf-8"))["scriptVersion"]
 
 # Site-native fm2026 grid (340px dash) — deliberately different from the plugin's 366px
@@ -124,6 +132,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_html(FORM_HTML)
         elif parsed.path == "/team4.php":
             self.send_html(team_html("" if query.get("noswitch") else SWITCHER_HTML))
+        elif parsed.path == "/fixtures/fm2026-team-main.html":
+            # Issue #365: serve the 16-column roster fixture so the name-column
+            # width is measured against the collapse regime (content ~656px).
+            self.send_html(FIXTURE_TEAM.read_text(encoding="utf-8"))
         elif parsed.path == "/champ.php":
             self.send_html(CHAMP_HTML)
         elif parsed.path in {"/player.php", "/alter.php"}:
@@ -318,13 +330,89 @@ def assert_no_switcher_defaults_roster(browser: Browser, base_url: str):
         context.close()
 
 
+def assert_roster_name_column_visible(browser: Browser, base_url: str):
+    """Issue #365: the fm2026 roster compaction CSS must not collapse the «Игрок» column.
+
+    Loads the 16-column roster fixture (name column 4th, numeric columns carrying the
+    classes/rstat markup the compaction block targets; content column ~656px mirrors the
+    live 688px@1280 regime) through a /team4.php route: the plugin's championship panel
+    and the fixture's own inline verify are gated on the team4.php pathname plus a
+    1280px viewport (isTeam4MainPage + matchMedia('(min-width: 1280px)')), so the routed
+    load makes the fixture self-check — tableLayout 'auto', fit gates, nameThWidth >= 120,
+    name text visible — execute inside this case; a fixture regression surfaces as a
+    page error and fails the errors assertion below. Sub-resource fetches
+    (/team4.php?action=…, /champ.php) do not match the end-anchored route glob and hit
+    the live server handlers. Under the reverted fix the forced table-layout:fixed px
+    budget leaves the name th < 30px and the text clipped; with the fix (auto layout,
+    no px budget, min-width floor) the name th stays >= 120px and the text renders.
+    """
+    context = browser.new_context(locale="ru-RU", viewport={"width": 1280, "height": 1000})
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.add_init_script(init_script())
+    # Serve the fixture AS /team4.php so the pathname-gated championship panel mounts and
+    # the fixture's inline self-verify actually runs; only the document is intercepted.
+    fixture_html = FIXTURE_TEAM.read_text(encoding="utf-8")
+    page.route(
+        "**/team4.php",
+        lambda route: route.fulfill(status=200, content_type="text/html; charset=utf-8", body=fixture_html),
+    )
+    page.goto(base_url + "/team4.php", wait_until="domcontentloaded")
+    try:
+        inject(page)
+        page.wait_for_function("() => !!document.querySelector('#generallist thead .player-column-name')")
+        page.wait_for_function("() => document.getElementById('generallist')?.dataset.slfRosterFit === '1'")
+        # The fixture verify assigns __slfRosterFitEvidence (non-skipped at this viewport)
+        # immediately before its own pass/throw decision; waiting for it plus a short
+        # settle (assert_clean convention) guarantees its outcome is already in `errors`.
+        page.wait_for_function("() => window.__slfRosterFitEvidence && !window.__slfRosterFitEvidence.skipped")
+        page.wait_for_timeout(150)
+        evidence = page.evaluate(
+            """() => {
+              const table = document.getElementById('generallist');
+              const th = table.tHead.rows[0].querySelector('.player-column-name');
+              const td = table.tBodies[0].rows[0].querySelector('.player-column-name');
+              const cell = td.getBoundingClientRect();
+              const range = document.createRange();
+              range.selectNodeContents(td);
+              const text = range.getBoundingClientRect();
+              return {
+                columns: table.tHead.rows[0].cells.length,
+                tableLayout: getComputedStyle(table).tableLayout,
+                nameThWidth: th.getBoundingClientRect().width,
+                nameTdWidth: cell.width,
+                nameTextWidth: text.width,
+                nameTextInside: text.width > 0 && text.left >= cell.left - 1 && text.right <= cell.right + 1,
+                wrapperOverflow: {scroll: table.closest('.roster-scroll').scrollWidth, client: table.closest('.roster-scroll').clientWidth},
+                fixtureVerifyRan: !!(window.__slfRosterFitEvidence && !window.__slfRosterFitEvidence.skipped)
+              };
+            }"""
+        )
+        assert evidence["columns"] == 16, evidence
+        assert evidence["nameThWidth"] >= 120, evidence
+        assert evidence["nameTextInside"], evidence
+        assert evidence["wrapperOverflow"]["scroll"] <= evidence["wrapperOverflow"]["client"] + 1, evidence
+        assert evidence["fixtureVerifyRan"], evidence
+        assert errors == [], errors
+        print(
+            f"[team4-championship-subtab] passed: roster-name-column viewport=1280 "
+            f"nameTh={evidence['nameThWidth']:.0f}px textInside={evidence['nameTextInside']} "
+            f"fixtureVerify={evidence['fixtureVerifyRan']} version={VERSION}"
+        )
+    finally:
+        context.close()
+
+
 def main():
     assert ARTIFACT.is_file(), ARTIFACT
+    assert FIXTURE_TEAM.is_file(), FIXTURE_TEAM
     with server() as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
             assert_subtab_cycle(browser, base_url)
             assert_no_switcher_defaults_roster(browser, base_url)
+            assert_roster_name_column_visible(browser, base_url)
         finally:
             browser.close()
 
