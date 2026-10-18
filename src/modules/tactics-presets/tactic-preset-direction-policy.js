@@ -1,22 +1,26 @@
-// Generator 5.61 Tactical Suite v11 Recommendation Policy
+// Generator 5.61 Tactical Suite v12 Recommendation Policy
 // ============================================================
 // The active registry owns tactic data/UI identity. This layer makes the
 // registry decision canonical for Coach Mode, progression and telemetry.
-// v11 eliminates all implicit preset fallbacks: when no eligible candidate
-// exists the decision is hold_current — a hardcoded preset is never injected.
+// v12 adds the lead_press_hold situation (#361): a pressing lead option
+// (Flick_LeadPressHold_v12) for holding a one-goal lead against an opponent
+// pressing above plan (opponent press vector >= +20%), with hard gates on the
+// 60–85 minute window and a dribble guard for lead situations. v11 guarantees
+// stand: no implicit preset fallbacks — when no eligible candidate exists the
+// decision is hold_current, a hardcoded preset is never injected.
 
 (function tacticPresetDirectionPolicy() {
     'use strict';
 
-    const VERSION = '5.61-tactical-suite-v11.0';
+    const VERSION = '5.61-tactical-suite-v12.0';
     const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
     const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
     if (!registry || !engine || window.SLFTacticDirectionPolicy?.version === VERSION) return;
 
-    // v11 install guard: the policy only installs on a registry that carries the v11 suite
-    // identity. SUITE must NOT be derived before this check, otherwise a stale v10 registry
+    // v12 install guard: the policy only installs on a registry that carries the v12 suite
+    // identity. SUITE must NOT be derived before this check, otherwise a stale v11 registry
     // would satisfy a self-referential comparison and silently install a mixed stack.
-    const EXPECTED_SUITE = 'slf_tactic_suite_561_v11';
+    const EXPECTED_SUITE = 'slf_tactic_suite_561_v12';
     if (registry.suiteVersion !== EXPECTED_SUITE) return;
     const SUITE = registry.suiteVersion;
     const SCHEMA = registry.recommendationSchema;
@@ -24,9 +28,9 @@
     const ACTIVE_SET = new Set(ACTIVE);
     const DEFAULT_RISK = registry.defaultRiskAppetite || 'standard';
 
-    const STEP = {"Arteta_SafePossession_v11":["Emery_BalancedBase_v11"],"Guardiola_PressEscape_v11":["Emery_BalancedBase_v11","Mourinho_CleanCounter_v11","Guardiola_PressCooldown_v11"],"Guardiola_PressCooldown_v11":["Guardiola_PressEscape_v11","Emery_BalancedBase_v11","Allegri_LeadOutlet_v11"],"Guardiola_ControlledPush_v11":["Guardiola_PositionalSiege_v11","Conte_WideChannels_v11"],"Guardiola_PositionalSiege_v11":["Guardiola_ControlledPush_v11","Conte_WideChannels_v11","Klopp_LateGegenpress_v11"],"Conte_WideChannels_v11":["Guardiola_ControlledPush_v11","Guardiola_PositionalSiege_v11","Emery_BalancedBase_v11"],"Klopp_LateGegenpress_v11":["Guardiola_PositionalSiege_v11","Guardiola_ControlledPush_v11"],"Simeone_CompactLead_v11":["Allegri_LeadOutlet_v11","Simeone_EmergencyBlock_v11"],"Simeone_EmergencyBlock_v11":["Simeone_CompactLead_v11","Allegri_LeadOutlet_v11"],"Emery_BalancedBase_v11":["Arteta_SafePossession_v11","Guardiola_PressEscape_v11","Mourinho_CleanCounter_v11","Allegri_LeadOutlet_v11","Guardiola_ControlledPush_v11","Conte_WideChannels_v11"],"Mourinho_CleanCounter_v11":["Emery_BalancedBase_v11","Guardiola_PressEscape_v11","Guardiola_ControlledPush_v11"],"Allegri_LeadOutlet_v11":["Simeone_CompactLead_v11","Emery_BalancedBase_v11","Guardiola_PressCooldown_v11"]};
+    const STEP = {"Arteta_SafePossession_v11":["Emery_BalancedBase_v11"],"Guardiola_PressEscape_v11":["Emery_BalancedBase_v11","Mourinho_CleanCounter_v11","Guardiola_PressCooldown_v11"],"Guardiola_PressCooldown_v11":["Guardiola_PressEscape_v11","Emery_BalancedBase_v11","Allegri_LeadOutlet_v11"],"Guardiola_ControlledPush_v11":["Guardiola_PositionalSiege_v11","Conte_WideChannels_v11"],"Guardiola_PositionalSiege_v11":["Guardiola_ControlledPush_v11","Conte_WideChannels_v11","Klopp_LateGegenpress_v11"],"Conte_WideChannels_v11":["Guardiola_ControlledPush_v11","Guardiola_PositionalSiege_v11","Emery_BalancedBase_v11"],"Klopp_LateGegenpress_v11":["Guardiola_PositionalSiege_v11","Guardiola_ControlledPush_v11"],"Simeone_CompactLead_v11":["Allegri_LeadOutlet_v11","Simeone_EmergencyBlock_v11","Flick_LeadPressHold_v12"],"Simeone_EmergencyBlock_v11":["Simeone_CompactLead_v11","Allegri_LeadOutlet_v11"],"Emery_BalancedBase_v11":["Arteta_SafePossession_v11","Guardiola_PressEscape_v11","Mourinho_CleanCounter_v11","Allegri_LeadOutlet_v11","Guardiola_ControlledPush_v11","Conte_WideChannels_v11"],"Mourinho_CleanCounter_v11":["Emery_BalancedBase_v11","Guardiola_PressEscape_v11","Guardiola_ControlledPush_v11"],"Allegri_LeadOutlet_v11":["Simeone_CompactLead_v11","Emery_BalancedBase_v11","Guardiola_PressCooldown_v11","Flick_LeadPressHold_v12"],"Flick_LeadPressHold_v12":["Allegri_LeadOutlet_v11","Simeone_CompactLead_v11"]};
 
-    const SCORE_BY_SITUATION = {"default_start":{"Emery_BalancedBase_v11":85,"Guardiola_PressEscape_v11":30},"pressure_escape":{"Guardiola_PressEscape_v11":82,"Emery_BalancedBase_v11":48,"Guardiola_PressCooldown_v11":25},"pressure_counter":{"Mourinho_CleanCounter_v11":85,"Guardiola_PressEscape_v11":46,"Emery_BalancedBase_v11":40},"press_cooldown":{"Guardiola_PressCooldown_v11":80,"Guardiola_PressEscape_v11":42,"Emery_BalancedBase_v11":35},"controlled_chase":{"Guardiola_ControlledPush_v11":75,"Emery_BalancedBase_v11":30,"Guardiola_PositionalSiege_v11":20},"positional_siege":{"Guardiola_PositionalSiege_v11":77,"Guardiola_ControlledPush_v11":49,"Conte_WideChannels_v11":33},"width_attack":{"Conte_WideChannels_v11":78,"Guardiola_ControlledPush_v11":38,"Guardiola_PositionalSiege_v11":25},"late_high_pressure":{"Klopp_LateGegenpress_v11":80,"Guardiola_ControlledPush_v11":55,"Guardiola_PositionalSiege_v11":44},"protect_lead":{"Simeone_CompactLead_v11":78,"Allegri_LeadOutlet_v11":68,"Emery_BalancedBase_v11":30},"protect_lead_with_outlet":{"Allegri_LeadOutlet_v11":86,"Simeone_CompactLead_v11":48,"Emery_BalancedBase_v11":35},"emergency_lock":{"Simeone_EmergencyBlock_v11":85,"Allegri_LeadOutlet_v11":44,"Simeone_CompactLead_v11":42}};
+    const SCORE_BY_SITUATION = {"default_start":{"Emery_BalancedBase_v11":85,"Guardiola_PressEscape_v11":30},"pressure_escape":{"Guardiola_PressEscape_v11":82,"Emery_BalancedBase_v11":48,"Guardiola_PressCooldown_v11":25},"pressure_counter":{"Mourinho_CleanCounter_v11":85,"Guardiola_PressEscape_v11":46,"Emery_BalancedBase_v11":40},"press_cooldown":{"Guardiola_PressCooldown_v11":80,"Guardiola_PressEscape_v11":42,"Emery_BalancedBase_v11":35},"controlled_chase":{"Guardiola_ControlledPush_v11":75,"Emery_BalancedBase_v11":30,"Guardiola_PositionalSiege_v11":20},"positional_siege":{"Guardiola_PositionalSiege_v11":77,"Guardiola_ControlledPush_v11":49,"Conte_WideChannels_v11":33},"width_attack":{"Conte_WideChannels_v11":78,"Guardiola_ControlledPush_v11":38,"Guardiola_PositionalSiege_v11":25},"late_high_pressure":{"Klopp_LateGegenpress_v11":80,"Guardiola_ControlledPush_v11":55,"Guardiola_PositionalSiege_v11":44},"protect_lead":{"Simeone_CompactLead_v11":78,"Allegri_LeadOutlet_v11":68,"Emery_BalancedBase_v11":30},"protect_lead_with_outlet":{"Allegri_LeadOutlet_v11":86,"Simeone_CompactLead_v11":48,"Emery_BalancedBase_v11":35},"emergency_lock":{"Simeone_EmergencyBlock_v11":85,"Allegri_LeadOutlet_v11":44,"Simeone_CompactLead_v11":42},"lead_press_hold":{"Flick_LeadPressHold_v12":80,"Allegri_LeadOutlet_v11":45,"Simeone_CompactLead_v11":35,"Emery_BalancedBase_v11":30}};
 
     // Old stored progression IDs must resolve to the same v10 tactical vector.
     // Only aliases are mapped; unknown/custom names are never promoted.
@@ -40,6 +44,8 @@
     function normalizedContext(context = {}) {
         const scoreState = context.score?.state || context.scoreState || 'unknown';
         const minute = Number(context.minute || 0);
+        // Positive scoreDiff = we lead (getScoreDiff convention); 0 when unknown.
+        const scoreDiff = Number(context.scoreDiff ?? context.score?.diff ?? 0);
         const myBad = Number(context.myBad || context.myBadActionsPct || 0);
         const drop = Number(context.myPowerDropPct || 0);
         const underPressure = context.underPressure === true || has(context, 'under_pressure') || has(context, 'transition_threat') || has(context, 'opponent_high_press');
@@ -56,13 +62,20 @@
         const attackingMomentum = context.attackingMomentum === true || has(context, 'attacking_momentum');
         const attackNeed = Number(context.attackNeed || 0);
         const pressureRisk = Number(context.pressureRisk || 0);
+        // #361 context contract: opponentPressVector is the opponent's pressing
+        // vector percentage read from the match page stats table. Production
+        // mapping: match-stats-parser.js reads the native `press_height` column
+        // into team.pressVector; cah-runtime-context exposes it to this policy as
+        // moment.context.oppPressVector (alias oppPress from the coach-hint
+        // snapshot layer). Direct callers may pass opponentPressVector explicitly.
+        const opponentPressVector = Number(context.opponentPressVector ?? context.oppPressVector ?? context.oppPress ?? 0);
         const emergencyLockRequired = underPressure && !counterExitAvailable && (context.ownRedCard || highBadActions || drop >= 5 || pressureRisk >= 82 || has(context, 'sustained_siege'));
         return Object.assign({}, context, {
-            scoreState, minute, myBad, myPowerDropPct:drop, underPressure,
+            scoreState, minute, scoreDiff, myBad, myPowerDropPct:drop, underPressure,
             counterExitAvailable, counterExitBlocked, pressFatigueRisk,
             highBadActions, lowBadActions, transitionThreat, centerClosed,
             wideQuality, ownCrossesBad, opponentCrossesDangerous,
-            attackingMomentum, attackNeed, pressureRisk, emergencyLockRequired
+            attackingMomentum, attackNeed, pressureRisk, opponentPressVector, emergencyLockRequired
         });
     }
 
@@ -70,6 +83,10 @@
         const c = normalizedContext(context);
         if (c.emergencyLockRequired || (c.scoreState === 'winning' && c.minute >= 84 && c.underPressure && c.pressureRisk >= 55)) return 'emergency_lock';
         if (c.pressFatigueRisk && !(c.scoreState === 'losing' && c.minute >= 70)) return 'press_cooldown';
+        // v12 (#361): ведём счёт против соперника, прессингующего выше плана
+        // (вектор прессинга соперника >= +20%) — активное прессующее удержание
+        // вместо пассивного блока, окно 60–85 минут.
+        if (c.scoreState === 'winning' && c.minute >= 60 && c.minute <= 85 && c.opponentPressVector >= 20) return 'lead_press_hold';
         if (c.scoreState === 'winning' && c.minute >= 65) {
             return c.counterExitAvailable && !c.counterExitBlocked && !c.highBadActions
                 ? 'protect_lead_with_outlet' : 'protect_lead';
@@ -115,6 +132,18 @@
         if (name === 'Klopp_LateGegenpress_v11' && !['late_high_pressure'].includes(situation)) reasons.push('Klopp только поздняя погоня');
         if (name === 'Klopp_LateGegenpress_v11' && (c.pressFatigueRisk || c.highBadActions || c.ownRedCard || c.myPowerDropPct >= 5)) reasons.push('дорогой прессинг запрещён по fatigue/браку/удалению');
         if (c.scoreState === 'winning' && c.minute >= 70 && ['Klopp_LateGegenpress_v11','Guardiola_PositionalSiege_v11'].includes(name)) reasons.push('позднее преимущество не требует high/all-in риска');
+        // v12 (#361) — (a) Lead Press Hold: только при удержании преимущества
+        // в окне 60–85 минут против соперника, прессингующего выше плана
+        // (вектор прессинга соперника >= +20%).
+        if (name === 'Flick_LeadPressHold_v12' && !(c.scoreState === 'winning' && c.minute >= 60 && c.minute <= 85 && c.opponentPressVector >= 20)) reasons.push('прессующее удержание только при преимуществе в окне 60–85 минут против вектора прессинга соперника ≥ +20%');
+        // v12 (#361) — (b) Compact Lead против прессинга выше плана: глубокий блок
+        // отдаёт территорию и опасен со стандартов. Остаётся валиден после 85-й,
+        // при преимуществе в два и более гола и в emergency_lock.
+        if (name === 'Simeone_CompactLead_v11' && situation !== 'emergency_lock' && c.scoreState === 'winning' && c.scoreDiff <= 1 && c.minute >= 60 && c.minute <= 85 && c.opponentPressVector >= 20) reasons.push('против прессинга выше плана компактный блок отдаёт территорию и опасен со стандартов');
+        // v12 (#361) — (c) dribble guard: в ситуациях удержания пресеты с
+        // дриблингом ≤1 не удерживают мяч против высокого прессинга.
+        const dribbleValue = Number(registry.presets?.[name]?.dribble);
+        if (['lead_press_hold','protect_lead','protect_lead_with_outlet'].includes(situation) && Number.isFinite(dribbleValue) && dribbleValue <= 1) reasons.push('в ситуациях удержания дриблинг ≤1 отдаёт мяч и территорию');
         return { vetoed:reasons.length > 0, reasons };
     }
 

@@ -5,11 +5,13 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 // #335: one user-locked XI, twelve tactical modes, no formation switching.
+// #361: v12 adds the thirteenth mode — a pressing lead option.
 const active=[
  'Emery_BalancedBase_v11','Mourinho_CleanCounter_v11','Guardiola_PressEscape_v11',
  'Arteta_SafePossession_v11','Guardiola_PressCooldown_v11','Guardiola_ControlledPush_v11',
  'Guardiola_PositionalSiege_v11','Conte_WideChannels_v11','Klopp_LateGegenpress_v11',
- 'Simeone_CompactLead_v11','Simeone_EmergencyBlock_v11','Allegri_LeadOutlet_v11'
+ 'Simeone_CompactLead_v11','Simeone_EmergencyBlock_v11','Allegri_LeadOutlet_v11',
+ 'Flick_LeadPressHold_v12'
 ];
 const retiredActive=['Compact_Counter_def3','Bielsa_ChaosPress_att5'];
 const retired=['Mourinho_WeakSide_def3','Xabi_BoxMidfield_bal3','DeZerbi_BaitPress_bal3'];
@@ -54,19 +56,19 @@ vm.runInContext(source('src/modules/tactics-presets/tactic-preset-direction-poli
 const registry=context.window.SLFActivePresetRegistry;
 const policy=context.window.SLFTacticDirectionPolicy;
 const engine=context.window.SLFCurrentActionHintEngine;
-assert.equal(registry.suiteVersion,'slf_tactic_suite_561_v11');
+assert.equal(registry.suiteVersion,'slf_tactic_suite_561_v12');
 assert.equal(registry.recommendationSchema,'slf_rule_decision_v11_tactical_suite');
 assert.equal(registry.defaultRiskAppetite,'standard');
-assert.equal(registry.fallbackPolicy,'5.61-tactical-suite-v11-hold-current');
+assert.equal(registry.fallbackPolicy,'5.61-tactical-suite-v12-hold-current');
 assert.equal(registry.defaultPresetId,'Emery_BalancedBase_v11');
 assert.deepEqual([...registry.active],active);
-assert.equal(active.length,12);
-assert.equal(new Set(active).size,12);
-assert.equal(Object.keys(registry.presets).length,12);
-assert.equal(Object.keys(registry.roleContracts).length,12);
-assert.equal(Object.keys(registry.formations).length,12);
-assert.equal(Object.keys(registry.labels).length,13);
-assert.equal(Object.keys(registry.displayMeta).length,13);
+assert.equal(active.length,13);
+assert.equal(new Set(active).size,13);
+assert.equal(Object.keys(registry.presets).length,13);
+assert.equal(Object.keys(registry.roleContracts).length,13);
+assert.equal(Object.keys(registry.formations).length,13);
+assert.equal(Object.keys(registry.labels).length,14);
+assert.equal(Object.keys(registry.displayMeta).length,14);
 assert.deepEqual([...registry.retiredActive],retiredActive);
 for(const id of oldIds.concat(retiredActive,retired)){
  assert.equal(context.BASE_PRESETS[id],undefined,`${id}: old built-in absent from BASE_PRESETS`);
@@ -90,7 +92,8 @@ const table={
  Klopp_LateGegenpress_v11:'3 3 2 4 3 3 2 3 4 3 3 3 1 3',
  Simeone_CompactLead_v11:'1 2 1 2 1 2 2 2 2 2 1 2 1 1',
  Simeone_EmergencyBlock_v11:'1 1 1 1 1 1 2 1 1 1 1 1 1 1',
- Allegri_LeadOutlet_v11:'2 2 2 1 2 2 2 2 2 1 1 2 1 1'
+ Allegri_LeadOutlet_v11:'2 2 2 1 2 2 2 2 2 1 1 2 1 1',
+ Flick_LeadPressHold_v12:'2 2 2 3 2 1 2 2 3 2 2 2 1 2'
 };
 const rw=['gk','ld','cd1','cd3','rd','dm2','cm2','lw','am1','rw','st2'];
 const rm=rw.map(p=>p==='rw'?'rm':p);
@@ -115,16 +118,16 @@ for(const id of active){
  assert.ok(registry.situations.includes(registry.meta[id].role),`${id}: role included`);
  assert.ok(registry.displayOrder.includes(id),`${id}: visible in active UI`);
  assert.equal(registry.roleContracts[id].fallbackEligible,false);
- assert.match(registry.labels[id],/Emery|Mourinho|Guardiola|Arteta|Conte|Klopp|Simeone|Allegri/);
+ assert.match(registry.labels[id],/Emery|Mourinho|Guardiola|Arteta|Conte|Klopp|Simeone|Allegri|Flick/);
  assert.ok(!/3-2-5|4-4-2|5-4-1|4-3-3/.test(registry.labels[id]),`${id}: label is mode not formation`);
 }
 assert.equal(registry.roleContracts.Arteta_SafePossession_v11.manualOnly,true);
 assert.equal(policy.hardVeto('Arteta_SafePossession_v11',{}).vetoed,true);
 assert.equal(registry.auditTier.manualOnly[0],'Arteta_SafePossession_v11');
-assert.equal(registry.situations.length,12);
+assert.equal(registry.situations.length,13);
 assert.equal(registry.evidenceAdjustment(),0,'never fabricate causal evidence');
-assert.equal(policy.version,'5.61-tactical-suite-v11.0');
-assert.equal(policy.suiteVersion,'slf_tactic_suite_561_v11');
+assert.equal(policy.version,'5.61-tactical-suite-v12.0');
+assert.equal(policy.suiteVersion,'slf_tactic_suite_561_v12');
 assert.equal(policy.recommendationSchema,'slf_rule_decision_v11_tactical_suite');
 assert.equal(policy.autoApply,false);
 assert.equal(engine.__tacticSuiteV11Installed,true);
@@ -141,7 +144,7 @@ function decide(input={}){
  const d=engine.run(snapshot,{minute:30,scoreState:'draw',score:{state:'draw'},attackNeed:20,myBad:10,lowBadActions:true,signals:[],...input});
  assert.ok(active.includes(d.action.preset),`eligible v11 preset: ${d.action.preset}`);
  assert.notEqual(d.action.preset,'Arteta_SafePossession_v11','diagnostic never auto');
- assert.equal(snapshot.tacticTelemetry.libraryVersion,'slf_tactic_suite_561_v11');
+ assert.equal(snapshot.tacticTelemetry.libraryVersion,'slf_tactic_suite_561_v12');
  assert.equal(snapshot.tacticTelemetry.recommendationSchema,'slf_rule_decision_v11_tactical_suite');
  assert.equal(d.confidence.gap,d.margin,'score margin, not calibrated win rate');
  return d;
@@ -153,8 +156,12 @@ const scenarios=[
  ['pressure/clean outlet',{underPressure:true,counterExitAvailable:true,signals:['under_pressure','counter_exit_available']},'Mourinho_CleanCounter_v11','pressure_counter'],
  ['cooldown',{pressFatigueRisk:true,myPowerDropPct:5},'Guardiola_PressCooldown_v11','press_cooldown'],
  ['wide',{centerClosed:true,wideQuality:true},'Conte_WideChannels_v11','width_attack'],
- ['lead',{minute:72,scoreState:'winning',score:{state:'winning'}},'Simeone_CompactLead_v11','protect_lead'],
- ['lead outlet',{minute:72,scoreState:'winning',score:{state:'winning'},counterExitAvailable:true},'Allegri_LeadOutlet_v11','protect_lead_with_outlet'],
+ // #361 dribble guard: Simeone/Allegri (dribble 1) are vetoed in lead situations;
+ // Emery (dribble 2) is the remaining safe lead candidate vs baseline press.
+ ['lead',{minute:72,scoreState:'winning',score:{state:'winning'}},'Emery_BalancedBase_v11','protect_lead'],
+ ['lead outlet',{minute:72,scoreState:'winning',score:{state:'winning'},counterExitAvailable:true},'Emery_BalancedBase_v11','protect_lead_with_outlet'],
+ // #361 lead_press_hold: winning in the 60-85 window vs opponent pressing above plan.
+ ['lead press hold',{minute:72,scoreState:'winning',score:{state:'winning'},oppPressVector:25},'Flick_LeadPressHold_v12','lead_press_hold'],
  ['emergency',{minute:60,underPressure:true,counterExitAvailable:false,pressureRisk:90,highBadActions:true,signals:['under_pressure','sustained_siege']},'Simeone_EmergencyBlock_v11','emergency_lock'],
  ['chase',{minute:55,scoreState:'losing',score:{state:'losing'},attackNeed:48},'Guardiola_ControlledPush_v11','controlled_chase'],
  ['siege',{minute:62,attackNeed:60,attackingMomentum:true},'Guardiola_PositionalSiege_v11','positional_siege'],
@@ -172,6 +179,7 @@ assert.equal(policy.hardVeto('Simeone_EmergencyBlock_v11',{minute:20,scoreState:
 assert.equal(policy.preferredPreset('final_all_in'),null);
 assert.equal(policy.preferredPreset('default_start'),'Emery_BalancedBase_v11');
 assert.equal(policy.preferredPreset('pressure_counter'),'Mourinho_CleanCounter_v11');
+assert.equal(policy.preferredPreset('lead_press_hold'),'Flick_LeadPressHold_v12');
 const engineSource=source('src/modules/tactics-presets/tactic-control-engine.js');
 const panelSource=source('src/modules/tactics-presets/tactic-preset-library-panel.js');
 assert.equal(/tacticControlBridge\.(applyFormation|saveLiveLineup)\s*\(/.test(engineSource),false,'switching mode cannot change/save formation');
@@ -312,4 +320,4 @@ assert.match(aliasOut,/coach preset alias migration: OK/,'old saved v10 names re
 const syncOut=execFileSync(process.execPath,['tools/sync-active-preset-inventory.mjs','--check'],{cwd:fileURLToPath(root),encoding:'utf8'});
 assert.match(syncOut,/ok: .*active-preset-inventory-v3\.json in sync/,'active-preset inventory must be in sync with the registry');
 
-console.log('tactical suite v11 fixed lineup + Tactical Lab v1 P03 validation contracts: OK');
+console.log('tactical suite v12 fixed lineup + Tactical Lab v1 P03 validation contracts: OK');

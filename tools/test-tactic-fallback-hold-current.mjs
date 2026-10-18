@@ -48,8 +48,8 @@ const P = sandbox.window.SLFTacticDirectionPolicy;
 const E = sandbox.window.SLFCurrentActionHintEngine;
 const RE = sandbox.__RE;
 assert.ok(R && P && E && RE, 'bundle installed registry, policy, engine and RecommendationEngine');
-assert.equal(P.version, '5.61-tactical-suite-v11.0', 'policy version v9.0');
-assert.equal(R.fallbackPolicy, '5.61-tactical-suite-v11-hold-current', 'registry fallbackPolicy is the v9 hold-current contract');
+assert.equal(P.version, '5.61-tactical-suite-v12.0', 'policy version v12.0');
+assert.equal(R.fallbackPolicy, '5.61-tactical-suite-v12-hold-current', 'registry fallbackPolicy is the hold-current contract');
 
 // --- (a) hold branch: no eligible candidate -> hold_current, no preset --------
 // choose()/rank()/scoreCandidate() are closure-local inside the policy IIFE, so a
@@ -80,7 +80,7 @@ const holdSandbox = {
 holdSandbox.window = holdSandbox;
 holdSandbox.globalThis = holdSandbox;
 holdSandbox.window.SLFActivePresetRegistry = {
-  suiteVersion: 'slf_tactic_suite_561_v11',
+  suiteVersion: 'slf_tactic_suite_561_v12',
   recommendationSchema: 'slf_rule_decision_v11_tactical_suite',
   active: [],
   defaultRiskAppetite: 'standard',
@@ -103,10 +103,10 @@ assert.equal(holdResult.action.fallbackReason, 'no_eligible_candidate');
 assert.equal(holdResult.action.guardReason, 'no production preset fallback is allowed');
 assert.equal(holdResult.action.score, 0);
 assert.equal(holdResult.schema, 'slf_rule_decision_v11_tactical_suite');
-assert.equal(holdResult.libraryVersion, 'slf_tactic_suite_561_v11');
+assert.equal(holdResult.libraryVersion, 'slf_tactic_suite_561_v12');
 assert.equal(holdResult.telemetry.recommendedPreset, null, 'hold: telemetry.recommendedPreset null');
 assert.equal(holdResult.telemetry.recommendationState, 'fallback_hold', 'hold: telemetry.recommendationState fallback_hold');
-assert.equal(holdResult.telemetry.libraryVersion, 'slf_tactic_suite_561_v11');
+assert.equal(holdResult.telemetry.libraryVersion, 'slf_tactic_suite_561_v12');
 assert.equal(holdResult.action.riskAppetite, 'standard');
 
 // Non-hold sanity (sandbox A, real bundle): normal contexts still select an active preset (no over-holding).
@@ -141,7 +141,7 @@ assert.equal(removed.fallbackReason, 'invalid_preset', 'removed preset id -> inv
 // diagnostic ruleDecision passthrough retains the raw (invalid) decision.
 assert.equal(removedSnap.ruleDecision, stubDecision, 'invalid_preset hold: raw decision kept on the snapshot as diagnostic input');
 assert.equal(removedSnap.tacticTelemetry.recommendedPreset, null, 'invalid_preset hold: retired preset id never survives into canonical telemetry');
-assert.equal(removedSnap.tacticTelemetry.libraryVersion, 'slf_tactic_suite_561_v11', 'invalid_preset hold: snapshot telemetry carries the v9 library version');
+assert.equal(removedSnap.tacticTelemetry.libraryVersion, 'slf_tactic_suite_561_v12', 'invalid_preset hold: snapshot telemetry carries the v9 library version');
 
 E.run = () => null;
 const priorDecision = { action: { preset: 'Emery_BalancedBase_v11', reason: 'prior decision from an earlier tick' } };

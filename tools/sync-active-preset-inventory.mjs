@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-// Canonical inventory generator/validator for the generator 5.61 tactical suite v11
-// (SLF issue #325). Derives data/tactics/active-preset-inventory-v3.json
+// Canonical inventory generator/validator for the generator 5.61 tactical suite v12
+// (SLF issue #325, extended by #361). Derives data/tactics/active-preset-inventory-v3.json
 // deterministically from src/modules/tactics-presets/active-preset-registry.js,
 // closing the registry<->inventory drift class from issue #252.
 //
@@ -21,7 +21,7 @@ const REGISTRY_PATH = path.join(root, 'src/modules/tactics-presets/active-preset
 const INVENTORY_PATH = path.join(root, 'data/tactics/active-preset-inventory-v3.json');
 const GENERATED_FROM = 'src/modules/tactics-presets/active-preset-registry.js';
 const EXPECTED_SCHEMA = 'slf_active_preset_inventory_v3';
-const EXPECTED_SUITE_VERSION = 'slf_tactic_suite_561_v11';
+const EXPECTED_SUITE_VERSION = 'slf_tactic_suite_561_v12';
 const NATIVE_CONTRACT_PATH = path.join(root, 'data/tactics/tactical-lab-contract-v1.json');
 const nativeDomains = JSON.parse(fs.readFileSync(NATIVE_CONTRACT_PATH, 'utf8')).population.nativeControlDomains;
 
@@ -57,7 +57,7 @@ function loadRegistry() {
     fail(`${GENERATED_FROM} did not install window.SLFActivePresetRegistry`);
   }
   if (registry.suiteVersion !== EXPECTED_SUITE_VERSION) {
-    fail(`registry suiteVersion '${registry.suiteVersion}' !== '${EXPECTED_SUITE_VERSION}'; this tool is v11-bound`);
+    fail(`registry suiteVersion '${registry.suiteVersion}' !== '${EXPECTED_SUITE_VERSION}'; this tool is v12-bound`);
   }
   return registry;
 }
@@ -109,7 +109,7 @@ function validateRegistryInvariants(registry) {
       errors.push(`roleContracts[${id}].controls do not deep-equal registry.presets[${id}]`);
     }
   }
-  if (active.length !== 12) errors.push(`v10 must have exactly 12 active production presets; got ${active.length}`);
+  if (active.length !== 13) errors.push(`v12 must have exactly 13 active production presets; got ${active.length}`);
   if (active.includes('Bielsa_ChaosPress_att5') || Object.keys(presets).includes('Bielsa_ChaosPress_att5'))
     errors.push('Bielsa is LAB-only, never production-recommendable');
   for (const id of active) {
@@ -134,7 +134,7 @@ function validateRegistryInvariants(registry) {
   const expectedRW = ['gk','ld','cd1','cd3','rd','dm2','cm2','lw','am1','rw','st2'];
   const expectedRM = expectedRW.map(position => position === 'rw' ? 'rm' : position);
   if (!fixed || fixed.id !== 'fixed_4231_cd1_cd3_rw_or_rm')
-    errors.push('missing canonical fixed-lineup v11 profile');
+    errors.push('missing canonical fixed-lineup v12 profile');
   if (!deepEqual(fixed?.canonicalPositions, expectedRW))
     errors.push('fixed profile: canonical positions must use CD1/CD3, not CD2');
   if (!deepEqual(fixed?.formationVariants?.rw, expectedRW)
@@ -151,7 +151,7 @@ function validateRegistryInvariants(registry) {
       errors.push(`${id}: missing same fixed-lineup contract`);
   }
   if (registry.defaultPresetId !== 'Emery_BalancedBase_v11')
-    errors.push('v11 start mode must be Emery, not Arteta');
+    errors.push('v12 start mode must be Emery, not Arteta');
   if (registry.roleContracts?.Arteta_SafePossession_v11?.manualOnly !== true)
     errors.push('Arteta diagnostic must be manual-only');
   if ((registry.auditTier?.manualOnly || []).includes('Arteta_SafePossession_v11') !== true)
