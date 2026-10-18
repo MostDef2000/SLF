@@ -2570,12 +2570,15 @@
         "public": [],
         "requires": [],
         "hostCapabilities": [
+          "MutationObserver",
           "URLSearchParams",
           "DOMParser",
           "document",
           "window",
           "location",
           "fetch",
+          "setTimeout",
+          "clearTimeout",
           "console"
         ]
       },

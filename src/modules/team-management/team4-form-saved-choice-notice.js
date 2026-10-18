@@ -158,6 +158,82 @@ SLFTeam4FormSavedChoiceNotice.start();
         return null;
     }
 
+    // Issue #363: team4 sub-tabs (squad switch .tpanel-a/.tpanel-b and column-set switch
+    // .sub-panel-a/.sub-panel-b) keep #generallist in the DOM, so resolvePageLayout() alone
+    // cannot tell the roster view from the other sub-tabs. The championship roster-side
+    // layout must exist only while the roster view is active; every non-roster sub-tab
+    // (финансы, в реале, скиллы, номера, Резерв, Академия, …) gets the site's own full-width
+    // flow back by having the layout classes removed. Pages without the switcher (mocks,
+    // other site states) default to the roster layout.
+    function activeTabLabel(kind) {
+        const tab = document.querySelector(`.${kind}-a`);
+        if (!tab) return '';
+        const wide = tab.querySelector('.wide_format');
+        if (wide) return norm(wide.textContent);
+        // Whole-tab fallback (repo fixtures, older states): strip counter badges
+        // («Основная команда 19», «Аренды 2») so only the label classifies the tab.
+        const clone = tab.cloneNode(true);
+        clone.querySelectorAll('.tpanel__count').forEach(node => node.remove());
+        return norm(clone.textContent);
+    }
+
+    function isRosterSubtabActive() {
+        const squadLabel = activeTabLabel('tpanel');
+        const subLabel = activeTabLabel('sub-panel');
+        if (!squadLabel && !subLabel) return true;
+        // Prefix anchors (start-anchored only): the live site uses short labels
+        // («Основная команда», «основные») while repo fixtures use long ones
+        // («Основная команда 19», «основные показатели») — both classify as roster.
+        // «Аренды…», «финансы…», «в реале», «скиллы», «номера» classify non-roster.
+        if (squadLabel && !/^основная\s+команда/i.test(squadLabel)) return false;
+        if (subLabel && !/^основные/i.test(subLabel)) return false;
+        return true;
+    }
+
+    function applyLayoutState(panel) {
+        if (!panel) return;
+        const layout = resolvePageLayout();
+        if (!layout || layout.mode !== 'fm2026-roster-side' || panel.parentElement !== layout.host) return;
+        const active = isRosterSubtabActive();
+        if ((panel.dataset.slfRosterSideActive || '') === (active ? '1' : '0')) {
+            if (active) syncPanelPlacement(panel, layout);
+            return;
+        }
+        panel.dataset.slfRosterSideActive = active ? '1' : '0';
+        const { host } = layout;
+        if (active) {
+            panel.style.removeProperty('display');
+            panel.dataset.slfTeamPlacement = '';
+            host.classList.add('slf-team4-championship-layout', 'slf-team4-championship-roster-side');
+            if (host.dataset.slfChampGenericContent === '1') host.classList.add('team_general_content');
+            syncPanelPlacement(panel, layout);
+        } else {
+            host.classList.remove('slf-team4-championship-layout', 'slf-team4-championship-roster-side', EXTERNAL_CLASS);
+            if (host.dataset.slfChampGenericContent === '1') host.classList.remove('team_general_content');
+            host.closest('.content-ui__wrapper')?.classList.remove(OVERFLOW_CLASS);
+            panel.dataset.slfTeamPlacement = '';
+            panel.style.setProperty('display', 'none');
+        }
+    }
+
+    function installSubtabObserver(panel, layout) {
+        if (!panel || panel.dataset.slfSubtabObserver === '1') return;
+        panel.dataset.slfSubtabObserver = '1';
+        // Deferred re-checks catch late switcher state changes (tablesorter init, redraws).
+        [300, 1000, 2500].forEach(delay => setTimeout(() => applyLayoutState(panel), delay));
+        if (typeof MutationObserver !== 'function' || !layout?.general) return;
+        let timer = 0;
+        const schedule = () => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                timer = 0;
+                applyLayoutState(panel);
+            }, 150);
+        };
+        const observer = new MutationObserver(schedule);
+        observer.observe(layout.general, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+    }
+
     function getActiveTeam() {
         const rosterLink = document.querySelector('.tf3 a[href*="/roster.php"][href*="id="]')
             || document.querySelector('.team .t_name a[href*="/roster.php"][href*="id="]');
@@ -247,7 +323,7 @@ SLFTeam4FormSavedChoiceNotice.start();
     }
 
     function syncPanelPlacement(panel, layout) {
-        if (!panel || layout?.mode !== 'fm2026-roster-side') return;
+        if (!panel || layout?.mode !== 'fm2026-roster-side' || panel.dataset.slfRosterSideActive === '0') return;
         const contentRoot = layout.host.closest('.content-ui__wrapper');
         const hostRect = layout.host.getBoundingClientRect();
         const viewportRight = document.documentElement.clientWidth || window.innerWidth || 0;
@@ -288,23 +364,27 @@ SLFTeam4FormSavedChoiceNotice.start();
         const layout = resolvePageLayout();
         if (!layout) return null;
 
-        layout.host.classList.add('slf-team4-championship-layout');
         let panel = document.getElementById(PANEL_ID);
 
         if (layout.mode === 'fm2026-roster-side') {
-            layout.host.classList.add('team_general_content', 'slf-team4-championship-roster-side');
             if (!panel) {
                 panel = document.createElement('aside');
                 panel.id = PANEL_ID;
-                layout.host.appendChild(panel);
-            } else if (panel.parentElement !== layout.host) {
-                layout.host.appendChild(panel);
             }
+            if (panel.parentElement !== layout.host) layout.host.appendChild(panel);
+            // team_general_content is plugin-added on .team-body in this mode; remember that
+            // so deactivation can drop it again without touching site-native classes.
+            if (!layout.host.classList.contains('team_general_content')) layout.host.dataset.slfChampGenericContent = '1';
             installPlacementController(panel, layout);
-        } else if (!panel) {
-            panel = document.createElement('aside');
-            panel.id = PANEL_ID;
-            layout.general.insertAdjacentElement('afterend', panel);
+            installSubtabObserver(panel, layout);
+            applyLayoutState(panel);
+        } else {
+            layout.host.classList.add('slf-team4-championship-layout');
+            if (!panel) {
+                panel = document.createElement('aside');
+                panel.id = PANEL_ID;
+                layout.general.insertAdjacentElement('afterend', panel);
+            }
         }
 
         panel.dataset.slfTeamLayout = layout.mode;
