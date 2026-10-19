@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>SLF E2E FM 2026 owned live match — late tactic controls</title>
+  <!-- Repro fixture for the Tactical Lab mount-timing hang (base_sha 89b50df).
+       Mirrors fm2026-owned-live-match.html, but the native tactic radio
+       controls are NOT in the initial DOM: they are rendered by the script
+       at the bottom ~1200 ms after the load event, like the real FM2026 page
+       draws them lazily.
+
+       The deferred block is injected into document.body, OUTSIDE
+       .content-ui__wrapper. This models the production live-match layout
+       where the lazy tactic block lands outside the SLF-observed content
+       root: the match-page DOM observer (src/core/dom-utils.js,
+       installObserver) watches only the .content-ui__wrapper/.match_content
+       subtree, so it never re-renders the Tactical Lab panel, while
+       controlsAvailable() queries the whole document and would now pass.
+       That asymmetry is the permanent "Тактика загружается…" hang. -->
+  <style>
+    :root {
+      --fm-panel:#171b29;--fm-panel-2:#1c2132;--fm-panel-3:#222842;
+      --fm-border:#272d42;--fm-border-2:#38415f;--fm-text:#eef1f8;
+      --fm-muted:#8b93ab;--fm-green:#2bd97c;--fm-green-2:#43f58c;
+      --fm-red:#ff5d6c;--fm-radius:14px;--fm-font:"Roboto","Segoe UI",Arial,sans-serif;
+    }
+    body{margin:0;background:#0d0f18;color:var(--fm-text);font-family:var(--fm-font)}
+    .fm-topbar{min-height:56px;background:#11141f}.fm-deck{min-height:90px;background:#171b29}
+    .fm-stage{display:flex;gap:12px;max-width:1200px;margin:20px auto}.fm-slots{width:60px}
+    .content-ui__wrapper{flex:1;padding:26px 30px;background:#171b29;border:1px solid #272d42;border-radius:18px}
+    .team_general_content{padding:12px;background:#1c2132}
+  </style>
+</head>
+<body id="body" class="dark-theme">
+  <div class="fm-topbar"><div class="fm-topbar__right"></div></div>
+  <div class="fm-topbar-spacer"></div>
+  <div class="fm-deck">
+    <div class="fm-deck__grid">
+      <div class="fm-card fm-card--manager"><div class="fm-account__status">manager online</div></div>
+    </div>
+  </div>
+  <div class="fm-stage">
+    <aside class="fm-slots"><div class="lt3"></div></aside>
+    <div class="content-ui__wrapper">
+      <div id="head">FM 2026 fixture header</div>
+      <main class="match_content">
+        <p>Идёт '20 мин</p>
+        <div class="score_board"><div class="indarkbig"><div>1</div><div>0</div></div></div>
+        <nav>
+          <a href="roster.php?id=23698">Луч</a>
+          <a href="roster.php?id=99999">Соперник</a>
+        </nav>
+        <section class="stats">
+          <span class="stat-23698-power2">102</span><span class="stat-99999-power2">96</span>
+          <span class="stat-23698-pos">54</span><span class="stat-99999-pos">46</span>
+          <span class="stat-23698-shots">7</span><span class="stat-99999-shots">4</span>
+          <span class="stat-23698-ontarget">4</span><span class="stat-99999-ontarget">2</span>
+          <span class="stat-23698-xG">1.10</span><span class="stat-99999-xG">0.55</span>
+          <span class="stat-23698-passes">180</span><span class="stat-99999-passes">150</span>
+          <span class="stat-23698-unpasses">21</span><span class="stat-99999-unpasses">25</span>
+          <span class="stat-23698-ttx">220</span><span class="stat-99999-ttx">205</span>
+          <span class="stat-23698-defective">10</span><span class="stat-99999-defective">13</span>
+          <span class="stat-23698-def_height">2</span><span class="stat-99999-def_height">2</span>
+          <span class="stat-23698-press_height">3</span><span class="stat-99999-press_height">2</span>
+          <span class="stat-23698-fouls">3</span><span class="stat-99999-fouls">4</span>
+          <span class="stat-23698-corners">2</span><span class="stat-99999-corners">1</span>
+          <span class="stat-23698-offsides">1</span><span class="stat-99999-offsides">0</span>
+          <span class="stat-23698-ind">12</span><span class="stat-99999-ind">10</span>
+          <span class="stat-23698-post">0</span><span class="stat-99999-post">0</span>
+          <span class="stat-23698-support">61</span><span class="stat-99999-support">55</span>
+        </section>
+        <p>xT (импульс атаки) 0.72 - 0.38</p>
+        <table class="game_comments"><tr><td>20' Луч продолжает атаку</td></tr><tr><td>18' Удар в створ</td></tr></table>
+        <section class="team_general_content">
+          <!-- Static placeholder. The real tactic radio groups are injected
+               by the deferred script below (outside this wrapper, as in
+               production) ~1200 ms after load. -->
+        </section>
+      </main>
+    </div>
+  </div>
+  <script>
+    // Stand-in for the FM2026 lazy tactic renderer. Same control groups and
+    // default checked values as fm2026-owned-live-match.html, plus the full
+    // native-domain value grid (every value in every range) so that the
+    // assigned experiment's exact controls are guaranteed to exist once this
+    // runs — mirroring how the real page renders all radio options per group.
+    // The block is injected into document.body, outside the SLF-observed
+    // .content-ui__wrapper subtree (production lazy-render position).
+    window.__slfLateControlsAdded = false;
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        var host = document.createElement('section');
+        host.className = 'team_general_content fm-late-tactics';
+        document.body.appendChild(host);
+        var section = host;
+        var ranges = {
+          def_line: ['1', '2', '3'], press_line: ['1', '2', '3'], def_width: ['1', '2', '3'],
+          press_intense: ['1', '2', '3', '4', '5'],
+          build_type: ['1', '2', '3'], build_temp: ['1', '2', '3'],
+          build_long: ['1', '2', '3'], build_fast: ['1', '2', '3'],
+          style: ['1', '2', '3', '4', '5'], pass_risk: ['1', '2', '3', '4', '5'],
+          dribble: ['1', '2', '3', '4', '5'], cross: ['1', '2', '3'],
+          corner: ['1', '2'], shot: ['1', '2', '3']
+        };
+        var defaults = {
+          def_line: '2', press_line: '3', def_width: '2', press_intense: '3',
+          build_type: '2', build_temp: '2', build_long: '2', build_fast: '2',
+          style: '3', pass_risk: '3', dribble: '2', cross: '2', corner: '1', shot: '2'
+        };
+        var blocks = [
+          ['Оборона', ['def_line', 'press_line', 'def_width', 'press_intense']],
+          ['Построение атаки', ['build_type', 'build_temp', 'build_long', 'build_fast']],
+          ['Атака', ['style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot']]
+        ];
+        blocks.forEach(function (block) {
+          var heading = document.createElement('h2');
+          heading.textContent = block[0];
+          section.appendChild(heading);
+          block[1].forEach(function (name) {
+            ranges[name].forEach(function (value) {
+              var input = document.createElement('input');
+              input.type = 'radio';
+              input.name = name;
+              input.value = value;
+              if (value === defaults[name]) {
+                input.checked = true;
+                var label = document.createElement('label');
+                label.appendChild(input);
+                label.appendChild(document.createTextNode(name));
+                section.appendChild(label);
+              } else {
+                input.hidden = true;
+                section.appendChild(input);
+              }
+            });
+          });
+        });
+        [['priority_l', false], ['priority_c', true], ['priority_r', false]].forEach(function (entry) {
+          var input = document.createElement('input');
+          input.type = 'checkbox';
+          input.name = entry[0];
+          input.value = '1';
+          input.checked = entry[1];
+          if (entry[1]) {
+            var label = document.createElement('label');
+            label.appendChild(input);
+            label.appendChild(document.createTextNode('priority center'));
+            section.appendChild(label);
+          } else {
+            input.hidden = true;
+            section.appendChild(input);
+          }
+        });
+        window.__slfLateControlsAdded = true;
+        window.__slfLateControlsAddedAt = Date.now();
+      }, 1200);
+    });
+  </script>
+</body>
+</html>

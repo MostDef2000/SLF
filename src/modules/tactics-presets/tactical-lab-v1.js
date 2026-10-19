@@ -658,6 +658,39 @@
             renderUI();
             return {active:true,completed:null};
         }
+        // Lazy redraw watcher: while the panel shows «Тактика загружается…», native
+        // tactic controls may still be absent and can be injected anywhere in the
+        // document (outside the match-page recovery observer's roots). Re-render
+        // on a short interval until controls appear, the experiment resolves, or
+        // the panel is removed. The tick budget is per burst (~40 ticks × 300 ms
+        // ≈ 12 s), not one-shot: every external renderUI() call restarts the
+        // poller with a fresh budget while the button is still waiting, so the
+        // watcher keeps running in ~12 s bursts. Never duplicated.
+        let readyPollerTimer = null;
+        let readyPollerTicks = 0;
+        function stopReadyPoller() {
+            if (readyPollerTimer == null) return;
+            clearInterval(readyPollerTimer);
+            readyPollerTimer = null;
+        }
+        function ensureReadyPoller() {
+            if (readyPollerTimer != null) return;
+            readyPollerTicks = 0;
+            readyPollerTimer = setInterval(() => {
+                try {
+                    readyPollerTicks += 1;
+                    if (!document.getElementById(PANEL_ID) || readyPollerTicks >= 40) { stopReadyPoller(); return; }
+                    renderUI();
+                    const state = loadState(String(MatchStateParser.getGameId() || ''));
+                    const experiment = experimentFor(state);
+                    if (!experiment || state?.activation?.status === 'active' || state?.completed) { stopReadyPoller(); return; }
+                    if (STATE.tacticControlBridge && controlsAvailable(experiment.controls)) stopReadyPoller();
+                } catch (error) {
+                    stopReadyPoller();
+                    debugWarn('[SLF Tactical Lab] ready poller stopped', error);
+                }
+            },300);
+        }
         function renderUI() {
             const panel = document.getElementById(PANEL_ID);
             if (!panel) return;
@@ -691,6 +724,7 @@
                 const ready = !!STATE.tacticControlBridge && controlsAvailable(experiment.controls);
                 button.disabled = !ready;
                 button.textContent = ready ? 'Применить эксперимент' : 'Тактика загружается…';
+                if (!ready) ensureReadyPoller();
             }
         }
         async function mountUI(snapshot = null) {
