@@ -21,28 +21,28 @@ The active orchestration role is **SLF Delivery Orchestrator**. It retains one t
 
 ## Mandatory operating rules
 
+General delivery gates follow the global contract `~/.config/opencode/AGENTS.md` (durable source: profiles/global/** in the workspace repo ai-playground); scope-admission phrase: `commit approved`. Rules below are additive project-specific strength.
+
 1. Treat GitHub `main` as the only long-term source of truth for repository/product state. Published artifacts live on the protected `release` branch.
 2. Treat the canonical Issue as durable delivery-control truth for an existing task: admitted scope, authorization receipt, Delivery Checkpoint and exact evidence cursors.
 3. Treat the live conversation as transient interaction state used for new source-admission decisions, not as the durable execution cursor.
 4. Start new implementation from a canonical Issue and explicit Implementation Scope Check.
-5. Before asking for `commit approved`, show the complete visible Implementation Scope Check (behavior, file categories, exclusions, risks, verification, release impact) as the last substantive assistant content; approval is valid only in the immediately following user turn.
-6. The only phrase that authorizes repository writes is the exact lowercase phrase `commit approved`. It authorizes only the bounded reversible lifecycle inside the approved scope.
-7. After valid approval persist a durable authorization receipt and machine-readable `SLF Delivery Checkpoint v2`; the receipt may continue only the same exact admitted scope and cannot create, widen, or replace source authority.
-8. Generated outputs are never editable source: `releases/latest.user.js`, `releases/latest.meta.js`, `data/version.json`, `data/release-evidence.json`, `CHANGELOG.md`.
-9. Significant implementation/control-plane work creates or updates linked `spec.md`, `plan.md`, and `tasks.md` under `specs/**`.
-10. Use one fresh branch from current `main` and one bounded PR for one canonical task. Material scope changes require fresh source authorization.
-11. Keep the PR description synchronized with the exact diff, risk profile, and release impact.
-12. Merge requires fresh base/head/scope checks and required CI checks on the exact head.
-13. Merge, release, deployment, runtime verification and product acceptance are distinct states. Releases follow `SLF_AUTOMATIC_RELEASE_POLICY.md`; manual workflow dispatch is fallback-only.
-14. Never commit secrets, credentials, local runtime state, `.env`, virtual environments, logs or generated output outside canonical generated paths.
-15. While a safe authorized next action is executable now, continue automatically; do not return control at deterministic intermediate stages.
-16. Tool routing is deny by default. Availability never grants permission.
-17. For a known task with a valid checkpoint, perform bounded Resume Probe before any full project recovery.
-18. Context compaction, session restart, response truncation or model-memory loss does not itself invalidate source authorization, return an admitted task to discussion, or justify repeated Task Intake. `CONTEXT_LOSS` is not an invalidation reason.
-19. Connector reads after task resolution follow `known object -> metadata -> targeted detail -> failure fragment`; equivalent reads are forbidden unless a canonical gate requires a fresh read.
-20. Checkpoint updates occur at meaningful lifecycle/evidence transitions, not after every tool call, and always record `Next admissible action`.
-21. Lifecycle state is monotonic. Backward/source-reauthorization transition requires a concrete recorded invalidation such as `MATERIAL_SCOPE_CHANGE`, `PROTECTED_BOUNDARY_CHANGE`, `USER_CHANGED_OUTCOME`, `MATERIAL_MAIN_DIVERGENCE`, or `EVIDENCE_CONTRADICTION`.
-22. In a synchronous session, when no safe action is executable now and progress depends only on a machine-observable external transition, persist `WAITING_EXTERNAL` in the checkpoint and return control without promising background work. A resumed wait permits one bounded observation of its exact evidence cursor; unchanged evidence returns `WAITING_EXTERNAL` again without replanning.
+5. After valid approval persist a durable authorization receipt and machine-readable `SLF Delivery Checkpoint v2`; the receipt may continue only the same exact admitted scope and cannot create, widen, or replace source authority.
+6. Generated outputs are never editable source: `releases/latest.user.js`, `releases/latest.meta.js`, `data/version.json`, `data/release-evidence.json`, `CHANGELOG.md`.
+7. Significant implementation/control-plane work creates or updates linked `spec.md`, `plan.md`, and `tasks.md` under `specs/**`.
+8. Use one fresh branch from current `main` and one bounded PR for one canonical task. Material scope changes require fresh source authorization.
+9. Keep the PR description synchronized with the exact diff, risk profile, and release impact.
+10. Merge requires fresh base/head/scope checks and required CI checks on the exact head.
+11. Merge, release, deployment, runtime verification and product acceptance are distinct states. Releases follow `SLF_AUTOMATIC_RELEASE_POLICY.md`; manual workflow dispatch is fallback-only.
+12. Never commit secrets, credentials, local runtime state, `.env`, virtual environments, logs or generated output outside canonical generated paths.
+13. While a safe authorized next action is executable now, continue automatically; do not return control at deterministic intermediate stages.
+14. Tool routing is deny by default. Availability never grants permission.
+15. For a known task with a valid checkpoint, perform bounded Resume Probe before any full project recovery.
+16. Context compaction, session restart, response truncation or model-memory loss does not itself invalidate source authorization, return an admitted task to discussion, or justify repeated Task Intake. `CONTEXT_LOSS` is not an invalidation reason.
+17. Connector reads after task resolution follow `known object -> metadata -> targeted detail -> failure fragment`; equivalent reads are forbidden unless a canonical gate requires a fresh read.
+18. Checkpoint updates occur at meaningful lifecycle/evidence transitions, not after every tool call, and always record `Next admissible action`.
+19. Lifecycle state is monotonic. Backward/source-reauthorization transition requires a concrete recorded invalidation such as `MATERIAL_SCOPE_CHANGE`, `PROTECTED_BOUNDARY_CHANGE`, `USER_CHANGED_OUTCOME`, `MATERIAL_MAIN_DIVERGENCE`, or `EVIDENCE_CONTRADICTION`.
+20. In a synchronous session, when no safe action is executable now and progress depends only on a machine-observable external transition, persist `WAITING_EXTERNAL` in the checkpoint and return control without promising background work. A resumed wait permits one bounded observation of its exact evidence cursor; unchanged evidence returns `WAITING_EXTERNAL` again without replanning.
 
 ## Resumable delivery contract
 
