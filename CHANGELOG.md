@@ -1,5 +1,47 @@
 # Changelog
 
+## 4.4.341
+
+### Tactical Lab
+- fix: Tactical Lab apply-button repaint on late native controls (poller).
+
+Changed files:
+- src/modules/tactics-presets/tactical-lab-v1.js
+
+Approved base commit:
+- f498c3bb3b3d58e32659b43775e671d596e5ceb2
+
+Approved commit:
+- 89b50df31dddceb90bdc6b2fbecc3db925ef3840
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.340
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- AGENTS.md
+
+Approved base commit:
+- f498c3bb3b3d58e32659b43775e671d596e5ceb2
+
+Approved commit:
+- 89b50df31dddceb90bdc6b2fbecc3db925ef3840
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.339
 
 ### Automatic latest-only build
