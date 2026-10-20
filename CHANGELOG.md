@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.4.342
+
+### Tactics panels (issue #370)
+- feat: mount tactics dropdown and panels on fm2026v2 tactic-card markup (team4 tactic page and game.php): new mount-point candidates `form.tactics__form` / `.ui-tactic__wrap` / `.team-control__block`, observer watches fm2026v2 tactic-card mutations, Tactical Lab mounts adjacent to the new cards, design adapter recognizes card-only pages.
+- test: fm2026v2 fixtures + 6-case mounting suite (`tests/browser/test_fm2026_v2_mount.py`), RED-verified on clean main (T2/T4/T6).
+
 ## 4.4.341
 
 ### Tactical Lab
