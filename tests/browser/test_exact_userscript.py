@@ -872,11 +872,28 @@ def assert_hybrid_priority_preflight_rejects_button_lane(page: Page):
     # One legacy checkbox flips the family: the β dirs toggle no longer
     # satisfies the bridge preflight for the lane it covers (issue #377).
     add_hybrid_priority_checkbox(page, "priority_r")
+    # Capture-phase counter: the fix rejects BEFORE any native control
+    # interaction. Base behavior was: preflight passed the β toggle, the
+    # checkbox-family setter clicked priority_r (requested by this preset),
+    # the readback mismatch rolled the click back — mutations with no net
+    # effect. Zero clicks is the discriminator.
+    page.evaluate(
+        """() => {
+          window.__slfNativeClicks = 0;
+          document.addEventListener('click', () => { window.__slfNativeClicks += 1; }, true);
+        }"""
+    )
     apply_fm2026_preset(page, PRIORITY_PRESET_ID)
     log = page.locator("#slf-parser-log").text_content() or ""
     assert "Пресет выбран" not in log, (
         f"applyTacticObject reached ok:true on hybrid markup — the β dirs toggle "
         f"must not satisfy the preflight when a legacy priority checkbox exists; log: {log!r}"
+    )
+    clicks = page.evaluate("() => window.__slfNativeClicks")
+    assert clicks == 0, (
+        f"bridge preflight must reject the hybrid request before any native control "
+        f"click (preset {PRIORITY_PRESET_ID} requests left+right; only priority_r "
+        f"exists as a checkbox — preflight_failed, not click-then-rollback); observed clicks: {clicks}"
     )
     state = page.evaluate(PRIORITY_STATE_JS)
     assert state == {"priority_l": "false", "priority_c": "false", "priority_r": "false"}, (
@@ -925,6 +942,20 @@ def assert_hybrid_lab_controls_unavailable(page: Page):
             timeout=10000,
         )
     except PlaywrightTimeoutError:
+        # Negative assertion with a positive control: the sibling case
+        # fm2026-lab-ready (same fixture, no foreign checkbox) positively
+        # waits for the ready button text, so this timeout can only be the
+        # priority-family gate. Assert the non-priority native lanes are
+        # present in the DOM to rule out a vacuous timeout.
+        missing = page.evaluate(
+            """ranges => Object.keys(ranges).filter(name =>
+                 !document.querySelector(`input[name="${name}"]`))""",
+            TACTIC_RADIO_RANGES,
+        )
+        assert not missing, (
+            "Tactical Lab apply timeout must come from the priority-family gate, "
+            f"not missing non-priority controls; missing lanes: {missing}"
+        )
         return  # expected: the apply button stays disabled on hybrid markup
     state = page.evaluate("""() => {
       const button = document.getElementById('slf-tactical-lab-apply');
