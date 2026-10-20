@@ -16,6 +16,8 @@
       <span class="stat-11111-press_height">2</span><span class="stat-22222-press_height">2</span>
     </section>
     <section class="team_general_content">
+      <!-- The div models the real classic control container (table cell) that defInput.closest('td, div') resolves as the mount anchor; without a div/td ancestor the reviewed game.php contract leaves the panel unmounted. -->
+      <div class="tactic-controls">
       <label><input type="radio" name="def_line" value="2" checked>def_line</label>
       <label><input type="radio" name="press_line" value="2" checked>press_line</label>
       <label><input type="radio" name="def_width" value="2" checked>def_width</label>
@@ -26,6 +28,7 @@
       <label><input type="radio" name="build_fast" value="2" checked>build_fast</label>
       <label><input type="radio" name="style" value="3" checked>style</label>
       <label><input type="radio" name="pass_risk" value="2" checked>pass_risk</label>
+      </div>
     </section>
   </main>
 </body>

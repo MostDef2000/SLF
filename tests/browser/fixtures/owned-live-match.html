@@ -32,6 +32,8 @@
     <p>xT (импульс атаки) 0.72 - 0.38</p>
     <table class="game_comments"><tr><td>20' Луч продолжает атаку</td></tr><tr><td>18' Удар в створ</td></tr></table>
     <section class="team_general_content">
+      <!-- The div models the real classic control container (table cell) that defInput.closest('td, div') resolves as the mount anchor; without a div/td ancestor the reviewed game.php contract leaves the panel unmounted. -->
+      <div class="tactic-controls">
       <h2>Оборона</h2>
       <label><input type="radio" name="def_line" value="2" checked>def_line</label>
       <label><input type="radio" name="press_line" value="3" checked>press_line</label>
@@ -50,6 +52,7 @@
       <label><input type="radio" name="corner" value="1" checked>corner</label>
       <label><input type="radio" name="shot" value="2" checked>shot</label>
       <label><input type="checkbox" name="priority_c" value="1" checked>priority center</label>
+      </div>
     </section>
 
     <section class="control_field control_field_1">
