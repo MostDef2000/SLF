@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.341
+// @version      4.4.342
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.341',
-        scriptVersion: '4.4.341',
+        version: '4.4.342',
+        scriptVersion: '4.4.342',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.341',
+        scriptVersion: '4.4.342',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -675,7 +675,14 @@ const DomUtils = {
             '#game_control',
             '.game_tab_content',
             '.tabs_content',
-            'input[name="def_line"]'
+            'input[name="def_line"]',
+            // fm2026v2 tactic cards (issue #370)
+            '.ui-tactic__wrap',
+            'form.tactics__form',
+            '.ui-tactic-manager',
+            '.ui-tactic-manager__form',
+            '.team-control__block',
+            '.lineup__wrapper'
         ].join(',');
 
         const isRelevantNode = node => {
@@ -715,8 +722,16 @@ const DomUtils = {
 
         window.__slf_match_ui_observer_state = 'waiting';
         this.waitForElement(
-            '.content-ui__wrapper, .match_content',
-            installMatchObserver,
+            '.content-ui__wrapper, .match_content, .ui-tactic__wrap', // fm2026v2 tactic cards (issue #370)
+            element => {
+                // fm2026v2 tactic cards (issue #370): climb from a narrow card
+                // to a wider container so out-of-card match mutations still
+                // re-sync the panels.
+                const wide = element && element.classList.contains('ui-tactic__wrap')
+                    ? (element.closest('.ui-tactic-manager') || element.closest('form') || element.parentElement)
+                    : element;
+                installMatchObserver(wide || element);
+            },
             50,
             100
         );
@@ -2453,7 +2468,10 @@ const DomUtils = {
             const state = ensureAssignment(snapshot);
             if (!state?.assignment) return false;
             const recommendation = document.getElementById('slf-parser-recommendation');
-            const fallback = document.getElementById('slf-match-parser-panel') || document.querySelector('.control_field_1');
+            // fm2026v2 tactic cards (issue #370)
+            const fallback = document.getElementById('slf-match-parser-panel') ||
+                document.querySelector('.control_field_1') ||
+                document.querySelector('.ui-tactic-manager__form, form.tactics__form, .ui-tactic__wrap');
             if (!recommendation && !fallback) return false;
             let panel = document.getElementById(PANEL_ID);
             if (!panel) {
@@ -9830,7 +9848,10 @@ if (!isTacticPage) return;
             let target = document.querySelector('.team_general_content');
 
             if (!target && isTeam4TacticPage) {
-                const tacticWrap = document.querySelector('.ui-tactic__wrap');
+                // fm2026v2 tactic cards (issue #370)
+                const tacticWrap =
+                    document.querySelector('form.tactics__form') ||
+                    document.querySelector('.ui-tactic__wrap');
                 target = tacticWrap?.closest('form') || tacticWrap || null;
             }
 
@@ -10077,22 +10098,29 @@ if (!isTacticPage) return;
             if (location.pathname.includes('/game.php')) {
                 const defInput = document.querySelector('input[name="def_line"]');
 
-                let controlRoot = defInput;
+                // fm2026v2 tactic cards (issue #370): prefer the nearest tactic card as insertion root
+                let controlRoot = defInput
+                    ? defInput.closest('.ui-tactic__wrap, form.tactics__form, .team-control__block')
+                    : null;
 
-                while (
-                    controlRoot &&
-                    controlRoot !== document.body &&
-                    !(
-                        controlRoot.innerText &&
-                        controlRoot.innerText.includes('Оборона') &&
-                        controlRoot.innerText.includes('Построение атаки') &&
-                        controlRoot.innerText.includes('Атака')
-                    )
-                ) {
-                    controlRoot = controlRoot.parentNode;
+                if (!controlRoot) {
+                    controlRoot = defInput;
+
+                    while (
+                        controlRoot &&
+                        controlRoot !== document.body &&
+                        !(
+                            controlRoot.innerText &&
+                            controlRoot.innerText.includes('Оборона') &&
+                            controlRoot.innerText.includes('Построение атаки') &&
+                            controlRoot.innerText.includes('Атака')
+                        )
+                    ) {
+                        controlRoot = controlRoot.parentNode;
+                    }
+
+                    if (!controlRoot || controlRoot === document.body) return;
                 }
-
-                if (!controlRoot || controlRoot === document.body) return;
 
                 container.style.cssText =
                     'width:100%;box-sizing:border-box;margin:4px 0 8px 0;padding:6px 10px;background:#222;color:#fff;border:1px solid #555;border-radius:4px;font-family:Arial,sans-serif;font-size:13px;display:block;overflow:visible;';
@@ -10222,7 +10250,7 @@ if (!isTacticPage) return;
 
     const STYLE_ID = 'slf-fm2026-design-adapter-style';
     const BADGE_ID = 'slf-version-inline-badge';
-    const designSelector = '.fm-stage, .fm-topbar, .fm-deck, .content-ui__wrapper';
+    const designSelector = '.fm-stage, .fm-topbar, .fm-deck, .content-ui__wrapper, .ui-tactic__wrap'; // fm2026v2 tactic cards (issue #370)
 
     function safe(fn, fallback = null) {
         try { return fn(); } catch (error) { return fallback; }
@@ -25358,15 +25386,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.341',
-        scriptVersion: '4.4.341',
+        version: '4.4.342',
+        scriptVersion: '4.4.342',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.341',
+        scriptVersion: '4.4.342',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

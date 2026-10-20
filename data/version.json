@@ -1,22 +1,28 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.341",
+  "scriptVersion": "4.4.342",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_341_published",
+  "status": "release_4_4_342_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "416ae351ab5359f1a20488ec79b5af44f93665d0eb3e2aa8d5cec7fc30f903f5",
     "bundleFileCount": 90,
-    "approvedBaseCommit": "f498c3bb3b3d58e32659b43775e671d596e5ceb2",
-    "approvedCommit": "89b50df31dddceb90bdc6b2fbecc3db925ef3840",
+    "approvedBaseCommit": "89b50df31dddceb90bdc6b2fbecc3db925ef3840",
+    "approvedCommit": "f2697ed0d2841327facbc2caebfc8f3004e0a656",
     "approvedFiles": [
-      "AGENTS.md"
+      "CHANGELOG.md",
+      "data/version.json",
+      "releases/latest.meta.js",
+      "releases/latest.user.js",
+      "src/modules/tactics-presets/tactical-lab-v1.js",
+      "tests/browser/fixtures/fm2026-owned-live-match-late-controls.html",
+      "tests/browser/test_tactical_lab_late_controls.py"
     ],
     "sourceBranch": "",
     "releaseNotesProvided": false,

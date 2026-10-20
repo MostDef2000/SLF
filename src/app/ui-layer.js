@@ -273,7 +273,10 @@ if (!isTacticPage) return;
             let target = document.querySelector('.team_general_content');
 
             if (!target && isTeam4TacticPage) {
-                const tacticWrap = document.querySelector('.ui-tactic__wrap');
+                // fm2026v2 tactic cards (issue #370)
+                const tacticWrap =
+                    document.querySelector('form.tactics__form') ||
+                    document.querySelector('.ui-tactic__wrap');
                 target = tacticWrap?.closest('form') || tacticWrap || null;
             }
 
@@ -520,22 +523,29 @@ if (!isTacticPage) return;
             if (location.pathname.includes('/game.php')) {
                 const defInput = document.querySelector('input[name="def_line"]');
 
-                let controlRoot = defInput;
+                // fm2026v2 tactic cards (issue #370): prefer the nearest tactic card as insertion root
+                let controlRoot = defInput
+                    ? defInput.closest('.ui-tactic__wrap, form.tactics__form, .team-control__block')
+                    : null;
 
-                while (
-                    controlRoot &&
-                    controlRoot !== document.body &&
-                    !(
-                        controlRoot.innerText &&
-                        controlRoot.innerText.includes('Оборона') &&
-                        controlRoot.innerText.includes('Построение атаки') &&
-                        controlRoot.innerText.includes('Атака')
-                    )
-                ) {
-                    controlRoot = controlRoot.parentNode;
+                if (!controlRoot) {
+                    controlRoot = defInput;
+
+                    while (
+                        controlRoot &&
+                        controlRoot !== document.body &&
+                        !(
+                            controlRoot.innerText &&
+                            controlRoot.innerText.includes('Оборона') &&
+                            controlRoot.innerText.includes('Построение атаки') &&
+                            controlRoot.innerText.includes('Атака')
+                        )
+                    ) {
+                        controlRoot = controlRoot.parentNode;
+                    }
+
+                    if (!controlRoot || controlRoot === document.body) return;
                 }
-
-                if (!controlRoot || controlRoot === document.body) return;
 
                 container.style.cssText =
                     'width:100%;box-sizing:border-box;margin:4px 0 8px 0;padding:6px 10px;background:#222;color:#fff;border:1px solid #555;border-radius:4px;font-family:Arial,sans-serif;font-size:13px;display:block;overflow:visible;';

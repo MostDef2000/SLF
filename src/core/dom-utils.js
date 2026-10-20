@@ -67,7 +67,14 @@ const DomUtils = {
             '#game_control',
             '.game_tab_content',
             '.tabs_content',
-            'input[name="def_line"]'
+            'input[name="def_line"]',
+            // fm2026v2 tactic cards (issue #370)
+            '.ui-tactic__wrap',
+            'form.tactics__form',
+            '.ui-tactic-manager',
+            '.ui-tactic-manager__form',
+            '.team-control__block',
+            '.lineup__wrapper'
         ].join(',');
 
         const isRelevantNode = node => {
@@ -107,8 +114,16 @@ const DomUtils = {
 
         window.__slf_match_ui_observer_state = 'waiting';
         this.waitForElement(
-            '.content-ui__wrapper, .match_content',
-            installMatchObserver,
+            '.content-ui__wrapper, .match_content, .ui-tactic__wrap', // fm2026v2 tactic cards (issue #370)
+            element => {
+                // fm2026v2 tactic cards (issue #370): climb from a narrow card
+                // to a wider container so out-of-card match mutations still
+                // re-sync the panels.
+                const wide = element && element.classList.contains('ui-tactic__wrap')
+                    ? (element.closest('.ui-tactic-manager') || element.closest('form') || element.parentElement)
+                    : element;
+                installMatchObserver(wide || element);
+            },
             50,
             100
         );

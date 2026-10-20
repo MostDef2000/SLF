@@ -736,7 +736,10 @@
             const state = ensureAssignment(snapshot);
             if (!state?.assignment) return false;
             const recommendation = document.getElementById('slf-parser-recommendation');
-            const fallback = document.getElementById('slf-match-parser-panel') || document.querySelector('.control_field_1');
+            // fm2026v2 tactic cards (issue #370)
+            const fallback = document.getElementById('slf-match-parser-panel') ||
+                document.querySelector('.control_field_1') ||
+                document.querySelector('.ui-tactic-manager__form, form.tactics__form, .ui-tactic__wrap');
             if (!recommendation && !fallback) return false;
             let panel = document.getElementById(PANEL_ID);
             if (!panel) {

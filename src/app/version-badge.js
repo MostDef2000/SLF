@@ -6,7 +6,7 @@
 
     const STYLE_ID = 'slf-fm2026-design-adapter-style';
     const BADGE_ID = 'slf-version-inline-badge';
-    const designSelector = '.fm-stage, .fm-topbar, .fm-deck, .content-ui__wrapper';
+    const designSelector = '.fm-stage, .fm-topbar, .fm-deck, .content-ui__wrapper, .ui-tactic__wrap'; // fm2026v2 tactic cards (issue #370)
 
     function safe(fn, fallback = null) {
         try { return fn(); } catch (error) { return fallback; }
