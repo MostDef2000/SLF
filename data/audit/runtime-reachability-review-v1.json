@@ -431,6 +431,14 @@
       ]
     },
     {
+      "file": "src/modules/tactics-presets/tactic-control-engine.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Stage 4 verbatim extraction (specs/002-refactoring-program); engine facade body verified identical programmatically.",
+        "Issue #377 (2026-10-20): adds the shared hasLegacyPriorityInputs() family predicate consumed by the bridge preflight, the lab controlsAvailable and the manual watcher; the word 'legacy' in the new comments names the checkbox control family, not obsolete code — no deletion and no behavior beyond the documented family precedence is authorized by this entry."
+      ]
+    },
+    {
       "file": "src/modules/tactics-presets/tactical-lab-v1.js",
       "classification": "ACTIVE",
       "evidence": [
