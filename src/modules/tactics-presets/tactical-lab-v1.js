@@ -535,12 +535,16 @@
                 if (!(ranges[key] || []).includes(value)) return false;
                 if (!findTacticControl(key, value)) return false; // β: tc-seg fallback (engine resolver)
             }
+            // Issue #377: same family precedence as the engine preflight —
+            // legacy checkboxes anywhere make the checkbox family authoritative
+            // for every lane; β toggles decide only on checkbox-free pages.
+            const legacyFamily = hasLegacyPriorityInputs();
             for (const value of normalizePriority(controls.priority)) {
                 const suffix = value === 'left' ? 'l' : value === 'center' ? 'c' : value === 'right' ? 'r' : '';
-                // β design (issue #375): tc-seg priority toggles stand in for
-                // the old-design priority inputs on the new dark design.
-                if (!suffix || (!document.querySelector(`input[name="priority_${suffix}"]`)
-                    && !document.querySelector(`.tc-seg button[data-option="priority_${suffix}"]`))) return false;
+                const domInput = legacyFamily
+                    ? document.querySelector(`input[type="checkbox"][name="priority_${suffix}"]`)
+                    : document.querySelector(`.tc-seg button[data-option="priority_${suffix}"]`);
+                if (!suffix || !domInput) return false;
             }
             return true;
         }

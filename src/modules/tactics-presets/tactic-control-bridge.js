@@ -25,6 +25,12 @@
             corner:['1','2'], shot:['1','2','3']
         });
         const priorityInputName = { left:'priority_l', center:'priority_c', right:'priority_r' };
+        // Issue #377: standalone-safe alias — in the bundle the engine's
+        // public predicate wins; test sandboxes without the engine check the
+        // DOM directly with the same selector.
+        const legacyPriorityInputsPresent = typeof hasLegacyPriorityInputs === 'function'
+            ? hasLegacyPriorityInputs
+            : () => !!document.querySelector('input[type="checkbox"][name^="priority_"]');
         const normalizePriority = value => (Array.isArray(value) ? value : value ? [value] : [])
             .map(item => String(item))
             .sort();
@@ -104,13 +110,16 @@
                         const invalid = requestedPriorities.filter(value => !priorityInputName[value]);
                         if (invalid.length) failures.push('priority_invalid');
                         const needed = new Set([...requestedPriorities, ...initialPriorities]);
+                        // Issue #377: family precedence follows the engine —
+                        // legacy checkboxes anywhere make the checkbox family
+                        // authoritative; a β toggle satisfies the DOM check
+                        // only on pages with no legacy priority checkbox.
+                        const legacyFamily = legacyPriorityInputsPresent();
                         for (const value of needed) {
-                            // β design (issue #375): a tc-seg priority toggle
-                            // satisfies the DOM check when the old-design
-                            // checkbox is absent.
-                            if (!document.querySelector(`input[type="checkbox"][name="${priorityInputName[value]}"]`)
-                                && !document.querySelector(`.tc-seg button[data-option="${priorityInputName[value]}"]`))
-                                failures.push('priority_' + value);
+                            const domInput = legacyFamily
+                                ? document.querySelector(`input[type="checkbox"][name="${priorityInputName[value]}"]`)
+                                : document.querySelector(`.tc-seg button[data-option="${priorityInputName[value]}"]`);
+                            if (!domInput) failures.push('priority_' + value);
                         }
                     } else {
                         const value = String(normalized[key] ?? '');

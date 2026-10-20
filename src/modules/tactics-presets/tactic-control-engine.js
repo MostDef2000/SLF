@@ -27,6 +27,14 @@
         return '';
     }
 
+    // Issue #377: single family predicate for priority control precedence.
+    // Legacy checkboxes anywhere on the page make the legacy family the
+    // authoritative one for ALL lanes; β toggles decide only on pages with
+    // no legacy priority checkbox at all (KB invariant, issue #375).
+    function hasLegacyPriorityInputs() {
+        return !!document.querySelector('input[type="checkbox"][name^="priority_"]');
+    }
+
     async function setPriorityAsync(value) {
         const values = Array.isArray(value) ? value : [value];
         const allCB = document.querySelectorAll('input[type="checkbox"][name^="priority_"]');
@@ -149,7 +157,7 @@
 
         const priorities = [];
 
-        if (document.querySelector('input[type="checkbox"][name^="priority_"]')) {
+        if (hasLegacyPriorityInputs()) {
             document.querySelectorAll('input[type="checkbox"][name^="priority_"]:checked').forEach(el => {
                 const value = priorityNameToValue(el.name);
                 if (value) priorities.push(value);
