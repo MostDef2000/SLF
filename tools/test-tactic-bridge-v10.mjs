@@ -40,6 +40,7 @@ function harness(){
   STATE:{},debugWarn(){},
   normalizePresets(data){return data;},
   getCurrentTactic(){return {...current,priority:current.priority.slice()};},
+  findTacticControl(key,value){return document.querySelector(`input[name="${key}"][value="${value}"]`);},
   async setControlAsync(key,value){
    writes.push([key,JSON.stringify(value)]);
    if(fault?.key===key && fault?.value===String(value) && fault.type==='reject') return false;

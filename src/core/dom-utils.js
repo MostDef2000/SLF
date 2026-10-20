@@ -62,6 +62,9 @@ const DomUtils = {
         const relevantSelector = [
             '#slf-match-parser-panel',
             '#slf-tactics-dropdown',
+            // β design (issue #370 follow-up): lazy compare-tab tactic cards
+            '.tc-block',
+            '.tc-seg',
             '.team_general_content',
             '.game_control',
             '#game_control',
@@ -105,7 +108,13 @@ const DomUtils = {
 
         const root =
             document.querySelector('.content-ui__wrapper') ||
-            document.querySelector('.match_content');
+            document.querySelector('.match_content') ||
+            // β design (issue #370 follow-up): wrapper-less radio-less match
+            // pages get a filtered body root so lazy compare-tab cards are
+            // seen; the mountUI β gate (tc-seg anchor required) decides what
+            // actually mounts, so a permissive root here is safe.
+            (!document.querySelector('input[name="def_line"]') &&
+                document.querySelector('.control_field_1') ? document.body : null);
 
         if (root) {
             installMatchObserver(root);

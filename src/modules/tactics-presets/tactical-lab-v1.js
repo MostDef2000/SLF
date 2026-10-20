@@ -327,7 +327,10 @@
             return items.find(item => item.experimentId === state?.assignment?.experimentId) || null;
         }
         function isOwnedLive(snapshot) {
-            return !!snapshot?.gameId && !!snapshot?.myTeam && snapshot.status !== 'finished';
+            // Foreign-normalized snapshots alias myTeam to the analyzed side
+            // (strategy-data-task-a-ui-extension normalizeForeignSnapshot), so
+            // myTeam alone never proves ownership — matchOwnership does.
+            return !!snapshot?.gameId && !!snapshot?.myTeam && snapshot.status !== 'finished' && snapshot.matchOwnership !== 'foreign';
         }
         function scoreContext(snapshot) {
             const score = snapshot?.score || {};
@@ -530,7 +533,7 @@
             for (const key of labControlKeys) {
                 const value = String(controls[key] ?? '');
                 if (!(ranges[key] || []).includes(value)) return false;
-                if (!document.querySelector(`input[name="${key}"][value="${value}"]`)) return false;
+                if (!findTacticControl(key, value)) return false; // β: tc-seg fallback (engine resolver)
             }
             for (const value of normalizePriority(controls.priority)) {
                 const suffix = value === 'left' ? 'l' : value === 'center' ? 'c' : value === 'right' ? 'r' : '';

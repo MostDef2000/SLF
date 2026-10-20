@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.342
+// @version      4.4.343
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.342',
-        scriptVersion: '4.4.342',
+        version: '4.4.343',
+        scriptVersion: '4.4.343',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.342',
+        scriptVersion: '4.4.343',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -670,6 +670,9 @@ const DomUtils = {
         const relevantSelector = [
             '#slf-match-parser-panel',
             '#slf-tactics-dropdown',
+            // β design (issue #370 follow-up): lazy compare-tab tactic cards
+            '.tc-block',
+            '.tc-seg',
             '.team_general_content',
             '.game_control',
             '#game_control',
@@ -713,7 +716,13 @@ const DomUtils = {
 
         const root =
             document.querySelector('.content-ui__wrapper') ||
-            document.querySelector('.match_content');
+            document.querySelector('.match_content') ||
+            // β design (issue #370 follow-up): wrapper-less radio-less match
+            // pages get a filtered body root so lazy compare-tab cards are
+            // seen; the mountUI β gate (tc-seg anchor required) decides what
+            // actually mounts, so a permissive root here is safe.
+            (!document.querySelector('input[name="def_line"]') &&
+                document.querySelector('.control_field_1') ? document.body : null);
 
         if (root) {
             installMatchObserver(root);
@@ -1314,6 +1323,28 @@ const DomUtils = {
         return true;
     }
 
+    // β design (tc-seg buttons): resolve a canonical option button without
+    // native radios. Radio-group presence on the same key always wins, even
+    // when it lacks the requested value.
+    function findBetaTacticButton(key, value = null) {
+        if (!TACTIC_CONTROL_KEYS.includes(key)) return null;
+        if (document.querySelector(`input[type="radio"][name="${key}"]`)) return null;
+        const group = document.querySelector(`.tc-seg[data-option="${key}"]`);
+        if (!group) return null;
+        const buttons = Array.from(group.querySelectorAll('button[data-value]'));
+        if (value !== null) {
+            return buttons.find(button => button.dataset.value === String(value)) || null;
+        }
+        const active = buttons.filter(button => button.classList.contains('is-on'));
+        return active.length === 1 ? active[0] : null;
+    }
+
+    function findTacticControl(key, value) {
+        const input = document.querySelector(`input[name="${key}"][value="${value}"]`);
+        if (input) return input;
+        return findBetaTacticButton(key, value);
+    }
+
     async function setControlAsync(key, value) {
         return new Promise(resolve => {
             setTimeout(async () => {
@@ -1322,7 +1353,7 @@ const DomUtils = {
                     return;
                 }
 
-                const el = document.querySelector(`input[name="${key}"][value="${value}"]`);
+                const el = findTacticControl(key, value);
 
                 if (!el) {
                     debugWarn('[SLF] Не найден элемент:', key, value);
@@ -1330,7 +1361,12 @@ const DomUtils = {
                     return;
                 }
 
-                if (!el.checked) {
+                if (el.matches('.tc-seg button[data-value]')) {
+                    if (!el.classList.contains('is-on')) {
+                        nativeClick(el);
+                        await new Promise(r => setTimeout(r, 20));
+                    }
+                } else if (!el.checked) {
                     const label = el.closest('label');
                     if (label) nativeClick(label);
                     else nativeClick(el);
@@ -1352,6 +1388,15 @@ const DomUtils = {
             if (el.name.startsWith('priority_')) return;
             groups[el.name] = el.value;
         });
+
+        // β design: canonical button groups are read only for keys that have
+        // no native radio value in this page state. No active button (or
+        // multiple) yields no fabricated value.
+        for (const key of TACTIC_CONTROL_KEYS) {
+            if (Object.prototype.hasOwnProperty.call(groups, key)) continue;
+            const button = findBetaTacticButton(key);
+            if (button) groups[key] = button.dataset.value;
+        }
 
         const priorities = [];
 
@@ -1560,12 +1605,14 @@ const DomUtils = {
                     } else {
                         const value = String(normalized[key] ?? '');
                         if (!nativeDomains[key]?.includes(value)) failures.push(key + ':out_of_domain');
-                        else if (!document.querySelector(`input[name="${key}"][value="${value}"]`))
+                        // β design: an engine-resolved tc-seg button satisfies the
+                        // DOM check when no native radio input exists for the key.
+                        else if (!findTacticControl(key, value))
                             failures.push(key + ':missing_dom_input');
                         // A rollback also needs the original option to be present.
                         const originalValue = String(initial?.[key] ?? '');
                         if (!nativeDomains[key]?.includes(originalValue)
-                            || !document.querySelector(`input[name="${key}"][value="${originalValue}"]`))
+                            || !findTacticControl(key, originalValue))
                             failures.push(key + ':rollback_unavailable');
                     }
                 }
@@ -2059,7 +2106,10 @@ const DomUtils = {
             return items.find(item => item.experimentId === state?.assignment?.experimentId) || null;
         }
         function isOwnedLive(snapshot) {
-            return !!snapshot?.gameId && !!snapshot?.myTeam && snapshot.status !== 'finished';
+            // Foreign-normalized snapshots alias myTeam to the analyzed side
+            // (strategy-data-task-a-ui-extension normalizeForeignSnapshot), so
+            // myTeam alone never proves ownership — matchOwnership does.
+            return !!snapshot?.gameId && !!snapshot?.myTeam && snapshot.status !== 'finished' && snapshot.matchOwnership !== 'foreign';
         }
         function scoreContext(snapshot) {
             const score = snapshot?.score || {};
@@ -2262,7 +2312,7 @@ const DomUtils = {
             for (const key of labControlKeys) {
                 const value = String(controls[key] ?? '');
                 if (!(ranges[key] || []).includes(value)) return false;
-                if (!document.querySelector(`input[name="${key}"][value="${value}"]`)) return false;
+                if (!findTacticControl(key, value)) return false; // β: tc-seg fallback (engine resolver)
             }
             for (const value of normalizePriority(controls.priority)) {
                 const suffix = value === 'left' ? 'l' : value === 'center' ? 'c' : value === 'right' ? 'r' : '';
@@ -9798,8 +9848,9 @@ recBox.style.cssText = `
                         document.querySelector('.content');
 
                     if (
-                        target &&
-                        target.querySelectorAll('input[type="radio"][name], input[type="checkbox"][name]').length >= 10
+                        (target &&
+                        target.querySelectorAll('input[type="radio"][name], input[type="checkbox"][name]').length >= 10) ||
+                        TACTIC_CONTROL_KEYS.filter(key => !!findBetaTacticButton(key)).length >= 10 // β: tc-seg readiness
                     ) {
                         resolve();
                         return;
@@ -9857,7 +9908,10 @@ if (!isTacticPage) return;
 
             if (!target && location.pathname.includes('/game.php')) {
                 const defInput = document.querySelector('input[name="def_line"]');
-                target = defInput ? defInput.closest('td, div') : null;
+                // β design: no radios at all — fall back to persistent anchors.
+                target = (defInput ? defInput.closest('td, div') : null)
+                    || document.getElementById('slf-match-parser-panel')
+                    || document.querySelector('.control_field_1');
             }
 
             if (!target) return;
@@ -10094,6 +10148,21 @@ if (!isTacticPage) return;
 
             row.append(select, applyBtn, saveBtn, deleteBtn, exportBtn, importBtn);
             container.append(title, row, schemeLabel);
+
+            // β design (issue #370 follow-up): tactic radios do not exist on
+            // radio-less game.php pages; mount next to a persistent anchor
+            // instead of waiting for a lazy tactic card. Requires actual β
+            // evidence (tc-seg group for the canonical marker key) so plain
+            // radio-less pages without β cards still never mount (v2 suite T3).
+            if (location.pathname.includes('/game.php') &&
+                !document.querySelector('input[name="def_line"]') &&
+                document.querySelector('.tc-seg[data-option="def_line"]')) {
+                const anchor = document.getElementById('slf-match-parser-panel') ||
+                    document.querySelector('.control_field_1');
+                if (!anchor?.parentNode) return;
+                anchor.parentNode.insertBefore(container, anchor);
+                return;
+            }
 
             if (location.pathname.includes('/game.php')) {
                 const defInput = document.querySelector('input[name="def_line"]');
@@ -11506,14 +11575,10 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
         STATE.tacticWatcherStarted = true;
         STATE.lastManualTactic = getCurrentTactic();
         STATE.lastManualTacticSnapshot = initialSnapshot;
-        document.body.addEventListener('change', event => {
-            const element = event.target;
-            if (!isTacticalInput(element)) return;
-            if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
-
-            // Record every observed control transition synchronously. Debouncing
-            // all change events by 500ms previously erased rapid A -> B -> A
-            // changes within the same game minute.
+        // Record every observed control transition synchronously. Debouncing
+        // all change events by 500ms previously erased rapid A -> B -> A
+        // changes within the same game minute.
+        function recordManualTransition() {
             const beforeControls = STATE.lastManualTactic;
             const current = getCurrentTactic();
             const changed = EventTracker.diffTactic(beforeControls, current);
@@ -11580,6 +11645,35 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
                     ? 'ui_readback_confirmed'
                     : 'applied_unverified';
             }, 500);
+        }
+
+        document.body.addEventListener('change', event => {
+            const element = event.target;
+            if (!isTacticalInput(element)) return;
+            if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
+            recordManualTransition();
+        }, true);
+
+        // β design (issue #370 follow-up): tc-seg tactic buttons fire click,
+        // never change. Capture the pre-click vector, then record in a
+        // microtask after the site's synchronous click handlers settle.
+        document.body.addEventListener('click', event => {
+            const button = event.target?.closest?.('.tc-seg button[data-value]');
+            const key = button?.closest('.tc-seg')?.dataset.option;
+            if (!button || findBetaTacticButton(key, button.dataset.value) !== button) return;
+            if (STATE.tacticControlBridgeApplyInProgress ||
+                Date.now() < (STATE.suppressManualWatcherUntil || 0)) return;
+            const before = getCurrentTactic();
+            // setTimeout(0), not queueMicrotask: microtask checkpoints run
+            // between listeners of the same dispatch, i.e. BEFORE the site's
+            // bubble-phase handler flips is-on. A macrotask runs after the
+            // whole click dispatch settles.
+            setTimeout(() => {
+                if (STATE.tacticControlBridgeApplyInProgress ||
+                    Date.now() < (STATE.suppressManualWatcherUntil || 0)) return;
+                STATE.lastManualTactic = before;
+                recordManualTransition();
+            }, 0);
         }, true);
         return true;
     }
@@ -25357,6 +25451,16 @@ const App = {
     } catch (error) {
         console.warn('[SLF] tactics-dropdown failed; continuing startup', error);
     }
+
+    // β design (issue #370 follow-up): on radio-less match pages the Lab must
+    // recheck readiness even when its own mount pass ran before controls exist.
+    try {
+        if (location.pathname.includes('/game.php')) {
+            void STATE.tacticalLabRuntime?.mountUI?.();
+        }
+    } catch (error) {
+        console.warn('[SLF] tactical-lab-mount failed; continuing startup', error);
+    }
 },
 
     start() {
@@ -25386,15 +25490,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.342',
-        scriptVersion: '4.4.342',
+        version: '4.4.343',
+        scriptVersion: '4.4.343',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.342',
+        scriptVersion: '4.4.343',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
