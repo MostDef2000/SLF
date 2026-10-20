@@ -47,6 +47,28 @@
         return true;
     }
 
+    // β design (tc-seg buttons): resolve a canonical option button without
+    // native radios. Radio-group presence on the same key always wins, even
+    // when it lacks the requested value.
+    function findBetaTacticButton(key, value = null) {
+        if (!TACTIC_CONTROL_KEYS.includes(key)) return null;
+        if (document.querySelector(`input[type="radio"][name="${key}"]`)) return null;
+        const group = document.querySelector(`.tc-seg[data-option="${key}"]`);
+        if (!group) return null;
+        const buttons = Array.from(group.querySelectorAll('button[data-value]'));
+        if (value !== null) {
+            return buttons.find(button => button.dataset.value === String(value)) || null;
+        }
+        const active = buttons.filter(button => button.classList.contains('is-on'));
+        return active.length === 1 ? active[0] : null;
+    }
+
+    function findTacticControl(key, value) {
+        const input = document.querySelector(`input[name="${key}"][value="${value}"]`);
+        if (input) return input;
+        return findBetaTacticButton(key, value);
+    }
+
     async function setControlAsync(key, value) {
         return new Promise(resolve => {
             setTimeout(async () => {
@@ -55,7 +77,7 @@
                     return;
                 }
 
-                const el = document.querySelector(`input[name="${key}"][value="${value}"]`);
+                const el = findTacticControl(key, value);
 
                 if (!el) {
                     debugWarn('[SLF] Не найден элемент:', key, value);
@@ -63,7 +85,12 @@
                     return;
                 }
 
-                if (!el.checked) {
+                if (el.matches('.tc-seg button[data-value]')) {
+                    if (!el.classList.contains('is-on')) {
+                        nativeClick(el);
+                        await new Promise(r => setTimeout(r, 20));
+                    }
+                } else if (!el.checked) {
                     const label = el.closest('label');
                     if (label) nativeClick(label);
                     else nativeClick(el);
@@ -85,6 +112,15 @@
             if (el.name.startsWith('priority_')) return;
             groups[el.name] = el.value;
         });
+
+        // β design: canonical button groups are read only for keys that have
+        // no native radio value in this page state. No active button (or
+        // multiple) yields no fabricated value.
+        for (const key of TACTIC_CONTROL_KEYS) {
+            if (Object.prototype.hasOwnProperty.call(groups, key)) continue;
+            const button = findBetaTacticButton(key);
+            if (button) groups[key] = button.dataset.value;
+        }
 
         const priorities = [];
 

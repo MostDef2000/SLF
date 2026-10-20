@@ -530,7 +530,7 @@
             for (const key of labControlKeys) {
                 const value = String(controls[key] ?? '');
                 if (!(ranges[key] || []).includes(value)) return false;
-                if (!document.querySelector(`input[name="${key}"][value="${value}"]`)) return false;
+                if (!findTacticControl(key, value)) return false; // β: tc-seg fallback (engine resolver)
             }
             for (const value of normalizePriority(controls.priority)) {
                 const suffix = value === 'left' ? 'l' : value === 'center' ? 'c' : value === 'right' ? 'r' : '';

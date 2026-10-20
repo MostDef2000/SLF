@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.4.343
+
+### β-design tc-seg tactic controls (issue #370 follow-up)
+- feat: tactic preset read/write on fm2026v2 β card markup — `.tc-seg` button groups (`is-on`/aria-pressed) resolve canonical options when no native radio group exists for a key (`findBetaTacticButton`/`findTacticControl`); radio groups keep precedence as control of record.
+- feat: all-or-nothing preflight accepts engine-resolved β buttons (missing/out-of-domain requested or original value still rejects before any DOM mutation); rollback restore loop works over β clicks and skips controls already at the seed value.
+- feat: manual-change telemetry for click-driven (not change-driven) tactic controls: capture-phase pre-click vector + deferred record via setTimeout(0) (microtask checkpoints run between listeners of the same dispatch, before the site's bubble handler flips `is-on`); apply-path suppression guards unchanged.
+- feat: Tactical Lab readiness and controls detection on β pages via `findTacticControl`; dropdown/panel mount and `waitForTacticReady` recognize β pages (no radio groups, tc-seg groups present).
+- test: β fixture `tests/browser/fixtures/beta-owned-live-match.html` (GM/token stubs, fault hook, late cards, unknown-only variant) + 7-case Playwright suite `tests/browser/test_beta_tcseg_controls.py` (read+apply e2e, no-op apply, preflight abort, rollback, Lab readiness/dedupe, dropdown mount, manual telemetry); RED-verified on clean main (all 7 fail).
+- fix: bundle-order dependency audit — `queueMicrotask` no longer declared for manual-state-integrity (recording deferred via macrotask).
+
 ## 4.4.342
 
 ### Tactics panels (issue #370)

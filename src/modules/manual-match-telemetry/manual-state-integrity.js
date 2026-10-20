@@ -260,14 +260,10 @@
         STATE.tacticWatcherStarted = true;
         STATE.lastManualTactic = getCurrentTactic();
         STATE.lastManualTacticSnapshot = initialSnapshot;
-        document.body.addEventListener('change', event => {
-            const element = event.target;
-            if (!isTacticalInput(element)) return;
-            if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
-
-            // Record every observed control transition synchronously. Debouncing
-            // all change events by 500ms previously erased rapid A -> B -> A
-            // changes within the same game minute.
+        // Record every observed control transition synchronously. Debouncing
+        // all change events by 500ms previously erased rapid A -> B -> A
+        // changes within the same game minute.
+        function recordManualTransition() {
             const beforeControls = STATE.lastManualTactic;
             const current = getCurrentTactic();
             const changed = EventTracker.diffTactic(beforeControls, current);
@@ -334,6 +330,35 @@
                     ? 'ui_readback_confirmed'
                     : 'applied_unverified';
             }, 500);
+        }
+
+        document.body.addEventListener('change', event => {
+            const element = event.target;
+            if (!isTacticalInput(element)) return;
+            if (STATE.suppressManualWatcherUntil && Date.now() < STATE.suppressManualWatcherUntil) return;
+            recordManualTransition();
+        }, true);
+
+        // β design (issue #370 follow-up): tc-seg tactic buttons fire click,
+        // never change. Capture the pre-click vector, then record in a
+        // microtask after the site's synchronous click handlers settle.
+        document.body.addEventListener('click', event => {
+            const button = event.target?.closest?.('.tc-seg button[data-value]');
+            const key = button?.closest('.tc-seg')?.dataset.option;
+            if (!button || findBetaTacticButton(key, button.dataset.value) !== button) return;
+            if (STATE.tacticControlBridgeApplyInProgress ||
+                Date.now() < (STATE.suppressManualWatcherUntil || 0)) return;
+            const before = getCurrentTactic();
+            // setTimeout(0), not queueMicrotask: microtask checkpoints run
+            // between listeners of the same dispatch, i.e. BEFORE the site's
+            // bubble-phase handler flips is-on. A macrotask runs after the
+            // whole click dispatch settles.
+            setTimeout(() => {
+                if (STATE.tacticControlBridgeApplyInProgress ||
+                    Date.now() < (STATE.suppressManualWatcherUntil || 0)) return;
+                STATE.lastManualTactic = before;
+                recordManualTransition();
+            }, 0);
         }, true);
         return true;
     }

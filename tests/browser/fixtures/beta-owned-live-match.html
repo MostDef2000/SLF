@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Матч — SLF β owned-live fixture</title>
+<style>
+  body { font-family: sans-serif; margin: 16px; }
+  .cf1-pitch { width: 300px; height: 180px; border: 1px solid #999; }
+  .control_line { height: 4px; background: #ccc; margin: 2px 0; }
+  .control_lineup { width: 24px; height: 24px; background: #eee; border: 1px solid #bbb;
+                    float: left; margin: 2px; }
+  .match_tabs button.is-active { font-weight: bold; }
+  .mint-card { border: 1px solid #ccc; margin: 8px 0; padding: 8px; }
+  .mint-seg__i { padding: 2px 8px; }
+  .mint-seg__i.is-on { background: #1565c0; color: #fff; }
+  .tc-click-marker { display: none; }
+</style>
+<script>
+/* ── fixture recorders + telemetry stubs + jQuery shim: must exist before the
+      userscript bundle is injected (add_script_tag after DOMContentLoaded). ── */
+(function () {
+  "use strict";
+  window.__betaClicks = [];
+  window.__slfRequests = [];
+  window.__slfNativeFetches = [];
+  window.__betaCardsDelay = 300;               // ms; overridable per test
+  window.__slfFixture = { name: "beta-owned-live-match", ownedLive: true };
+
+  /* GM storage stubs: in-memory store so the bundle init never throws. */
+  var __gmStore = {};
+  window.GM_getValue = function (k, d) {
+    // token-storage reads GM_getValue('slf_api_token'); without it the bundle
+    // aborts init with '[SLF] API token is not configured' (v2 harness parity)
+    if (k === 'slf_api_token') return 'browser-e2e-token';
+    return k in __gmStore ? __gmStore[k] : d;
+  };
+  window.GM_setValue = function (k, v) { __gmStore[k] = v; };
+  window.GM_deleteValue = function (k) { delete __gmStore[k]; };
+  window.GM_listValues = function () { return Object.keys(__gmStore); };
+  window.GM_registerMenuCommand = function () { return 1; };
+  window.unsafeWindow = window;
+  if (window.GM) {
+    window.GM.getValue = function (k, d) { return Promise.resolve(GM_getValue(k, d)); };
+    window.GM.setValue = function (k, v) { GM_setValue(k, v); return Promise.resolve(); };
+    window.GM.deleteValue = function (k) { GM_deleteValue(k); return Promise.resolve(); };
+    window.GM.listValues = function () { return Promise.resolve(GM_listValues()); };
+  } else {
+    window.GM = {
+      getValue: function (k, d) { return Promise.resolve(GM_getValue(k, d)); },
+      setValue: function (k, v) { GM_setValue(k, v); return Promise.resolve(); },
+      deleteValue: function (k) { GM_deleteValue(k); return Promise.resolve(); },
+      listValues: function () { return Promise.resolve(GM_listValues()); }
+    };
+  }
+
+  /* GM_xmlhttpRequest stub → window.__slfRequests */
+  function gmXhr(details) {
+    details = details || {};
+    window.__slfRequests.push({
+      url: String(details.url || ""),
+      method: String(details.method || "GET"),
+      data: details.data == null ? null : String(details.data)
+    });
+    setTimeout(function () {
+      var resp = {
+        status: 200, readyState: 4, responseHeaders: "",
+        responseText: '{"ok":true}', response: '{"ok":true}'
+      };
+      if (typeof details.onload === "function") details.onload(resp);
+      if (typeof details.onreadystatechange === "function") details.onreadystatechange(resp);
+    }, 0);
+    return { abort: function () {} };
+  }
+  window.GM_xmlhttpRequest = gmXhr;
+  window.GM.xmlHttpRequest = gmXhr;
+
+  /* native fetch stub → window.__slfNativeFetches */
+  window.fetch = function (input, init) {
+    init = init || {};
+    var url = typeof input === "string" ? input : (input && input.url) || String(input);
+    window.__slfNativeFetches.push({
+      kind: "fetch", url: url, method: init.method || "GET",
+      data: init.body == null ? null : String(init.body)
+    });
+    return Promise.resolve({
+      ok: true, status: 200,
+      json: function () { return Promise.resolve({ ok: true }); },
+      text: function () { return Promise.resolve('{"ok":true}'); }
+    });
+  };
+
+  /* native XHR stub → window.__slfNativeFetches */
+  function FakeXhr() { this.readyState = 0; this.status = 0; this.responseText = "";
+                        this._m = "GET"; this._u = ""; }
+  FakeXhr.prototype.open = function (m, u) { this._m = m; this._u = String(u); };
+  FakeXhr.prototype.setRequestHeader = function () {};
+  FakeXhr.prototype.getAllResponseHeaders = function () { return ""; };
+  FakeXhr.prototype.send = function (body) {
+    window.__slfNativeFetches.push({
+      kind: "xhr", url: this._u, method: this._m,
+      data: body == null ? null : String(body)
+    });
+    var self = this;
+    this.readyState = 4; this.status = 200; this.responseText = '{"ok":true}';
+    setTimeout(function () {
+      if (typeof self.onload === "function") self.onload({});
+      if (typeof self.onreadystatechange === "function") self.onreadystatechange({});
+    }, 0);
+  };
+  window.XMLHttpRequest = FakeXhr;
+
+  /* minimal jQuery-compatible shim */
+  function wrap(nodes) {
+    var api = {
+      length: nodes.length,
+      get: function (i) { return i == null ? nodes.slice() : nodes[i]; },
+      each: function (fn) { nodes.forEach(function (n, i) { fn.call(n, i, n); }); return api; },
+      find: function (sel) {
+        var out = [];
+        nodes.forEach(function (n) {
+          Array.prototype.push.apply(out, n.querySelectorAll ? n.querySelectorAll(sel) : []);
+        });
+        return wrap(out);
+      },
+      first: function () { return wrap(nodes.slice(0, 1)); },
+      eq: function (i) { return wrap(i < 0 ? nodes.slice(i) : nodes.slice(i, i + 1)); },
+      on: function (ev, fn) {
+        ev.split(/\s+/).forEach(function (e) {
+          nodes.forEach(function (n) { n.addEventListener(e, fn); });
+        });
+        return api;
+      },
+      addClass: function (c) { nodes.forEach(function (n) { n.classList.add.apply(n.classList, c.split(/\s+/)); }); return api; },
+      removeClass: function (c) { nodes.forEach(function (n) { n.classList.remove.apply(n.classList, c.split(/\s+/)); }); return api; },
+      attr: function (k, v) {
+        if (v === undefined) return nodes[0] ? nodes[0].getAttribute(k) : undefined;
+        nodes.forEach(function (n) { n.setAttribute(k, v); });
+        return api;
+      },
+      val: function (v) {
+        if (v === undefined) return nodes[0] ? nodes[0].value : undefined;
+        nodes.forEach(function (n) { n.value = v; });
+        return api;
+      },
+      text: function (v) {
+        if (v === undefined) return nodes[0] ? nodes[0].textContent : "";
+        nodes.forEach(function (n) { n.textContent = v; });
+        return api;
+      },
+      html: function (v) {
+        if (v === undefined) return nodes[0] ? nodes[0].innerHTML : "";
+        nodes.forEach(function (n) { n.innerHTML = v; });
+        return api;
+      },
+      append: function (child) {
+        nodes.forEach(function (n) {
+          if (typeof child === "string") n.insertAdjacentHTML("beforeend", child);
+          else n.appendChild(child.nodeType ? child : child[0]);
+        });
+        return api;
+      },
+      remove: function () { nodes.forEach(function (n) { n.parentNode && n.parentNode.removeChild(n); }); return api; },
+      closest: function (sel) {
+        var out = [];
+        nodes.forEach(function (n) { var m = n.closest && n.closest(sel); if (m) out.push(m); });
+        return wrap(out);
+      },
+      is: function (sel) { return nodes.some(function (n) { return n.matches && n.matches(sel); }); },
+      trigger: function (ev) {
+        nodes.forEach(function (n) { n.dispatchEvent(new Event(ev, { bubbles: true })); });
+        return api;
+      }
+    };
+    nodes.forEach(function (n, i) { api[i] = n; });
+    return api;
+  }
+  function $(sel, ctx) {
+    if (typeof sel === "function") {
+      if (document.readyState !== "loading") sel($);
+      else document.addEventListener("DOMContentLoaded", function () { sel($); });
+      return;
+    }
+    if (sel && sel.nodeType) return wrap([sel]);
+    if (typeof sel === "string" && sel.charAt(0) === "<") {
+      var t = document.createElement("div");
+      t.innerHTML = sel.trim();
+      return wrap(Array.prototype.slice.call(t.children));
+    }
+    if (typeof sel === "string") return wrap(Array.prototype.slice.call((ctx || document).querySelectorAll(sel)));
+    if (sel && typeof sel.length === "number") return wrap(Array.prototype.slice.call(sel));
+    return wrap([]);
+  }
+  $.fn = {};
+  window.jQuery = window.$ = $;
+})();
+</script>
+</head>
+<body>
+<div class="page">
+  <h1>Матч «Смена» — «Заря» (id=1001)</h1>
+
+  <!-- match-stats anchors: MatchStatsParser.getAllTeamIds() scans class*="stat-";
+       23698 (luch) ∈ CONFIG.MY_TEAMS → detectMyTeamId passes and addDropdown
+       proceeds past the game.php ownership gate. -->
+  <div class="stat-23698-possession" hidden></div>
+
+  <!-- owned-live control scaffolding (conventional) -->
+  <div class="control_field_1"><div class="cf1-pitch"></div></div>
+  <div class="control_lines">
+    <div class="control_line" data-position="GK"></div>
+    <div class="control_line" data-position="D"></div>
+    <div class="control_line" data-position="DM"></div>
+    <div class="control_line" data-position="M"></div>
+  </div>
+  <div class="control_lineups">
+    <div class="control_lineup"></div><div class="control_lineup"></div>
+    <div class="control_lineup"></div><div class="control_lineup"></div>
+    <div class="control_lineup"></div><div class="control_lineup"></div>
+    <div class="control_lineup"></div><div class="control_lineup"></div>
+    <div class="control_lineup"></div><div class="control_lineup"></div>
+    <div class="control_lineup"></div><div class="control_lineup"></div>
+    <div class="control_lineup"></div><div class="control_lineup"></div>
+    <div class="control_lineup"></div><div class="control_lineup"></div>
+    <div class="control_lineup"></div><div class="control_lineup"></div>
+    <div class="control_lineup"></div><div class="control_lineup"></div>
+    <div class="control_lineup"></div>
+  </div>
+  <button class="lineup_send" type="button">Отправить</button>
+
+  <!-- legacy priority checkboxes: label-wrapped, none checked -->
+  <div class="priority_box">
+    <label><input type="checkbox" name="priority_l"> Левый фланг</label>
+    <label><input type="checkbox" name="priority_c"> Центр</label>
+    <label><input type="checkbox" name="priority_r"> Правый фланг</label>
+  </div>
+
+  <!-- the ONE deliberate radio group (style): precedence test vs β seg style -->
+  <div class="legacy_style">
+    <label><input type="radio" name="style" value="1"> Акцент атаки</label>
+    <label><input type="radio" name="style" value="2" checked> Баланс</label>
+  </div>
+
+  <!-- tab area: cards exist ONLY under «Сравнение» -->
+  <div class="match_content">
+    <div class="match_tabs">
+      <button type="button" class="match_tab is-active" data-tab="match">Матч</button>
+      <button type="button" class="match_tab" data-tab="compare">Сравнение</button>
+    </div>
+    <div class="match_tabpane" data-pane="match">
+      <p class="match_score">Счёт: 1:0</p>
+    </div>
+    <div class="match_tabpane" data-pane="compare"></div>
+  </div>
+</div>
+
+<script>
+/* ── page JS: β tactic cards (mint-seg button groups), tabs, click engine ── */
+(function () {
+  "use strict";
+
+  var UNKNOWN_ONLY =
+    new URLSearchParams(location.search).get("beta") === "unknownonly";
+
+  /* canonical groups: EXACT value sets per spec; unknown group extra */
+  var CANON = [
+    { key: "def_line",      title: "Линия обороны",           label: "Линия обороны",           values: 3 },
+    { key: "press_line",    title: "Линия прессинга",         label: "Линия прессинга",         values: 3 },
+    { key: "def_width",     title: "Ширина обороны",          label: "Ширина обороны",          values: 3 },
+    { key: "press_intense", title: "Интенсивность прессинга", label: "Интенсивность прессинга", values: 5 },
+    { key: "build_type",    title: "Тип розыгрыша",           label: "Тип розыгрыша",           values: 3 },
+    { key: "build_temp",    title: "Темп розыгрыша",          label: "Темп розыгрыша",          values: 3 },
+    { key: "build_long",    title: "Длинные передачи",        label: "Длинные передачи",        values: 3 },
+    { key: "build_fast",    title: "Быстрый розыгрыш",        label: "Быстрый розыгрыш",        values: 3 },
+    { key: "style",         title: "Стиль",                   label: "Стиль",                   values: 5 },
+    { key: "pass_risk",     title: "Риск паса",               label: "Риск паса",               values: 5 },
+    { key: "dribble",       title: "Обыгрыш",                 label: "Обыгрыш",                 values: 5 },
+    { key: "cross",         title: "Фланговые подачи",        label: "Фланговые подачи",        values: 3 },
+    { key: "corner",        title: "Угловые",                 label: "Угловые",                 values: 2 },
+    { key: "shot",          title: "Броски",                  label: "Броски",                  values: 3 }
+  ];
+  var UNKNOWN = { key: "press_style", title: "Прессинг-стиль", label: "Прессинг-стиль", values: 2, unknown: true };
+
+  function seedValue(g) {
+    if (g.unknown) return null;                 // unknown group: no is-on
+    return g.key === "def_line" ? "2" : "1";    // canonical seed
+  }
+
+  function buildSection(g) {
+    var sec = document.createElement("section");
+    sec.className = "mint-card tc-block";
+    sec.innerHTML =
+      '<div class="mint-card__head">' +
+        '<h2 class="mint-card__title"></h2>' +
+        '<div class="mint-card__tools"><span class="tc-form mint-tip" data-tc-form hidden></span></div>' +
+      '</div>' +
+      '<div class="tc-opt"><div class="tc-opt__label"></div></div>';
+    sec.querySelector(".mint-card__title").textContent = g.title;
+    sec.querySelector(".tc-opt__label").textContent = g.label;
+
+    var seed = seedValue(g);
+    var seg = document.createElement("span");
+    seg.className = "mint-seg tc-seg";
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", g.label);
+    seg.setAttribute("data-option", g.key);
+    for (var v = 1; v <= g.values; v++) {
+      var val = String(v);
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "mint-seg__i" + (val === seed ? " is-on" : "");
+      b.setAttribute("data-value", val);
+      b.setAttribute("aria-pressed", val === seed ? "true" : "false");
+      b.textContent = val;
+      seg.appendChild(b);
+    }
+    sec.querySelector(".tc-opt").appendChild(seg);
+    return sec;
+  }
+
+  function buildCards() {
+    var holder = document.createElement("div");
+    holder.className = "tc-cards";
+    holder.id = "tc-cards";
+    var groups = UNKNOWN_ONLY ? [UNKNOWN] : CANON.concat([UNKNOWN]);
+    groups.forEach(function (g) { holder.appendChild(buildSection(g)); });
+    return holder;
+  }
+
+  /* tabs: «Сравнение» inserts cards after __betaCardsDelay ms; «Матч» removes them */
+  var tabs = Array.prototype.slice.call(document.querySelectorAll(".match_tab"));
+  var comparePane = document.querySelector('.match_tabpane[data-pane="compare"]');
+  var insertTimer = null;
+
+  function currentCards() { return document.getElementById("tc-cards"); }
+  function removeCards() { var c = currentCards(); if (c) c.remove(); }
+  function insertCards() { removeCards(); comparePane.appendChild(buildCards()); }
+
+  document.querySelector(".match_tabs").addEventListener("click", function (e) {
+    var btn = e.target.closest(".match_tab");
+    if (!btn) return;
+    tabs.forEach(function (t) { t.classList.toggle("is-active", t === btn); });
+    if (insertTimer) { clearTimeout(insertTimer); insertTimer = null; }
+    if (btn.getAttribute("data-tab") === "compare") {
+      var d = (typeof window.__betaCardsDelay === "number" && window.__betaCardsDelay >= 0)
+        ? window.__betaCardsDelay : 300;
+      insertTimer = setTimeout(function () { insertTimer = null; insertCards(); }, d);
+    } else {
+      removeCards();
+    }
+  });
+
+  /* β click engine: single is-on per group; record; fault hook */
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest(".tc-seg button[data-value]");
+    if (!btn) return;
+    var seg = btn.closest(".tc-seg");
+    var key = seg.getAttribute("data-option");
+    var value = btn.getAttribute("data-value");
+
+    window.__betaClicks.push({ key: key, value: value, ts: Date.now() });
+    var marker = document.createElement("div");
+    marker.className = "tc-click-marker";
+    document.body.appendChild(marker);
+
+    if (window.__betaRejectNext === key) {   // fault hook: no state change
+      window.__betaRejectNext = null;
+      return;
+    }
+    Array.prototype.forEach.call(seg.querySelectorAll("button[data-value]"), function (b) {
+      var on = b === btn;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  });
+})();
+</script>
+</body>
+</html>

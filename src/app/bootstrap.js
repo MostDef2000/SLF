@@ -137,6 +137,16 @@ const App = {
     } catch (error) {
         console.warn('[SLF] tactics-dropdown failed; continuing startup', error);
     }
+
+    // β design (issue #370 follow-up): on radio-less match pages the Lab must
+    // recheck readiness even when its own mount pass ran before controls exist.
+    try {
+        if (location.pathname.includes('/game.php')) {
+            void STATE.tacticalLabRuntime?.mountUI?.();
+        }
+    } catch (error) {
+        console.warn('[SLF] tactical-lab-mount failed; continuing startup', error);
+    }
 },
 
     start() {

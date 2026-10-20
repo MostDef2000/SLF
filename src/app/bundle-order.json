@@ -327,11 +327,15 @@
           "setPriorityAsync",
           "setControlAsync",
           "getCurrentTactic",
-          "applyPresetAsync"
+          "applyPresetAsync",
+          "findBetaTacticButton",
+          "findTacticControl"
         ],
         "public": [
           "getCurrentTactic",
-          "applyPresetAsync"
+          "applyPresetAsync",
+          "findBetaTacticButton",
+          "findTacticControl"
         ],
         "requires": [
           {
@@ -339,7 +343,8 @@
             "symbols": [
               "PresetUsageTracker",
               "STATE",
-              "debugWarn"
+              "debugWarn",
+              "TACTIC_CONTROL_KEYS"
             ],
             "phase": "runtime"
           },
@@ -402,7 +407,8 @@
           {
             "file": "src/modules/tactics-presets/tactic-control-engine.js",
             "symbols": [
-              "getCurrentTactic"
+              "getCurrentTactic",
+              "findTacticControl"
             ],
             "phase": "runtime"
           },
@@ -434,7 +440,8 @@
           {
             "file": "src/modules/tactics-presets/tactic-control-engine.js",
             "symbols": [
-              "getCurrentTactic"
+              "getCurrentTactic",
+              "findTacticControl"
             ],
             "phase": "runtime"
           },
@@ -1376,7 +1383,8 @@
             "file": "src/core/config.js",
             "symbols": [
               "BASE_PRESETS",
-              "debugLog"
+              "debugLog",
+              "TACTIC_CONTROL_KEYS"
             ],
             "phase": "runtime"
           },
@@ -1399,7 +1407,8 @@
             "file": "src/modules/tactics-presets/tactic-control-engine.js",
             "symbols": [
               "applyPresetAsync",
-              "getCurrentTactic"
+              "getCurrentTactic",
+              "findBetaTacticButton"
             ],
             "phase": "runtime"
           },
@@ -1544,7 +1553,8 @@
             "file": "src/modules/tactics-presets/tactic-control-engine.js",
             "symbols": [
               "getCurrentTactic",
-              "applyPresetAsync"
+              "applyPresetAsync",
+              "findBetaTacticButton"
             ],
             "phase": "runtime"
           },
@@ -2700,6 +2710,13 @@
             "file": "src/modules/team-management/team-loan-limit-helper.js",
             "symbols": [
               "LoanLimitPanel"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "STATE"
             ],
             "phase": "runtime"
           }

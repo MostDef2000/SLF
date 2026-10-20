@@ -351,6 +351,10 @@ function makeSandbox(location, doc) {
     // Only reachable from event handlers — must never fire during mount.
     applyPresetAsync: () => { throw new Error('applyPresetAsync must not run during mount'); },
     getCurrentTactic: () => { throw new Error('getCurrentTactic must not run during mount'); },
+    // β design resolver (issue #370 follow-up): fixtures here have native
+    // radios, so the resolver must never produce a β button during mount.
+    TACTIC_CONTROL_KEYS: ['def_line', 'press_line', 'def_width', 'press_intense', 'build_type', 'build_temp', 'build_long', 'build_fast', 'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'],
+    findBetaTacticButton: () => null,
     normalizePresets: data => data
   };
   sandbox.window = sandbox;

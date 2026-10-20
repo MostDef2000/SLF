@@ -111,12 +111,14 @@
                     } else {
                         const value = String(normalized[key] ?? '');
                         if (!nativeDomains[key]?.includes(value)) failures.push(key + ':out_of_domain');
-                        else if (!document.querySelector(`input[name="${key}"][value="${value}"]`))
+                        // β design: an engine-resolved tc-seg button satisfies the
+                        // DOM check when no native radio input exists for the key.
+                        else if (!findTacticControl(key, value))
                             failures.push(key + ':missing_dom_input');
                         // A rollback also needs the original option to be present.
                         const originalValue = String(initial?.[key] ?? '');
                         if (!nativeDomains[key]?.includes(originalValue)
-                            || !document.querySelector(`input[name="${key}"][value="${originalValue}"]`))
+                            || !findTacticControl(key, originalValue))
                             failures.push(key + ':rollback_unavailable');
                     }
                 }

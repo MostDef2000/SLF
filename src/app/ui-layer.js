@@ -223,8 +223,9 @@ recBox.style.cssText = `
                         document.querySelector('.content');
 
                     if (
-                        target &&
-                        target.querySelectorAll('input[type="radio"][name], input[type="checkbox"][name]').length >= 10
+                        (target &&
+                        target.querySelectorAll('input[type="radio"][name], input[type="checkbox"][name]').length >= 10) ||
+                        TACTIC_CONTROL_KEYS.filter(key => !!findBetaTacticButton(key)).length >= 10 // β: tc-seg readiness
                     ) {
                         resolve();
                         return;
@@ -282,7 +283,10 @@ if (!isTacticPage) return;
 
             if (!target && location.pathname.includes('/game.php')) {
                 const defInput = document.querySelector('input[name="def_line"]');
-                target = defInput ? defInput.closest('td, div') : null;
+                // β design: no radios at all — fall back to persistent anchors.
+                target = (defInput ? defInput.closest('td, div') : null)
+                    || document.getElementById('slf-match-parser-panel')
+                    || document.querySelector('.control_field_1');
             }
 
             if (!target) return;
@@ -519,6 +523,21 @@ if (!isTacticPage) return;
 
             row.append(select, applyBtn, saveBtn, deleteBtn, exportBtn, importBtn);
             container.append(title, row, schemeLabel);
+
+            // β design (issue #370 follow-up): tactic radios do not exist on
+            // radio-less game.php pages; mount next to a persistent anchor
+            // instead of waiting for a lazy tactic card. Requires actual β
+            // evidence (tc-seg group for the canonical marker key) so plain
+            // radio-less pages without β cards still never mount (v2 suite T3).
+            if (location.pathname.includes('/game.php') &&
+                !document.querySelector('input[name="def_line"]') &&
+                document.querySelector('.tc-seg[data-option="def_line"]')) {
+                const anchor = document.getElementById('slf-match-parser-panel') ||
+                    document.querySelector('.control_field_1');
+                if (!anchor?.parentNode) return;
+                anchor.parentNode.insertBefore(container, anchor);
+                return;
+            }
 
             if (location.pathname.includes('/game.php')) {
                 const defInput = document.querySelector('input[name="def_line"]');
