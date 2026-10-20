@@ -214,12 +214,17 @@ def assert_classic_geometry(page):
     assert geometry["filter"] == "none", geometry
     assert geometry["shadow"] == "none", geometry
     assert geometry["marginBottom"] == "0px", geometry
-    # issue #375: the overlay no longer injects the classic pitch PNG — the
-    # field background must be the solid #1d6f36 color with no url() image.
-    assert geometry["background"] == "none", geometry
-    assert geometry["backgroundColor"] == "rgb(29, 111, 54)", geometry
-    assert "custom-pitch.jpg" not in geometry["background"], geometry
-    assert "second-custom-pitch.jpg" not in geometry["background"], geometry
+    # issue #375: the classic pitch keeps the original grass texture with all
+    # baked field markup inpainted away, embedded as an inline data-URI image
+    # (no site asset fetched); #1d6f36 stays as the fallback color under it.
+    bg_image = geometry["background"]
+    def bg_fail():
+        return {**geometry, "background": f"{bg_image[:80]}...({len(bg_image)} chars)"}
+    assert bg_image.startswith("url("), bg_fail()
+    assert "data:image/" in bg_image, bg_fail()
+    assert geometry["backgroundColor"] == "rgb(29, 111, 54)", bg_fail()
+    assert "custom-pitch.jpg" not in bg_image, bg_fail()
+    assert "second-custom-pitch.jpg" not in bg_image, bg_fail()
     contain_tokens = set(geometry["contain"].split())
     assert geometry["contain"] == "content" or {"layout", "paint", "style"}.issubset(contain_tokens), geometry
     assert geometry["isolation"] == "isolate", geometry

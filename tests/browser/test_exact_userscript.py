@@ -450,12 +450,16 @@ def assert_fm2026_compact_recommendation(page: Page):
 
 def assert_pitch_background_static():
     # issue #375 (match-rendering-compatibility): the compatibility overlay
-    # must no longer inject the classic pitch PNG.  Grep the exact built
-    # artifact — the same bytes every browser case above executes.
+    # must no longer reference the classic pitch PNG by name.  The grass
+    # texture (baked markup inpainted away) is embedded inline as a data-URI.
+    # Grep the exact built artifact — the same bytes every browser case above
+    # executes.
     artifact_text = ARTIFACT.read_text(encoding="utf-8")
     hits = artifact_text.count("play_field6")
     assert hits == 0, f"play_field6 still referenced in the built bundle: {hits} hit(s)"
-    print("[browser-e2e] passed: pitch-background-static (play_field6 hits=0)")
+    data_uris = artifact_text.count("data:image/")
+    assert data_uris >= 1, f"cleaned grass data-URI missing from the built bundle: {data_uris} data:image/ occurrence(s)"
+    print(f"[browser-e2e] passed: pitch-background-static (play_field6 hits=0, data:image/ uris={data_uris})")
 
 
 def assert_owned_live(page: Page):
