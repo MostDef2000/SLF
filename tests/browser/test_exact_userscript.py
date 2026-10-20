@@ -851,6 +851,93 @@ def assert_transfer_page(page: Page):
     assert page.locator("#slf-manual-recommendation-btn").count() == 0
 
 
+# ── issue #377: hybrid priority markup pins the page to the checkbox family ──
+# The engine's family predicate (hasLegacyPriorityInputs) is the single
+# precedence source: ANY legacy priority checkbox on the page makes the
+# checkbox family authoritative for every lane, and the β dirs toggles are
+# ignored by engine, bridge preflight, lab controlsAvailable and the watcher.
+def add_hybrid_priority_checkbox(page: Page, name: str):
+    page.evaluate(
+        """name => {
+          if (document.querySelector(`input[name="${name}"]`)) return;
+          const input = document.createElement('input');
+          input.type = 'checkbox'; input.name = name; input.value = '1'; input.hidden = true;
+          document.body.appendChild(input);
+        }""",
+        name,
+    )
+
+
+def assert_hybrid_priority_preflight_rejects_button_lane(page: Page):
+    # One legacy checkbox flips the family: the β dirs toggle no longer
+    # satisfies the bridge preflight for the lane it covers (issue #377).
+    add_hybrid_priority_checkbox(page, "priority_r")
+    apply_fm2026_preset(page, PRIORITY_PRESET_ID)
+    log = page.locator("#slf-parser-log").text_content() or ""
+    assert "Пресет выбран" not in log, (
+        f"applyTacticObject reached ok:true on hybrid markup — the β dirs toggle "
+        f"must not satisfy the preflight when a legacy priority checkbox exists; log: {log!r}"
+    )
+    state = page.evaluate(PRIORITY_STATE_JS)
+    assert state == {"priority_l": "false", "priority_c": "false", "priority_r": "false"}, (
+        f"β toggles must stay untouched on a hybrid page (checkbox family authoritative): {state}"
+    )
+
+
+def assert_hybrid_priority_checkbox_authoritative_apply(page: Page):
+    # Checkboxes for every lane: apply succeeds through the legacy path and
+    # the β toggles remain untouched (issue #377).
+    add_hybrid_priority_checkbox(page, "priority_l")
+    add_hybrid_priority_checkbox(page, "priority_r")
+    apply_fm2026_preset(page, PRIORITY_PRESET_ID)
+    log = page.locator("#slf-parser-log").text_content() or ""
+    assert "Пресет выбран" in log, (
+        f"applyTacticObject failed with checkboxes present for every lane — "
+        f"the legacy family must keep applying through checkboxes; log: {log!r}"
+    )
+    state = page.evaluate(PRIORITY_STATE_JS)
+    assert state == {"priority_l": "false", "priority_c": "false", "priority_r": "false"}, (
+        f"β toggles must stay untouched while checkboxes are driven: {state}"
+    )
+    checked = page.evaluate(
+        """() => ['priority_l','priority_c','priority_r'].map(name =>
+             document.querySelector(`input[name="${name}"]`)
+               ? document.querySelector(`input[name="${name}"]`).checked
+               : null)"""
+    )
+    assert checked == [True, None, True], checked
+
+
+def assert_hybrid_lab_controls_unavailable(page: Page):
+    # A legacy checkbox pins the page to the checkbox family: the lab apply
+    # button must stay disabled because the β priority toggles it would drive
+    # are ignored by the engine on such pages (issue #377).
+    page.wait_for_selector("#slf-tactical-lab-panel", timeout=10000)
+    add_hybrid_priority_checkbox(page, "priority_c")
+    add_tactic_radio_grid(page)
+    try:
+        page.wait_for_function(
+            """readyText => {
+              const button = document.getElementById('slf-tactical-lab-apply');
+              return !!button && !button.disabled && button.textContent.trim() === readyText;
+            }""",
+            arg=LAB_READY_TEXT,
+            timeout=10000,
+        )
+    except PlaywrightTimeoutError:
+        return  # expected: the apply button stays disabled on hybrid markup
+    state = page.evaluate("""() => {
+      const button = document.getElementById('slf-tactical-lab-apply');
+      return button ? {text: button.textContent.trim(), disabled: button.disabled} : null;
+    }""")
+    raise AssertionError(
+        "Tactical Lab apply button became available on hybrid markup — "
+        f"expected it to stay disabled (legacy checkbox present ⇒ β toggles ignored); "
+        f"observed {state!r} — controlsAvailable() must follow the engine's family "
+        "precedence (issue #377)."
+    )
+
+
 def main():
     cases = [
         ("owned-live", "/game.php?id=e2e-owned&fixture=owned", "success", assert_owned_live),
@@ -868,6 +955,9 @@ def main():
         ("fm2026-lab-ready", "/game.php?id=e2e-fm2026-a&fixture=fm2026", "success", assert_fm2026_lab_ready),
         ("fm2026-priority-release", "/game.php?id=e2e-fm2026-prio&fixture=fm2026", "success", assert_fm2026_priority_release),
         ("fm2026-compact-recommendation", "/game.php?id=e2e-fm2026-prio&fixture=fm2026", "success", assert_fm2026_compact_recommendation),
+        ("hybrid-priority-preflight-rejects-button-lane", "/game.php?id=e2e-hybrid-prio&fixture=fm2026", "success", assert_hybrid_priority_preflight_rejects_button_lane),
+        ("hybrid-priority-checkbox-authoritative-apply", "/game.php?id=e2e-hybrid-prio&fixture=fm2026", "success", assert_hybrid_priority_checkbox_authoritative_apply),
+        ("hybrid-lab-controls-unavailable", "/game.php?id=e2e-hybrid-lab&fixture=fm2026", "success", assert_hybrid_lab_controls_unavailable),
     ]
 
     assert_pitch_background_static()

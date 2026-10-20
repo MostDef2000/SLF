@@ -347,6 +347,10 @@
         document.body.addEventListener('click', event => {
             const button = event.target?.closest?.('.tc-seg button[data-value], .tc-seg button[data-option^="priority_"]');
             const isPriorityToggle = !!button?.dataset?.option?.startsWith('priority_');
+            // Issue #377: where legacy priority checkboxes exist the engine
+            // ignores β toggles; the watcher follows the same precedence
+            // explicitly instead of relying on the empty readback diff.
+            if (isPriorityToggle && hasLegacyPriorityInputs()) return;
             const key = isPriorityToggle ? null : button?.closest('.tc-seg')?.dataset.option;
             if (!button || (!isPriorityToggle && findBetaTacticButton(key, button.dataset.value) !== button)) return;
             if (STATE.tacticControlBridgeApplyInProgress ||
