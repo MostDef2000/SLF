@@ -9,6 +9,7 @@
 - feat: Tactical Lab readiness and controls detection on β pages via `findTacticControl`; dropdown/panel mount and `waitForTacticReady` recognize β pages (no radio groups, tc-seg groups present).
 - test: β fixture `tests/browser/fixtures/beta-owned-live-match.html` (GM/token stubs, fault hook, late cards, unknown-only variant) + 7-case Playwright suite `tests/browser/test_beta_tcseg_controls.py` (read+apply e2e, no-op apply, preflight abort, rollback, Lab readiness/dedupe, dropdown mount, manual telemetry); RED-verified on clean main (all 7 fail).
 - fix: bundle-order dependency audit — `queueMicrotask` no longer declared for manual-state-integrity (recording deferred via macrotask).
+- fix: Tactical Lab foreign-match gate — `isOwnedLive` rejects `matchOwnership === 'foreign'` snapshots (foreign normalization aliases `myTeam` to the analyzed side, so a truthy `myTeam` alone never proves ownership); catches the ungated bootstrap `mountUI` recheck path (caught by CI `test_exact_userscript.py::assert_foreign_live`).
 
 ## 4.4.342
 

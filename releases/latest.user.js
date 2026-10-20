@@ -2106,7 +2106,10 @@ const DomUtils = {
             return items.find(item => item.experimentId === state?.assignment?.experimentId) || null;
         }
         function isOwnedLive(snapshot) {
-            return !!snapshot?.gameId && !!snapshot?.myTeam && snapshot.status !== 'finished';
+            // Foreign-normalized snapshots alias myTeam to the analyzed side
+            // (strategy-data-task-a-ui-extension normalizeForeignSnapshot), so
+            // myTeam alone never proves ownership — matchOwnership does.
+            return !!snapshot?.gameId && !!snapshot?.myTeam && snapshot.status !== 'finished' && snapshot.matchOwnership !== 'foreign';
         }
         function scoreContext(snapshot) {
             const score = snapshot?.score || {};
