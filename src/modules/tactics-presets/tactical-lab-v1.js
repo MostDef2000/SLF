@@ -537,7 +537,10 @@
             }
             for (const value of normalizePriority(controls.priority)) {
                 const suffix = value === 'left' ? 'l' : value === 'center' ? 'c' : value === 'right' ? 'r' : '';
-                if (!suffix || !document.querySelector(`input[name="priority_${suffix}"]`)) return false;
+                // β design (issue #375): tc-seg priority toggles stand in for
+                // the old-design priority inputs on the new dark design.
+                if (!suffix || (!document.querySelector(`input[name="priority_${suffix}"]`)
+                    && !document.querySelector(`.tc-seg button[data-option="priority_${suffix}"]`))) return false;
             }
             return true;
         }

@@ -342,10 +342,13 @@
         // β design (issue #370 follow-up): tc-seg tactic buttons fire click,
         // never change. Capture the pre-click vector, then record in a
         // microtask after the site's synchronous click handlers settle.
+        // Issue #375: β priority toggles carry data-option on the button
+        // itself (no data-value) — watch them beside the canonical buttons.
         document.body.addEventListener('click', event => {
-            const button = event.target?.closest?.('.tc-seg button[data-value]');
-            const key = button?.closest('.tc-seg')?.dataset.option;
-            if (!button || findBetaTacticButton(key, button.dataset.value) !== button) return;
+            const button = event.target?.closest?.('.tc-seg button[data-value], .tc-seg button[data-option^="priority_"]');
+            const isPriorityToggle = !!button?.dataset?.option?.startsWith('priority_');
+            const key = isPriorityToggle ? null : button?.closest('.tc-seg')?.dataset.option;
+            if (!button || (!isPriorityToggle && findBetaTacticButton(key, button.dataset.value) !== button)) return;
             if (STATE.tacticControlBridgeApplyInProgress ||
                 Date.now() < (STATE.suppressManualWatcherUntil || 0)) return;
             const before = getCurrentTactic();

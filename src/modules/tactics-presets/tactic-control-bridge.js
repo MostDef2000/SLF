@@ -105,7 +105,11 @@
                         if (invalid.length) failures.push('priority_invalid');
                         const needed = new Set([...requestedPriorities, ...initialPriorities]);
                         for (const value of needed) {
-                            if (!document.querySelector(`input[type="checkbox"][name="${priorityInputName[value]}"]`))
+                            // β design (issue #375): a tc-seg priority toggle
+                            // satisfies the DOM check when the old-design
+                            // checkbox is absent.
+                            if (!document.querySelector(`input[type="checkbox"][name="${priorityInputName[value]}"]`)
+                                && !document.querySelector(`.tc-seg button[data-option="${priorityInputName[value]}"]`))
                                 failures.push('priority_' + value);
                         }
                     } else {

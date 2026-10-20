@@ -77,11 +77,39 @@
           <label><input type="radio" name="cross" value="2" checked>cross</label>
           <label><input type="radio" name="corner" value="1" checked>corner</label>
           <label><input type="radio" name="shot" value="2" checked>shot</label>
-          <label><input type="checkbox" name="priority_c" value="1" checked>priority center</label>
+          <!-- issue #375 (orchestrator waiver): the live dark design has NO
+               priority checkboxes; wing priorities are one multi-select dirs
+               toggle group whose state is aria-pressed (initially all false).
+               This mirrors that live markup and replaces the legacy
+               priority_c checkbox so the β priority path (engine/bridge/lab)
+               is the only path the page can take. -->
+          <span class="mint-seg tc-seg tc-seg--dirs" role="group" aria-label="Направление атак">
+            <button type="button" class="mint-seg__i" data-option="priority_l" aria-pressed="false">левый</button>
+            <button type="button" class="mint-seg__i" data-option="priority_c" aria-pressed="false">центр</button>
+            <button type="button" class="mint-seg__i" data-option="priority_r" aria-pressed="false">правый</button>
+          </span>
           </div>
         </section>
       </main>
     </div>
   </div>
 </body>
+<script>
+/* issue #375: mirrors the live dark-design site handler — a click on a dirs
+   toggle flips ONLY that button's aria-pressed (independent multi-select).
+   The fixed engine's β priority path clicks the button and re-reads
+   aria-pressed in a later task; without this bubble handler the readback
+   could never observe the state the real page produces. */
+(function () {
+  "use strict";
+  document.addEventListener("click", function (event) {
+    var button = event.target && event.target.closest
+      ? event.target.closest(".tc-seg--dirs button[data-option^='priority_']")
+      : null;
+    if (!button) return;
+    var pressed = button.getAttribute("aria-pressed") === "true";
+    button.setAttribute("aria-pressed", pressed ? "false" : "true");
+  });
+})();
+</script>
 </html>

@@ -15,7 +15,7 @@ function installMatchRenderingCompatibility() {
     const FIELD_WIDTH = 800;
     const FIELD_HEIGHT = 550;
     const MAX_RENDER_SCALE = 1;
-    const CLASSIC_PITCH_BACKGROUND = '#1d6f36 url("/images/gen4/play_field6.png") -1px 0 / 800px 550px no-repeat';
+    const CLASSIC_PITCH_BACKGROUND = '#1d6f36';
 
     const styleId = 'slf-match-rendering-compatibility';
     if (!document.getElementById(styleId)) {
@@ -26,7 +26,7 @@ function installMatchRenderingCompatibility() {
                 width: 800px !important;
                 height: 550px !important;
                 max-width: none !important;
-                background: #1d6f36 url("/images/gen4/play_field6.png") -1px 0 / 800px 550px no-repeat !important;
+                background: #1d6f36 !important;
                 transform: none !important;
                 transform-origin: top center !important;
                 margin-left: auto !important;

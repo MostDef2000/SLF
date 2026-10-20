@@ -31,6 +31,31 @@
         const values = Array.isArray(value) ? value : [value];
         const allCB = document.querySelectorAll('input[type="checkbox"][name^="priority_"]');
 
+        // β design (issue #375): the new dark design renders wing priorities as
+        // multi-select tc-seg toggle buttons (aria-pressed), not checkboxes.
+        // [] means "release every lane" — one click per needed state change.
+        if (!allCB.length) {
+            const buttons = document.querySelectorAll('.tc-seg button[data-option^="priority_"]');
+            if (!buttons.length) return false;
+
+            for (const button of buttons) {
+                const priorityValue = priorityNameToValue(button.dataset.option);
+                if (!priorityValue) continue;
+                const shouldBePressed = values.includes(priorityValue);
+                const isPressed = button.getAttribute('aria-pressed') === 'true';
+
+                if (isPressed !== shouldBePressed) {
+                    nativeClick(button);
+                    // The site's bubble handler flips aria-pressed after the
+                    // click dispatch settles — settle in a later macrotask
+                    // (same lesson as the β radio path).
+                    await new Promise(r => setTimeout(r, 80));
+                }
+            }
+
+            return true;
+        }
+
         for (let cb of allCB) {
             const priorityValue = priorityNameToValue(cb.name);
             const shouldBeChecked = values.includes(priorityValue);
@@ -124,10 +149,19 @@
 
         const priorities = [];
 
-        document.querySelectorAll('input[type="checkbox"][name^="priority_"]:checked').forEach(el => {
-            const value = priorityNameToValue(el.name);
-            if (value) priorities.push(value);
-        });
+        if (document.querySelector('input[type="checkbox"][name^="priority_"]')) {
+            document.querySelectorAll('input[type="checkbox"][name^="priority_"]:checked').forEach(el => {
+                const value = priorityNameToValue(el.name);
+                if (value) priorities.push(value);
+            });
+        } else {
+            // β design: pressed tc-seg priority toggles stand in for the
+            // checkboxes when the old-design inputs are absent.
+            document.querySelectorAll('.tc-seg button[data-option^="priority_"][aria-pressed="true"]').forEach(el => {
+                const value = priorityNameToValue(el.dataset.option);
+                if (value) priorities.push(value);
+            });
+        }
 
         groups.priority = priorities;
 
