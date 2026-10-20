@@ -309,6 +309,31 @@ function buildNewDesignDoc({ withForm = true } = {}) {
   return { doc, head, page, wrap };
 }
 
+// fm2026 NEW dark design (mint tactic page, issue #370): NO classic anchors
+// at all (no .team_general_content, no form.tactics__form/.ui-tactic__wrap);
+// DIV.tc.mint wraps the tactic cards, the «Мои тактики» mint card hosts the
+// hidden pill radios. A VISIBLE .team > .team-head is kept in the fixture to
+// pin that the mint mount ignores the header entirely (panel goes above the
+// cards, header-selector mode must not trigger).
+function buildMintDesignDoc() {
+  const doc = createDocument();
+  const team = doc.createElement('div');
+  team.classList.add('team');
+  const head = doc.createElement('div');
+  head.classList.add('team-head');
+  team.appendChild(head);
+  doc.body.appendChild(team);
+
+  const mint = doc.createElement('div');
+  mint.classList.add('tc', 'mint');
+  const card = doc.createElement('div');
+  card.classList.add('mint-card', 'tc-tactics');
+  addTacticRadios(doc, card);
+  mint.appendChild(card);
+  doc.body.appendChild(mint);
+  return { doc, head, mint, card };
+}
+
 function buildGameDoc() {
   const doc = createDocument();
   const control = doc.createElement('div');
@@ -431,6 +456,23 @@ const GAME_LOCATION = { pathname: '/game.php', search: '' };
   assert.equal(container.classList.contains('slf-team4-tactic-header-selector'), false, 'no form: no header-selector class');
 }
 
+// --- (3b) fm2026 NEW dark design (mint): before the «Мои тактики» card -----------
+{
+  const { doc, head, mint, card } = buildMintDesignDoc();
+  assert.notEqual(head.offsetParent, null, 'mint fixture sanity: header is visible, the mint path must still ignore it');
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc));
+  await UI.addDropdown();
+
+  const container = doc.getElementById('slf-tactics-dropdown');
+  assert.ok(container, 'mint design: dropdown mounted despite absent classic anchors');
+  assert.equal(container.parentNode, mint, 'mint design: container mounts inside DIV.tc.mint');
+  assert.equal(mint.firstChild, container, 'mint design: container sits directly BEFORE the tactics card');
+  assert.equal(mint._children[1], card, 'mint design: .mint-card.tc-tactics follows the dropdown');
+  assert.equal(container.classList.contains('slf-team4-tactic-header-selector'), false, 'mint design: no header-selector class despite visible header');
+  assert.equal(container.dataset.slfTeam4TacticHeader, undefined, 'mint design: no header dataset flag');
+  assert.equal(doc.getElementById('slf-team4-tactic-header-selector-style'), null, 'mint design: header style block not injected');
+}
+
 // --- (4) game.php smoke: parser-panel insertion path unchanged -------------------
 {
   const { doc, control } = buildGameDoc();
@@ -445,4 +487,4 @@ const GAME_LOCATION = { pathname: '/game.php', search: '' };
   assert.equal(container.classList.contains('slf-team4-tactic-header-selector'), false, 'game.php: no header-selector class');
 }
 
-console.log('team4 tactic dropdown mount: old design header mount (insertBefore/appendChild + class + style), new design form-first-child fallback, no-form wrap fallback, game.php smoke: OK');
+console.log('team4 tactic dropdown mount: old design header mount (insertBefore/appendChild + class + style), new design form-first-child fallback, no-form wrap fallback, fm2026 mint card-anchored mount, game.php smoke: OK');
