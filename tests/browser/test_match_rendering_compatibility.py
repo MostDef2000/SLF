@@ -192,6 +192,7 @@ def assert_classic_geometry(page):
             shadow: style.boxShadow,
             marginBottom: style.marginBottom,
             background: style.backgroundImage,
+            backgroundColor: style.backgroundColor,
             contain: style.contain,
             isolation: style.isolation,
             canvasWidth: canvasStyle.width,
@@ -213,7 +214,10 @@ def assert_classic_geometry(page):
     assert geometry["filter"] == "none", geometry
     assert geometry["shadow"] == "none", geometry
     assert geometry["marginBottom"] == "0px", geometry
-    assert "play_field6.png" in geometry["background"], geometry
+    # issue #375: the overlay no longer injects the classic pitch PNG — the
+    # field background must be the solid #1d6f36 color with no url() image.
+    assert geometry["background"] == "none", geometry
+    assert geometry["backgroundColor"] == "rgb(29, 111, 54)", geometry
     assert "custom-pitch.jpg" not in geometry["background"], geometry
     assert "second-custom-pitch.jpg" not in geometry["background"], geometry
     contain_tokens = set(geometry["contain"].split())

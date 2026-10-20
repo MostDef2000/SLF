@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import Browser, Page, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 ROOT = Path.cwd()
 ARTIFACT = ROOT / "releases" / "latest.user.js"
@@ -25,6 +26,7 @@ ROUTES = {
     "incomplete": FIXTURES / "incomplete-match.html",
     "tactic": FIXTURES / "team-tactic.html",
     "transfer": FIXTURES / "transfer-page.html",
+    "fm2026": FIXTURES / "fm2026-owned-live-match.html",
 }
 
 
@@ -260,14 +262,200 @@ def add_tactical_lab_control_fixture_values(page: Page):
           }
         }
         for (const suffix of ['l','c','r']) {
-          const name = `priority_${suffix}`;
-          if (document.querySelector(`input[name="${name}"]`)) continue;
-          const input = document.createElement('input');
-          input.type = 'checkbox'; input.name = name; input.value = '1'; input.hidden = true;
-          document.body.appendChild(input);
+            const name = `priority_${suffix}`;
+            if (document.querySelector(`input[name="${name}"]`)) continue;
+            const input = document.createElement('input');
+            input.type = 'checkbox'; input.name = name; input.value = '1'; input.hidden = true;
+            document.body.appendChild(input);
         }
       })();
     """)
+
+
+# ── issue #375: β priority toggles on the fm2026 mint fixture ────────────────
+# The β priority path (tactic-control-engine setPriorityAsync / getCurrentTactic,
+# tactic-control-bridge preflight, tactical-lab controlsAvailable) engages only
+# when the old-design priority checkboxes are ABSENT — the fixture mirrors the
+# live dark design (aria-pressed dirs toggles). add_tactical_lab_control_fixture
+# _values() would re-add those checkboxes and silently pin the page to the
+# legacy path, so these cases use this radios-only variant of the value grid.
+TACTIC_RADIO_RANGES = {
+    "def_line": ["1", "2", "3"], "press_line": ["1", "2", "3"],
+    "def_width": ["1", "2", "3"], "press_intense": ["1", "2", "3", "4", "5"],
+    "build_type": ["1", "2", "3"], "build_temp": ["1", "2", "3"],
+    "build_long": ["1", "2", "3"], "build_fast": ["1", "2", "3"],
+    "style": ["1", "2", "3", "4", "5"], "pass_risk": ["1", "2", "3", "4", "5"],
+    "dribble": ["1", "2", "3", "4", "5"], "cross": ["1", "2", "3"],
+    "corner": ["1", "2"], "shot": ["1", "2", "3"],
+}
+
+PRIORITY_NAMES_TO_VALUES = {"priority_l": "left", "priority_c": "center", "priority_r": "right"}
+
+# β readback selector of the fixed engine (tactic-control-engine.js), observed
+# through the DOM — the bundle exposes no test globals (repo oracle convention,
+# see tests/browser/test_beta_tcseg_controls.py header).
+PRIORITY_STATE_JS = """() => {
+  const out = {};
+  document.querySelectorAll('.tc-seg--dirs button[data-option^="priority_"]').forEach(
+    button => { out[button.dataset.option] = button.getAttribute('aria-pressed'); });
+  return out;
+}"""
+
+PRIORITY_READBACK_JS = """() => Array.from(
+    document.querySelectorAll('.tc-seg button[data-option^="priority_"][aria-pressed="true"]'))
+  .map(el => ({priority_l: 'left', priority_c: 'center', priority_r: 'right'})[el.dataset.option])"""
+
+# Conte_WideChannels_v11: registry preset with priority ["left","right"] —
+# the vector shape that regressed as «нет элементов priority_left,
+# priority_right» (issue #375). Applied via the dropdown change handler,
+# the same tacticControlBridge.applyTacticObject entry the existing
+# owned-live apply case uses.
+PRIORITY_PRESET_ID = "Conte_WideChannels_v11"
+RELEASE_PRESET_ID = "Emery_BalancedBase_v11"  # priority [] — release every lane
+
+LAB_READY_TEXT = "Применить эксперимент"
+LAB_LOADING_TEXT = "Тактика загружается…"
+
+
+def add_tactic_radio_grid(page: Page):
+    page.evaluate(
+        """ranges => {
+          for (const [name, values] of Object.entries(ranges)) {
+            for (const value of values) {
+              if (document.querySelector(`input[name="${name}"][value="${value}"]`)) continue;
+              const input = document.createElement('input');
+              input.type = 'radio'; input.name = name; input.value = value; input.hidden = true;
+              document.body.appendChild(input);
+            }
+          }
+        }""",
+        TACTIC_RADIO_RANGES,
+    )
+
+
+def apply_fm2026_preset(page: Page, preset_id: str):
+    add_tactic_radio_grid(page)
+    page.wait_for_selector("#slf-tactics-dropdown select", timeout=10000)
+    page.locator("#slf-tactics-dropdown select").select_option(preset_id)
+    # The apply chain (preflight → per-key clicks → aria-pressed flips →
+    # readback → «Пресет выбран» log) settles far below this budget on the
+    # fixed build; on unfixed src it never lands, which is the RED signal.
+    page.wait_for_timeout(4000)
+
+
+def assert_fm2026_priority_apply(page: Page):
+    apply_fm2026_preset(page, PRIORITY_PRESET_ID)
+    log = page.locator("#slf-parser-log").text_content() or ""
+    assert "Пресет выбран" in log, (
+        f"applyTacticObject did not reach ok:true (expected no preflight failures "
+        f"'priority_left'/'priority_right' with the β dirs toggles present); parser log: {log!r}"
+    )
+    state = page.evaluate(PRIORITY_STATE_JS)
+    assert state == {"priority_l": "true", "priority_c": "false", "priority_r": "true"}, state
+
+
+def assert_fm2026_priority_readback(page: Page):
+    apply_fm2026_preset(page, PRIORITY_PRESET_ID)
+    priorities = page.evaluate(PRIORITY_READBACK_JS)
+    assert priorities == ["left", "right"], priorities
+
+
+def assert_fm2026_lab_ready(page: Page):
+    # Game id measured against the deterministic P03 assignment: EXP-561-P03-
+    # 0001 (parent EXP-561-P02-0012) carries controls.priority ["left","right"]
+    # — the only condition that can freeze the apply button once the control
+    # grid is complete. Guard the RED bite if the assignment ever drifts.
+    page.wait_for_selector("#slf-tactical-lab-panel", timeout=10000)
+    experiment_id = page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id")
+    assert experiment_id == "EXP-561-P03-0001", experiment_id
+    add_tactic_radio_grid(page)
+    try:
+        page.wait_for_function(
+            """readyText => {
+              const button = document.getElementById('slf-tactical-lab-apply');
+              return !!button && !button.disabled && button.textContent.trim() === readyText;
+            }""",
+            arg=LAB_READY_TEXT,
+            timeout=10000,
+        )
+    except PlaywrightTimeoutError:
+        state = page.evaluate("""() => {
+          const button = document.getElementById('slf-tactical-lab-apply');
+          return button ? {text: button.textContent.trim(), disabled: button.disabled} : null;
+        }""")
+        raise AssertionError(
+            "Tactical Lab apply button stayed stuck with the dirs priority group present: "
+            f"expected {LAB_READY_TEXT!r} enabled within 10 s, observed {state!r} — "
+            "controlsAvailable() must accept .tc-seg priority toggles when the old-design "
+            "priority inputs are absent (issue #375)."
+        )
+
+
+def assert_fm2026_priority_release(page: Page):
+    apply_fm2026_preset(page, PRIORITY_PRESET_ID)
+    setup_state = page.evaluate(PRIORITY_STATE_JS)
+    assert setup_state == {"priority_l": "true", "priority_c": "false", "priority_r": "true"}, (
+        f"release precondition (Case A state) not reached: {setup_state}"
+    )
+    page.locator("#slf-tactics-dropdown select").select_option(RELEASE_PRESET_ID)
+    page.wait_for_function(
+        """() => ['priority_l','priority_c','priority_r'].every(name =>
+          document.querySelector(`.tc-seg--dirs button[data-option="${name}"]`)
+            ?.getAttribute('aria-pressed') === 'false')""",
+        timeout=10000,
+    )
+    state = page.evaluate(PRIORITY_STATE_JS)
+    assert state == {"priority_l": "false", "priority_c": "false", "priority_r": "false"}, state
+    assert page.evaluate(PRIORITY_READBACK_JS) == []
+
+
+def assert_fm2026_compact_recommendation(page: Page):
+    page.locator("#slf-manual-recommendation-btn").click()
+    page.wait_for_function(
+        "() => document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
+    )
+    page.wait_for_timeout(400)
+    structure = page.evaluate("""() => {
+      const block = document.querySelector('#slf-parser-recommendation [data-slf-rec-section="combined"]');
+      if (!block) return {block: false};
+      const details = Array.from(block.querySelectorAll('details.slf-final-tactic-more'));
+      const one = details.length === 1 ? details[0] : null;
+      const button = block.querySelector('#slf-final-tactic-apply-btn');
+      return {
+        block: true,
+        // innerText renders only visible text: a CLOSED <details> contributes
+        // nothing here, so visibleText is exactly the always-visible part.
+        visibleText: block.innerText,
+        detailsText: one ? one.textContent : null,
+        detailsCount: details.length,
+        summary: one ? (one.querySelector('summary')?.textContent || '').trim() : null,
+        hasOpenAttr: one ? one.hasAttribute('open') : null,
+        buttonOutsideDetails: !!button && !!one && !one.contains(button),
+      };
+    }""")
+    assert structure["block"], "recommendation block missing"
+    assert structure["detailsCount"] == 1, f'compact block must render exactly one details element: {structure["detailsCount"]}'
+    assert structure["summary"] == "Подробнее", structure["summary"]
+    assert structure["hasOpenAttr"] is False, "details must be collapsed by default (no open attribute)"
+    visible = structure["visibleText"]
+    assert "Δ:" in visible, f"always-visible part must contain the Δ line: {visible!r}"
+    assert "Применить" in visible and structure["buttonOutsideDetails"], (
+        f"always-visible part must contain the apply button outside details: {visible!r}"
+    )
+    for label in ("Вектор:", "Решение:", "Кандидаты:", "Сигналы:"):
+        assert label not in visible, f"{label} must not appear outside the details element"
+    for label in ("Вектор:", "Решение:", "Кандидаты:"):
+        assert label in structure["detailsText"], f"{label} must live inside the details element"
+
+
+def assert_pitch_background_static():
+    # issue #375 (match-rendering-compatibility): the compatibility overlay
+    # must no longer inject the classic pitch PNG.  Grep the exact built
+    # artifact — the same bytes every browser case above executes.
+    artifact_text = ARTIFACT.read_text(encoding="utf-8")
+    hits = artifact_text.count("play_field6")
+    assert hits == 0, f"play_field6 still referenced in the built bundle: {hits} hit(s)"
+    print("[browser-e2e] passed: pitch-background-static (play_field6 hits=0)")
 
 
 def assert_owned_live(page: Page):
@@ -671,7 +859,14 @@ def main():
         ("incomplete-match", "/game.php?id=e2e-incomplete&fixture=incomplete", "success", assert_incomplete_match),
         ("team-tactic", "/team4.php?action=tactic", "success", assert_tactic_page),
         ("transfer-page", "/transfers.php", "success", assert_transfer_page),
+        ("fm2026-priority-apply", "/game.php?id=e2e-fm2026-prio&fixture=fm2026", "success", assert_fm2026_priority_apply),
+        ("fm2026-priority-readback", "/game.php?id=e2e-fm2026-prio&fixture=fm2026", "success", assert_fm2026_priority_readback),
+        ("fm2026-lab-ready", "/game.php?id=e2e-fm2026-a&fixture=fm2026", "success", assert_fm2026_lab_ready),
+        ("fm2026-priority-release", "/game.php?id=e2e-fm2026-prio&fixture=fm2026", "success", assert_fm2026_priority_release),
+        ("fm2026-compact-recommendation", "/game.php?id=e2e-fm2026-prio&fixture=fm2026", "success", assert_fm2026_compact_recommendation),
     ]
+
+    assert_pitch_background_static()
 
     with fixture_server() as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)

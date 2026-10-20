@@ -142,6 +142,7 @@
     }
 
     function pickGeneratorSignals(rows) {
+        // Issue #375: the compact block surfaces at most the top-1 signal.
         return (Array.isArray(rows) ? rows : [])
             .map(row => String(row || '').trim())
             .filter(row => row && !row.includes('Детали «подробнее»'))
@@ -149,7 +150,7 @@
                 const rank = row => row.includes('Каналы генератора') ? 0 : row.startsWith('Генератор:') ? 1 : 2;
                 return rank(a) - rank(b);
             })
-            .slice(0, 2);
+            .slice(0, 1);
     }
 
     function resolveRecommendedPresetName(snapshot, primaryPresetName) {
@@ -409,11 +410,27 @@
     function buildFinalTacticTitle(rec) {
         if (rec?.base === 'current_tactic' || !rec?.presetId) return 'оставить текущую тактику';
         const title = RecommendationEngine.getPresetTitle(rec.presetId) || rec.presetId;
-        const scheme = RecommendationEngine.getPresetScheme(rec.presetId);
+        let scheme = RecommendationEngine.getPresetScheme(rec.presetId);
+        // The scheme string can embed the preset title as its suffix («Fixed
+        // 4-2-3-1 RW/RM — Antonio Conte — Wide Channels») — strip one trailing
+        // « — title» duplicate so the line does not say the name twice (#375).
+        const duplicateSuffix = ` — ${title}`;
+        if (scheme && scheme.endsWith(duplicateSuffix)) {
+            scheme = scheme.slice(0, duplicateSuffix.length * -1).trim();
+        }
         return scheme ? `${title}. Схема: ${scheme}.` : `${title}.`;
     }
 
-    function buildFinalTacticBlockHtml(snapshot) {
+    // Issue #375: secondary recommendation rows collapse into one quiet
+    // «Подробнее» disclosure (module-inline styling, no new colors).
+    function finalTacticMoreDetailsHtml(rowsHtml) {
+        if (!rowsHtml) return '';
+        return `<details class="slf-final-tactic-more" style="margin-top:9px;">`
+            + `<summary style="cursor:pointer;opacity:.6;font-size:11px;letter-spacing:.4px;text-transform:uppercase;">Подробнее</summary>`
+            + `<div style="margin-top:5px;">${rowsHtml}</div></details>`;
+    }
+
+    function buildFinalTacticBlockHtml(snapshot, extras = {}) {
         try {
             const rec = snapshot?.ruleDecision?.finalTactic;
             if (!rec || finalTacticSourceMissing(rec)) return null;
@@ -442,15 +459,20 @@
                 + ` title="${etalonEscape(state?.title || '')}"`
                 + `${state?.disabled ? ' disabled' : ''} style="${btnStyle}">${etalonEscape(state?.label || 'Применить')}</button>`;
 
-            return `<div style="line-height:1.4;margin-top:5px;border-top:1px solid #333;padding-top:5px;">`
-                + `${title}${etalonEscape(buildFinalTacticTitle(rec))}`
+            // Always visible: title + Δ + button. Everything secondary lives
+            // in the collapsed «Подробнее» row (issue #375).
+            const moreRows = `${extras.signalHtml || ''}`
                 + `${summary ? `<div>Вектор: ${etalonEscape(summary)}</div>` : ''}`
-                + `${delta ? `<div>Δ: ${etalonEscape(delta)}</div>` : ''}`
                 + `${provenance ? `<div style="opacity:.9;">${etalonEscape(provenance)}</div>` : ''}`
                 + `${referenceLine ? `<div style="opacity:.9;">${etalonEscape(referenceLine)}</div>` : ''}`
                 + `${insufficientText ? `<div>Эталон: недостаточно данных${insufficientText ? ` (${etalonEscape(insufficientText)})` : ''}</div>` : ''}`
                 + `${notes.length ? `<div style="opacity:.9;">Совет: ${etalonEscape(notes.join('; '))}</div>` : ''}`
-                + `${button}</div>`;
+                + `${extras.decisionHtml || ''}${extras.candidateHtml || ''}`;
+
+            return `<div style="line-height:1.4;margin-top:5px;border-top:1px solid #333;padding-top:5px;">`
+                + `${title}${etalonEscape(buildFinalTacticTitle(rec))}`
+                + `${delta ? `<div>Δ: ${etalonEscape(delta)}</div>` : ''}`
+                + `${button}${finalTacticMoreDetailsHtml(moreRows)}</div>`;
         } catch (_) {
             return null;
         }
@@ -581,18 +603,24 @@
             // #350: one merged «Рекомендация» block (preset base + etalon
             // overrides + ONE apply button). Falls back to the legacy
             // «Действие» row when the merge layer is unavailable.
-            const finalTacticHtml = buildFinalTacticBlockHtml(snapshot);
+            // Issue #375: secondary rows collapse into «Подробнее» in both paths.
+            const extras = {
+                signalHtml: signalText ? `<div style="line-height:1.4;margin-top:5px;"><b style="color:#c8ff7a;">Сигналы:</b> ${this.escapeHtml(signalText)}</div>` : '',
+                decisionHtml: decisionText ? `<div style="line-height:1.4;margin-top:5px;"><b style="color:#ffd76a;">Решение:</b> ${this.escapeHtml(decisionText)}</div>` : '',
+                candidateHtml: candidateText ? `<div style="line-height:1.4;margin-top:5px;opacity:.85;"><b>Кандидаты:</b> ${this.escapeHtml(candidateText)}</div>` : ''
+            };
+            const finalTacticHtml = buildFinalTacticBlockHtml(snapshot, extras);
+            const fallbackMoreHtml = finalTacticHtml === null
+                ? finalTacticMoreDetailsHtml(`${extras.signalHtml}${extras.decisionHtml}${extras.candidateHtml}`)
+                : '';
 
             return `
                 <div data-slf-rec-priority="1" data-slf-rec-section="combined" style="margin:5px 0;background:#151515;border:1px solid #444;border-radius:5px;color:#ddd;padding:9px;">
                     <div style="font-weight:bold;color:#75ff75;text-align:center;margin-bottom:7px;">Подсказка</div>
                     ${context ? `<div style="line-height:1.4;"><b style="color:#8fd3ff;">Ситуация:</b> ${this.escapeHtml(context)}</div>` : ''}
-                    ${signalText ? `<div style="line-height:1.4;margin-top:5px;"><b style="color:#c8ff7a;">Сигналы:</b> ${this.escapeHtml(signalText)}</div>` : ''}
                     ${finalTacticHtml !== null
                         ? finalTacticHtml
-                        : `<div style="line-height:1.4;margin-top:5px;"><b style="color:#75ff75;">Действие:</b> ${this.escapeHtml(actionText)}</div>`}
-                    ${decisionText ? `<div style="line-height:1.4;margin-top:5px;"><b style="color:#ffd76a;">Решение:</b> ${this.escapeHtml(decisionText)}</div>` : ''}
-                    ${candidateText ? `<div style="line-height:1.4;margin-top:5px;opacity:.85;"><b>Кандидаты:</b> ${this.escapeHtml(candidateText)}</div>` : ''}
+                        : `<div style="line-height:1.4;margin-top:5px;"><b style="color:#75ff75;">Действие:</b> ${this.escapeHtml(actionText)}</div>${fallbackMoreHtml}`}
                 </div>`;
         };
 
