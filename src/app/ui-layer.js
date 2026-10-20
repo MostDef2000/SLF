@@ -215,6 +215,9 @@ recBox.style.cssText = `
                     const target =
                         document.querySelector('.team_general_content') ||
                         document.querySelector('.ui-tactic__wrap') ||
+                        // fm2026 new design (dark mint tactic page, issue #370):
+                        // hidden pill radios live inside the mint controls wrapper
+                        document.querySelector('.tc.mint') ||
                         document.querySelector('.game_control') ||
                         document.querySelector('#game_control') ||
                         document.querySelector('.game_tab_content') ||
@@ -279,6 +282,13 @@ if (!isTacticPage) return;
                     document.querySelector('form.tactics__form') ||
                     document.querySelector('.ui-tactic__wrap');
                 target = tacticWrap?.closest('form') || tacticWrap || null;
+            }
+
+            if (!target && isTeam4TacticPage) {
+                // fm2026 new design (dark mint tactic page, issue #370):
+                // classic anchors are absent; DIV.tc.mint is the tactic
+                // controls wrapper that hosts the «Мои тактики» card.
+                target = document.querySelector('.tc.mint');
             }
 
             if (!target && location.pathname.includes('/game.php')) {
@@ -582,6 +592,21 @@ if (!isTacticPage) return;
 
                 controlRoot.parentNode.insertBefore(container, controlRoot);
             } else if (isTeam4TacticPage) {
+                // fm2026 new design (dark mint tactic page, issue #370): the
+                // panel belongs above the tactic cards — directly before the
+                // «Мои тактики» mint card when present, otherwise as the first
+                // child of the mint wrapper. Header-selector mode stays
+                // classic-only.
+                if (target.classList.contains('tc') && target.classList.contains('mint')) {
+                    const mintCard = target.querySelector('.mint-card.tc-tactics');
+                    if (mintCard?.parentNode) {
+                        mintCard.parentNode.insertBefore(container, mintCard);
+                    } else {
+                        target.insertBefore(container, target.firstChild);
+                    }
+                    return;
+                }
+
                 const teamHeader = document.querySelector('.team > .team-head');
                 const matches = teamHeader?.querySelector(':scope > .team-head__matches');
                 const headerVisible = teamHeader && teamHeader.offsetParent !== null;
