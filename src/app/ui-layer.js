@@ -274,7 +274,9 @@ if (!isTacticPage) return;
 
             const isTeam4TacticPage = location.pathname.includes('/team4.php')
                 && new URLSearchParams(location.search).get('action') === 'tactic';
-            let target = document.querySelector('.team_general_content');
+            let target = location.pathname.includes('/game.php')
+                ? null
+                : document.querySelector('.team_general_content');
 
             if (!target && isTeam4TacticPage) {
                 // fm2026v2 tactic cards (issue #370)
@@ -293,10 +295,19 @@ if (!isTacticPage) return;
 
             if (!target && location.pathname.includes('/game.php')) {
                 const defInput = document.querySelector('input[name="def_line"]');
-                // β design: no radios at all — fall back to persistent anchors.
-                target = (defInput ? defInput.closest('td, div') : null)
-                    || document.getElementById('slf-match-parser-panel')
-                    || document.querySelector('.control_field_1');
+
+                if (defInput) {
+                    // classic design: the panel sits next to the pill radios
+                    target = defInput.closest('td, div');
+                } else {
+                    // fm2026 match tactic view (issue #370 follow-up): the
+                    // DIV.tc.mint.tc--match container is pre-rendered HIDDEN
+                    // until «Управление → тактика» opens the tab — mounting
+                    // inside it shows the panel only when the tab view is
+                    // open. No mint view → no mount (no top-of-page fallbacks:
+                    // #slf-match-parser-panel / .control_field_1 removed).
+                    target = document.querySelector('.tc.mint') || null;
+                }
             }
 
             if (!target) return;
@@ -534,18 +545,30 @@ if (!isTacticPage) return;
             row.append(select, applyBtn, saveBtn, deleteBtn, exportBtn, importBtn);
             container.append(title, row, schemeLabel);
 
-            // β design (issue #370 follow-up): tactic radios do not exist on
-            // radio-less game.php pages; mount next to a persistent anchor
-            // instead of waiting for a lazy tactic card. Requires actual β
-            // evidence (tc-seg group for the canonical marker key) so plain
-            // radio-less pages without β cards still never mount (v2 suite T3).
+            // fm2026 match tactic view (issue #370 follow-up): on radio-less
+            // game.php pages the resolved target is the DIV.tc.mint.tc--match
+            // container, which stays hidden until «Управление → тактика»
+            // opens the tab — inserting inside it needs no tab-state tracking.
+            // Insert before the .tc-cols card grid: the .mint-card.tc-block
+            // cards are DIRECT children of that grid, so inserting before a
+            // card would turn the panel into a cramped grid cell (live check
+            // 2026-10-20, game.php?id=34923601). Fallbacks: first tactic card,
+            // then first child of the mint wrapper. Header-selector mode
+            // stays team4-only; without the mint view nothing mounts (no
+            // top-of-page fallbacks).
             if (location.pathname.includes('/game.php') &&
-                !document.querySelector('input[name="def_line"]') &&
-                document.querySelector('.tc-seg[data-option="def_line"]')) {
-                const anchor = document.getElementById('slf-match-parser-panel') ||
-                    document.querySelector('.control_field_1');
-                if (!anchor?.parentNode) return;
-                anchor.parentNode.insertBefore(container, anchor);
+                !document.querySelector('input[name="def_line"]')) {
+                if (target.classList.contains('tc') && target.classList.contains('mint')) {
+                    const tcCols = target.querySelector('.tc-cols');
+                    const mintCard = target.querySelector('.mint-card.tc-block');
+                    if (tcCols?.parentNode) {
+                        tcCols.parentNode.insertBefore(container, tcCols);
+                    } else if (mintCard?.parentNode) {
+                        mintCard.parentNode.insertBefore(container, mintCard);
+                    } else {
+                        target.insertBefore(container, target.firstChild);
+                    }
+                }
                 return;
             }
 
