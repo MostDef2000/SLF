@@ -28,6 +28,13 @@
         return !!object && Object.prototype.hasOwnProperty.call(object, key);
     }
 
+    // Issue #377: standalone-safe alias — in the bundle the engine's public
+    // predicate wins; test sandboxes without the engine check the DOM
+    // directly with the same selector.
+    const legacyPriorityInputsPresent = typeof hasLegacyPriorityInputs === 'function'
+        ? hasLegacyPriorityInputs
+        : () => !!document.querySelector('input[type="checkbox"][name^="priority_"]');
+
     function cloneForStorage(value) {
         if (value == null) return value;
         try { return JSON.parse(JSON.stringify(value)); } catch (_) { return null; }
@@ -350,7 +357,7 @@
             // Issue #377: where legacy priority checkboxes exist the engine
             // ignores β toggles; the watcher follows the same precedence
             // explicitly instead of relying on the empty readback diff.
-            if (isPriorityToggle && hasLegacyPriorityInputs()) return;
+            if (isPriorityToggle && legacyPriorityInputsPresent()) return;
             const key = isPriorityToggle ? null : button?.closest('.tc-seg')?.dataset.option;
             if (!button || (!isPriorityToggle && findBetaTacticButton(key, button.dataset.value) !== button)) return;
             if (STATE.tacticControlBridgeApplyInProgress ||
