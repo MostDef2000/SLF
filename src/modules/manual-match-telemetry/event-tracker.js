@@ -350,9 +350,27 @@
             return keys.map(key => `${key}:${JSON.stringify(tactic[key] ?? null)}`).join('|');
         };
         const detectPreset = tactic => {
-            const engine = typeof window !== 'undefined' ? window.SLFCurrentActionHintEngine : null;
-            const signatures = engine?.TACTIC_SIGNATURES || {};
-            return Object.keys(signatures).find(name => engine.tacticMatches(signatures[name], tactic)) || null;
+            const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+            if (!registry || !Array.isArray(registry.active) || !registry.presets || !tactic) return null;
+            const keys = [
+                ...(typeof TACTIC_CONTROL_KEYS !== 'undefined' ? TACTIC_CONTROL_KEYS : [
+                    'def_line', 'press_line', 'def_width', 'press_intense',
+                    'build_type', 'build_temp', 'build_long', 'build_fast',
+                    'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
+                ])
+            ];
+            // A partial UI vector is not proof of a built-in preset. Legacy
+            // hint signatures deliberately do not participate in attribution.
+            if (keys.some(key => tactic[key] == null || tactic[key] === '') ||
+                !Array.isArray(tactic.priority)) return null;
+            const priority = value => JSON.stringify(value.map(String).sort());
+            const matches = registry.active.filter(name => {
+                const preset = registry.presets[name];
+                return preset && keys.every(key => preset[key] != null && String(preset[key]) === String(tactic[key])) &&
+                    Array.isArray(preset.priority) && priority(preset.priority) === priority(tactic.priority);
+            });
+            // Duplicated vectors are ambiguous regardless of preset name.
+            return matches.length === 1 ? matches[0] : null;
         };
         const getSession = snapshot => {
             const gameId = String(snapshot?.gameId || 'unknown');

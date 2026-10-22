@@ -47,6 +47,10 @@ const context = {
     },
     SLFActivePresetRegistry: {
       active: ['test_preset', 'Guardiola_PressEscape_v11'],
+      presets: {
+        test_preset: { def_line: '2', press_line: '3', def_width: '2', press_intense: '2', build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3', pass_risk: '2', dribble: '2', cross: '2', corner: '1', shot: '2', priority: ['left'] },
+        Guardiola_PressEscape_v11: { def_line: '2', press_line: '2', def_width: '1', press_intense: '2', build_type: '2', build_temp: '1', build_long: '1', build_fast: '1', style: '3', pass_risk: '2', dribble: '1', cross: '1', corner: '1', shot: '1', priority: [] }
+      },
       suiteVersion: 'slf_tactic_suite_561_v11',
       recommendationSchema: 'slf_rule_decision_v11_tactical_suite',
       defaultRiskAppetite: 'bold'
@@ -182,9 +186,10 @@ snapshotTemplate = {
   teams: [1, 2],
   myTeam: 1,
   currentTactic: {
-    def_line: '2',
-    press_line: '3',
-    priority: ['left']
+    def_line: '2', press_line: '3', def_width: '2', press_intense: '2',
+    build_type: '2', build_temp: '2', build_long: '2', build_fast: '2',
+    style: '3', pass_risk: '2', dribble: '2', cross: '2', corner: '1',
+    shot: '2', priority: ['left']
   },
   stats: stats(0.5, 0.4),
   developerHints: []
@@ -208,6 +213,26 @@ snapshotTemplate = {
   score: { home: 1, away: 0 },
   stats: stats(1.1, 0.6)
 };
+// Exact attribution does not accept legacy partial signatures, corner/priority
+// mismatches, absent controls or ambiguous duplicates.
+const savedTemplate = clone(snapshotTemplate);
+for (const altered of [
+  { ...savedTemplate.currentTactic, corner: '4' },
+  { ...savedTemplate.currentTactic, priority: ['right'] },
+  { ...savedTemplate.currentTactic, priority: null },
+  { ...savedTemplate.currentTactic, shot: undefined }
+]) {
+  snapshotTemplate = { ...savedTemplate, currentTactic: altered };
+  assert.equal(context.SnapshotEngine.build().tacticTelemetry.currentPreset, null);
+}
+context.window.SLFActivePresetRegistry.presets.duplicate = clone(context.window.SLFActivePresetRegistry.presets.test_preset);
+context.window.SLFActivePresetRegistry.active.push('duplicate');
+snapshotTemplate = savedTemplate;
+assert.equal(context.SnapshotEngine.build().tacticTelemetry.currentPreset, null);
+context.window.SLFActivePresetRegistry.active.pop();
+delete context.window.SLFActivePresetRegistry.presets.duplicate;
+assert.equal(context.SnapshotEngine.build().tacticTelemetry.currentPreset, 'test_preset');
+snapshotTemplate = savedTemplate;
 const after = context.SnapshotEngine.build();
 
 context.STATE.pendingPresetEvent = {
@@ -256,7 +281,7 @@ assert.equal(effectWithoutTelemetry.tacticTelemetry, null);
 // stamping the legacy libraryVersion) — every assertion below fails on v8.
 const presetA = 'Emery_BalancedBase_v11';
 const presetB = 'Guardiola_PressEscape_v11';
-const tacticB = { def_line: '2', press_line: '2', def_width: '1', press_intense: '2', build_type: '2', build_temp: '1', build_long: '1', build_fast: '1', style: '3', pass_risk: '2', dribble: '1', cross: '1', shot: '1' };
+const tacticB = { ...context.window.SLFActivePresetRegistry.presets.Guardiola_PressEscape_v11 };
 const ruleA = {
   schema: 'slf_rule_decision_v11_tactical_suite',
   mode: 'button_on_demand_scored_rules',
@@ -284,7 +309,7 @@ snapshotTemplate = {
   generationWindow: { index: 1, label: '01-15' },
   score: { home: 0, away: 0 },
   stats: stats(0.5, 0.4),
-  currentTactic: { def_line: '2', press_line: '3', priority: ['left'] },
+  currentTactic: { def_line: '2', press_line: '3', def_width: '2', press_intense: '2', build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3', pass_risk: '2', dribble: '2', cross: '2', corner: '1', shot: '2', priority: ['left'] },
   ruleDecision: ruleA
 };
 const beforeA = context.SnapshotEngine.build();

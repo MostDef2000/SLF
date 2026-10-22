@@ -898,10 +898,12 @@
             finalFingerprint: context.tacticFingerprint,
             outcomeLinkStatus: snapshot.status === 'finished' ? 'finished_with_observed_controls' : 'in_progress'
         };
-        // Never use a fuzzy legacy preset signature for v9 attribution.
-        if (snapshot.tacticTelemetry && context.presetId === 'unknown') {
-            snapshot.tacticTelemetry.currentPreset = null;
-            snapshot.tacticTelemetry.actualPreset = null;
+        // The observed full vector, not a recommended preset or a legacy
+        // partial signature, is the only source for built-in attribution.
+        if (snapshot.tacticTelemetry) {
+            const exactPreset = exactProductionPresetId(snapshot);
+            snapshot.tacticTelemetry.currentPreset = exactPreset;
+            snapshot.tacticTelemetry.actualPreset = exactPreset;
         }
         snapshot.tacticalPhase = state?.openPhase ? {
             schema: 'slf_tactical_phase_ref_v1',
