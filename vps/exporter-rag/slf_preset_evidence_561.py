@@ -180,6 +180,22 @@ def preset_name(record: Mapping[str, Any]) -> str:
     return str(value or "unknown")
 
 
+def comparable_preset_name(record: Mapping[str, Any]) -> str | None:
+    """Only explicitly named, non-conflicting preset observations enter comparisons.
+
+    Unknown/manual and inconsistent identity evidence remain in raw counts and
+    diagnostic totals, not in per-preset scores or conversion denominators.
+    """
+    raw = preset_name(record).strip()
+    if not raw or raw.lower() in {"unknown", "manual_change", "manual", "null", "none"}:
+        return None
+    explicit = get_path(record, "telemetryContext.presetId")
+    if explicit is not None and str(explicit).strip().lower() not in {"", "unknown"}:
+        if str(explicit).strip() != raw:
+            return None
+    return analysis_preset_name(record)
+
+
 def score_snapshot(record: Mapping[str, Any]) -> Mapping[str, Any]:
     for path in ("phaseStart", "before", "beforeSnapshot", "snapshot", "phaseEnd", "after"):
         value = get_path(record, path)
@@ -413,10 +429,14 @@ def build_report(
     context_groups: dict[tuple[str, str, str, str], list[Mapping[str, Any]]] = collections.defaultdict(list)
 
     for row in analysis_events:
-        event_groups[(generator_period(row), analysis_preset_name(row))].append(row)
+        preset = comparable_preset_name(row)
+        if preset is not None:
+            event_groups[(generator_period(row), preset)].append(row)
     for row in analysis_effects:
+        preset = comparable_preset_name(row)
+        if preset is None:
+            continue
         period = generator_period(row)
-        preset = analysis_preset_name(row)
         effect_groups[(period, preset)].append(row)
         context_groups[(period, preset, score_state(row), minute_bucket(minute_of(row)))].append(row)
 
@@ -507,6 +527,10 @@ def build_report(
             "eventsByPeriod": dict(period_event_counts),
             "effectsByPeriod": dict(period_effect_counts),
             "unknownPresetEvents": sum(1 for row in analysis_events if preset_name(row) == "unknown"),
+            "excludedComparativeEvents": sum(comparable_preset_name(row) is None for row in analysis_events),
+            "excludedComparativeEffects": sum(comparable_preset_name(row) is None for row in analysis_effects),
+            "comparableEvents": sum(comparable_preset_name(row) is not None for row in analysis_events),
+            "comparableEffects": sum(comparable_preset_name(row) is not None for row in analysis_effects),
             "manualChangeEffects": sum(1 for row in analysis_effects if preset_name(row) == "manual_change"),
             "stableNamedEffects": len(stable_named),
             "stablePresetCount": len(stable_presets),
@@ -553,7 +577,9 @@ def build_effects_summary(events: Sequence[Mapping[str, Any]], effects: Sequence
     by_preset: dict[str, list[Mapping[str, Any]]] = collections.defaultdict(list)
     by_context: dict[tuple[str, str, str], list[Mapping[str, Any]]] = collections.defaultdict(list)
     for row in analysis_effects:
-        name = analysis_preset_name(row)
+        name = comparable_preset_name(row)
+        if name is None:
+            continue
         by_preset[name].append(row)
         by_context[(name, score_state(row), minute_bucket(minute_of(row)))].append(row)
 
@@ -578,6 +604,8 @@ def build_effects_summary(events: Sequence[Mapping[str, Any]], effects: Sequence
         "sourceCollection": "preset_effects_v2",
         "count": len(effects),
         "analysisCount": len(analysis_effects),
+        "comparableCount": sum(comparable_preset_name(row) is not None for row in analysis_effects),
+        "excludedComparativeCount": sum(comparable_preset_name(row) is None for row in analysis_effects),
         "cohort": cohort,
         "byPreset": preset_rows,
         "byPresetContext": context_rows[:2000],
@@ -590,10 +618,11 @@ def build_effects_summary(events: Sequence[Mapping[str, Any]], effects: Sequence
 
 def build_events_summary(events: Sequence[Mapping[str, Any]], effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     analysis_events, _, cohort = select_analysis_cohort(events, effects)
-    by_preset = collections.Counter(analysis_preset_name(row) for row in analysis_events)
+    comparable = [(row, comparable_preset_name(row)) for row in analysis_events]
+    by_preset = collections.Counter(name for _, name in comparable if name is not None)
     by_context = collections.Counter(
-        (analysis_preset_name(row), score_state(row), minute_bucket(minute_of(row)))
-        for row in analysis_events
+        (name, score_state(row), minute_bucket(minute_of(row)))
+        for row, name in comparable if name is not None
     )
     return {
         "schema": "preset_events_summary_v2_tactical_phase",
@@ -601,6 +630,8 @@ def build_events_summary(events: Sequence[Mapping[str, Any]], effects: Sequence[
         "sourceCollection": "preset_events_v2",
         "count": len(events),
         "analysisCount": len(analysis_events),
+        "comparableCount": sum(name is not None for _, name in comparable),
+        "excludedComparativeCount": sum(name is None for _, name in comparable),
         "cohort": cohort,
         "byPreset": [{"presetName": key, "count": value} for key, value in by_preset.most_common()],
         "byPresetContext": [
