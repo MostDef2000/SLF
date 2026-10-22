@@ -198,6 +198,35 @@ class TelemetryAnalyticsTest(unittest.TestCase):
             self.assertNotIn("gameId", row)
             self.assertRegex(row["matchRef"], r"^[0-9a-f]{12}$")
 
+    def test_unknown_and_conflicting_tactics_are_not_in_preset_comparisons(self):
+        named_event = phase_event("known", "phase-known", preset="Preset_A")
+        unknown_event = phase_event("unknown", "phase-unknown", preset="unknown")
+        manual_event = phase_event("manual", "phase-manual", preset="manual_change")
+        named_effect = phase_effect("known", "phase-known", preset="Preset_A")
+        unknown_effect = phase_effect("unknown", "phase-unknown", preset="unknown")
+        manual_effect = phase_effect("manual", "phase-manual", preset="manual_change")
+        conflicting_effect = phase_effect("conflict", "phase-conflict", preset="Preset_A")
+        conflicting_effect["telemetryContext"]["presetId"] = "Preset_B"
+        events = [named_event, unknown_event, manual_event]
+        effects = [named_effect, unknown_effect, manual_effect, conflicting_effect]
+        report = module.build_report(events, effects)
+        effect_summary = module.build_effects_summary(events, effects)
+        event_summary = module.build_events_summary(events, effects)
+        self.assertEqual({r["presetName"] for r in report["byPeriodPreset"]}, {"Preset_A"})
+        self.assertEqual(report["counts"]["excludedComparativeEvents"], 2)
+        self.assertEqual(report["counts"]["excludedComparativeEffects"], 3)
+        self.assertEqual({r["presetName"] for r in effect_summary["byPreset"]}, {"Preset_A"})
+        self.assertEqual(effect_summary["analysisCount"], 4)
+        self.assertEqual(effect_summary["excludedComparativeCount"], 3)
+        self.assertEqual({r["presetName"] for r in event_summary["byPreset"]}, {"Preset_A"})
+        self.assertEqual(event_summary["analysisCount"], 3)
+        self.assertEqual(event_summary["excludedComparativeCount"], 2)
+        # Unattributed final results still count toward global W/D/L.
+        unassigned = result("unassigned", score=(2, 0), preset=None)
+        matches = module.build_match_outcomes_summary([unassigned], [])
+        self.assertEqual(matches["overall"]["wins"], 1)
+        self.assertEqual(matches["byFinalPreset"]["unknown"], 1)
+
     def test_match_outcome_diagnostics_explain_invalid_rows(self):
         missing_score = result("g-missing-score", score=(1, 0))
         missing_score["score"] = None
