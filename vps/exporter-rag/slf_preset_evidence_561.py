@@ -372,6 +372,7 @@ def is_v11_current_phase_effect(row: Mapping[str, Any]) -> bool:
     # outcome evidence from v9 or v10, even when a coach name is similar.
     return (
         is_phase_effect(row)
+        and comparable_preset_name(row) is not None
         and get_path(row, "telemetryContext.libraryVersion") == V11_LIBRARY
         and get_path(row, "telemetryContext.recommendationSchema") == V11_RECOMMENDATION_SCHEMA
         and preset_name(row) in V11_PRODUCTION_PRESETS
@@ -382,6 +383,7 @@ def is_v11_current_phase_effect(row: Mapping[str, Any]) -> bool:
 def is_v10_current_phase_effect(row: Mapping[str, Any]) -> bool:
     return (
         is_phase_effect(row)
+        and comparable_preset_name(row) is not None
         and get_path(row, "telemetryContext.libraryVersion") == V10_LIBRARY
         and get_path(row, "telemetryContext.recommendationSchema") == V10_RECOMMENDATION_SCHEMA
         and analysis_preset_name(row) in V10_PRODUCTION_PRESETS
@@ -392,6 +394,7 @@ def is_v10_current_phase_effect(row: Mapping[str, Any]) -> bool:
 def is_v9_current_phase_effect(row: Mapping[str, Any]) -> bool:
     return (
         is_phase_effect(row)
+        and comparable_preset_name(row) is not None
         and get_path(row, "telemetryContext.libraryVersion") == V9_LIBRARY
         and get_path(row, "telemetryContext.recommendationSchema") == V9_RECOMMENDATION_SCHEMA
         and preset_name(row) in V9_PRODUCTION_PRESETS
@@ -467,7 +470,7 @@ def build_report(
 
     stable_named = [
         row for row in analysis_effects
-        if generator_period(row) == "stable_5_61" and preset_name(row) not in {"unknown", "manual_change"}
+        if generator_period(row) == "stable_5_61" and comparable_preset_name(row) is not None
     ]
     stable_presets = {analysis_preset_name(row) for row in stable_named}
     # Historical named phases are descriptive only. v11 readiness additionally
