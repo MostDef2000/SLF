@@ -86,6 +86,11 @@
             .map(String)
             .filter(item => priorityValues.has(item))
             .sort();
+        // Minute 0 is never a real match minute: readMinuteInfo() returns null when
+        // the page has no clock text (just-loaded or finished page), and Number(null)
+        // coerces to 0. Coercing null to 0 corrupted exposure minutes (regression
+        // match 34919903: fromMinute/toMinute/duration all 0).
+        const minuteOrNull = value => (value != null && Number.isFinite(Number(value))) ? Number(value) : null;
         const nearestAllowedValue = (key, value) => {
             const values = ranges[key] || [];
             const requested = String(value ?? '');
@@ -406,7 +411,7 @@
             const decisionContext = decision?.moment?.context || {};
             const transitions = Array.isArray(snapshot?.tacticTelemetry?.transitions) ? snapshot.tacticTelemetry.transitions : [];
             const latest = transitions[transitions.length - 1] || null;
-            const minute = Number.isFinite(Number(snapshot?.minute)) ? Number(snapshot.minute) : null;
+            const minute = minuteOrNull(snapshot?.minute);
             const transitionMinute = Number.isFinite(Number(latest?.minute)) ? Number(latest.minute) : null;
             const currentFingerprint = snapshot?.tacticTelemetry?.currentTacticFingerprint || tacticFingerprint(snapshot?.currentTactic || {});
             const currentPreset = snapshot?.tacticTelemetry?.currentPreset || null;
@@ -579,7 +584,7 @@
                 activationId:`tactical_lab_activation|${state.gameId}|${state.assignment.assignmentId}`,
                 experimentId:experiment.experimentId,
                 startedAtTs:Date.now(),
-                startedAtMinute:Number.isFinite(Number(snapshot.minute))?Number(snapshot.minute):null,
+                startedAtMinute:minuteOrNull(snapshot.minute),
                 entryContext,
                 baselineMetrics
             };
@@ -612,7 +617,9 @@
                 tacticFingerprint:next?.nextTacticFingerprint || exitContext.previous?.tacticFingerprint || null
             };
             const completedAt = Date.now();
-            const endMinute = Number.isFinite(Number(snapshot?.minute)) ? Number(snapshot.minute) : null;
+            // A finished-parse snapshot has no clock text (minute null); the last
+            // minute seen at an earlier checkpoint is the honest exposure end.
+            const endMinute = minuteOrNull(snapshot?.minute) ?? minuteOrNull(activation.lastSeenMinute);
             const duration = activation.startedAtMinute != null && endMinute != null ? Math.max(0,endMinute-activation.startedAtMinute) : null;
             const elapsedWallClockMs = Number.isFinite(Number(activation.startedAtTs)) ? Math.max(0,completedAt - Number(activation.startedAtTs)) : null;
             const delta = metricDelta(activation.baselineMetrics || {},metrics(snapshot));
@@ -651,6 +658,12 @@
             }
             const experiment = experimentFor(state);
             if (!experiment) return {active:true,completed:null};
+
+            const seenMinute = minuteOrNull(snapshot?.minute);
+            if (seenMinute != null && (state.activation.lastSeenMinute == null || seenMinute > state.activation.lastSeenMinute)) {
+                state.activation.lastSeenMinute = seenMinute;
+                persistState(state);
+            }
 
             const actual = tacticFingerprint(getCurrentTactic());
             if (actual !== experiment.tacticFingerprint) {

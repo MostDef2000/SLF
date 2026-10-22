@@ -1,5 +1,33 @@
 # Changelog
 
+## 4.4.344
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- specs/380-tactical-attribution/plan.md
+- specs/380-tactical-attribution/spec.md
+- specs/380-tactical-attribution/tasks.md
+- src/modules/manual-match-telemetry/event-tracker.js
+- src/modules/manual-match-telemetry/manual-match-runtime.js
+- tools/test-tactic-telemetry-envelope.mjs
+- vps/exporter-rag/slf_preset_evidence_561.py
+- vps/exporter-rag/test_slf_preset_evidence_561.py
+
+Approved base commit:
+- 5088e44e15140fe9756f802ffa50fae3ef294209
+
+Approved commit:
+- 44e60486857a52c74b82c98a3d64e75ed8a9d1d5
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.343
 
 ### β-design tc-seg tactic controls (issue #370 follow-up)
