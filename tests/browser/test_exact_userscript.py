@@ -706,6 +706,13 @@ def assert_owned_live(page: Page):
     assert lab_state["activation"] is None
     assert lab_state["completed"]["experimentId"] == experiment_id
     assert lab_state["completed"]["exitReason"] == "user_selected_production"
+    # Regression (live match 34919903): this fixture has no clock text, so snapshot
+    # minutes are null. The old code coerced null to 0 and wrote exposure 0/0/0.
+    # The owned fixture resolves snapshot minute 20; exposure uses it, never a
+    # fabricated 0.
+    assert lab_state["completed"]["fromMinute"] == 20, lab_state["completed"]
+    assert lab_state["completed"]["toMinute"] == 20, lab_state["completed"]
+    assert lab_state["completed"]["durationMinutes"] == 0, lab_state["completed"]
     assert page.locator("#slf-tactical-lab-apply").is_disabled()
 
     page.evaluate("""
@@ -724,6 +731,56 @@ def assert_owned_live(page: Page):
     assert page.locator("#slf-live-lineup-preset-select").count() == 0
     assert page.locator("#slf-parser-recommendation > #slf-tactical-lab-panel").count() == 1
     assert page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id") == experiment_id
+
+
+def assert_lab_exposure_finished_parse(page: Page):
+    # Regression (live match 34919903): exposure must survive a finished-parse
+    # exit. The owned fixture resolves snapshot minute 20 (mock API); the finished
+    # page has no live minute, so the exit must fall back to the last checkpoint
+    # minute instead of writing 0/0/0.
+    add_tactical_lab_control_fixture_values(page)
+    page.locator("#slf-manual-recommendation-btn").click()
+    page.wait_for_function(
+        "() => document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
+    )
+    page.wait_for_function(
+        "() => document.getElementById('slf-tactical-lab-apply') && !document.getElementById('slf-tactical-lab-apply').disabled"
+    )
+    page.locator("#slf-tactical-lab-apply").click()
+    page.wait_for_function(
+        "() => document.getElementById('slf-tactical-lab-status')?.textContent.includes('ACTIVE')"
+    )
+    lab_state = page.evaluate(
+        "JSON.parse(localStorage.getItem('slf_manual_match_state_v2:e2e-owned') || '{}').tacticalLab"
+    )
+    assert lab_state["activation"]["startedAtMinute"] == 20, lab_state["activation"]
+
+    page.locator("#slf-manual-recommendation-btn").click()
+    page.wait_for_function(
+        "() => !document.getElementById('slf-manual-recommendation-btn')?.disabled && document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
+    )
+    lab_state = page.evaluate(
+        "JSON.parse(localStorage.getItem('slf_manual_match_state_v2:e2e-owned') || '{}').tacticalLab"
+    )
+    assert lab_state["activation"]["lastSeenMinute"] == 20, lab_state["activation"]
+
+    base_url = page.evaluate("location.origin")
+    page.goto(f"{base_url}/game.php?id=e2e-owned&fixture=finished", wait_until="domcontentloaded")
+    inject_exact_artifact(page)
+    page.wait_for_selector("#slf-match-parser-panel")
+    page.get_by_role("button", name="Спарсить завершённый").click()
+    page.wait_for_function(
+        "() => window.__slfRequests.some(item => item.url.includes('/api/match_results_v2?mode=append'))"
+    )
+    lab_state = page.evaluate(
+        "JSON.parse(localStorage.getItem('slf_manual_match_state_v2:e2e-owned') || '{}').tacticalLab"
+    )
+    assert lab_state["activation"] is None, lab_state
+    completed = lab_state["completed"]
+    assert completed["exitReason"] == "tactic_changed_checkpoint", completed
+    assert completed["fromMinute"] == 20, completed
+    assert completed["toMinute"] == 20, completed
+    assert completed["durationMinutes"] == 0, completed
 
 
 def assert_offline_bootstrap(page: Page):
@@ -989,6 +1046,7 @@ def main():
         ("hybrid-priority-preflight-rejects-button-lane", "/game.php?id=e2e-hybrid-prio&fixture=fm2026", "success", assert_hybrid_priority_preflight_rejects_button_lane),
         ("hybrid-priority-checkbox-authoritative-apply", "/game.php?id=e2e-hybrid-prio&fixture=fm2026", "success", assert_hybrid_priority_checkbox_authoritative_apply),
         ("hybrid-lab-controls-unavailable", "/game.php?id=e2e-hybrid-lab&fixture=fm2026", "success", assert_hybrid_lab_controls_unavailable),
+        ("lab-exposure-finished-parse", "/game.php?id=e2e-owned&fixture=owned", "success", assert_lab_exposure_finished_parse),
     ]
 
     assert_pitch_background_static()
