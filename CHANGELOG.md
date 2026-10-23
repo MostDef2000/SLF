@@ -1,6 +1,28 @@
 # Changelog
 
-## 4.4.344
+## 4.4.359
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/tactics-presets/tactical-lab-v1.js
+- tests/browser/test_exact_userscript.py
+
+Approved base commit:
+- 44e60486857a52c74b82c98a3d64e75ed8a9d1d5
+
+Approved commit:
+- 3822a40b580066ff1c996f17532e5fa1cab90ac4
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.358
 
 ### Automatic latest-only build
 - Built deterministic latest-only artifacts from the approved source commit.
@@ -28,36 +50,491 @@ Compatibility / storage:
 Safety notes:
 - Generated artifacts are workflow outputs and must not be edited manually.
 
-## 4.4.343
+## 4.4.357
 
-### β-design tc-seg tactic controls (issue #370 follow-up)
-- feat: tactic preset read/write on fm2026v2 β card markup — `.tc-seg` button groups (`is-on`/aria-pressed) resolve canonical options when no native radio group exists for a key (`findBetaTacticButton`/`findTacticControl`); radio groups keep precedence as control of record.
-- feat: all-or-nothing preflight accepts engine-resolved β buttons (missing/out-of-domain requested or original value still rejects before any DOM mutation); rollback restore loop works over β clicks and skips controls already at the seed value.
-- feat: manual-change telemetry for click-driven (not change-driven) tactic controls: capture-phase pre-click vector + deferred record via setTimeout(0) (microtask checkpoints run between listeners of the same dispatch, before the site's bubble handler flips `is-on`); apply-path suppression guards unchanged.
-- feat: Tactical Lab readiness and controls detection on β pages via `findTacticControl`; dropdown/panel mount and `waitForTacticReady` recognize β pages (no radio groups, tc-seg groups present).
-- test: β fixture `tests/browser/fixtures/beta-owned-live-match.html` (GM/token stubs, fault hook, late cards, unknown-only variant) + 7-case Playwright suite `tests/browser/test_beta_tcseg_controls.py` (read+apply e2e, no-op apply, preflight abort, rollback, Lab readiness/dedupe, dropdown mount, manual telemetry); RED-verified on clean main (all 7 fail).
-- fix: bundle-order dependency audit — `queueMicrotask` no longer declared for manual-state-integrity (recording deferred via macrotask).
-- fix: Tactical Lab foreign-match gate — `isOwnedLive` rejects `matchOwnership === 'foreign'` snapshots (foreign normalization aliases `myTeam` to the analyzed side, so a truthy `myTeam` alone never proves ownership); catches the ungated bootstrap `mountUI` recheck path (caught by CI `test_exact_userscript.py::assert_foreign_live`).
-
-## 4.4.342
-
-### Tactics panels (issue #370)
-- feat: mount tactics dropdown and panels on fm2026v2 tactic-card markup (team4 tactic page and game.php): new mount-point candidates `form.tactics__form` / `.ui-tactic__wrap` / `.team-control__block`, observer watches fm2026v2 tactic-card mutations, Tactical Lab mounts adjacent to the new cards, design adapter recognizes card-only pages.
-- test: fm2026v2 fixtures + 6-case mounting suite (`tests/browser/test_fm2026_v2_mount.py`), RED-verified on clean main (T2/T4/T6).
-
-## 4.4.341
-
-### Tactical Lab
-- fix: Tactical Lab apply-button repaint on late native controls (poller).
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
 
 Changed files:
+- data/audit/runtime-reachability-review-v1.json
+- src/app/bundle-order.json
+- src/modules/manual-match-telemetry/manual-state-integrity.js
+- src/modules/tactics-presets/tactic-control-bridge.js
+- src/modules/tactics-presets/tactic-control-engine.js
 - src/modules/tactics-presets/tactical-lab-v1.js
+- tests/browser/test_exact_userscript.py
+
+Approved base commit:
+- 2a085893e6d8f3d1678aa7336e7269892fd4c19b
+
+Approved commit:
+- 5088e44e15140fe9756f802ffa50fae3ef294209
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.356
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/match-rendering-compatibility.js
+- tests/browser/test_exact_userscript.py
+- tests/browser/test_match_rendering_compatibility.py
+
+Approved base commit:
+- 38f159dd8c858a856763bd8e8b849d52c7f19d73
+
+Approved commit:
+- 2a085893e6d8f3d1678aa7336e7269892fd4c19b
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.355
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/match-rendering-compatibility.js
+- src/modules/manual-match-telemetry/manual-state-integrity.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- src/modules/tactics-presets/tactic-control-bridge.js
+- src/modules/tactics-presets/tactic-control-engine.js
+- src/modules/tactics-presets/tactical-lab-v1.js
+- tests/browser/fixtures/fm2026-owned-live-match.html
+- tests/browser/test_exact_userscript.py
+- tests/browser/test_match_rendering_compatibility.py
+
+Approved base commit:
+- 59d3105409fd2cd1b7fa7ed83a5c5e4289eae22c
+
+Approved commit:
+- 38f159dd8c858a856763bd8e8b849d52c7f19d73
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.354
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- tests/browser/fixtures/fm2026-owned-live-match.html
+- tests/browser/fixtures/foreign-live-match.html
+- tests/browser/fixtures/owned-live-match.html
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- b564b1a9bc1823308e7f2717cee7508d32893f8a
+
+Approved commit:
+- 59d3105409fd2cd1b7fa7ed83a5c5e4289eae22c
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.353
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- fa0053bac0dc7e8a0b10f9a56a20f5e71fe8a4e3
+
+Approved commit:
+- b564b1a9bc1823308e7f2717cee7508d32893f8a
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.352
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/bootstrap.js
+- src/app/bundle-order.json
+- src/app/ui-layer.js
+- src/core/dom-utils.js
+- src/modules/manual-match-telemetry/manual-state-integrity.js
+- src/modules/tactics-presets/tactic-control-bridge.js
+- src/modules/tactics-presets/tactic-control-engine.js
+- src/modules/tactics-presets/tactical-lab-v1.js
+- tests/browser/fixtures/beta-owned-live-match.html
+- tests/browser/test_beta_tcseg_controls.py
+- tools/test-tactic-bridge-v10.mjs
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- 2761c3a1db37ac1c93612083921cca33c89b1fc9
+
+Approved commit:
+- fa0053bac0dc7e8a0b10f9a56a20f5e71fe8a4e3
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.351
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- src/app/version-badge.js
+- src/core/dom-utils.js
+- src/modules/tactics-presets/tactical-lab-v1.js
+- tests/browser/fixtures/fm2026-v2-game.html
+- tests/browser/fixtures/fm2026-v2-team-tactic.html
+- tests/browser/test_fm2026_v2_mount.py
+
+Approved base commit:
+- f2697ed0d2841327facbc2caebfc8f3004e0a656
+
+Approved commit:
+- 2761c3a1db37ac1c93612083921cca33c89b1fc9
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.350
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- AGENTS.md
+- src/modules/tactics-presets/tactical-lab-v1.js
+- tests/browser/fixtures/fm2026-owned-live-match-late-controls.html
+- tests/browser/test_tactical_lab_late_controls.py
 
 Approved base commit:
 - f498c3bb3b3d58e32659b43775e671d596e5ceb2
 
 Approved commit:
-- 89b50df31dddceb90bdc6b2fbecc3db925ef3840
+- f2697ed0d2841327facbc2caebfc8f3004e0a656
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.349
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- specs/365-roster-name-column/plan.md
+- specs/365-roster-name-column/spec.md
+- specs/365-roster-name-column/tasks.md
+- src/modules/team-management/team4-leadership-upgrade-indicator.js
+- tests/browser/fixtures/fm2026-team-main.html
+- tests/browser/test_team4_championship_subtab_layout.py
+
+Approved base commit:
+- f4cceb75147140808d7eceead4622acf394bbb8b
+
+Approved commit:
+- f498c3bb3b3d58e32659b43775e671d596e5ceb2
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.348
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/quality-integration.yml
+- specs/363-team4-subtab-layout/plan.md
+- specs/363-team4-subtab-layout/spec.md
+- specs/363-team4-subtab-layout/tasks.md
+- src/app/bundle-order.json
+- src/modules/team-management/team4-form-saved-choice-notice.js
+- tests/browser/fixtures/fm2026-team-main.html
+- tests/browser/test_team4_championship_subtab_layout.py
+
+Approved base commit:
+- d667da6bd84cb2815cc5dcfc5c8ccdaf9a784bf1
+
+Approved commit:
+- f4cceb75147140808d7eceead4622acf394bbb8b
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.347
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/tactics/active-preset-inventory-v3.json
+- specs/357-dave56-wiki-supplement/plan.md
+- specs/357-dave56-wiki-supplement/spec.md
+- specs/357-dave56-wiki-supplement/tasks.md
+- specs/361-lead-press-hold-v12/plan.md
+- specs/361-lead-press-hold-v12/spec.md
+- specs/361-lead-press-hold-v12/tasks.md
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- src/modules/strategy-data-recommendations/final-tactic-merge-layer.js
+- src/modules/tactics-presets/active-preset-registry.js
+- src/modules/tactics-presets/tactic-preset-direction-policy.js
+- tests/browser/test_exact_userscript.py
+- tests/test-tactic-suite-v12-lead-press-hold.mjs
+- tools/sync-active-preset-inventory.mjs
+- tools/test-coach-preset-aliases.mjs
+- tools/test-dave56-etalon-apply-contract.mjs
+- tools/test-dave56-etalon-matcher.mjs
+- tools/test-dave56-etalon-panel.mjs
+- tools/test-tactic-fallback-hold-current.mjs
+- tools/test-tactic-transition-graph.mjs
+- tools/test-tactical-situation-diversity.mjs
+- vps/exporter-rag/dave56_supplement.json
+- vps/exporter-rag/slf_ai_export.py
+- vps/exporter-rag/test_slf_ai_export.py
+- vps/ops/deploy-code.sh
+- vps/ops/rollback-code.sh
+
+Approved base commit:
+- 1e58d38e1887c043be2d27360e75c5bd02815ba9
+
+Approved commit:
+- d667da6bd84cb2815cc5dcfc5c8ccdaf9a784bf1
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.346
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- .github/workflows/quality-integration.yml
+- specs/slf-356-boot-hardening/plan.md
+- specs/slf-356-boot-hardening/spec.md
+- specs/slf-356-boot-hardening/tasks.md
+- src/app/bootstrap.js
+- src/modules/team-management/team4-leadership-upgrade-indicator.js
+- src/modules/team-management/training-reference-guide.js
+- tools/test-boot-continuation.mjs
+
+Approved base commit:
+- e775f72aaa8cc8b33b4cf20452d8dfca8cf5dba6
+
+Approved commit:
+- 1e58d38e1887c043be2d27360e75c5bd02815ba9
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.345
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- .github/workflows/quality-integration.yml
+- data/audit/runtime-reachability-review-v1.json
+- specs/slf-353-loan-limit-fm2026/plan.md
+- specs/slf-353-loan-limit-fm2026/spec.md
+- specs/slf-353-loan-limit-fm2026/tasks.md
+- src/modules/team-management/team-loan-limit-helper.js
+- tools/test-loan-limit-fm2026.mjs
+
+Approved base commit:
+- 71478b01e6067104478cd3e61f8646e6b3e9106f
+
+Approved commit:
+- e775f72aaa8cc8b33b4cf20452d8dfca8cf5dba6
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.344
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- .github/workflows/quality-integration.yml
+- contracts/branches/strategy-data-recommendations.md
+- data/quality/reliability-budget-v1.json
+- specs/350-final-tactic-merge/plan.md
+- specs/350-final-tactic-merge/spec.md
+- specs/350-final-tactic-merge/tasks.md
+- src/app/bundle-order.json
+- src/core/config.js
+- src/modules/strategy-data-recommendations/final-tactic-merge-layer.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/test-dave56-etalon-apply-contract.mjs
+- tools/test-dave56-etalon-panel.mjs
+- tools/test-final-tactic-merge.mjs
+
+Approved base commit:
+- 422027e62ee5275f69f508a938156d3f2b7992ea
+
+Approved commit:
+- 71478b01e6067104478cd3e61f8646e6b3e9106f
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.343
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- .github/workflows/quality-integration.yml
+- src/app/ui-layer.js
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- 49b3663a8e5456ef909b58513d3f4116375a05d5
+
+Approved commit:
+- 422027e62ee5275f69f508a938156d3f2b7992ea
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.342
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/build-latest-release.yml
+- .github/workflows/quality-integration.yml
+- contracts/branches/strategy-data-recommendations.md
+- data/quality/reliability-budget-v1.json
+- data/tactics/dave56-etalon-v1.json
+- specs/348-dave56-etalon-hint/plan.md
+- specs/348-dave56-etalon-hint/spec.md
+- specs/348-dave56-etalon-hint/tasks.md
+- specs/slf-342-game-acceptance/plan.md
+- specs/slf-342-game-acceptance/spec.md
+- specs/slf-342-game-acceptance/tasks.md
+- src/app/bundle-order.json
+- src/core/config.js
+- src/modules/strategy-data-recommendations/dave-engine-knowledge.js
+- src/modules/strategy-data-recommendations/dave56-etalon-data.js
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- src/modules/strategy-data-recommendations/dave56-etalon-mapping.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/sync-dave56-etalon.mjs
+- tools/test-dave56-etalon-apply-contract.mjs
+- tools/test-dave56-etalon-data-sync.mjs
+- tools/test-dave56-etalon-mapping.mjs
+- tools/test-dave56-etalon-matcher.mjs
+- tools/test-dave56-etalon-panel.mjs
+
+Approved base commit:
+- a46e9699fa11ca069738602f29ac7a5f8bdb9bf5
+
+Approved commit:
+- 49b3663a8e5456ef909b58513d3f4116375a05d5
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.341
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/bundle-order.json
+- src/modules/transfer-analyzer/transfer-candidate-full-market-policy.js
+- src/modules/transfer-analyzer/transfer-history-visible-analysis-cleanup.js
+- src/modules/transfer-analyzer/transfer-tm-profile-guard.js
+- tests/browser/fixtures/fm2026-transfer-market.html
+
+Approved base commit:
+- b6c1340cc9e8c3b180a991dab63392fdac6f9be6
+
+Approved commit:
+- a46e9699fa11ca069738602f29ac7a5f8bdb9bf5
 
 Compatibility / storage:
 - Cache/schema/storage keys changed: NO
@@ -72,13 +549,49 @@ Safety notes:
 - Built deterministic latest-only artifacts from the approved source commit.
 
 Changed files:
-- AGENTS.md
+- .github/workflows/deploy-vps.yml
+- .github/workflows/quality-integration.yml
+- contracts/SLF_GOVERNANCE.md
+- contracts/SLF_WORKFLOW_LIFECYCLE_POLICY.md
+- contracts/branches/server-api-operations.md
+- data/audit/runtime-reachability-review-v1.json
+- data/quality/reliability-budget-v1.json
+- data/quality/workflow-inventory-v1.json
+- deploy/vps/slf-deploy-launcher
+- docs/decision_records/DR-013-consolidated-ci-release-workflows.md
+- specs/336-vps-deploy-transport/plan.md
+- specs/336-vps-deploy-transport/spec.md
+- specs/336-vps-deploy-transport/tasks.md
+- src/app/bundle-order.json
+- src/app/tactics-dropdown-ui-policy.js
+- src/core/config.js
+- src/modules/manual-match-telemetry/event-tracker.js
+- src/modules/manual-match-telemetry/manual-match-runtime.js
+- src/modules/manual-match-telemetry/manual-state-integrity.js
+- src/modules/manual-match-telemetry/snapshot-engine.js
+- src/modules/strategy-data-recommendations/current-action-hint-engine.js
+- src/modules/tactics-presets/active-preset-registry.js
+- src/modules/tactics-presets/preset-storage.js
+- src/modules/tactics-presets/tactic-control-bridge.js
+- src/modules/tactics-presets/tactic-preset-library.js
+- src/modules/transfer-analyzer/transfer-candidate-scanner.js
+- src/modules/transfer-analyzer/transfer-history-vps-sync.js
+- tests/test-preset-storage-sync-status.mjs
+- tests/test-preset-usage-tracker-quota.mjs
+- tests/test-scanner-legacy-storage-purge.mjs
+- tools/validate-quality-governance.mjs
+- tools/validate-workflow-inventory.mjs
+- vps/ops/deploy-code.sh
+- vps/ops/rollback-code.sh
+- vps/ops/tests/drill_deploy_transport.sh
+- vps/ops/tests/test_deploy_files_completeness.py
+- vps/ops/tests/test_deploy_transport_contract.py
 
 Approved base commit:
-- f498c3bb3b3d58e32659b43775e671d596e5ceb2
+- 4fd7aed02b25befefdad17274b7eb2c896fda051
 
 Approved commit:
-- 89b50df31dddceb90bdc6b2fbecc3db925ef3840
+- b6c1340cc9e8c3b180a991dab63392fdac6f9be6
 
 Compatibility / storage:
 - Cache/schema/storage keys changed: NO
