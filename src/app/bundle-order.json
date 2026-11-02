@@ -89,6 +89,7 @@
     "src/modules/team-management/training-reference-guide.js",
     "src/modules/team-management/team-loan-limit-helper.js",
     "src/modules/team-management/team4-alter-current-season-minutes-fix.js",
+    "src/modules/team-management/team4-championship-table-swap.js",
     "src/modules/team-management/team4-form-saved-choice-notice.js",
     "src/modules/team-management/team4-leadership-upgrade-indicator.js",
     "src/app/header-matches-layout-compatibility.js",
@@ -98,7 +99,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 90,
+    "expectedModuleCount": 91,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -2574,6 +2575,27 @@
           "setTimeout",
           "setInterval",
           "clearInterval",
+          "console"
+        ]
+      },
+      {
+        "file": "src/modules/team-management/team4-championship-table-swap.js",
+        "declares": [
+          "SLFTeam4ChampionshipTableSwap"
+        ],
+        "public": [],
+        "requires": [],
+        "hostCapabilities": [
+          "MutationObserver",
+          "URL",
+          "URLSearchParams",
+          "DOMParser",
+          "document",
+          "window",
+          "location",
+          "fetch",
+          "setTimeout",
+          "clearTimeout",
           "console"
         ]
       },
