@@ -253,6 +253,33 @@
   </div>
 </div>
 
+<!-- fm2026 match tactic view (post-4cf12ec mount contract): on radio-less
+     game.php pages the quick-switch dropdown mounts ONLY inside DIV.tc.mint —
+     the top-of-page fallbacks (#slf-match-parser-panel / .control_field_1)
+     were deliberately removed. This block models the real «Управление →
+     тактика» tab view per tools/test-tactic-dropdown-mount.mjs buildGameMintDoc():
+     .team.ttxBody.control_field wrapper > DIV.tc.mint.tc--match > .tc-cols grid
+     with .mint-card.tc-block cards. Modeled OPEN (visible): the real container
+     is pre-rendered hidden until the tab opens, and this suite asserts the
+     mounted dropdown with Playwright's default visible-state wait. The cards
+     are inert (no .tc-seg) — the β seg groups live in the dynamic
+     «Сравнение»-tab cards only. -->
+<div class="team ttxBody control_field">
+  <div class="tc mint tc--match">
+    <div class="tc-cols">
+      <section class="mint-card tc-block">Оборона</section>
+      <section class="mint-card tc-block">Построение атаки</section>
+      <section class="mint-card tc-block">Атака</section>
+    </div>
+  </div>
+</div>
+
+<!-- Site-header anchor: the parser strip (addMatchParserPanel) mounts before
+     #head when present. Placed AFTER the tactic view so the parser panel
+     follows the mounted dropdown in body order (test_beta_tcseg_controls t6
+     pins dropdown-before-parser-panel). -->
+<div id="head">SLF fixture header</div>
+
 <script>
 /* ── page JS: β tactic cards (mint-seg button groups), tabs, click engine ── */
 (function () {
