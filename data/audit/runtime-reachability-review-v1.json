@@ -558,6 +558,17 @@
         "Panel mount (#generallist afterend), LIMIT constants and fail-closed no-op unchanged; registered in bundle-order (90 modules, check-bundle-order OK).",
         "Unit-covered by tools/test-loan-limit-fm2026.mjs T1-T8 (incl. dual-anchor dedupe union, tablesorter header-row trap and the tab-gating boundary with legacy pl--1 fallback pin); independent peer review pass on fix/loan-limit-fm2026 (base 71478b0); live probe under owner session shows the panel visible with live counts in both designs."
       ]
+    },
+    {
+      "file": "src/modules/team-management/team4-championship-table-swap.js",
+      "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Issue #385: UI-only patch that fetches the championship table from roster.php and mounts it as a card in the left column right below the lineup pitch, moving the infirmary / disqualified / loan-request cards to the bottom of the right column; bundle-registered active code with no deletion candidates of its own.",
+        "Legacy-shaped identifiers (LEGACY_PANEL_ID, suppressLegacyPanel) reference the EXTERNAL legacy side panel #slf-team4-championship-table: after a successful mount the module disarms the legacy placement controller (panel.dataset.slfRosterSideActive='0'), mirrors the legacy module's own cleanup branch (366px grid / overflow layout classes removed) and detaches the panel — an external cleanup target, not retained in-module legacy code.",
+        "Registered in bundle-order dependency audit (91 modules, check-bundle-order OK).",
+        "E2E-covered by tests/browser/test_team4_champ_table_swap.py (RED on the base artifact, GREEN on the built artifact)."
+      ]
     }
   ],
   "symbolReviewQueue": [
