@@ -258,6 +258,8 @@ jobs:
           python3 -m py_compile tests/browser/test_team4_championship_external_layout.py
           python3 -m py_compile tests/browser/test_team4_championship_subtab_layout.py
           python3 -m py_compile tests/browser/test_save_dialog_xss_fixtures.py
+          python3 -m py_compile tests/browser/test_team4_champ_table_swap.py
+          python3 -m py_compile tests/browser/test_beta_tcseg_controls.py
 
       - name: Install pinned browser test dependencies
         run: python3 -m pip install --disable-pip-version-check -r tests/browser/requirements.txt
@@ -268,6 +270,7 @@ jobs:
       - name: Install pinned Chromium runtime
         run: python3 -m playwright install --with-deps chromium
 
+      # Browser tests resolve releases/latest.user.js from the repo root and expect the artifact version stamped by the build step earlier in this same job — keep the build step before the test step.
       - name: Execute exact candidate userscript in browser fixtures
         run: |
           python3 tests/browser/test_exact_userscript.py
@@ -278,6 +281,8 @@ jobs:
           python3 tests/browser/test_team4_championship_external_layout.py
           python3 tests/browser/test_team4_championship_subtab_layout.py
           python3 tests/browser/test_save_dialog_xss_fixtures.py
+          python3 tests/browser/test_team4_champ_table_swap.py
+          python3 tests/browser/test_beta_tcseg_controls.py
 
       - name: Upload browser failure evidence
         if: failure() && hashFiles('tests/browser/artifacts/**') != ''
