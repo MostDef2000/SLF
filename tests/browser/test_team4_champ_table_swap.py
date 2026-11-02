@@ -18,7 +18,11 @@ HTTP server, plus server-side injections (the fixture file is never modified):
   (b) the legacy-conflict state: the #slf-team4-championship-table panel node, the legacy
       classes on .team-body, and slf-team4-championship-overflow on the .content-ui__wrapper.
 
-The /roster.php stub carries a .roster_champ_table whose own-team row links via
+The /roster.php stub carries a .roster_champ_table that begins with the live .top-head
+header — an inline .rstr-ico SVG with NO width/height attributes (the production defect
+trigger: on team4.php nothing styles it, so it renders as a ~322px placeholder block),
+a .rstr-head__title league link, and a .rstr-head__end with two .champ-toggle anchors the
+module must strip — followed by the table whose own-team row links via
 roster.php?id=<teamId>; a player.php row carries the SAME id to prove the module's
 club-link-only own-row matching excludes player.php; one row ships a .champ-toggle button
 and an inline display:none to prove the module expands every row. The stub never pre-marks
@@ -34,6 +38,7 @@ pageerror assertions below; every other pageerror still fails the test.
 
 import json
 import os
+import re
 import threading
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -45,10 +50,30 @@ from playwright.sync_api import Browser, Page, sync_playwright
 ROOT = Path.cwd()
 ARTIFACT = Path(os.environ.get("SLF_TEST_ARTIFACT") or (ROOT / "releases" / "latest.user.js"))
 FIXTURE_TEAM = ROOT / "tests" / "browser" / "fixtures" / "fm2026-team-main.html"
-VERSION = json.loads((ROOT / "data" / "version.json").read_text(encoding="utf-8"))["scriptVersion"]
+
+
+def expected_version() -> str:
+    """The scriptVersion the injected artifact must report.
+
+    CI default (releases/latest.user.js): the data/version.json manifest of the approved
+    build. SLF_TEST_ARTIFACT override: the repo manifest describes the repo's own build,
+    not the override, so the artifact's own // @version header is the expected version —
+    the gate still proves the override actually loaded and registered window.SLF.
+    """
+    if not os.environ.get("SLF_TEST_ARTIFACT"):
+        return json.loads((ROOT / "data" / "version.json").read_text(encoding="utf-8"))["scriptVersion"]
+    for line in ARTIFACT.read_text(encoding="utf-8", errors="replace").splitlines():
+        match = re.match(r"\s*//\s*@version\s+(\S+)", line)
+        if match:
+            return match.group(1)
+    raise AssertionError(f"no // @version header in {ARTIFACT}")
+
+
+VERSION = expected_version()
 
 TEAM_ID = "23698"
 CLUB_NAME = "Луч"
+LEAGUE_NAME = "Тестовая лига"
 MOVED_TITLES = ["Лазарет клуба", "Дисквалифицированные игроки", "Ваши заявки на аренду"]
 
 # The fixture's legacy (#363/#365) inline self-verify throws one of these two messages when
@@ -71,11 +96,22 @@ LEGACY_PANEL = (
     '<tbody><tr><td>1</td><td>Луч</td><td>4</td><td>12</td></tr></tbody></table></aside>'
 )
 
-# The roster.php stub: own-team row links via roster.php?id=<teamId>; a player.php row
-# carries the SAME id (must NOT be marked own); a team.php row carries a different id; one
-# row ships a .champ-toggle + inline display:none (the module must expand it). No slf-own.
+# The roster.php stub: the .roster_champ_table begins with the live .top-head header —
+# .rstr-ico SVG (no width/height attributes: the defect trigger), .rstr-head__title league
+# link, .rstr-head__end with two .champ-toggle anchors (the module must strip them too) —
+# then the table: own-team row links via roster.php?id=<teamId>; a player.php row carries
+# the SAME id (must NOT be marked own); a team.php row carries a different id; one row
+# ships a .champ-toggle + inline display:none (the module must expand it). No slf-own.
 ROSTER_HTML = f"""<!doctype html><html><body>
 <div class="roster_champ_table">
+  <div class="top-head">
+    <svg class="rstr-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8m-4-4v4M7 4h10l3 8H4l3-8zm0 8v5h10v-5"/></svg>
+    <span class="rstr-head__title"><a href="/champ.php?action=view&id=56627" class="rstr-a">{LEAGUE_NAME}</a></span>
+    <span class="rstr-head__end">
+      <a href="javascript:void(0)" class="champ-line-btn-1 champ-toggle">1</a>
+      <a href="javascript:void(0)" class="champ-line-btn-0 champ-toggle">0</a>
+    </span>
+  </div>
   <table>
     <thead><tr><th>№</th><th>Команда</th><th>И</th><th>О</th></tr></thead>
     <tbody>
@@ -277,6 +313,25 @@ EVIDENCE_JS = """() => {
 }"""
 
 
+# Live-header defect probe (issue #385 follow-up): the roster.php .top-head carries an
+# inline .rstr-ico SVG with no width/height; on team4.php nothing styles it, so the
+# un-fixed module mounts it verbatim and it renders as a ~322px placeholder block.
+# Approved fix (option Б): the icon is stripped at mount time, the head stays a slim
+# text row with the league link.
+HEADER_JS = """() => {
+  const card = document.querySelector('.pcard.slf-champ');
+  const head = card ? card.querySelector('.top-head') : null;
+  const rect = head ? head.getBoundingClientRect() : null;
+  return {
+    cardPresent: !!card,
+    iconCount: card ? card.querySelectorAll('.rstr-ico').length : -1,
+    headPresent: !!head,
+    headHeight: rect ? rect.height : -1,
+    headText: head ? head.textContent.replace(/\\s+/g, ' ').trim() : ''
+  };
+}"""
+
+
 def assert_happy_path(browser: Browser, base_url: str):
     """Case 1: legacy-conflict page, roster.php 200 → full swap."""
     ROSTER_STATUS["status"] = 200
@@ -302,6 +357,15 @@ def assert_happy_path(browser: Browser, base_url: str):
         assert evidence["toggleCount"] == 0, evidence
         assert evidence["rowCount"] >= 3, evidence
         assert all(d != "none" for d in evidence["rowDisplay"]), evidence
+        # Live-header defect probe: the mounted card must not carry the unstyled .rstr-ico
+        # SVG (option Б strips it at mount time), the .top-head must stay a slim text row
+        # (≤ 40px rendered — the user-visible outcome), and the league link must survive.
+        header = page.evaluate(HEADER_JS)
+        assert header["cardPresent"], header
+        assert header["iconCount"] == 0, f"live header bug: mounted card still contains .rstr-ico icon(s): {header}"
+        assert header["headPresent"], header
+        assert header["headHeight"] <= 40, f"live header bug: .top-head renders {header['headHeight']}px tall (unstyled .rstr-ico SVG): {header}"
+        assert LEAGUE_NAME in header["headText"], f"league link lost from .top-head: {header}"
         assert module_pageerrors(errors) == [], errors
         print(f"[team4-champ-table-swap] passed: happy-path viewport=1440 version={VERSION}")
     finally:
@@ -360,14 +424,24 @@ def assert_gate_noop(browser: Browser, base_url: str):
 def main():
     assert ARTIFACT.is_file(), ARTIFACT
     assert FIXTURE_TEAM.is_file(), FIXTURE_TEAM
+    # Run every case even when one fails, so a single invocation reports the full
+    # pass/fail picture (e.g. RED: happy-path fails on the header probe while the
+    # failure-path and gate-noop cases still pass). Exit non-zero if any case failed.
+    failures = []
     with server() as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
-            assert_happy_path(browser, base_url)
-            assert_failure_path(browser, base_url)
-            assert_gate_noop(browser, base_url)
+            for case in (assert_happy_path, assert_failure_path, assert_gate_noop):
+                try:
+                    case(browser, base_url)
+                except AssertionError as error:
+                    failures.append((case.__name__, str(error)))
         finally:
             browser.close()
+    if failures:
+        for name, message in failures:
+            print(f"[team4-champ-table-swap] FAILED: {name}: {message}")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

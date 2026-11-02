@@ -48,7 +48,8 @@ const SLFTeam4ChampionshipTableSwap = (() => {
             .slf-champ tr:nth-child(odd) { background:#232530; }
             .slf-champ tr:nth-child(even) { background:#1e2029; }
             .slf-champ .rstr-thead td { color:#9aa0b5; font-weight:600; }
-            .slf-champ .top-head { padding:4px 8px; font-weight:600; }
+            .slf-champ .top-head { display:flex; align-items:center; padding:6px 8px; font-weight:600; color:#e8eaf3; }
+            .slf-champ .top-head .rstr-a { color:#e8eaf3; text-decoration:none; }
             .slf-champ tr.slf-own { background:rgba(43,217,124,.14); }
             .slf-moved { margin-top:12px; }
             .slf-moved .pcard { margin-bottom:12px; }
@@ -120,6 +121,11 @@ const SLFTeam4ChampionshipTableSwap = (() => {
         // drop the buttons themselves, keep the cells, and force every row visible
         // (no compact mode — clear any inline display:none hiding rows).
         box.querySelectorAll('.champ-toggle').forEach(button => button.remove());
+        // Live roster header ships an unsized inline SVG icon and a button container;
+        // neither has stylesheet support on team4.php — the SVG renders as a huge
+        // placeholder block. Option Б (owner-approved): strip both, keep the league link.
+        box.querySelector('.top-head .rstr-ico')?.remove();
+        box.querySelector('.top-head .rstr-head__end')?.remove();
         box.querySelectorAll('tr').forEach(row => { row.style.display = ''; });
         if (!box.querySelector('.top-head')) {
             const head = document.createElement('div');
