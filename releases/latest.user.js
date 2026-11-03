@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.344
+// @version      4.4.364
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.344',
-        scriptVersion: '4.4.344',
+        version: '4.4.364',
+        scriptVersion: '4.4.364',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.344',
+        scriptVersion: '4.4.364',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -2174,14 +2174,23 @@ const DomUtils = {
         function scoreContext(snapshot) {
             const score = snapshot?.score || {};
             const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
-            const isHome = Number(teams[0]) === Number(snapshot?.myTeam);
-            const home = Number(score.home);
-            const away = Number(score.away);
-            if (!Number.isFinite(home) || !Number.isFinite(away) || !snapshot?.myTeam) {
-                return {scoreState:'unknown',scoreDiff:null,homeAway:snapshot?.myTeam?(isHome?'home':'away'):'unknown'};
+            const myTeam = snapshot?.myTeam;
+            // Side is observed evidence, never a default: with a missing/short
+            // teams array the old Number(teams[0]) === Number(myTeam) comparison
+            // produced NaN === myTeam -> false and silently assumed 'away'.
+            const sidesKnown = teams.length === 2 && myTeam != null;
+            const isHome = sidesKnown ? Number(teams[0]) === Number(myTeam) : false;
+            // readScore() is fail-closed, but guard the coercion path anyway:
+            // Number('') and Number(null) coerce to 0 and would fabricate a
+            // draw. Raw values must be finite numbers (issue #309 convention)
+            // before any numeric comparison.
+            const isScoreValue = value => typeof value === 'number' && Number.isFinite(value);
+            const scoreValid = isScoreValue(score.home) && isScoreValue(score.away);
+            if (!sidesKnown || !scoreValid) {
+                return {scoreState:'unknown',scoreDiff:null,homeAway:sidesKnown?(isHome?'home':'away'):'unknown'};
             }
-            const myGoals = isHome ? home : away;
-            const oppGoals = isHome ? away : home;
+            const myGoals = isHome ? score.home : score.away;
+            const oppGoals = isHome ? score.away : score.home;
             return {scoreState:myGoals>oppGoals?'winning':myGoals<oppGoals?'losing':'draw',scoreDiff:myGoals-oppGoals,homeAway:isHome?'home':'away'};
         }
         function teamStats(snapshot, own) {
@@ -2217,25 +2226,75 @@ const DomUtils = {
         function productionRecommendation(decision = STATE.lastRuleDecision || null) {
             const compact = EventTracker.compactRuleDecision?.(decision) || null;
             const runnerUp = decision?.runnerUp || (decision?.candidates || []).find(item => !item?.vetoed && item?.preset !== decision?.action?.preset) || null;
-            return compact ? {
+            if (!compact) return null;
+            const recommendation = {
                 presetId:compact.action?.preset || null,
                 situationKey:decision?.situationKey || compact.action?.decision || null,
                 confidence:clone(decision?.confidence || compact.confidence || null),
                 runnerUp:runnerUp?{preset:runnerUp.preset||null,score:Number(runnerUp.score||0)}:null,
                 margin:Number(decision?.margin ?? compact.margin ?? 0),
                 riskAppetite:compact.riskAppetite || null
-            } : null;
+            };
+            // data-linkage v1: decision linkage metadata (additive). Only
+            // decisions captured through captureActivationProductionDecision
+            // carry decisionSource; legacy call sites (exit context) keep the
+            // exact prior shape. Absence stays null — never a dict of nulls.
+            if (decision.decisionSource) {
+                const decidedAt = Number(decision.decidedAt) || null;
+                recommendation.decidedAt = decidedAt;
+                recommendation.decidedMinute = decision.decidedMinute != null ? minuteOrNull(decision.decidedMinute) : null;
+                recommendation.decisionSource = decision.decisionSource === 'persisted' ? 'persisted' : 'live';
+                recommendation.decisionAgeMinutes = decidedAt != null ? Math.round((Date.now() - decidedAt) / 60000) : null;
+            }
+            return recommendation;
+        }
+        // data-linkage v1 (telemetry only): the durable last-production-decision
+        // record persisted by EventTracker.recordLastRuleDecision in the manual
+        // match state envelope. Used as the activation fallback when neither the
+        // exact snapshot nor the live advisor yields a decision (e.g. activation
+        // after a page reload, where STATE.lastRuleDecision is gone).
+        function persistedLastRuleDecisionRecord(gameId) {
+            if (gameId == null || gameId === '') return null;
+            try {
+                if (typeof SnapshotEngine?.loadManualState !== 'function') return null;
+                const record = SnapshotEngine.loadManualState(gameId)?.lastRuleDecisionRecord || null;
+                if (!record || record.schema !== EventTracker.lastRuleDecisionRecordSchema) return null;
+                if (String(record.gameId || '') !== String(gameId)) return null;
+                return record?.decision?.action ? record : null;
+            } catch (_) {
+                return null;
+            }
         }
         function captureActivationProductionDecision(snapshot) {
             const advisor = document.defaultView?.SLFCurrentActionHintEngine || null;
-            if (!snapshot || !advisor || typeof advisor.run !== 'function') return snapshot?.ruleDecision || null;
-            try {
-                const decision = advisor.run(snapshot, {});
-                return snapshot?.ruleDecision || decision || null;
-            } catch (error) {
-                debugWarn('[SLF Tactical Lab] activation recommendation capture failed', error);
-                return snapshot?.ruleDecision || null;
+            let decision = null;
+            if (!snapshot || !advisor || typeof advisor.run !== 'function') {
+                decision = snapshot?.ruleDecision || null;
+            } else {
+                try {
+                    decision = advisor.run(snapshot, {});
+                    decision = snapshot?.ruleDecision || decision || null;
+                } catch (error) {
+                    debugWarn('[SLF Tactical Lab] activation recommendation capture failed', error);
+                    decision = snapshot?.ruleDecision || null;
+                }
             }
+            if (decision) {
+                // Live decision: linkage metadata travels on a clone so the
+                // engine's decision object and the snapshot are never mutated.
+                return Object.assign(clone(decision) || {}, {
+                    decisionSource:'live',
+                    decidedAt:Number(decision.generatedAt) || null,
+                    decidedMinute:minuteOrNull(decision.moment?.minute)
+                });
+            }
+            const record = persistedLastRuleDecisionRecord(getGameId(snapshot));
+            if (!record) return null;
+            return Object.assign(clone(record.decision) || {}, {
+                decisionSource:'persisted',
+                decidedAt:Number(record.decidedAt) || null,
+                decidedMinute:record.decidedMinute != null ? minuteOrNull(record.decidedMinute) : null
+            });
         }
         function buildContext(snapshot, decision = STATE.lastRuleDecision || null) {
             const my = teamStats(snapshot, true) || {};
@@ -3600,6 +3659,57 @@ const SnapshotEngine = {
         return isNumericScore(score.home) && isNumericScore(score.away);
     },
 
+    // data-linkage v1 (telemetry only): resolve the last applied production
+    // preset for this match so match_result rows carry preset attribution.
+    // Precedence: presetProgression (memory, then the persisted manual-state
+    // envelope copy of the same record — survives page reloads), then the
+    // durable global usage tracker. Every source must match the result's
+    // gameId — a preset applied in another match is never attributed here.
+    // Additive-only: legacy rows without these fields stay valid.
+    finalPresetAttribution(gameId, snapshot = null) {
+        const attribution = {
+            lastAppliedPreset: null,
+            lastAppliedPresetAt: null,
+            lastAppliedPresetSource: null,
+            generatorVersion: null
+        };
+        try {
+            // A result without a resolvable gameId is never attributed: two
+            // absent gameIds would string-compare equal ('' === '') and leak
+            // another match's attribution into a degenerate row.
+            if (gameId == null || gameId === '') return attribution;
+            const matchesResult = record => record != null && String(record.gameId || '') === String(gameId || '');
+            const progressions = [STATE?.presetProgression || null];
+            if (typeof this.loadManualState === 'function') {
+                try { progressions.push(this.loadManualState(gameId)?.presetProgression || null); } catch (_) {}
+            }
+            const progression = progressions.find(item => item?.lastAppliedPreset && matchesResult(item)) || null;
+            if (progression) {
+                attribution.lastAppliedPreset = progression.lastAppliedPreset;
+                attribution.lastAppliedPresetAt = progression.appliedAt ?? null;
+                attribution.lastAppliedPresetSource = 'preset_progression';
+            } else {
+                const usage = typeof PresetUsageTracker !== 'undefined' && typeof PresetUsageTracker?.getLast === 'function'
+                    ? PresetUsageTracker.getLast()
+                    : null;
+                if (usage && usage.presetName && matchesResult(usage)) {
+                    attribution.lastAppliedPreset = usage.presetName;
+                    attribution.lastAppliedPresetAt = usage.ts ?? null;
+                    attribution.lastAppliedPresetSource = 'usage_tracker';
+                }
+            }
+            // Declared generator metadata only — never an invented version
+            // string. The hint flow stamps snapshot.generatorVersion; the
+            // active preset registry declares the suite's generator version.
+            const generatorCandidates = [
+                snapshot?.generatorVersion,
+                typeof window !== 'undefined' ? window.SLFActivePresetRegistry?.generatorVersion : null
+            ];
+            attribution.generatorVersion = generatorCandidates.find(value => value != null && String(value).trim()) || null;
+        } catch (_) {}
+        return attribution;
+    },
+
     sendMatchResult(snapshot) {
         // QR-010: a finished match result must carry a resolvable score.  The
         // server used to accept a null score verbatim, so a client-side
@@ -3626,7 +3736,7 @@ const SnapshotEngine = {
                 collectedAt: Date.now(),
                 scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown'
             }
-        });
+        }, this.finalPresetAttribution(snapshot?.gameId, snapshot));
 
         const key = result.resultKey;
         const pending = this._pendingMatchResultRequests.get(key);
@@ -3700,6 +3810,57 @@ const SnapshotEngine = {
                 candidateScores: Object.fromEntries((decision.candidates || []).map(item => [item.preset, item.score])),
                 vetoedPresets: decision.vetoedPresets || {}
             };
+        },
+
+        // data-linkage v1 (telemetry only): durable LAST-production-decision-per-game
+        // record. A decision made at any point of the match must stay linkable to
+        // the match even when it was not made at the exact activation snapshot —
+        // STATE.lastRuleDecision is memory-only and dies with the page, so the
+        // recorder persists one bounded record per game in the manual match state
+        // envelope. This records decisions; it never changes how they are made.
+        lastRuleDecisionRecordSchema: 'slf_last_rule_decision_record_v1',
+        lastDecisionRecordSignatures: new Map(),
+
+        buildLastRuleDecisionRecord(gameId, decision) {
+            if (!decision?.action || gameId == null || gameId === '') return null;
+            const compact = this.compactRuleDecision(decision);
+            if (!compact) return null;
+            return {
+                schema: this.lastRuleDecisionRecordSchema,
+                gameId: String(gameId),
+                decidedAt: Number(decision.generatedAt) || Number(compact.generatedAt) || Date.now(),
+                decidedMinute: decision.moment?.minute ?? null,
+                decidedScoreState: decision.moment?.score || null,
+                decision: compact
+            };
+        },
+
+        recordLastRuleDecision(gameId, decision) {
+            if (!decision?.action || gameId == null || gameId === '') return null;
+            // A memory-fallback decision from another game must never be
+            // attributed to this match; the engine stamps moment.gameId.
+            const decisionGameId = decision.moment?.gameId;
+            if (decisionGameId != null && String(decisionGameId) !== String(gameId)) return null;
+            const signature = [decision.generatedAt ?? '', decision.action.preset ?? '', decision.action.decision ?? '', decision.margin ?? ''].join('|');
+            const key = String(gameId);
+            if (this.lastDecisionRecordSignatures.get(key) === signature) return null;
+            const record = this.buildLastRuleDecisionRecord(gameId, decision);
+            if (!record) return null;
+            let persisted = true;
+            try {
+                if (typeof SnapshotEngine !== 'undefined' && typeof SnapshotEngine.persistManualState === 'function') {
+                    persisted = !!SnapshotEngine.persistManualState({ gameId: key, lastRuleDecisionRecord: record });
+                }
+            } catch (_) {
+                persisted = false;
+            }
+            if (!persisted) return null;
+            // Bounded signature cache (same shape as the envelope session map):
+            // enrich() runs on every snapshot build, the guard prevents write
+            // amplification; only a NEW decision identity is persisted.
+            if (this.lastDecisionRecordSignatures.size > 8) this.lastDecisionRecordSignatures.delete(this.lastDecisionRecordSignatures.keys().next().value);
+            this.lastDecisionRecordSignatures.set(key, signature);
+            return record;
         },
 
         // v9: единые правила классификации применения рекомендации (#252, single-writer contract).
@@ -4064,7 +4225,17 @@ const SnapshotEngine = {
                 session.lastFingerprint = currentFingerprint;
                 session.lastPreset = currentPreset;
             }
-            const decision = EventTracker.compactRuleDecision(snapshot.ruleDecision || STATE.lastRuleDecision || null);
+            const rawRuleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
+            const decision = EventTracker.compactRuleDecision(rawRuleDecision);
+            // data-linkage v1 (telemetry only): persist the last production
+            // decision per game so it survives reloads and stays linkable to
+            // this match. enrich() runs on every build/buildSnapshotRecord/
+            // sendMatchResult and the ~15s auto-poll; the recorder's signature
+            // dedup absorbs the write amplification. The raw (uncompacted)
+            // decision is recorded — the recorder re-compacts and reads
+            // moment.gameId/minute from it. Telemetry must never break the
+            // snapshot flow.
+            try { EventTracker.recordLastRuleDecision(snapshot.gameId, rawRuleDecision); } catch (_) {}
             let riskAppetite = decision?.riskAppetite || decision?.action?.riskAppetite || null;
             try { riskAppetite = riskAppetite || localStorage.getItem('slf:tactics:risk-appetite'); } catch (_) {}
             // v11: single-writer contract (#252) — enrich дополняет прежний tacticTelemetry (MERGE),
@@ -7731,6 +7902,200 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
 // <<< src/modules/strategy-data-recommendations/coach-hint-snapshot-context-layer.js
 
 
+// >>> src/modules/strategy-data-recommendations/tactical-knowledge-pack.js
+// Tactical Knowledge Pack loader
+// ============================================================
+// Anonymous read-only loader for the seed-rule knowledge pack served by the
+// SLF AI endpoint. The pack supplies LABELED HYPOTHESIS priors (seed rules)
+// to the active preset registry scoring seam — it never applies tactics and
+// never mutates engine or registry state.
+//
+// Contract (specs/381-tactical-knowledge-pack-hints):
+// - init() reads the localStorage cache synchronously; when absent, expired
+//   or invalid it starts ONE anonymous GET (no Authorization header). The
+//   fetch is never awaited during hint generation — a completed fetch affects
+//   the NEXT hint only. No polling and no re-render on completion.
+// - validatePack() is fail-closed: one malformed rule rejects the whole pack.
+//   An EMPTY rules array is valid (withdrawal mechanism).
+// - get() is synchronous and read-only: validated unexpired state or null.
+//   An expired cache must not score. A future-dated fetchedAt (beyond a 60s
+//   clock-skew tolerance) is rejected the same way — it must not bypass the
+//   TTL and must not score.
+// - All storage, parse and transport errors are caught; a cache-write failure
+//   must not discard valid in-memory state; a missing GM capability keeps the
+//   pack null (endpoint outage is not a kill switch).
+// - generatorContext.safeRules is diagnostic-only and is NOT scoring input;
+//   it is ignored here.
+
+const TacticalKnowledgePack = {
+    schema: 'slf_tactical_knowledge_pack_v1',
+    PACK_URL: 'https://slf-api.mostdef.ru/slf_ai/tactics/knowledge-pack.latest.json',
+    CACHE_KEY: 'slf:tactics:knowledge-pack:v1',
+    TTL_MS: 24 * 60 * 60 * 1000,
+    FETCH_TIMEOUT_MS: 15000,
+    SUPPORTED_WHEN_KEYS: ['score_state', 'minute_min', 'my_bad_min', 'my_bad_max', 'pressure'],
+    SCORE_STATES: ['losing', 'winning', 'draw'],
+    PRESSURE_LITERAL: 'opponent_advantage_xg_or_xt',
+    CLOCK_SKEW_MS: 60000,
+
+    // Validated in-memory state: {fetchedAt: number, pack} | null.
+    state: null,
+    fetchStarted: false,
+
+    storageAvailable() {
+        try {
+            return typeof localStorage !== 'undefined' && !!localStorage
+                && typeof localStorage.getItem === 'function';
+        } catch (_) {
+            return false;
+        }
+    },
+
+    readCache() {
+        try {
+            if (!this.storageAvailable()) return null;
+            const raw = localStorage.getItem(this.CACHE_KEY);
+            if (typeof raw !== 'string' || !raw) return null;
+            const envelope = JSON.parse(raw);
+            if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) return null;
+            const fetchedAt = envelope.fetchedAt;
+            if (typeof fetchedAt !== 'number' || !Number.isFinite(fetchedAt)) return null;
+            if (fetchedAt > Date.now() + this.CLOCK_SKEW_MS) return null; // future-dated: reject, must not bypass the TTL
+            if (Date.now() - fetchedAt >= this.TTL_MS) return null; // expired cache must not score
+            const pack = this.validatePack(envelope.pack);
+            return pack ? { fetchedAt, pack } : null;
+        } catch (_) {
+            return null;
+        }
+    },
+
+    writeCache(state) {
+        // A cache-write failure must not discard valid in-memory state.
+        try {
+            if (!this.storageAvailable() || typeof localStorage.setItem !== 'function') return;
+            const envelope = { fetchedAt: state.fetchedAt, pack: state.pack };
+            localStorage.setItem(this.CACHE_KEY, JSON.stringify(envelope));
+        } catch (_) { /* keep serving the in-memory state */ }
+    },
+
+    isSupportedWhenValue(key, value) {
+        if (key === 'score_state') return this.SCORE_STATES.indexOf(value) !== -1;
+        if (key === 'minute_min' || key === 'my_bad_min' || key === 'my_bad_max') {
+            // Strict numerics: no null/''/numeric-string coercion.
+            return typeof value === 'number' && Number.isFinite(value);
+        }
+        if (key === 'pressure') return value === this.PRESSURE_LITERAL;
+        return false;
+    },
+
+    validateRule(rule, seenIds) {
+        if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return false;
+        if (typeof rule.id !== 'string' || !rule.id.trim()) return false;
+        if (seenIds.has(rule.id)) return false;
+        if (rule.confidence !== 'seed_rule') return false;
+        const recommendation = rule.recommendation;
+        if (!recommendation || typeof recommendation !== 'object' || Array.isArray(recommendation)) return false;
+        if (typeof recommendation.preset !== 'string' || !recommendation.preset.trim()) return false;
+        if (recommendation.reason !== undefined && typeof recommendation.reason !== 'string') return false;
+        const when = rule.when;
+        if (!when || typeof when !== 'object' || Array.isArray(when)) return false;
+        const keys = Object.keys(when);
+        if (!keys.length) return false;
+        for (const key of keys) {
+            if (this.SUPPORTED_WHEN_KEYS.indexOf(key) === -1) return false;
+            if (!this.isSupportedWhenValue(key, when[key])) return false;
+        }
+        if (when.my_bad_min !== undefined && when.my_bad_max !== undefined && when.my_bad_min > when.my_bad_max) return false;
+        return true;
+    },
+
+    // Fail-closed: the first malformed rule rejects the whole pack (null).
+    validatePack(raw) {
+        try {
+            if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+            if (raw.schema !== this.schema) return null;
+            if (typeof raw.version !== 'string' || !raw.version.trim()) return null;
+            if (!Array.isArray(raw.rules)) return null;
+            const seenIds = new Set();
+            for (const rule of raw.rules) {
+                if (!this.validateRule(rule, seenIds)) return null;
+                seenIds.add(rule.id);
+            }
+            return { schema: raw.schema, version: raw.version, rules: raw.rules };
+        } catch (_) {
+            return null;
+        }
+    },
+
+    adoptPack(raw) {
+        const pack = this.validatePack(raw);
+        if (!pack) return; // invalid pack → keep previous state (fail-closed)
+        this.state = { fetchedAt: Date.now(), pack };
+        this.writeCache(this.state);
+    },
+
+    handleResponse(response) {
+        const status = Number(response && response.status);
+        if (!Number.isFinite(status) || status < 200 || status > 299) return;
+        const text = response && typeof response.responseText === 'string' ? response.responseText : '';
+        if (!text) return;
+        let raw = null;
+        try {
+            raw = JSON.parse(text);
+        } catch (_) {
+            return; // parse error → keep previous state
+        }
+        this.adoptPack(raw);
+    },
+
+    startFetch() {
+        if (this.fetchStarted) return;
+        if (typeof GM_xmlhttpRequest !== 'function') return; // missing GM capability → stay null
+        this.fetchStarted = true;
+        const packLoader = this;
+        try {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: this.PACK_URL,
+                timeout: this.FETCH_TIMEOUT_MS,
+                anonymous: true,
+                onload: response => { try { packLoader.handleResponse(response); } catch (_) { /* keep state */ } },
+                onerror: () => { /* transport failure → keep state */ },
+                ontimeout: () => { /* timeout → keep state */ }
+            });
+        } catch (_) {
+            // Transport raised synchronously — remain without a pack.
+        }
+    },
+
+    // Synchronous, read-only. Expired or future-dated state must not score.
+    get() {
+        const state = this.state;
+        if (!state || !state.pack) return null;
+        if (typeof state.fetchedAt !== 'number' || !Number.isFinite(state.fetchedAt)) return null;
+        if (state.fetchedAt > Date.now() + this.CLOCK_SKEW_MS) return null; // future-dated: reject
+        if (Date.now() - state.fetchedAt >= this.TTL_MS) return null;
+        return state.pack;
+    },
+
+    init() {
+        const cached = this.readCache();
+        if (cached) {
+            this.state = cached;
+            return;
+        }
+        this.startFetch();
+    }
+};
+
+if (typeof window !== 'undefined') {
+    window.SLFTacticalKnowledgePack = TacticalKnowledgePack;
+}
+
+TacticalKnowledgePack.init();
+// <<< src/modules/strategy-data-recommendations/tactical-knowledge-pack.js
+
+
 // >>> src/modules/tactics-presets/active-preset-registry.js
 // Active Tactical Preset Registry
 // ============================================================
@@ -7796,6 +8161,61 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
         displayMeta:{trainer:'Mourinho',formation:'4-4-1-1',style:'3',suffix:'_neutr'}
     };
 
+    // Knowledge-pack seed priors (specs/381-tactical-knowledge-pack-hints):
+    // the pack supplies LABELED HYPOTHESES, not outcome evidence. A matching
+    // seed adds a bounded +3 to the candidate; multiple matches do NOT stack
+    // (ruleIds are collected for provenance only); the outcome-evidence delta
+    // stays dormant at 0; the total is clamped to ±5. No match is never a veto.
+    const KNOWLEDGE_SEED_PRIOR=3;
+    const KNOWLEDGE_EVIDENCE_DELTA=0;
+    const KNOWLEDGE_DELTA_LIMIT=5;
+    const knowledgeAssessmentNone=()=>({delta:0,source:'none',ruleIds:[],n:null,packVersion:null});
+    // Approximate mapping of pack conditions onto the runtime context:
+    // score_state → exact equality with context.scoreState ('unknown' never
+    // matches); minute_min → finite context.minute >= bound; my_bad_min/max →
+    // inclusive bounds on context.myBad AND context.myBad > 0 (missing
+    // bad-actions normalize to 0 — missing is NOT 0% execution); pressure →
+    // context.underPressure === true (approximation of the pack's
+    // xG/xT pressure literal).
+    const knowledgeRuleMatches=(when,context)=>{
+        if(!when||typeof when!=='object')return false;
+        if(when.score_state!==undefined){
+            if(context.scoreState!==when.score_state||context.scoreState==='unknown')return false;
+        }
+        if(when.minute_min!==undefined){
+            if(typeof context.minute!=='number'||!Number.isFinite(context.minute)||context.minute<when.minute_min)return false;
+        }
+        if(when.my_bad_min!==undefined||when.my_bad_max!==undefined){
+            if(typeof context.myBad!=='number'||!Number.isFinite(context.myBad)||context.myBad<=0)return false;
+            if(when.my_bad_min!==undefined&&context.myBad<when.my_bad_min)return false;
+            if(when.my_bad_max!==undefined&&context.myBad>when.my_bad_max)return false;
+        }
+        if(when.pressure!==undefined&&context.underPressure!==true)return false;
+        return true;
+    };
+    const knowledgeAssessment=args=>{
+        try{
+            const input=args&&typeof args==='object'?args:{};
+            const preset=resolvePresetId(input.preset);
+            if(typeof preset!=='string'||!preset||!ACTIVE.has(preset))return knowledgeAssessmentNone();
+            const pack=(typeof TacticalKnowledgePack!=='undefined'&&TacticalKnowledgePack&&typeof TacticalKnowledgePack.get==='function')?TacticalKnowledgePack.get():null;
+            if(!pack||!Array.isArray(pack.rules)||!pack.rules.length)return knowledgeAssessmentNone();
+            const context=input.context&&typeof input.context==='object'?input.context:{};
+            const packVersion=typeof pack.version==='string'?pack.version:null;
+            const matchedIds=[];
+            for(const rule of pack.rules){
+                const target=resolvePresetId(rule&&rule.recommendation?rule.recommendation.preset:null);
+                if(typeof target!=='string'||target!==preset||!ACTIVE.has(target))continue;
+                if(!knowledgeRuleMatches(rule.when,context))continue;
+                matchedIds.push(String(rule.id));
+            }
+            if(!matchedIds.length)return{delta:0,source:'none',ruleIds:[],n:null,packVersion};
+            matchedIds.sort();
+            const total=Math.max(-KNOWLEDGE_DELTA_LIMIT,Math.min(KNOWLEDGE_DELTA_LIMIT,KNOWLEDGE_SEED_PRIOR+KNOWLEDGE_EVIDENCE_DELTA));
+            return{delta:total,source:'seed',ruleIds:matchedIds,n:null,packVersion};
+        }catch(_){return knowledgeAssessmentNone();}
+    };
+
     const clonePresets=map=>Object.fromEntries(Object.entries(map).map(([name,p])=>[name,Object.assign({},p,{priority:(p.priority||[]).slice()})]));
     const cloneTraits=map=>Object.fromEntries(Object.entries(map).map(([name,t])=>[name,Object.assign({},t,{attackLanes:(t.attackLanes||[]).slice(),requires:(t.requires||[]).slice(),avoids:(t.avoids||[]).slice()})]));
     const removeInactive=map=>{if(!map||typeof map!=='object')return;Object.keys(map).forEach(key=>{if(!ACTIVE.has(key))delete map[key];});};
@@ -7812,8 +8232,21 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
         // fallback keeps the registry standalone-safe in bare test sandboxes.
         controlFields: typeof TACTIC_CONTROL_KEYS !== 'undefined' ? TACTIC_CONTROL_KEYS.slice() : ['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot'],
         inventorySchema:'slf_active_preset_inventory_v3',
-        // bounded evidence adjustment — reserved; v10 hypotheses are not outcome evidence
-        evidenceAdjustment:function(){return 0;},
+        // Bounded evidence adjustment (specs/381): seed priors from the
+        // tactical knowledge pack only — labeled hypotheses (+3, non-stacking,
+        // clamped ±5), NOT outcome evidence. Cohort/outcome requirements stay
+        // reserved for a future evidence contract; no match never vetoes.
+        evidenceAdjustment:function(args){
+            try{
+                const assessment=knowledgeAssessment(args);
+                const delta=assessment?Number(assessment.delta):NaN;
+                return Number.isFinite(delta)?delta:0;
+            }catch(_){return 0;}
+        },
+        // Pure provenance view over the loaded knowledge pack:
+        // {delta, source:'seed'|'none', ruleIds, n, packVersion}. No I/O, no
+        // mutation; the pack itself is read synchronously from the loader.
+        knowledgeAssessment:function(args){return knowledgeAssessment(args);},
         roleContracts:Object.fromEntries(Object.entries(ROLE_CONTRACTS).map(([id,c])=>[id,Object.assign({},c,{allowedSituations:c.allowedSituations.slice(),entryConditions:c.entryConditions.slice(),exitConditions:c.exitConditions.slice(),hardVetoes:c.hardVetoes.slice(),formation:(FORMATIONS[id]||[]).slice(),controls:Object.assign({},PRESETS[id],{priority:(PRESETS[id]?.priority||[]).slice()})})]))
     };
 })();
@@ -11294,6 +11727,52 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
         });
     }
 
+    // Knowledge-pack provenance (specs/381): one display-only line under the
+    // coach heading attributing the DISPLAYED preset (final merged action,
+    // not blindly the original winner) to matched knowledge-pack seed rules.
+    // Seed priors are labeled hypotheses, not outcome evidence. Read-only:
+    // a completed pack fetch affects the NEXT hint, never this render.
+    function resolveDisplayedKnowledgePreset(snapshot, primaryPresetName) {
+        const finalTactic = snapshot?.ruleDecision?.finalTactic;
+        if (finalTactic && finalTactic.base !== 'current_tactic' && finalTactic.presetId) return String(finalTactic.presetId);
+        return resolveRecommendedPresetName(snapshot, primaryPresetName);
+    }
+
+    function buildKnowledgeProvenanceHtml(snapshot, primaryPresetName) {
+        let matched = false;
+        try {
+            const decision = snapshot?.ruleDecision || null;
+            const preset = resolveDisplayedKnowledgePreset(snapshot, primaryPresetName);
+            // Prefer the decision's OWN computed adjustment (same-decision data):
+            // the candidate parts carry the boundedEvidenceAdjustment the policy
+            // actually applied. This never diverges from the decision, unlike a
+            // live re-evaluation on the raw moment.context (whose normalized
+            // fields — e.g. signal-derived underPressure — can differ). Fall back
+            // to a live assessment only when the candidate parts are unavailable.
+            const candidate = Array.isArray(decision?.candidates)
+                ? decision.candidates.find(item => item && item.preset === preset)
+                : null;
+            if (candidate && candidate.parts && typeof candidate.parts.boundedEvidenceAdjustment === 'number') {
+                matched = candidate.parts.boundedEvidenceAdjustment !== 0;
+            } else {
+                const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+                const assessment = registry && typeof registry.knowledgeAssessment === 'function'
+                    ? registry.knowledgeAssessment({
+                        preset,
+                        situation: decision?.situation || decision?.moment?.context?.gameMode || '',
+                        context: decision?.moment?.context || null
+                    })
+                    : null;
+                matched = Boolean(assessment && assessment.source === 'seed'
+                    && Array.isArray(assessment.ruleIds) && assessment.ruleIds.length > 0);
+            }
+        } catch (_) {
+            matched = false; // attribution unavailable → none-variant
+        }
+        const label = matched ? 'База: seed (гипотеза)' : 'База: нет совпавших данных';
+        return `<div style="line-height:1.4;opacity:.85;">${etalonEscape(label)}</div>`;
+    }
+
     function patchCompactCoachMode() {
         if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__compactCoachModePatchedV4) return;
 
@@ -11317,10 +11796,12 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
             const fallbackMoreHtml = finalTacticHtml === null
                 ? finalTacticMoreDetailsHtml(`${extras.signalHtml}${extras.decisionHtml}${extras.candidateHtml}`)
                 : '';
+            const knowledgeProvenanceHtml = buildKnowledgeProvenanceHtml(snapshot, primaryPresetName);
 
             return `
                 <div data-slf-rec-priority="1" data-slf-rec-section="combined" style="margin:5px 0;background:#151515;border:1px solid #444;border-radius:5px;color:#ddd;padding:9px;">
                     <div style="font-weight:bold;color:#75ff75;text-align:center;margin-bottom:7px;">Подсказка</div>
+                    ${knowledgeProvenanceHtml}
                     ${context ? `<div style="line-height:1.4;"><b style="color:#8fd3ff;">Ситуация:</b> ${this.escapeHtml(context)}</div>` : ''}
                     ${finalTacticHtml !== null
                         ? finalTacticHtml
@@ -24549,6 +25030,258 @@ Team4AlterCurrentSeasonMinutesBridge.start();
 // <<< src/modules/team-management/team4-alter-current-season-minutes-fix.js
 
 
+// >>> src/modules/team-management/team4-championship-table-swap.js
+// Team Management: Team4 championship table swap (issue #385)
+// UI-only patch. Fetches the championship table from roster.php and mounts it as a card
+// in the left column right below the lineup pitch; the infirmary / disqualified /
+// loan-request cards move to the bottom of the right column. After a successful mount
+// the legacy #slf-team4-championship-table side panel is removed from the DOM.
+// Stable cache keys: no storage/schema version changes.
+
+const SLFTeam4ChampionshipTableSwap = (() => {
+    'use strict';
+
+    const LOG_PREFIX = '[SLF Team4 Championship Swap]';
+    const STYLE_ID = 'slf-team4-championship-table-swap-style';
+    const MOUNT_FLAG = 'slfTeam4ChampionshipSwap';
+    const LEGACY_PANEL_ID = 'slf-team4-championship-table';
+    const CARD_CLASS = 'slf-champ';
+    const MOVED_CONTAINER_CLASS = 'slf-moved';
+    const OWN_ROW_CLASS = 'slf-own';
+    const ROSTER_URL = '/roster.php';
+    const READY_POLL_MS = 300;
+    const READY_MAX_TRIES = 40; // ~12s of retries, then keep the native layout
+    const MOVE_CARD_TITLES = ['Лазарет клуба', 'Дисквалифицированные игроки', 'Ваши заявки на аренду'];
+
+    const norm = value => String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+
+    function isTeam4MainPage() {
+        const params = new URLSearchParams(location.search || '');
+        return /\/team4\.php$/i.test(location.pathname || '') && !params.get('action');
+    }
+
+    function isFm2026Design() {
+        return document.documentElement.dataset.slfDesign === 'fm2026'
+            || Boolean(document.querySelector('.fm-stage .content-ui__wrapper'));
+    }
+
+    function isAlreadyMounted() {
+        return document.documentElement.dataset[MOUNT_FLAG] === '1'
+            || Boolean(document.querySelector(`.${CARD_CLASS}`));
+    }
+
+    function ensureStyle() {
+        if (document.getElementById(STYLE_ID)) return;
+        const style = document.createElement('style');
+        style.id = STYLE_ID;
+        style.textContent = `
+            .slf-champ .roster_champ_table { padding:0; }
+            .slf-champ table { width:100%; border-collapse:collapse; font-size:13px; color:#e8eaf3; }
+            .slf-champ td { padding:6px 8px; border-bottom:1px solid #353849; }
+            .slf-champ tr:nth-child(odd) { background:#232530; }
+            .slf-champ tr:nth-child(even) { background:#1e2029; }
+            .slf-champ .rstr-thead td { color:#9aa0b5; font-weight:600; }
+            .slf-champ .top-head { display:flex; align-items:center; padding:6px 8px; font-weight:600; color:#e8eaf3; }
+            .slf-champ .top-head .rstr-a { color:#e8eaf3; text-decoration:none; }
+            .slf-champ tr.slf-own { background:rgba(43,217,124,.14); }
+            .slf-moved { margin-top:12px; }
+            .slf-moved .pcard { margin-bottom:12px; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function resolveTeamId() {
+        const fromUrl = (location.search.match(/[?&]id=(\d+)/) || [])[1];
+        if (fromUrl) return fromUrl;
+        // team4.php shows the active club — fall back to the club card link.
+        const link = document.querySelector('.fm-card--club a[href*="/roster.php?id="]');
+        const href = link?.getAttribute('href') || link?.href || '';
+        return (href.match(/[?&]id=(\d+)/) || [])[1] || '';
+    }
+
+    function resolveClubName() {
+        const card = document.querySelector('.fm-card--club');
+        return norm(card?.querySelector('.team-name')?.textContent || card?.querySelector('a')?.textContent || '');
+    }
+
+    function findMovedCards(dash) {
+        return [...dash.querySelectorAll('.pcard:not(.team-lineup):not(.slf-champ)')].filter(card => {
+            const head = card.querySelector('.pcard__head2');
+            if (!head) return false;
+            const title = norm(head.textContent);
+            return MOVE_CARD_TITLES.some(candidate => title.includes(candidate));
+        });
+    }
+
+    function resolveTeamContent(dash) {
+        const teamBody = dash.closest('.team-body');
+        return teamBody?.querySelector(':scope > .team-content')
+            || document.querySelector('.team-body .team-content');
+    }
+
+    function rowLinksToTeam(row, teamId) {
+        return [...row.querySelectorAll('a[href]')].some(anchor => {
+            try {
+                const url = new URL(anchor.getAttribute('href') || '', location.origin);
+                // Club links only (roster.php/team.php) — player.php links carry their own id space.
+                return /\/(?:roster|team)\.php$/i.test(url.pathname) && url.searchParams.get('id') === teamId;
+            } catch (_) {
+                return false;
+            }
+        });
+    }
+
+    function rowShowsClubName(row, clubName) {
+        if (!clubName) return false;
+        const clubNameLower = clubName.toLowerCase();
+        return [...row.querySelectorAll('td,th')].some(cell => norm(cell.textContent).toLowerCase() === clubNameLower);
+    }
+
+    function markOwnRow(box, teamId, clubName) {
+        const rows = [...box.querySelectorAll('tr')];
+        let ownRows = teamId ? rows.filter(row => rowLinksToTeam(row, teamId)) : [];
+        if (!ownRows.length) {
+            // Name fallback only when unambiguous: exactly one row carries the club name
+            // (textContent pierces plain and <b>-wrapped name cells alike).
+            const byName = rows.filter(row => rowShowsClubName(row, clubName));
+            if (byName.length === 1) ownRows = byName;
+        }
+        ownRows.forEach(row => row.classList.add(OWN_ROW_CLASS));
+    }
+
+    function prepareTable(box, teamId, clubName) {
+        // Toggle buttons are driven by roster.js and do not work inside the mounted card:
+        // drop the buttons themselves, keep the cells, and force every row visible
+        // (no compact mode — clear any inline display:none hiding rows).
+        box.querySelectorAll('.champ-toggle').forEach(button => button.remove());
+        // Live roster header ships an unsized inline SVG icon and a button container;
+        // neither has stylesheet support on team4.php — the SVG renders as a huge
+        // placeholder block. Option Б (owner-approved): strip both, keep the league link.
+        box.querySelector('.top-head .rstr-ico')?.remove();
+        box.querySelector('.top-head .rstr-head__end')?.remove();
+        box.querySelectorAll('tr').forEach(row => { row.style.display = ''; });
+        if (!box.querySelector('.top-head')) {
+            const head = document.createElement('div');
+            head.className = 'top-head';
+            head.textContent = 'Турнирная таблица';
+            box.prepend(head);
+        }
+        markOwnRow(box, teamId, clubName);
+        return box;
+    }
+
+    function mount(dash, lineup, box) {
+        // Resolve the right column before any mutation so a missing anchor fails
+        // without detaching the moved cards from the page.
+        const teamContent = resolveTeamContent(dash);
+        if (!teamContent) throw new Error('right column .team-content not found');
+
+        const card = document.createElement('div');
+        card.className = `pcard ${CARD_CLASS}`;
+        card.appendChild(box);
+        lineup.insertAdjacentElement('afterend', card);
+
+        const moved = document.createElement('div');
+        moved.className = MOVED_CONTAINER_CLASS;
+        findMovedCards(dash).forEach(candidate => moved.appendChild(candidate));
+        if (moved.children.length) teamContent.appendChild(moved);
+    }
+
+    function waitReady(onReady) {
+        let settled = false;
+        let tries = 0;
+        let timer = 0;
+        const observer = typeof MutationObserver === 'function' ? new MutationObserver(() => check(false)) : null;
+
+        function stop() {
+            if (observer) observer.disconnect();
+            if (timer) {
+                clearTimeout(timer);
+                timer = 0;
+            }
+        }
+
+        function check(fromTimer) {
+            if (settled) return;
+            const dash = document.querySelector('.team-body > .team-dash') || document.querySelector('.team-dash');
+            const lineup = dash?.querySelector('.pcard.team-lineup');
+            if (dash && lineup && findMovedCards(dash).length === MOVE_CARD_TITLES.length) {
+                settled = true;
+                stop();
+                onReady(dash, lineup);
+                return;
+            }
+            if (fromTimer) {
+                tries += 1;
+                if (tries > READY_MAX_TRIES) {
+                    settled = true;
+                    stop();
+                    console.warn(LOG_PREFIX, 'team4 layout anchors did not appear, page left untouched');
+                    return;
+                }
+            }
+            if (!timer) timer = setTimeout(() => { timer = 0; check(true); }, READY_POLL_MS);
+        }
+
+        if (observer) observer.observe(document.documentElement, { childList: true, subtree: true });
+        check(false);
+    }
+
+    function suppressLegacyPanel() {
+        const panel = document.getElementById(LEGACY_PANEL_ID);
+        if (!panel) return;
+        // Disarm the legacy placement controller before detaching: its resize and
+        // ResizeObserver closures keep the panel reference alive and re-toggle the
+        // external/overflow classes on every resize; the dataset flag is their only
+        // guard and keeps working on the detached node.
+        panel.dataset.slfRosterSideActive = '0';
+        // Mirror the legacy module's own cleanup branch: once the panel is detached,
+        // that branch is unreachable (applyLayoutState early-returns on a detached
+        // panel), so the 366px grid and overflow classes would otherwise stick.
+        const host = document.querySelector('.team-body');
+        if (host) {
+            host.classList.remove('slf-team4-championship-layout', 'slf-team4-championship-roster-side', 'slf-team4-championship-external');
+            if (host.dataset.slfChampGenericContent === '1') host.classList.remove('team_general_content');
+            host.closest('.content-ui__wrapper')?.classList.remove('slf-team4-championship-overflow');
+        }
+        panel.remove();
+    }
+
+    async function mountFromRoster(dash, lineup) {
+        const teamId = resolveTeamId();
+        if (!teamId) throw new Error('team id not found (no ?id= in url, no .fm-card--club roster link)');
+        const response = await fetch(`${ROSTER_URL}?id=${teamId}`, { credentials: 'include', cache: 'no-store' });
+        if (!response.ok) throw new Error(`roster.php responded with HTTP ${response.status}`);
+        const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const box = doc.querySelector('.roster_champ_table');
+        if (!box) throw new Error('.roster_champ_table not found in roster.php response');
+        if (isAlreadyMounted()) return;
+
+        prepareTable(box, teamId, resolveClubName());
+        ensureStyle();
+        mount(dash, lineup, box);
+        suppressLegacyPanel();
+        document.documentElement.dataset[MOUNT_FLAG] = '1';
+    }
+
+    function start() {
+        if (!isTeam4MainPage() || !isFm2026Design() || isAlreadyMounted()) return;
+        waitReady((dash, lineup) => {
+            mountFromRoster(dash, lineup).catch(error => {
+                console.warn(LOG_PREFIX, 'mount failed, native layout kept:', error);
+            });
+        });
+    }
+
+    const api = { isTeam4MainPage, isFm2026Design, resolveTeamId, resolveClubName, findMovedCards, prepareTable, mount, start };
+    window.SLFTeam4ChampionshipTableSwap = api;
+    return api;
+})();
+
+SLFTeam4ChampionshipTableSwap.start();
+// <<< src/modules/team-management/team4-championship-table-swap.js
+
+
 // >>> src/modules/team-management/team4-form-saved-choice-notice.js
 // Team Management: Team4 form saved-choice notice
 // UI-only patch. Stable cache keys: no storage/schema version changes.
@@ -25680,15 +26413,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.344',
-        scriptVersion: '4.4.344',
+        version: '4.4.364',
+        scriptVersion: '4.4.364',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.344',
+        scriptVersion: '4.4.364',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
