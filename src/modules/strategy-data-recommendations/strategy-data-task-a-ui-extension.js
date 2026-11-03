@@ -590,6 +590,52 @@
         });
     }
 
+    // Knowledge-pack provenance (specs/381): one display-only line under the
+    // coach heading attributing the DISPLAYED preset (final merged action,
+    // not blindly the original winner) to matched knowledge-pack seed rules.
+    // Seed priors are labeled hypotheses, not outcome evidence. Read-only:
+    // a completed pack fetch affects the NEXT hint, never this render.
+    function resolveDisplayedKnowledgePreset(snapshot, primaryPresetName) {
+        const finalTactic = snapshot?.ruleDecision?.finalTactic;
+        if (finalTactic && finalTactic.base !== 'current_tactic' && finalTactic.presetId) return String(finalTactic.presetId);
+        return resolveRecommendedPresetName(snapshot, primaryPresetName);
+    }
+
+    function buildKnowledgeProvenanceHtml(snapshot, primaryPresetName) {
+        let matched = false;
+        try {
+            const decision = snapshot?.ruleDecision || null;
+            const preset = resolveDisplayedKnowledgePreset(snapshot, primaryPresetName);
+            // Prefer the decision's OWN computed adjustment (same-decision data):
+            // the candidate parts carry the boundedEvidenceAdjustment the policy
+            // actually applied. This never diverges from the decision, unlike a
+            // live re-evaluation on the raw moment.context (whose normalized
+            // fields — e.g. signal-derived underPressure — can differ). Fall back
+            // to a live assessment only when the candidate parts are unavailable.
+            const candidate = Array.isArray(decision?.candidates)
+                ? decision.candidates.find(item => item && item.preset === preset)
+                : null;
+            if (candidate && candidate.parts && typeof candidate.parts.boundedEvidenceAdjustment === 'number') {
+                matched = candidate.parts.boundedEvidenceAdjustment !== 0;
+            } else {
+                const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+                const assessment = registry && typeof registry.knowledgeAssessment === 'function'
+                    ? registry.knowledgeAssessment({
+                        preset,
+                        situation: decision?.situation || decision?.moment?.context?.gameMode || '',
+                        context: decision?.moment?.context || null
+                    })
+                    : null;
+                matched = Boolean(assessment && assessment.source === 'seed'
+                    && Array.isArray(assessment.ruleIds) && assessment.ruleIds.length > 0);
+            }
+        } catch (_) {
+            matched = false; // attribution unavailable → none-variant
+        }
+        const label = matched ? 'База: seed (гипотеза)' : 'База: нет совпавших данных';
+        return `<div style="line-height:1.4;opacity:.85;">${etalonEscape(label)}</div>`;
+    }
+
     function patchCompactCoachMode() {
         if (typeof RecommendationEngine === 'undefined' || RecommendationEngine.__compactCoachModePatchedV4) return;
 
@@ -613,10 +659,12 @@
             const fallbackMoreHtml = finalTacticHtml === null
                 ? finalTacticMoreDetailsHtml(`${extras.signalHtml}${extras.decisionHtml}${extras.candidateHtml}`)
                 : '';
+            const knowledgeProvenanceHtml = buildKnowledgeProvenanceHtml(snapshot, primaryPresetName);
 
             return `
                 <div data-slf-rec-priority="1" data-slf-rec-section="combined" style="margin:5px 0;background:#151515;border:1px solid #444;border-radius:5px;color:#ddd;padding:9px;">
                     <div style="font-weight:bold;color:#75ff75;text-align:center;margin-bottom:7px;">Подсказка</div>
+                    ${knowledgeProvenanceHtml}
                     ${context ? `<div style="line-height:1.4;"><b style="color:#8fd3ff;">Ситуация:</b> ${this.escapeHtml(context)}</div>` : ''}
                     ${finalTacticHtml !== null
                         ? finalTacticHtml
