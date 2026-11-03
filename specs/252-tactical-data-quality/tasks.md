@@ -58,3 +58,22 @@ The parser compatibility change is merged to protected `main`, exact-head canoni
 ### Follow-up Definition of Done (v8)
 
 Tactical Selector v8 source is merged to `main` with exactly 10 active production presets and no Compact Counter in active selection/UI; no tactical slider/formation value changed for retained presets; P03 and Tactical Lab v2+ remain untouched; exact-head canonical CI is green; and userscript release provenance is verified. Post-change telemetry is segmentable as v8.
+
+## Follow-up: entry-context recovery and availability counters (2026-11-03)
+
+- [x] Recover the exporter entry context from completed state and exit-event extras when the activation lifecycle snapshot is missing.
+- [x] Keep recovery selection-only: empty dict keeps precedence, no field merging, no inference from exit score/minute.
+- [x] Add count-only `entryContextFieldAvailability` per-field counters.
+- [x] Distinguish advisor absence reasons (`noRuleDecisionRecorded` vs `recommendationPresetMissing`).
+- [x] Guard client `scoreContext`: observed side only with a two-entry `teams` array and `myTeam`; finite-number score validation; valid inputs unchanged.
+- [x] Keep strict `entryCompleteness` semantics and existing report keys unchanged.
+- [x] Extend the Python Tactical Lab exporter regression with cases (a)–(f).
+- [x] Update spec, plan, tasks and Tactical Lab audit documentation.
+- [ ] Verify exact branch diff remains inside approved scope.
+- [ ] Require exact-head `SLF CI / ci = SUCCESS` (includes the browser suite).
+- [ ] Merge and verify automatic userscript release.
+- [ ] Leave VPS exporter deployment unperformed pending separate operational approval.
+
+### Follow-up Definition of Done
+
+The exporter recovery order, additive availability counters, advisor absence reasons and client `scoreContext` guard are merged to protected `main` with exact-head canonical CI green; strict `entryCompleteness` semantics and historical records are unchanged; and no VPS exporter deployment has been performed.

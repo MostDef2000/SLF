@@ -184,6 +184,182 @@ assert broken_outcome["unresolvedResultReasons"] == {"missing_or_invalid_score":
 assert broken_quality["counts"]["unresolvedResultReasons"] == {"missing_or_invalid_score": 1}
 assert broken_quality["coverage"]["finishedOutcomeResolution"] == 0
 
+# --- SLF #252 tactical data-quality: entry-context recovery, per-field counters,
+# --- advisor absence reasons. Strict entryCompleteness semantics are unchanged.
+
+# (a) activation event missing + completed.entryContext present -> entry context recovered
+recovered_assignment = "tactical_lab_assignment|game-secret-3|EXP-561-P03-0002"
+recovered_state = {
+    "schema": "slf_tactical_lab_match_v1",
+    "populationVersion": "slf_tactical_lab_561_p03",
+    "assignment": {
+        "assignmentId": recovered_assignment,
+        "experimentId": "EXP-561-P03-0002",
+        "populationVersion": "slf_tactical_lab_561_p03",
+        "genomeFingerprint": "tlab1-recovered",
+    },
+    "activation": None,
+    "completed": {
+        "experimentId": "EXP-561-P03-0002",
+        "durationMinutes": 12,
+        "elapsedWallClockMs": 60000,
+        "exitReason": "match_finished",
+        "entryContext": entry,
+        "exitContext": exit_context,
+    },
+}
+recovered_summary, recovered_quality = lab.build_outputs(
+    [snapshot("recovered-s0", "game-secret-3", "EXP-561-P03-0002", recovered_assignment, state=recovered_state)],
+    [],
+)
+recovered_row = recovered_summary["experiments"][0]
+assert recovered_row["activations"] == 1
+assert recovered_row["completedPhases"] == 1
+assert recovered_row["entryContext"]["minuteBuckets"] == {"45-59": 1}
+assert recovered_row["entryContext"]["previousPreset"]["Arteta_Control433_bal3"] == 1
+assert recovered_row["entryContext"]["scoreState"] == {"winning": 1}
+assert recovered_row["entryContext"]["homeAway"] == {"home": 1}
+assert recovered_quality["coverage"]["entryContextComplete"] == 1
+
+# (a2) precedence: an empty activation-event context stays selected; a lower-priority
+# completed.entryContext must not be field-merged into it.
+precedence_assignment = "tactical_lab_assignment|game-secret-6|EXP-561-P03-0007"
+precedence_state = {
+    "schema": "slf_tactical_lab_match_v1",
+    "populationVersion": "slf_tactical_lab_561_p03",
+    "assignment": {
+        "assignmentId": precedence_assignment,
+        "experimentId": "EXP-561-P03-0007",
+        "populationVersion": "slf_tactical_lab_561_p03",
+        "genomeFingerprint": "tlab1-precedence",
+    },
+    "activation": None,
+    "completed": {"entryContext": entry, "exitContext": exit_context},
+}
+precedence_summary, _ = lab.build_outputs([
+    snapshot("prec-s0", "game-secret-6", "EXP-561-P03-0007", precedence_assignment, state=precedence_state),
+    snapshot("prec-s1", "game-secret-6", "EXP-561-P03-0007", precedence_assignment, "activation", {}, {}),
+], [])
+precedence_row = precedence_summary["experiments"][0]
+assert precedence_row["entryContext"]["minuteBuckets"] == {"unknown": 1}
+assert "45-59" not in precedence_row["entryContext"]["minuteBuckets"]
+assert precedence_row["entryContext"]["previousPreset"] == {"unknown": 1}
+
+# (b) only exit event extra.entryContext -> entry context recovered
+exit_only_assignment = "tactical_lab_assignment|game-secret-4|EXP-561-P03-0003"
+exit_only_summary, exit_only_quality = lab.build_outputs(
+    [snapshot("exit-only-s0", "game-secret-4", "EXP-561-P03-0003", exit_only_assignment, "exit", exit_context, {
+        "durationMinutes": 19,
+        "entryContext": entry,
+    })],
+    [],
+)
+exit_only_row = exit_only_summary["experiments"][0]
+assert exit_only_row["activations"] == 1
+assert exit_only_row["entryContext"]["minuteBuckets"] == {"45-59": 1}
+assert exit_only_row["entryContext"]["homeAway"] == {"home": 1}
+assert exit_only_quality["coverage"]["entryContextComplete"] == 1
+
+# (c) nothing recoverable -> per-field counters show missing, strict completeness unchanged
+unrecoverable_assignment = "tactical_lab_assignment|game-secret-5|EXP-561-P03-0005"
+empty_entry = {
+    "minute": None,
+    "bucket": None,
+    "scoreState": "unknown",
+    "scoreDiff": None,
+    "homeAway": "unknown",
+    "strengthBucket": "unknown",
+    "previous": {},
+    "productionRecommendation": None,
+}
+unrec_summary, unrec_quality = lab.build_outputs(
+    [snapshot("unrec-s0", "game-secret-5", "EXP-561-P03-0005", unrecoverable_assignment, "activation", empty_entry, {})],
+    [],
+)
+unrec_row = unrec_summary["experiments"][0]
+assert unrec_row["activations"] == 1
+assert unrec_row["entryContext"]["minuteBuckets"] == {"unknown": 1}
+assert unrec_quality["coverage"]["entryContextComplete"] == 0
+unrec_availability = unrec_quality["entryContextFieldAvailability"]
+assert unrec_availability["samples"] == 1
+for field in ("minuteBucket", "scoreState", "homeAway", "previousPreset", "productionRecommendation"):
+    assert unrec_availability[field] == {"available": 0, "missing": 1}, field
+assert unrec_quality["productionRecommendationAbsenceReasons"] == {
+    "noRuleDecisionRecorded": 1,
+    "recommendationPresetMissing": 0,
+}
+
+# (d) per-field availability counters + advisor absence reason counts
+null_preset_entry = {**entry, "productionRecommendation": {"presetId": None, "margin": 0}}
+partial_entry = {
+    "minute": None,
+    "bucket": None,
+    "scoreState": "unknown",
+    "scoreDiff": None,
+    "homeAway": "unknown",
+    "strengthBucket": "even",
+    "previous": {"tacticFingerprint": "manual-fingerprint"},
+    "productionRecommendation": None,
+}
+advisor_snapshots = [
+    snapshot("adv-s0", "game-secret-7", "EXP-561-P03-0006", "tactical_lab_assignment|game-secret-7|EXP-561-P03-0006", "activation", entry, {}),
+    snapshot("adv-s1", "game-secret-8", "EXP-561-P03-0006", "tactical_lab_assignment|game-secret-8|EXP-561-P03-0006", "activation", null_preset_entry, {}),
+    snapshot("adv-s2", "game-secret-9", "EXP-561-P03-0006", "tactical_lab_assignment|game-secret-9|EXP-561-P03-0006", "activation", partial_entry, {}),
+]
+advisor_summary, advisor_quality = lab.build_outputs(advisor_snapshots, [])
+advisor_row = advisor_summary["experiments"][0]
+assert advisor_row["entryContext"]["minuteBuckets"] == {"45-59": 2, "unknown": 1}
+advisor_availability = advisor_quality["entryContextFieldAvailability"]
+assert advisor_availability["samples"] == 3
+assert advisor_availability["minuteBucket"] == {"available": 2, "missing": 1}
+assert advisor_availability["scoreState"] == {"available": 2, "missing": 1}
+assert advisor_availability["homeAway"] == {"available": 2, "missing": 1}
+assert advisor_availability["previousPreset"] == {"available": 3, "missing": 0}
+assert advisor_availability["productionRecommendation"] == {"available": 1, "missing": 2}
+assert advisor_quality["productionRecommendationAbsenceReasons"] == {
+    "noRuleDecisionRecorded": 1,
+    "recommendationPresetMissing": 1,
+}
+assert advisor_quality["coverage"]["entryContextComplete"] == 0.3333
+
+# (e) strict entryCompleteness semantics unchanged on the existing fixtures
+assert quality["coverage"]["entryContextComplete"] == 1
+assert quality["coverage"]["exitContextComplete"] == 1
+assert quality["coverage"]["knownPreviousTactic"] == 1
+assert broken_quality["coverage"]["entryContextComplete"] == 1
+assert recovered_quality["coverage"]["entryContextComplete"] == 1
+assert exit_only_quality["coverage"]["entryContextComplete"] == 1
+
+# (f) privacy flags stay false on every sanitized output; counters are counts only
+for payload in (summary, quality, recovered_summary, recovered_quality, exit_only_summary,
+                exit_only_quality, unrec_summary, unrec_quality, advisor_summary, advisor_quality):
+    assert payload["privacy"]["containsRawGameId"] is False
+    assert payload["privacy"]["containsAssignmentId"] is False
+    assert payload["privacy"]["containsEventKey"] is False
+    assert payload["privacy"]["containsTeamNames"] is False
+availability_all = quality["entryContextFieldAvailability"]
+assert availability_all["samples"] == 1
+for field in ("minuteBucket", "scoreState", "homeAway", "previousPreset", "productionRecommendation"):
+    assert availability_all[field] == {"available": 1, "missing": 0}, field
+    assert all(isinstance(value, int) for value in availability_all[field].values())
+assert quality["productionRecommendationAbsenceReasons"] == {
+    "noRuleDecisionRecorded": 0,
+    "recommendationPresetMissing": 0,
+}
+assert all(isinstance(value, int) for value in quality["productionRecommendationAbsenceReasons"].values())
+
+serialized_new = json.dumps({
+    "recovered": [recovered_summary, recovered_quality],
+    "exitOnly": [exit_only_summary, exit_only_quality],
+    "unrecoverable": [unrec_summary, unrec_quality],
+    "advisor": [advisor_summary, advisor_quality],
+    "precedence": precedence_summary,
+}, ensure_ascii=False)
+for secret in ("game-secret-3", "game-secret-4", "game-secret-6", "game-secret-7", "game-secret-8", "game-secret-9",
+               recovered_assignment, exit_only_assignment, precedence_assignment, unrecoverable_assignment,
+               "event-activation", "event-exit"):
+    assert secret not in serialized_new, secret
+
 serialized = json.dumps({"summary": summary, "quality": quality}, ensure_ascii=False)
 for secret in ("game-secret-1", assignment, "result-secret", "event-activation"):
     assert secret not in serialized, secret

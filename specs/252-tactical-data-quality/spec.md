@@ -93,3 +93,22 @@ Interpretation: this change may retire a preset from production selection, but i
 - Selector keeps at least two eligible ranked alternatives with score/margin/confidence diagnostics.
 - Progression guards and emergency overrides remain deterministic.
 - Existing Tactical Lab P03 assignments and population identity remain intact.
+
+## Follow-up: entry-context recovery and availability counters (2026-11-03)
+
+Status: Approved implementation
+Base: 86e3b82fa212b2a73d7db3a288af483cb47b7b1d
+
+### Required behavior
+
+- Tactical Lab exporter entry-context recovery: when the activation lifecycle snapshot is missing, the entry context is recovered by selecting the first dict-valued observation in a fixed order — activation event `context` → activation state `entryContext` → completed state `entryContext` → exit event `extra.entryContext`. An existing empty dict keeps precedence over lower-priority observations; contexts are never field-merged across observations; the entry context is never inferred from the exit score or exit minute.
+- Additive, count-only per-field availability diagnostics under `entryContextFieldAvailability`: `samples` plus `minuteBucket`, `scoreState`, `homeAway`, `previousPreset` and `productionRecommendation`, each reported as `available`/`missing` counts. A field is available when it is present and usable under the same missing-value rule as `completeness()` (`None`/`''`/`'unknown'` count as missing); `previousPreset` follows the existing `knownPreviousTactic` semantics (a named preset or a manual tactic fingerprint counts as available).
+- Production Advisor recommendation absence reasons are distinguished and reported count-only under `productionRecommendationAbsenceReasons`: `noRuleDecisionRecorded` (no recommendation object recorded) versus `recommendationPresetMissing` (a recommendation object without a usable preset).
+- Client `scoreContext` guard in Tactical Lab v1: home/away is observed evidence, never a default — the side is attributed only when the `teams` array has exactly two entries and `myTeam` is present; otherwise `homeAway` is `unknown` (previously a missing/short `teams` array silently assumed `away`). Score values must be finite numbers before any comparison, so coercion of empty/null values can no longer fabricate a draw; valid inputs produce unchanged `scoreState`/`scoreDiff`/`homeAway` output.
+- Strict `entryCompleteness` metric semantics are unchanged; the new counters and absence reasons are additive report keys only.
+
+### Non-functional requirements
+
+- No historical data rewrite and no schema/storage change beyond additive summary keys.
+- Counters are counts only; the existing privacy sanitization flags remain false on all sanitized outputs.
+- No P03 population/weights change and no production preset change.

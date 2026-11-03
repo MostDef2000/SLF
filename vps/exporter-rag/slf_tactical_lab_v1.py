@@ -264,14 +264,24 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
         activation_state = row.get("activation") if isinstance(row.get("activation"), dict) else None
         completed_state = row.get("completed") if isinstance(row.get("completed"), dict) else None
 
+        # Entry-context recovery (issue #252): the producer copies the entry
+        # context into completed.entryContext and into the exit-event extras,
+        # so a missing activation lifecycle snapshot must not lose the entry
+        # context. Select the first dict-valued observation in this fixed
+        # order; never field-merge contexts from different observations and
+        # never infer entry context from exit score/minute. An existing empty
+        # dict keeps precedence over lower-priority observations.
+        exit_extra = exit_event.get("extra") if isinstance(exit_event, dict) and isinstance(exit_event.get("extra"), dict) else {}
         entry = activation_event.get("context") if isinstance(activation_event, dict) and isinstance(activation_event.get("context"), dict) else None
         if entry is None and activation_state:
             entry = activation_state.get("entryContext") if isinstance(activation_state.get("entryContext"), dict) else None
+        if entry is None and completed_state:
+            entry = completed_state.get("entryContext") if isinstance(completed_state.get("entryContext"), dict) else None
+        if entry is None and isinstance(exit_extra.get("entryContext"), dict):
+            entry = exit_extra["entryContext"]
         exit_context = exit_event.get("context") if isinstance(exit_event, dict) and isinstance(exit_event.get("context"), dict) else None
         if exit_context is None and completed_state:
             exit_context = completed_state.get("exitContext") if isinstance(completed_state.get("exitContext"), dict) else None
-
-        exit_extra = exit_event.get("extra") if isinstance(exit_event, dict) and isinstance(exit_event.get("extra"), dict) else {}
         duration = exit_extra.get("durationMinutes")
         if duration is None and completed_state:
             duration = completed_state.get("durationMinutes")
@@ -384,6 +394,39 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
     exit_complete = sum(completeness(row, ("minute", "scoreState", "next.tacticSource")) for row in exit_contexts)
     unknown_previous = sum(safe_previous(row) == "unknown" for row in entry_contexts)
 
+    # Per-field availability diagnostics (issue #252): counts only, additive
+    # keys. A field is available when it is present and usable under the same
+    # missing-value rule as completeness() (None/''/'unknown' count as
+    # missing). previousPreset follows the existing knownPreviousTactic
+    # semantics: a named preset or a manual tactic fingerprint counts as
+    # available. The advisor recommendation absence reasons distinguish a
+    # missing rule decision from a recommendation object without a preset.
+    entry_field_samples = len(entry_contexts)
+
+    def entry_field_availability(predicate) -> Dict[str, int]:
+        available = sum(1 for row in entry_contexts if predicate(row))
+        return {"available": available, "missing": entry_field_samples - available}
+
+    advisor_no_decision = 0
+    advisor_preset_missing = 0
+    advisor_available = 0
+    for row in entry_contexts:
+        recommendation = row.get("productionRecommendation")
+        if not isinstance(recommendation, dict):
+            advisor_no_decision += 1
+        elif completeness(recommendation, ("presetId",)):
+            advisor_available += 1
+        else:
+            advisor_preset_missing += 1
+    entry_field_counters = {
+        "samples": entry_field_samples,
+        "minuteBucket": entry_field_availability(lambda row: minute_bucket(row.get("minute")) != "unknown"),
+        "scoreState": entry_field_availability(lambda row: completeness(row, ("scoreState",))),
+        "homeAway": entry_field_availability(lambda row: completeness(row, ("homeAway",))),
+        "previousPreset": entry_field_availability(lambda row: safe_previous(row) != "unknown"),
+        "productionRecommendation": {"available": advisor_available, "missing": advisor_no_decision + advisor_preset_missing},
+    }
+
     summary = {
         "schema": SUMMARY_SCHEMA,
         "generatedAt": now_iso(),
@@ -433,6 +476,11 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
             "entryContextComplete": ratio(entry_complete, len(entry_contexts)),
             "exitContextComplete": ratio(exit_complete, len(exit_contexts)),
             "knownPreviousTactic": ratio(len(entry_contexts) - unknown_previous, len(entry_contexts)),
+        },
+        "entryContextFieldAvailability": entry_field_counters,
+        "productionRecommendationAbsenceReasons": {
+            "noRuleDecisionRecorded": advisor_no_decision,
+            "recommendationPresetMissing": advisor_preset_missing,
         },
         "readiness": {
             "hasAssignments": assignment_count > 0,

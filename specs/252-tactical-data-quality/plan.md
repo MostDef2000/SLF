@@ -56,3 +56,23 @@ The production evidence proves missing final scores but does not expose raw prod
 - `Compact_Counter_def3` can never be recommended because it is absent from the direction policy's active set; `hardVeto` rejects it explicitly.
 - Tactical Lab P03 population/assignment identity is not touched; only the manual dropdown expectation changes in the browser test.
 - The `browser-e2e` dropdown assertion is re-derived from `ui-layer.js` + `preset-storage.js`, not guessed.
+
+## Follow-up plan: entry-context recovery and availability counters (2026-11-03)
+
+1. In the Tactical Lab exporter, recover the entry context when the activation lifecycle snapshot is missing by selecting the first dict-valued observation in a fixed order (activation event `context` → activation state `entryContext` → completed state `entryContext` → exit event `extra.entryContext`); an existing empty dict keeps precedence, contexts are never field-merged, and nothing is inferred from the exit score or exit minute.
+2. Add count-only per-field availability counters (`entryContextFieldAvailability`) and advisor absence reasons (`noRuleDecisionRecorded` vs `recommendationPresetMissing`) as additive summary keys, reusing the `completeness()` missing-value rule and the existing `knownPreviousTactic` semantics for `previousPreset`.
+3. Guard the client `scoreContext` in `tactical-lab-v1.js`: attribute home/away only with a two-entry `teams` array and a present `myTeam` (previously a missing/short array silently assumed `away`), and require finite numeric `home`/`away` before comparison (previously `Number('')`/`Number(null)` coerced to 0 and could fabricate a draw); valid inputs are unchanged.
+4. Keep strict `entryCompleteness` semantics and all existing report keys unchanged.
+
+### Verification
+
+- `python3 vps/exporter-rag/test_slf_tactical_lab_v1.py` — passes; covers recovery from completed state (a), empty-dict precedence without field merging (a2), recovery from exit-event extras (b), unrecoverable rows with per-field missing counts (c), per-field counters and advisor absence reasons (d), unchanged strict `entryCompleteness` (e), and privacy flags plus count-only counters (f).
+- `node tools/test-tactical-situation-diversity.mjs` — passes (loads `tactical-lab-v1.js` source).
+- `node --check src/modules/tactics-presets/tactical-lab-v1.js` — passes.
+- Browser exact-userscript suite via canonical `SLF CI / ci`.
+
+### Risk controls
+
+- Recovery is selection of an already-recorded context, not synthesis: no context is invented and no field is merged from different observations.
+- New summary keys are additive; existing keys and the strict `entryCompleteness` semantics are unchanged.
+- The client guard changes only the unknown-input path; valid inputs produce identical output.

@@ -340,14 +340,23 @@
         function scoreContext(snapshot) {
             const score = snapshot?.score || {};
             const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
-            const isHome = Number(teams[0]) === Number(snapshot?.myTeam);
-            const home = Number(score.home);
-            const away = Number(score.away);
-            if (!Number.isFinite(home) || !Number.isFinite(away) || !snapshot?.myTeam) {
-                return {scoreState:'unknown',scoreDiff:null,homeAway:snapshot?.myTeam?(isHome?'home':'away'):'unknown'};
+            const myTeam = snapshot?.myTeam;
+            // Side is observed evidence, never a default: with a missing/short
+            // teams array the old Number(teams[0]) === Number(myTeam) comparison
+            // produced NaN === myTeam -> false and silently assumed 'away'.
+            const sidesKnown = teams.length === 2 && myTeam != null;
+            const isHome = sidesKnown ? Number(teams[0]) === Number(myTeam) : false;
+            // readScore() is fail-closed, but guard the coercion path anyway:
+            // Number('') and Number(null) coerce to 0 and would fabricate a
+            // draw. Raw values must be finite numbers (issue #309 convention)
+            // before any numeric comparison.
+            const isScoreValue = value => typeof value === 'number' && Number.isFinite(value);
+            const scoreValid = isScoreValue(score.home) && isScoreValue(score.away);
+            if (!sidesKnown || !scoreValid) {
+                return {scoreState:'unknown',scoreDiff:null,homeAway:sidesKnown?(isHome?'home':'away'):'unknown'};
             }
-            const myGoals = isHome ? home : away;
-            const oppGoals = isHome ? away : home;
+            const myGoals = isHome ? score.home : score.away;
+            const oppGoals = isHome ? score.away : score.home;
             return {scoreState:myGoals>oppGoals?'winning':myGoals<oppGoals?'losing':'draw',scoreDiff:myGoals-oppGoals,homeAway:isHome?'home':'away'};
         }
         function teamStats(snapshot, own) {
