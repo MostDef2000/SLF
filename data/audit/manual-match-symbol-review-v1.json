@@ -69,11 +69,14 @@
       "classification": "ACTIVE_MANUAL_BOUNDARY",
       "allowedFiles": [
         "src/modules/manual-match-telemetry/manual-match-runtime.js",
-        "src/modules/manual-match-telemetry/manual-state-integrity.js"
+        "src/modules/manual-match-telemetry/manual-state-integrity.js",
+        "src/modules/manual-match-telemetry/snapshot-engine.js",
+        "src/modules/tactics-presets/tactical-lab-v1.js"
       ],
       "evidence": [
         "Prefers the new manual key and migrates a valid legacy record on read.",
-        "Stage 2 refactor (specs/002-refactoring-program): state integrity helpers moved verbatim to manual-state-integrity.js; references updated."
+        "Stage 2 refactor (specs/002-refactoring-program): state integrity helpers moved verbatim to manual-state-integrity.js; references updated.",
+        "data-linkage v1 (#397): finalPresetAttribution reads the persisted presetProgression copy and Tactical Lab reads the persisted last-decision record via the same reviewed read boundary; write path unchanged (persistManualState allowlist already covers both files)."
       ],
       "deletionStatus": "KEEP"
     },

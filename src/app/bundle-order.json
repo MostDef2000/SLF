@@ -563,9 +563,10 @@
             "file": "src/core/config.js",
             "symbols": [
               "CONFIG",
+              "PresetUsageTracker",
               "STATE",
-              "num",
-              "debugLog"
+              "debugLog",
+              "num"
             ],
             "phase": "runtime"
           },

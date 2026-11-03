@@ -386,6 +386,57 @@ const SnapshotEngine = {
         return isNumericScore(score.home) && isNumericScore(score.away);
     },
 
+    // data-linkage v1 (telemetry only): resolve the last applied production
+    // preset for this match so match_result rows carry preset attribution.
+    // Precedence: presetProgression (memory, then the persisted manual-state
+    // envelope copy of the same record — survives page reloads), then the
+    // durable global usage tracker. Every source must match the result's
+    // gameId — a preset applied in another match is never attributed here.
+    // Additive-only: legacy rows without these fields stay valid.
+    finalPresetAttribution(gameId, snapshot = null) {
+        const attribution = {
+            lastAppliedPreset: null,
+            lastAppliedPresetAt: null,
+            lastAppliedPresetSource: null,
+            generatorVersion: null
+        };
+        try {
+            // A result without a resolvable gameId is never attributed: two
+            // absent gameIds would string-compare equal ('' === '') and leak
+            // another match's attribution into a degenerate row.
+            if (gameId == null || gameId === '') return attribution;
+            const matchesResult = record => record != null && String(record.gameId || '') === String(gameId || '');
+            const progressions = [STATE?.presetProgression || null];
+            if (typeof this.loadManualState === 'function') {
+                try { progressions.push(this.loadManualState(gameId)?.presetProgression || null); } catch (_) {}
+            }
+            const progression = progressions.find(item => item?.lastAppliedPreset && matchesResult(item)) || null;
+            if (progression) {
+                attribution.lastAppliedPreset = progression.lastAppliedPreset;
+                attribution.lastAppliedPresetAt = progression.appliedAt ?? null;
+                attribution.lastAppliedPresetSource = 'preset_progression';
+            } else {
+                const usage = typeof PresetUsageTracker !== 'undefined' && typeof PresetUsageTracker?.getLast === 'function'
+                    ? PresetUsageTracker.getLast()
+                    : null;
+                if (usage && usage.presetName && matchesResult(usage)) {
+                    attribution.lastAppliedPreset = usage.presetName;
+                    attribution.lastAppliedPresetAt = usage.ts ?? null;
+                    attribution.lastAppliedPresetSource = 'usage_tracker';
+                }
+            }
+            // Declared generator metadata only — never an invented version
+            // string. The hint flow stamps snapshot.generatorVersion; the
+            // active preset registry declares the suite's generator version.
+            const generatorCandidates = [
+                snapshot?.generatorVersion,
+                typeof window !== 'undefined' ? window.SLFActivePresetRegistry?.generatorVersion : null
+            ];
+            attribution.generatorVersion = generatorCandidates.find(value => value != null && String(value).trim()) || null;
+        } catch (_) {}
+        return attribution;
+    },
+
     sendMatchResult(snapshot) {
         // QR-010: a finished match result must carry a resolvable score.  The
         // server used to accept a null score verbatim, so a client-side
@@ -412,7 +463,7 @@ const SnapshotEngine = {
                 collectedAt: Date.now(),
                 scriptVersion: typeof SLF_VERSION_INFO !== 'undefined' ? SLF_VERSION_INFO.scriptVersion : 'unknown'
             }
-        });
+        }, this.finalPresetAttribution(snapshot?.gameId, snapshot));
 
         const key = result.resultKey;
         const pending = this._pendingMatchResultRequests.get(key);
