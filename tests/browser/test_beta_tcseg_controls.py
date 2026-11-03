@@ -383,11 +383,12 @@ def test_t6_dropdown_mount():
         info = page.evaluate(DROPDOWN_MOUNT_JS)
         assert info["exists"], f"no #slf-tactics-dropdown: {info}"
         assert info["count"] == 1, f"dropdown duplicated after cards insertion: {info}"
-        # No #head on the fixture page: the parser panel is prepended to body
-        # (ui-layer addMatchParserPanel) and the dropdown is inserted before
-        # its anchor, so the dropdown legitimately ends up as the first body
-        # child (previousElementSibling=None). Anchor check is therefore
-        # positional: when the parser panel exists it must FOLLOW the dropdown.
+        # The fixture HAS #head: addMatchParserPanel inserts the parser panel
+        # right before it (ui-layer), as a body-level sibling after the match
+        # view. The dropdown mounts inside .tc.mint.tc--match, before
+        # .tc-cols: first child of that container (not of body), hence
+        # previousElementSibling=None and the anchor check is skipped. The
+        # panel still FOLLOWS the dropdown, so the positional assertion holds.
         if info.get("prevDesc"):
             assert info["prevIsParser"] or info["prevIsCf1"], (
                 f"dropdown anchored wrong; previousElementSibling={info['prevDesc']!r} ({info})"
