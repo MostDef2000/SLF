@@ -62,6 +62,61 @@
         displayMeta:{trainer:'Mourinho',formation:'4-4-1-1',style:'3',suffix:'_neutr'}
     };
 
+    // Knowledge-pack seed priors (specs/381-tactical-knowledge-pack-hints):
+    // the pack supplies LABELED HYPOTHESES, not outcome evidence. A matching
+    // seed adds a bounded +3 to the candidate; multiple matches do NOT stack
+    // (ruleIds are collected for provenance only); the outcome-evidence delta
+    // stays dormant at 0; the total is clamped to ±5. No match is never a veto.
+    const KNOWLEDGE_SEED_PRIOR=3;
+    const KNOWLEDGE_EVIDENCE_DELTA=0;
+    const KNOWLEDGE_DELTA_LIMIT=5;
+    const knowledgeAssessmentNone=()=>({delta:0,source:'none',ruleIds:[],n:null,packVersion:null});
+    // Approximate mapping of pack conditions onto the runtime context:
+    // score_state → exact equality with context.scoreState ('unknown' never
+    // matches); minute_min → finite context.minute >= bound; my_bad_min/max →
+    // inclusive bounds on context.myBad AND context.myBad > 0 (missing
+    // bad-actions normalize to 0 — missing is NOT 0% execution); pressure →
+    // context.underPressure === true (approximation of the pack's
+    // xG/xT pressure literal).
+    const knowledgeRuleMatches=(when,context)=>{
+        if(!when||typeof when!=='object')return false;
+        if(when.score_state!==undefined){
+            if(context.scoreState!==when.score_state||context.scoreState==='unknown')return false;
+        }
+        if(when.minute_min!==undefined){
+            if(typeof context.minute!=='number'||!Number.isFinite(context.minute)||context.minute<when.minute_min)return false;
+        }
+        if(when.my_bad_min!==undefined||when.my_bad_max!==undefined){
+            if(typeof context.myBad!=='number'||!Number.isFinite(context.myBad)||context.myBad<=0)return false;
+            if(when.my_bad_min!==undefined&&context.myBad<when.my_bad_min)return false;
+            if(when.my_bad_max!==undefined&&context.myBad>when.my_bad_max)return false;
+        }
+        if(when.pressure!==undefined&&context.underPressure!==true)return false;
+        return true;
+    };
+    const knowledgeAssessment=args=>{
+        try{
+            const input=args&&typeof args==='object'?args:{};
+            const preset=resolvePresetId(input.preset);
+            if(typeof preset!=='string'||!preset||!ACTIVE.has(preset))return knowledgeAssessmentNone();
+            const pack=(typeof TacticalKnowledgePack!=='undefined'&&TacticalKnowledgePack&&typeof TacticalKnowledgePack.get==='function')?TacticalKnowledgePack.get():null;
+            if(!pack||!Array.isArray(pack.rules)||!pack.rules.length)return knowledgeAssessmentNone();
+            const context=input.context&&typeof input.context==='object'?input.context:{};
+            const packVersion=typeof pack.version==='string'?pack.version:null;
+            const matchedIds=[];
+            for(const rule of pack.rules){
+                const target=resolvePresetId(rule&&rule.recommendation?rule.recommendation.preset:null);
+                if(typeof target!=='string'||target!==preset||!ACTIVE.has(target))continue;
+                if(!knowledgeRuleMatches(rule.when,context))continue;
+                matchedIds.push(String(rule.id));
+            }
+            if(!matchedIds.length)return{delta:0,source:'none',ruleIds:[],n:null,packVersion};
+            matchedIds.sort();
+            const total=Math.max(-KNOWLEDGE_DELTA_LIMIT,Math.min(KNOWLEDGE_DELTA_LIMIT,KNOWLEDGE_SEED_PRIOR+KNOWLEDGE_EVIDENCE_DELTA));
+            return{delta:total,source:'seed',ruleIds:matchedIds,n:null,packVersion};
+        }catch(_){return knowledgeAssessmentNone();}
+    };
+
     const clonePresets=map=>Object.fromEntries(Object.entries(map).map(([name,p])=>[name,Object.assign({},p,{priority:(p.priority||[]).slice()})]));
     const cloneTraits=map=>Object.fromEntries(Object.entries(map).map(([name,t])=>[name,Object.assign({},t,{attackLanes:(t.attackLanes||[]).slice(),requires:(t.requires||[]).slice(),avoids:(t.avoids||[]).slice()})]));
     const removeInactive=map=>{if(!map||typeof map!=='object')return;Object.keys(map).forEach(key=>{if(!ACTIVE.has(key))delete map[key];});};
@@ -78,8 +133,21 @@
         // fallback keeps the registry standalone-safe in bare test sandboxes.
         controlFields: typeof TACTIC_CONTROL_KEYS !== 'undefined' ? TACTIC_CONTROL_KEYS.slice() : ['def_line','press_line','def_width','press_intense','build_type','build_temp','build_long','build_fast','style','pass_risk','dribble','cross','corner','shot'],
         inventorySchema:'slf_active_preset_inventory_v3',
-        // bounded evidence adjustment — reserved; v10 hypotheses are not outcome evidence
-        evidenceAdjustment:function(){return 0;},
+        // Bounded evidence adjustment (specs/381): seed priors from the
+        // tactical knowledge pack only — labeled hypotheses (+3, non-stacking,
+        // clamped ±5), NOT outcome evidence. Cohort/outcome requirements stay
+        // reserved for a future evidence contract; no match never vetoes.
+        evidenceAdjustment:function(args){
+            try{
+                const assessment=knowledgeAssessment(args);
+                const delta=assessment?Number(assessment.delta):NaN;
+                return Number.isFinite(delta)?delta:0;
+            }catch(_){return 0;}
+        },
+        // Pure provenance view over the loaded knowledge pack:
+        // {delta, source:'seed'|'none', ruleIds, n, packVersion}. No I/O, no
+        // mutation; the pack itself is read synchronously from the loader.
+        knowledgeAssessment:function(args){return knowledgeAssessment(args);},
         roleContracts:Object.fromEntries(Object.entries(ROLE_CONTRACTS).map(([id,c])=>[id,Object.assign({},c,{allowedSituations:c.allowedSituations.slice(),entryConditions:c.entryConditions.slice(),exitConditions:c.exitConditions.slice(),hardVetoes:c.hardVetoes.slice(),formation:(FORMATIONS[id]||[]).slice(),controls:Object.assign({},PRESETS[id],{priority:(PRESETS[id]?.priority||[]).slice()})})]))
     };
 })();

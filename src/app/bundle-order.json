@@ -37,6 +37,7 @@
     "src/modules/strategy-data-recommendations/cah-runtime-context.js",
     "src/modules/strategy-data-recommendations/cah-decision-core.js",
     "src/modules/strategy-data-recommendations/coach-hint-snapshot-context-layer.js",
+    "src/modules/strategy-data-recommendations/tactical-knowledge-pack.js",
     "src/modules/tactics-presets/active-preset-registry.js",
     "src/modules/tactics-presets/tactic-preset-direction-policy.js",
     "src/modules/strategy-data-recommendations/signal-noise-filter-layer.js",
@@ -99,7 +100,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 91,
+    "expectedModuleCount": 92,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -1165,6 +1166,20 @@
         ]
       },
       {
+        "file": "src/modules/strategy-data-recommendations/tactical-knowledge-pack.js",
+        "declares": [
+          "TacticalKnowledgePack"
+        ],
+        "public": [
+          "TacticalKnowledgePack"
+        ],
+        "requires": [],
+        "hostCapabilities": [
+          "GM_xmlhttpRequest",
+          "localStorage"
+        ]
+      },
+      {
         "file": "src/modules/tactics-presets/active-preset-registry.js",
         "declares": [],
         "public": [],
@@ -1196,6 +1211,13 @@
             "file": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
             "symbols": [
               "CurrentActionHintEngine"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/tactical-knowledge-pack.js",
+            "symbols": [
+              "TacticalKnowledgePack"
             ],
             "phase": "runtime"
           }

@@ -104,6 +104,7 @@ jobs:
       - name: Check runtime and tactics tooling syntax
         run: |
           node --check src/modules/manual-match-telemetry/manual-match-runtime.js
+          node --check src/modules/strategy-data-recommendations/tactical-knowledge-pack.js
           node --check tools/test-manual-match-runtime.mjs
           node --check tools/test-manual-match-workflow.mjs
           node --check tools/test-manual-match-state-bridge.mjs
@@ -166,6 +167,7 @@ jobs:
           node tools/test-tactic-telemetry-envelope.mjs
           node tools/test-tactical-record-keys.mjs
           node tools/test-tactical-situation-diversity.mjs
+          node tools/test-tactical-knowledge-pack.mjs
           node tools/test-tactic-analytics-pipeline.mjs
           node tools/test-tactic-match-outcomes.mjs
           node tools/test-tactic-fallback-hold-current.mjs

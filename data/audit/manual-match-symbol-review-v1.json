@@ -108,6 +108,20 @@
         "Stage 2 refactor (specs/002-refactoring-program): watcher installation moved verbatim to manual-state-integrity.js."
       ],
       "deletionStatus": "KEEP"
+    },
+    {
+      "symbol": "TacticalKnowledgePack",
+      "token": "TacticalKnowledgePack",
+      "owner": "src/modules/strategy-data-recommendations/tactical-knowledge-pack.js",
+      "classification": "ACTIVE_MANUAL_BOUNDARY",
+      "allowedFiles": [
+        "src/modules/strategy-data-recommendations/tactical-knowledge-pack.js",
+        "src/modules/tactics-presets/active-preset-registry.js"
+      ],
+      "evidence": [
+        "Loader supplies validated knowledge to registry scoring; no automatic tactic application."
+      ],
+      "deletionStatus": "KEEP"
     }
   ],
   "nonGoals": [
