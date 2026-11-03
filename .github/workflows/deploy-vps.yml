@@ -21,8 +21,10 @@ name: SLF VPS Deploy
 #     succeeded. Any API/HTTP error fails closed. There is NO artifact
 #     signing: anyone able to push to main (and thus produce a green CI
 #     push-run) is trusted; single-owner repo => accepted.
-#   * Human gate: the owner confirms the deploy in the dev chat BEFORE the
-#     orchestrator dispatches (workspace owner decision 2026-10-10). The
+#   * Deploy gate: lane-A deploys are the orchestrator's default duty
+#     (workspace owner decision 2026-11-03) — after green trusted CI on the
+#     merged main SHA the orchestrator posts DEPLOY-TRIGGER in the dev chat
+#     and dispatches; no separate per-deploy confirmation. The
 #     `confirmation` input is a dispatch-time attestation that must match
 #     the exact phrase; the `production` environment intentionally has NO
 #     protection rules / required reviewers and is created implicitly.
@@ -90,10 +92,11 @@ jobs:
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
-          # Fail-closed attestation; the durable human gate is the dev chat
-          # confirmation that precedes every dispatch (owner decision
-          # 2026-10-10). Input goes through env, never direct interpolation
-          # into the script (expression-injection guard).
+          # Fail-closed attestation; the durable gate is the owner's standing
+          # deploy-default directive (2026-11-03): the orchestrator dispatches
+          # lane-A deploys by default after green CI and posts DEPLOY-TRIGGER
+          # in the dev chat. Input goes through env, never direct
+          # interpolation into the script (expression-injection guard).
           if [ "${CONFIRMATION}" != "deploy confirmed" ]; then
             echo "::error::confirmation input must be exactly: deploy confirmed"
             exit 1
@@ -244,8 +247,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # Owner decision 2026-10-10 (workspace deploy-unification): NO protection
-    # rules on this environment — the human gate is the chat confirmation
-    # before dispatch, not a GitHub reviewer gate. Do not add required
+    # rules on this environment — the deploy gate is the orchestrator's
+    # DEPLOY-TRIGGER + dispatch discipline (owner deploy-default directive
+    # 2026-11-03), not a GitHub reviewer gate. Do not add required
     # reviewers without a new owner decision. Created implicitly on first run.
     environment: production
     env:
