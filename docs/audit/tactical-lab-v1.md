@@ -211,3 +211,27 @@ Finished results were being accepted and persisted with `score: null`, so `match
 
 - Historical `match_results_v2` rows already persisted with `score: null` / `|?:?|` keys remain unresolved. This change prevents new bad rows only; it does not rewrite history.
 - Backfilling legacy scores is a separate decision. Any backfill source must be limited to `match_snapshots_v2` (joining on `snapshotKey`/`gameId` and teams), because finished match snapshots are not subject to the strict finish contract and may still carry the last readable score. No historical rewrite is part of issue #309.
+
+## Entry-context recovery and availability counters — issue #252 (2026-11-03)
+
+### Entry-context recovery order
+
+The producer copies the entry context into `completed.entryContext` and into the exit-event extras, so a missing activation lifecycle snapshot must no longer lose the entry context. The exporter now selects the first dict-valued observation in a fixed order:
+
+- activation event `context`;
+- activation state `entryContext`;
+- completed state `entryContext`;
+- exit event `extra.entryContext`.
+
+An existing empty dict keeps precedence over lower-priority observations, contexts are never field-merged across observations, and the entry context is never inferred from the exit score or exit minute. This extends the "Data-quality linkage hardening" section above; the strict `entryCompleteness` metric semantics are unchanged.
+
+### Sanitized availability counters
+
+The quality summary gains additive, count-only diagnostics:
+
+- `entryContextFieldAvailability`: `samples` plus per-field `available`/`missing` counts for `minuteBucket`, `scoreState`, `homeAway`, `previousPreset` and `productionRecommendation`, using the same missing-value rule as `completeness()` (`None`/`''`/`'unknown'` count as missing); `previousPreset` follows the existing `knownPreviousTactic` semantics (a named preset or a manual tactic fingerprint counts as available).
+- `productionRecommendationAbsenceReasons`: `noRuleDecisionRecorded` (no recommendation object recorded at entry) versus `recommendationPresetMissing` (a recommendation object without a usable preset).
+
+The client-side `scoreContext` in Tactical Lab v1 is guarded accordingly: home/away is attributed only when the `teams` array has exactly two entries and `myTeam` is present (previously a missing/short `teams` array silently assumed `away`), and score values must be finite numbers before comparison, so coercion of empty/null values can no longer fabricate a draw. Valid inputs are unchanged.
+
+The new counters are counts only and pass the existing privacy sanitization. As stated in the "Data-quality linkage hardening" section above, repository integration does not deploy the VPS exporter — these exporter changes affect derived reports only after a separately approved exporter deploy — and historical records are not rewritten.
