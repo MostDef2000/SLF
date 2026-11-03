@@ -125,8 +125,8 @@ results = [{
 }]
 
 summary, quality = lab.build_outputs(snapshots, results)
-assert summary["schema"] == "slf_tactical_lab_summary_v1"
-assert quality["schema"] == "slf_tactical_lab_quality_v1"
+assert summary["schema"] == "slf_tactical_lab_summary_v2"
+assert quality["schema"] == "slf_tactical_lab_quality_v2"
 assert summary["summary"]["assignments"] == 1
 assert summary["summary"]["activations"] == 1
 assert summary["summary"]["completedPhases"] == 1
@@ -146,6 +146,30 @@ assert row["outcomeAssociation"]["resolvedFinishedResults"] == 1
 assert row["outcomeAssociation"]["wins"] == 1
 assert row["outcomeAssociation"]["pointsPerMatch"] == 3
 assert quality["coverage"]["finishedOutcomeResolution"] == 1
+
+# --- data-linkage v2: decision x context x outcome cells + decisionLinkage coverage.
+# The main fixture is a legacy record (no linkage fields): its linked win still
+# emits a cell keyed by the entry-context recommendation, with the deterministic
+# "unknown"/"no_decision" sentinels where metadata is absent.
+assert summary["decisionOutcomeCells"] == [{
+    "decisionPreset": "Pep_ControlledPush_att3",
+    "situationKey": "unknown",
+    "homeAway": "home",
+    "scoreState": "winning",
+    "outcome": "win",
+    "n": 1,
+    "points": 3,
+}]
+legacy_linkage = quality["decisionLinkage"]
+assert legacy_linkage["totalMatchResults"] == 1
+assert legacy_linkage["attributedResults"] == 0
+assert legacy_linkage["attributionBySource"] == {}
+assert legacy_linkage["unattributedResults"] == 1
+assert legacy_linkage["entryContextsWithDecisionLinkage"] == 0
+assert legacy_linkage["entryContextsSampled"] == 1
+assert legacy_linkage["decisionSourceDistribution"] == {"live": 0, "persisted": 0}
+assert legacy_linkage["decisionAgeMinutes"] == {"samples": 0, "min": None, "median": None, "max": None}
+assert legacy_linkage["generatorVersionDistribution"] == {"unknown": 1}
 
 broken_assignment = "tactical_lab_assignment|game-secret-2|EXP-561-P03-0001"
 broken_state = {
@@ -183,6 +207,8 @@ assert broken_outcome["resolvedFinishedResults"] == 0
 assert broken_outcome["unresolvedResultReasons"] == {"missing_or_invalid_score": 1}
 assert broken_quality["counts"]["unresolvedResultReasons"] == {"missing_or_invalid_score": 1}
 assert broken_quality["coverage"]["finishedOutcomeResolution"] == 0
+# An unresolved linked result has no outcome -> no cell, no crash.
+assert broken_summary["decisionOutcomeCells"] == []
 
 # --- SLF #252 tactical data-quality: entry-context recovery, per-field counters,
 # --- advisor absence reasons. Strict entryCompleteness semantics are unchanged.
@@ -322,6 +348,148 @@ assert advisor_quality["productionRecommendationAbsenceReasons"] == {
 }
 assert advisor_quality["coverage"]["entryContextComplete"] == 0.3333
 
+# (g) data-linkage v2: cells and coverage from records carrying the new client
+# telemetry (live + persisted decision sources, result-level preset attribution,
+# generatorVersion). Mixed with a legacy record that has no linkage fields.
+linked_entry = {
+    **entry,
+    "homeAway": "away",
+    "scoreState": "level",
+    "productionRecommendation": {
+        "presetId": "Pep_ControlledPush_att3",
+        "situationKey": "balanced_buildup",
+        "confidence": 0.62,
+        "margin": 9,
+        "decidedAt": 1700000000000,
+        "decidedMinute": 12,
+        "decisionSource": "live",
+        "decisionAgeMinutes": 36,
+    },
+}
+persisted_entry = {
+    **entry,
+    "homeAway": "away",
+    "scoreState": "losing",
+    "productionRecommendation": {
+        "presetId": "Simeone_Compact442_def4",
+        "situationKey": "chase_game",
+        "decidedAt": 1700000000000,
+        "decidedMinute": None,
+        "decisionSource": "persisted",
+        "decisionAgeMinutes": 95,
+    },
+}
+linkage_assignment_a = "tactical_lab_assignment|game-secret-10|EXP-561-P03-0008"
+linkage_assignment_b = "tactical_lab_assignment|game-secret-11|EXP-561-P03-0009"
+linkage_assignment_c = "tactical_lab_assignment|game-secret-12|EXP-561-P03-0009"
+
+
+def linkage_state(assignment_id, experiment_id):
+    return {
+        "schema": "slf_tactical_lab_match_v1",
+        "populationVersion": "slf_tactical_lab_561_p03",
+        "assignment": {
+            "assignmentId": assignment_id,
+            "experimentId": experiment_id,
+            "populationVersion": "slf_tactical_lab_561_p03",
+            "genomeFingerprint": "tlab1-linkage",
+        },
+        "activation": None,
+        "completed": None,
+    }
+
+
+linkage_snapshots = [
+    snapshot("link-s0", "game-secret-10", "EXP-561-P03-0008", linkage_assignment_a, "activation", linked_entry, {}),
+    snapshot("link-s1", "game-secret-11", "EXP-561-P03-0009", linkage_assignment_b, "activation", persisted_entry, {}),
+    snapshot("link-s2", "game-secret-12", "EXP-561-P03-0009b", linkage_assignment_c, "activation", entry, {}),
+]
+linkage_results = [
+    {
+        "resultKey": "link-result-a",
+        "gameId": "game-secret-10",
+        "status": "finished",
+        "teams": [1, 2],
+        "myTeam": 1,
+        "score": {"home": 2, "away": 0},
+        "lastAppliedPreset": "Pep_ControlledPush_att3",
+        "lastAppliedPresetAt": 1700000300000,
+        "lastAppliedPresetSource": "preset_progression",
+        "generatorVersion": "5.61",
+        "tacticalLab": linkage_state(linkage_assignment_a, "EXP-561-P03-0008"),
+    },
+    {
+        "resultKey": "link-result-b",
+        "gameId": "game-secret-11",
+        "teams": [1, 2],
+        "myTeam": 1,
+        "score": {"home": 1, "away": 1},
+        "lastAppliedPreset": "Simeone_Compact442_def4",
+        "lastAppliedPresetAt": 1700000400000,
+        "lastAppliedPresetSource": "usage_tracker",
+        "generatorVersion": "5.61",
+        "tacticalLab": linkage_state(linkage_assignment_b, "EXP-561-P03-0009"),
+    },
+    {
+        # Legacy result row: no attribution fields at all.
+        "resultKey": "link-result-c",
+        "gameId": "game-secret-12",
+        "teams": [1, 2],
+        "myTeam": 1,
+        "score": {"home": 0, "away": 1},
+        "tacticalLab": linkage_state(linkage_assignment_c, "EXP-561-P03-0009b"),
+    },
+]
+linkage_summary, linkage_quality = lab.build_outputs(linkage_snapshots, linkage_results)
+assert linkage_summary["decisionOutcomeCells"] == [
+    {
+        "decisionPreset": "Pep_ControlledPush_att3",
+        "situationKey": "balanced_buildup",
+        "homeAway": "away",
+        "scoreState": "level",
+        "outcome": "win",
+        "n": 1,
+        "points": 3,
+    },
+    {
+        "decisionPreset": "Pep_ControlledPush_att3",
+        "situationKey": "unknown",
+        "homeAway": "home",
+        "scoreState": "winning",
+        "outcome": "loss",
+        "n": 1,
+        "points": 0,
+    },
+    {
+        "decisionPreset": "Simeone_Compact442_def4",
+        "situationKey": "chase_game",
+        "homeAway": "away",
+        "scoreState": "losing",
+        "outcome": "draw",
+        "n": 1,
+        "points": 1,
+    },
+]
+linkage_block = linkage_quality["decisionLinkage"]
+assert linkage_block["totalMatchResults"] == 3
+assert linkage_block["attributedResults"] == 2
+assert linkage_block["attributionBySource"] == {"preset_progression": 1, "usage_tracker": 1}
+assert linkage_block["unattributedResults"] == 1
+assert linkage_block["entryContextsWithDecisionLinkage"] == 2
+assert linkage_block["entryContextsSampled"] == 3
+assert linkage_block["decisionSourceDistribution"] == {"live": 1, "persisted": 1}
+assert linkage_block["decisionAgeMinutes"] == {"samples": 2, "min": 36, "median": 65.5, "max": 95}
+assert linkage_block["generatorVersionDistribution"] == {"5.61": 2, "unknown": 1}
+# Absence-reasons shape and semantics are unchanged by the v2 block.
+assert linkage_quality["productionRecommendationAbsenceReasons"] == {
+    "noRuleDecisionRecorded": 0,
+    "recommendationPresetMissing": 0,
+}
+assert set(linkage_quality["productionRecommendationAbsenceReasons"]) == {"noRuleDecisionRecorded", "recommendationPresetMissing"}
+assert all(isinstance(value, int) for value in linkage_block["decisionSourceDistribution"].values())
+assert all(cell["outcome"] in {"win", "draw", "loss"} and isinstance(cell["n"], int) and isinstance(cell["points"], int)
+           for cell in linkage_summary["decisionOutcomeCells"])
+
 # (e) strict entryCompleteness semantics unchanged on the existing fixtures
 assert quality["coverage"]["entryContextComplete"] == 1
 assert quality["coverage"]["exitContextComplete"] == 1
@@ -332,7 +500,8 @@ assert exit_only_quality["coverage"]["entryContextComplete"] == 1
 
 # (f) privacy flags stay false on every sanitized output; counters are counts only
 for payload in (summary, quality, recovered_summary, recovered_quality, exit_only_summary,
-                exit_only_quality, unrec_summary, unrec_quality, advisor_summary, advisor_quality):
+                exit_only_quality, unrec_summary, unrec_quality, advisor_summary, advisor_quality,
+                linkage_summary, linkage_quality):
     assert payload["privacy"]["containsRawGameId"] is False
     assert payload["privacy"]["containsAssignmentId"] is False
     assert payload["privacy"]["containsEventKey"] is False
@@ -354,9 +523,13 @@ serialized_new = json.dumps({
     "unrecoverable": [unrec_summary, unrec_quality],
     "advisor": [advisor_summary, advisor_quality],
     "precedence": precedence_summary,
+    "linkage": [linkage_summary, linkage_quality],
 }, ensure_ascii=False)
 for secret in ("game-secret-3", "game-secret-4", "game-secret-6", "game-secret-7", "game-secret-8", "game-secret-9",
+               "game-secret-10", "game-secret-11", "game-secret-12",
                recovered_assignment, exit_only_assignment, precedence_assignment, unrecoverable_assignment,
+               linkage_assignment_a, linkage_assignment_b, linkage_assignment_c,
+               "link-result-a", "link-result-b", "link-result-c",
                "event-activation", "event-exit"):
     assert secret not in serialized_new, secret
 

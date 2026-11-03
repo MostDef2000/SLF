@@ -392,25 +392,75 @@
         function productionRecommendation(decision = STATE.lastRuleDecision || null) {
             const compact = EventTracker.compactRuleDecision?.(decision) || null;
             const runnerUp = decision?.runnerUp || (decision?.candidates || []).find(item => !item?.vetoed && item?.preset !== decision?.action?.preset) || null;
-            return compact ? {
+            if (!compact) return null;
+            const recommendation = {
                 presetId:compact.action?.preset || null,
                 situationKey:decision?.situationKey || compact.action?.decision || null,
                 confidence:clone(decision?.confidence || compact.confidence || null),
                 runnerUp:runnerUp?{preset:runnerUp.preset||null,score:Number(runnerUp.score||0)}:null,
                 margin:Number(decision?.margin ?? compact.margin ?? 0),
                 riskAppetite:compact.riskAppetite || null
-            } : null;
+            };
+            // data-linkage v1: decision linkage metadata (additive). Only
+            // decisions captured through captureActivationProductionDecision
+            // carry decisionSource; legacy call sites (exit context) keep the
+            // exact prior shape. Absence stays null — never a dict of nulls.
+            if (decision.decisionSource) {
+                const decidedAt = Number(decision.decidedAt) || null;
+                recommendation.decidedAt = decidedAt;
+                recommendation.decidedMinute = decision.decidedMinute != null ? minuteOrNull(decision.decidedMinute) : null;
+                recommendation.decisionSource = decision.decisionSource === 'persisted' ? 'persisted' : 'live';
+                recommendation.decisionAgeMinutes = decidedAt != null ? Math.round((Date.now() - decidedAt) / 60000) : null;
+            }
+            return recommendation;
+        }
+        // data-linkage v1 (telemetry only): the durable last-production-decision
+        // record persisted by EventTracker.recordLastRuleDecision in the manual
+        // match state envelope. Used as the activation fallback when neither the
+        // exact snapshot nor the live advisor yields a decision (e.g. activation
+        // after a page reload, where STATE.lastRuleDecision is gone).
+        function persistedLastRuleDecisionRecord(gameId) {
+            if (gameId == null || gameId === '') return null;
+            try {
+                if (typeof SnapshotEngine?.loadManualState !== 'function') return null;
+                const record = SnapshotEngine.loadManualState(gameId)?.lastRuleDecisionRecord || null;
+                if (!record || record.schema !== EventTracker.lastRuleDecisionRecordSchema) return null;
+                if (String(record.gameId || '') !== String(gameId)) return null;
+                return record?.decision?.action ? record : null;
+            } catch (_) {
+                return null;
+            }
         }
         function captureActivationProductionDecision(snapshot) {
             const advisor = document.defaultView?.SLFCurrentActionHintEngine || null;
-            if (!snapshot || !advisor || typeof advisor.run !== 'function') return snapshot?.ruleDecision || null;
-            try {
-                const decision = advisor.run(snapshot, {});
-                return snapshot?.ruleDecision || decision || null;
-            } catch (error) {
-                debugWarn('[SLF Tactical Lab] activation recommendation capture failed', error);
-                return snapshot?.ruleDecision || null;
+            let decision = null;
+            if (!snapshot || !advisor || typeof advisor.run !== 'function') {
+                decision = snapshot?.ruleDecision || null;
+            } else {
+                try {
+                    decision = advisor.run(snapshot, {});
+                    decision = snapshot?.ruleDecision || decision || null;
+                } catch (error) {
+                    debugWarn('[SLF Tactical Lab] activation recommendation capture failed', error);
+                    decision = snapshot?.ruleDecision || null;
+                }
             }
+            if (decision) {
+                // Live decision: linkage metadata travels on a clone so the
+                // engine's decision object and the snapshot are never mutated.
+                return Object.assign(clone(decision) || {}, {
+                    decisionSource:'live',
+                    decidedAt:Number(decision.generatedAt) || null,
+                    decidedMinute:minuteOrNull(decision.moment?.minute)
+                });
+            }
+            const record = persistedLastRuleDecisionRecord(getGameId(snapshot));
+            if (!record) return null;
+            return Object.assign(clone(record.decision) || {}, {
+                decisionSource:'persisted',
+                decidedAt:Number(record.decidedAt) || null,
+                decidedMinute:record.decidedMinute != null ? minuteOrNull(record.decidedMinute) : null
+            });
         }
         function buildContext(snapshot, decision = STATE.lastRuleDecision || null) {
             const my = teamStats(snapshot, true) || {};

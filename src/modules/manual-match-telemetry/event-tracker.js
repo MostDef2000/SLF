@@ -42,6 +42,57 @@
             };
         },
 
+        // data-linkage v1 (telemetry only): durable LAST-production-decision-per-game
+        // record. A decision made at any point of the match must stay linkable to
+        // the match even when it was not made at the exact activation snapshot —
+        // STATE.lastRuleDecision is memory-only and dies with the page, so the
+        // recorder persists one bounded record per game in the manual match state
+        // envelope. This records decisions; it never changes how they are made.
+        lastRuleDecisionRecordSchema: 'slf_last_rule_decision_record_v1',
+        lastDecisionRecordSignatures: new Map(),
+
+        buildLastRuleDecisionRecord(gameId, decision) {
+            if (!decision?.action || gameId == null || gameId === '') return null;
+            const compact = this.compactRuleDecision(decision);
+            if (!compact) return null;
+            return {
+                schema: this.lastRuleDecisionRecordSchema,
+                gameId: String(gameId),
+                decidedAt: Number(decision.generatedAt) || Number(compact.generatedAt) || Date.now(),
+                decidedMinute: decision.moment?.minute ?? null,
+                decidedScoreState: decision.moment?.score || null,
+                decision: compact
+            };
+        },
+
+        recordLastRuleDecision(gameId, decision) {
+            if (!decision?.action || gameId == null || gameId === '') return null;
+            // A memory-fallback decision from another game must never be
+            // attributed to this match; the engine stamps moment.gameId.
+            const decisionGameId = decision.moment?.gameId;
+            if (decisionGameId != null && String(decisionGameId) !== String(gameId)) return null;
+            const signature = [decision.generatedAt ?? '', decision.action.preset ?? '', decision.action.decision ?? '', decision.margin ?? ''].join('|');
+            const key = String(gameId);
+            if (this.lastDecisionRecordSignatures.get(key) === signature) return null;
+            const record = this.buildLastRuleDecisionRecord(gameId, decision);
+            if (!record) return null;
+            let persisted = true;
+            try {
+                if (typeof SnapshotEngine !== 'undefined' && typeof SnapshotEngine.persistManualState === 'function') {
+                    persisted = !!SnapshotEngine.persistManualState({ gameId: key, lastRuleDecisionRecord: record });
+                }
+            } catch (_) {
+                persisted = false;
+            }
+            if (!persisted) return null;
+            // Bounded signature cache (same shape as the envelope session map):
+            // enrich() runs on every snapshot build, the guard prevents write
+            // amplification; only a NEW decision identity is persisted.
+            if (this.lastDecisionRecordSignatures.size > 8) this.lastDecisionRecordSignatures.delete(this.lastDecisionRecordSignatures.keys().next().value);
+            this.lastDecisionRecordSignatures.set(key, signature);
+            return record;
+        },
+
         // v9: единые правила классификации применения рекомендации (#252, single-writer contract).
         // 'unknown_legacy' клиентом никогда не пишется — это read-time классификация пре-v9 строк.
         resolveRecommendationState(applySource, action, priorRecommendationState, recommended, actual) {
@@ -404,7 +455,17 @@
                 session.lastFingerprint = currentFingerprint;
                 session.lastPreset = currentPreset;
             }
-            const decision = EventTracker.compactRuleDecision(snapshot.ruleDecision || STATE.lastRuleDecision || null);
+            const rawRuleDecision = snapshot.ruleDecision || STATE.lastRuleDecision || null;
+            const decision = EventTracker.compactRuleDecision(rawRuleDecision);
+            // data-linkage v1 (telemetry only): persist the last production
+            // decision per game so it survives reloads and stays linkable to
+            // this match. enrich() runs on every build/buildSnapshotRecord/
+            // sendMatchResult and the ~15s auto-poll; the recorder's signature
+            // dedup absorbs the write amplification. The raw (uncompacted)
+            // decision is recorded — the recorder re-compacts and reads
+            // moment.gameId/minute from it. Telemetry must never break the
+            // snapshot flow.
+            try { EventTracker.recordLastRuleDecision(snapshot.gameId, rawRuleDecision); } catch (_) {}
             let riskAppetite = decision?.riskAppetite || decision?.action?.riskAppetite || null;
             try { riskAppetite = riskAppetite || localStorage.getItem('slf:tactics:risk-appetite'); } catch (_) {}
             // v11: single-writer contract (#252) — enrich дополняет прежний tacticTelemetry (MERGE),

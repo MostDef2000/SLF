@@ -16,8 +16,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from slf_common_utils import read_json, write_json  # noqa: E402
 
-SUMMARY_SCHEMA = "slf_tactical_lab_summary_v1"
-QUALITY_SCHEMA = "slf_tactical_lab_quality_v1"
+SUMMARY_SCHEMA = "slf_tactical_lab_summary_v2"
+QUALITY_SCHEMA = "slf_tactical_lab_quality_v2"
 POPULATION_FALLBACK = "slf_tactical_lab_561_p01"
 MINUTE_BUCKETS = ((0, 14, "0-14"), (15, 29, "15-29"), (30, 44, "30-44"), (45, 59, "45-59"), (60, 74, "60-74"), (75, 200, "75+"))
 
@@ -159,6 +159,51 @@ def safe_previous(context: Dict[str, Any]) -> str:
     return "manual" if previous.get("tacticFingerprint") else "unknown"
 
 
+# data-linkage v1: additive decision-linkage fields the client may carry on an
+# entry context's productionRecommendation object. Their presence marks the
+# context as decision-linked; legacy contexts without them stay valid.
+DECISION_LINKAGE_FIELDS = ("decidedAt", "decidedMinute", "decisionSource", "decisionAgeMinutes")
+OUTCOME_POINTS = {"win": 3, "draw": 1, "loss": 0}
+
+
+def decision_linkage_recommendation(entry: Any) -> Optional[Dict[str, Any]]:
+    """Return the entry-context recommendation when it carries decision linkage metadata.
+
+    Legacy entry contexts (no linkage fields, or no recommendation object at
+    all) are unlinked: the caller counts them as such and never fabricates
+    decision metadata.
+    """
+    recommendation = entry.get("productionRecommendation") if isinstance(entry, dict) else None
+    if not isinstance(recommendation, dict):
+        return None
+    if not any(field in recommendation for field in DECISION_LINKAGE_FIELDS):
+        return None
+    return recommendation
+
+
+def decision_cell_key(entry: Any, result: str) -> Tuple[str, str, str, str, str]:
+    """Aggregatable decision x context x outcome cell key.
+
+    Follows the match_outcomes summary conventions: outcome is win/draw/loss,
+    missing context values fall back to the deterministic "unknown" sentinel
+    (same convention as counter_dict/minute_bucket). A linked result whose
+    entry context carries no decision recommendation keys under
+    "no_decision" so cells stay summable per (decision, context, outcome).
+    """
+    recommendation = entry.get("productionRecommendation") if isinstance(entry, dict) else None
+    preset = str(recommendation.get("presetId") or "").strip() if isinstance(recommendation, dict) else ""
+    situation = str(recommendation.get("situationKey") or "").strip() if isinstance(recommendation, dict) else ""
+    home_away = str(entry.get("homeAway") or "").strip() if isinstance(entry, dict) else ""
+    score_state = str(entry.get("scoreState") or "").strip() if isinstance(entry, dict) else ""
+    return (
+        preset or "no_decision",
+        situation or "unknown",
+        home_away or "unknown",
+        score_state or "unknown",
+        result,
+    )
+
+
 def completeness(context: Any, fields: Sequence[str]) -> bool:
     if not isinstance(context, dict):
         return False
@@ -255,6 +300,8 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
 
     buckets: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     population_counts: Counter[str] = Counter()
+    cell_n: Counter[Tuple[str, str, str, str, str]] = Counter()
+    cell_points: Counter[Tuple[str, str, str, str, str]] = Counter()
     for assignment_id, row in assignments.items():
         experiment_id = str(row.get("experimentId") or "unknown")
         population = str(row.get("populationVersion") or POPULATION_FALLBACK)
@@ -296,6 +343,15 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
 
         result_record = result_by_assignment.get(assignment_id) if assignment_id in result_by_assignment else None
         result, result_reason = owned_result_diagnostic(result_record or {})
+        # data-linkage v1: decision x context x outcome cells. One cell per
+        # linked match result with a resolved outcome, keyed by the entry
+        # context's decision (preset/situation) and context bucket. The
+        # analysis pipeline sums n and points per cell; unresolved results
+        # stay in the existing unresolved counters instead.
+        if result in OUTCOME_POINTS:
+            cell_key = decision_cell_key(entry, result)
+            cell_n[cell_key] += 1
+            cell_points[cell_key] += OUTCOME_POINTS[result]
         buckets[experiment_id].append({
             "activated": bool(entry or activation_state or completed_state),
             "completed": bool(exit_context or completed_state),
@@ -427,6 +483,63 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
         "productionRecommendation": {"available": advisor_available, "missing": advisor_no_decision + advisor_preset_missing},
     }
 
+    # data-linkage v1 coverage: how much of the ingested telemetry carries the
+    # new decision-attribution fields. Legacy records without the additive
+    # fields count as unlinked; nothing crashes and nothing is fabricated.
+    attributed_results = [row for row in results if isinstance(row, dict) and completeness(row, ("lastAppliedPreset",))]
+    linkage_recommendations = [
+        recommendation
+        for recommendation in (decision_linkage_recommendation(row) for row in entry_contexts)
+        if recommendation is not None
+    ]
+    decision_source_counts = Counter(
+        str(recommendation.get("decisionSource"))
+        for recommendation in linkage_recommendations
+        if recommendation.get("decisionSource") is not None
+    )
+    decision_ages = [
+        parsed
+        for recommendation in linkage_recommendations
+        if (parsed := number(recommendation.get("decisionAgeMinutes"))) is not None
+    ]
+    decision_linkage = {
+        "totalMatchResults": len(results),
+        "attributedResults": len(attributed_results),
+        "attributionBySource": counter_dict(row.get("lastAppliedPresetSource") for row in attributed_results),
+        "unattributedResults": len(results) - len(attributed_results),
+        "entryContextsWithDecisionLinkage": len(linkage_recommendations),
+        "entryContextsSampled": len(entry_contexts),
+        "decisionSourceDistribution": {
+            "live": decision_source_counts.get("live", 0),
+            "persisted": decision_source_counts.get("persisted", 0),
+        },
+        "decisionAgeMinutes": {
+            "samples": len(decision_ages),
+            "min": rounded(min(decision_ages)) if decision_ages else None,
+            "median": median(decision_ages),
+            "max": rounded(max(decision_ages)) if decision_ages else None,
+        },
+        "generatorVersionDistribution": counter_dict(
+            row.get("generatorVersion") for row in results if isinstance(row, dict)
+        ),
+    }
+
+    # data-linkage v1: deterministic, aggregatable decision x context x outcome
+    # cells (sorted by key). Consumers sum n and points per cell; the points
+    # convention matches the match_outcomes summary (win=3, draw=1, loss=0).
+    decision_outcome_cells = [
+        {
+            "decisionPreset": key[0],
+            "situationKey": key[1],
+            "homeAway": key[2],
+            "scoreState": key[3],
+            "outcome": key[4],
+            "n": cell_n[key],
+            "points": cell_points[key],
+        }
+        for key in sorted(cell_n)
+    ]
+
     summary = {
         "schema": SUMMARY_SCHEMA,
         "generatedAt": now_iso(),
@@ -445,6 +558,7 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
             "unresolvedResultReasons": dict(sorted(unresolved_reasons.items())),
         },
         "experiments": per_experiment,
+        "decisionOutcomeCells": decision_outcome_cells,
         "privacy": {
             "containsRawGameId": False,
             "containsAssignmentId": False,
@@ -482,6 +596,7 @@ def build_outputs(snapshots: Sequence[Dict[str, Any]], results: Sequence[Dict[st
             "noRuleDecisionRecorded": advisor_no_decision,
             "recommendationPresetMissing": advisor_preset_missing,
         },
+        "decisionLinkage": decision_linkage,
         "readiness": {
             "hasAssignments": assignment_count > 0,
             "hasActivations": activated_count > 0,
