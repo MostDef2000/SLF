@@ -151,6 +151,52 @@ class RagBuildMainTests(unittest.TestCase):
         self.assertIs(summary["ok"], True)
         self.assertEqual(summary["forum_official_claims"], 6)
 
+    def test_search_index_includes_official_claims(self):
+        self._run_main()
+        index = json.loads((self.out / "rag" / "search_index.json").read_text(encoding="utf-8"))
+        claim_rows = [item for item in index["items"] if item["type"] == "forum_official_claim"]
+        self.assertEqual(len(claim_rows), 6)
+        self.assertEqual([row["id"] for row in claim_rows], EXPECTED_CLAIM_IDS)
+        for row in claim_rows:
+            self.assertEqual(row["path"], "rag/forum_official_claims.json")
+            self.assertTrue(row["title"].startswith("Official claim "))
+            self.assertIn(row["topic"], row["title"])
+            self.assertTrue(row["text"].strip())
+        # One known substring from the repo claims file: a distinctive
+        # fragment of C1's claim field (not present in its quote).
+        c1_row = next(row for row in claim_rows if row["id"] == "C1")
+        self.assertIn("с перечитыванием состава, тактики, физики, морали и ролей", c1_row["text"])
+
+    def test_search_index_keeps_existing_kinds(self):
+        # Seed the optional sources so every index kind has at least one
+        # row: wiki chunks (rule_extract) and a forum FAQ dir (forum_note).
+        wiki_dir = self.out / "wiki"
+        wiki_dir.mkdir(parents=True)
+        (wiki_dir / "chunks.json").write_text(
+            json.dumps([{"title": "Тестовое правило", "text": "Тактика: прессинг после потери мяча."}]),
+            encoding="utf-8",
+        )
+        faq_dir = self.out / "forum_faq_source"
+        faq_dir.mkdir()
+        (faq_dir / "index.json").write_text(
+            json.dumps({"documents": [{"id": "faq1", "title": "Тестовый FAQ", "file": "faq1.md"}]}),
+            encoding="utf-8",
+        )
+        (faq_dir / "faq1.md").write_text("Тестовый форумный FAQ про тактику.", encoding="utf-8")
+        previous = os.environ.get("SLF_FORUM_FAQ_DIR")
+        os.environ["SLF_FORUM_FAQ_DIR"] = str(faq_dir)
+        try:
+            self._run_main()
+        finally:
+            if previous is None:
+                os.environ.pop("SLF_FORUM_FAQ_DIR", None)
+            else:
+                os.environ["SLF_FORUM_FAQ_DIR"] = previous
+        index = json.loads((self.out / "rag" / "search_index.json").read_text(encoding="utf-8"))
+        kinds = {item["type"] for item in index["items"]}
+        for kind in ("rule_extract", "forum_note", "match_evidence", "tactical_case", "forum_official_claim"):
+            self.assertIn(kind, kinds)
+
 
 class ForumOfficialClaimsValidationTests(unittest.TestCase):
     def setUp(self):
@@ -188,6 +234,18 @@ class ForumOfficialClaimsValidationTests(unittest.TestCase):
         payload = {"schema": EXPECTED_SCHEMA, "claims": [_valid_claim()]}
         module = _load_module_copy(case_dir, "slf_rag_build_valid", payload=payload)
         self.assertEqual(module.build_forum_official_claims(), payload)
+
+    def test_claims_field_non_string_rejected(self):
+        # Coverage pin for the isinstance branch: a non-string value in a
+        # validated field (id here) must fail closed, not just a missing one.
+        data = json.loads(REPO_CLAIMS_PATH.read_text(encoding="utf-8"))
+        data["claims"][0]["id"] = 123
+        case_dir = self.tmp_path / "non_string_id"
+        case_dir.mkdir()
+        module = _load_module_copy(case_dir, "slf_rag_build_non_string_id", payload=data)
+        with self.assertRaises(RuntimeError) as ctx:
+            module.build_forum_official_claims()
+        self.assertIn("invalid", str(ctx.exception))
 
 
 class RealRepoClaimsSanityTests(unittest.TestCase):

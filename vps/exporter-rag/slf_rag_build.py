@@ -334,7 +334,7 @@ def build_knowledge_pack(tactical_cases):
         "rules": rules
     }
 
-def build_search_index(rule_extracts, forum_notes, match_evidence, tactical_cases):
+def build_search_index(rule_extracts, forum_notes, match_evidence, tactical_cases, official_claims):
     rows = []
 
     def add(kind, item, text_fields):
@@ -349,7 +349,8 @@ def build_search_index(rule_extracts, forum_notes, match_evidence, tactical_case
                 "rule_extract": "rag/rule_extracts.jsonl",
                 "forum_note": "rag/forum_notes.jsonl",
                 "match_evidence": "rag/match_evidence.jsonl",
-                "tactical_case": "rag/tactical_cases.jsonl"
+                "tactical_case": "rag/tactical_cases.jsonl",
+                "forum_official_claim": "rag/forum_official_claims.json"
             }.get(kind)
         })
 
@@ -361,6 +362,8 @@ def build_search_index(rule_extracts, forum_notes, match_evidence, tactical_case
         add("match_evidence", item, ["source", "note"])
     for item in tactical_cases:
         add("tactical_case", item, ["id", "coaching_note", "recommended_preset"])
+    for item in official_claims.get("claims", []):
+        add("forum_official_claim", {**item, "title": f"Official claim {item.get('id')}: {item.get('topic', '')}"}, ["topic", "claim", "quote"])
 
     return rows
 
@@ -375,7 +378,7 @@ def main():
     match_evidence = build_match_evidence()
     tactical_cases = build_tactical_cases(match_evidence)
     knowledge_pack = build_knowledge_pack(tactical_cases)
-    search_index = build_search_index(rule_extracts, forum_notes, match_evidence, tactical_cases)
+    search_index = build_search_index(rule_extracts, forum_notes, match_evidence, tactical_cases, official_claims)
 
     write_jsonl(rag_dir / "rule_extracts.jsonl", rule_extracts)
     write_jsonl(rag_dir / "forum_notes.jsonl", forum_notes)
