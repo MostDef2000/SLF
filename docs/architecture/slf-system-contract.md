@@ -267,6 +267,10 @@ forum_notes:
   authority: soft_heuristic
   source: /opt/slf/slf-server/forum_faq
 
+forum_official_claims:
+  authority: official_claim
+  source: versioned repo file vps/exporter-rag/forum_official_claims.json (owner-approved claims from Dave = developer / Eywa = forum admin; per owner directive Dave's answers are treated as authoritative statements, but they remain account-reported priors, NOT independently verified engine laws)
+
 match_evidence:
   authority: observed_data
   source: exported match/preset summaries

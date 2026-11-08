@@ -132,7 +132,7 @@ case "$COMPONENT" in
       "$STAGE_DIR/slf_manifest_integrity.py"
     "$VENV_PY" -c 'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); assert p.get("schema") == "slf_generator_update_pack_v1"; assert p.get("generatorVersion") == "5.61"; assert p.get("rules")' "$STAGE_DIR/generator_updates.json"
     "$VENV_PY" -c 'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); assert p.get("schema") == "dave56_wiki_supplement_v1"; assert len(p.get("records", [])) == 10; assert all(r.get("markdown", "").strip() for r in p["records"])' "$STAGE_DIR/dave56_supplement.json"
-    "$VENV_PY" -c 'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); assert p.get("schema") == "slf_forum_official_claims_v1"; assert p.get("claims")' "$STAGE_DIR/forum_official_claims.json"
+    "$VENV_PY" -c 'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); assert isinstance(p, dict); assert p.get("schema") == "slf_forum_official_claims_v1"; c=p.get("claims"); assert isinstance(c, list) and c; assert all(isinstance(x, dict) and all(isinstance(x.get(f), str) and x.get(f).strip() for f in ("id", "author", "permalink", "category")) for x in c)' "$STAGE_DIR/forum_official_claims.json"
     bash -n "$STAGE_DIR/run_daily_export.sh"
 
     create_backup_dir

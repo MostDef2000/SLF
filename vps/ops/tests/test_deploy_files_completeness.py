@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import ast
+import json
 import re
 import shlex
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -144,6 +149,123 @@ class DeployFilesCompletenessTest(unittest.TestCase):
             self.assertTrue(
                 (ROOT / repo_path).is_file(),
                 f"deploy-code.sh stages a file that does not exist in the repo: {repo_path}",
+            )
+
+    def test_every_repo_json_referenced_by_exporter_is_staged(self):
+        """Guard the "new data file read added, FILES= forgotten" defect class: every bare *.json filename referenced by an exporter script and present in vps/exporter-rag/ must be staged by both deploy and rollback."""
+        derived = set()
+        for script in sorted(EXPORTER_DIR.glob("*.py")):
+            if script.name.startswith("test_"):
+                continue
+            tree = ast.parse(script.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    name = node.value
+                    if name.endswith(".json") and "/" not in name and (EXPORTER_DIR / name).is_file():
+                        derived.add(name)
+        missing_deploy = sorted(derived - set(self.exporter_files))
+        self.assertEqual(
+            missing_deploy,
+            [],
+            "deploy-code.sh exporter FILES is missing repo data files referenced "
+            f"by exporter scripts: {', '.join(missing_deploy)}",
+        )
+        missing_rollback = sorted(derived - set(self.rollback_exporter_files))
+        self.assertEqual(
+            missing_rollback,
+            [],
+            "rollback-code.sh exporter FILES is missing repo data files referenced "
+            f"by exporter scripts: {', '.join(missing_rollback)}",
+        )
+
+    def test_stage_validation_one_liner_mirrors_exporter(self):
+        """Pin the deploy-time stage validation for forum_official_claims.json.
+
+        Regression guard for the silent-gate-drop defect class: the exporter-rag
+        case in deploy-code.sh must keep exactly one python -c assert line
+        validating $STAGE_DIR/forum_official_claims.json. The pin is behavioral:
+        the extracted one-liner is executed against (a) the valid repo claims
+        file (must pass), (b) a copy with a blank claim author (must fail), and
+        (c) a copy with an empty claims list (must fail — pins the non-empty
+        claims assert). If the line is removed or its asserts weakened, this
+        test fails.
+        """
+        candidates = [
+            line
+            for line in self.deploy_script.splitlines()
+            if "forum_official_claims.json" in line
+            and ("python -c" in line or "$VENV_PY" in line)
+        ]
+        self.assertEqual(
+            len(candidates),
+            1,
+            "deploy-code.sh must contain exactly one stage-validation line for "
+            "forum_official_claims.json (python -c assert against "
+            "$STAGE_DIR/forum_official_claims.json); found "
+            f"{len(candidates)} — the deploy-time gate was removed or duplicated",
+        )
+        match = re.search(
+            r"""(?:python|\$VENV_PY)"?\s+-c\s+'([^']*)'\s+"?\$STAGE_DIR/forum_official_claims\.json"?\s*$""",
+            candidates[0],
+        )
+        self.assertIsNotNone(
+            match,
+            "the forum_official_claims.json stage-validation line must invoke "
+            "python -c with a single-quoted code argument and the "
+            "$STAGE_DIR/forum_official_claims.json path argument",
+        )
+        code = match.group(1)
+        repo_file = EXPORTER_DIR / "forum_official_claims.json"
+        self.assertTrue(
+            repo_file.is_file(),
+            f"repo claims file missing: {repo_file}",
+        )
+
+        def run_validation(path):
+            return subprocess.run(
+                [sys.executable, "-c", code, str(path)],
+                capture_output=True,
+                text=True,
+            )
+
+        ok = run_validation(repo_file)
+        self.assertEqual(
+            ok.returncode,
+            0,
+            "stage validation must pass on the valid repo claims file "
+            f"({repo_file}); stderr: {ok.stderr.strip()}",
+        )
+
+        payload = json.loads(repo_file.read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            blank_author = tmp_dir / "forum_official_claims.json"
+            mutated = json.loads(json.dumps(payload))
+            mutated["claims"][0]["author"] = ""
+            blank_author.write_text(
+                json.dumps(mutated, ensure_ascii=False), encoding="utf-8"
+            )
+            blank_result = run_validation(blank_author)
+            self.assertNotEqual(
+                blank_result.returncode,
+                0,
+                "stage validation must fail-closed on a claims file with a blank "
+                f"author (first claim); stderr: {blank_result.stderr.strip()}",
+            )
+
+            empty_claims = tmp_dir / "forum_official_claims.json"
+            mutated = json.loads(json.dumps(payload))
+            mutated["claims"] = []
+            empty_claims.write_text(
+                json.dumps(mutated, ensure_ascii=False), encoding="utf-8"
+            )
+            empty_result = run_validation(empty_claims)
+            self.assertNotEqual(
+                empty_result.returncode,
+                0,
+                "stage validation must fail-closed on a claims file with an "
+                "empty claims list (non-empty claims assert missing or "
+                f"weakened); stderr: {empty_result.stderr.strip()}",
             )
 
 
