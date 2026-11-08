@@ -13,7 +13,7 @@ closed (RuntimeError) on any malformed source. These tests pin:
   sha256 match the written file;
 - fail-closed validation of broken source files (loaded from a temp-dir
   copy of the module so repo files are never touched);
-- the real repo file passing validation with claims C1..C6.
+- the real repo file passing validation with claims C1..C169.
 
 Local-only tests: no network, filesystem writes only inside temp
 directories. slf_rag_build captures SLF_AI_OUT at import time, so the
@@ -38,7 +38,7 @@ sys.path.insert(0, str(HERE))
 MODULE_PATH = HERE / "slf_rag_build.py"
 REPO_CLAIMS_PATH = HERE / "forum_official_claims.json"
 EXPECTED_SCHEMA = "slf_forum_official_claims_v1"
-EXPECTED_CLAIM_IDS = ["C1", "C2", "C3", "C4", "C5", "C6"]
+EXPECTED_CLAIM_IDS = [f"C{i}" for i in range(1, 170)]
 
 
 def _valid_claim(**overrides):
@@ -118,7 +118,7 @@ class RagBuildMainTests(unittest.TestCase):
         self.assertEqual(entry["type"], "official_claims")
         self.assertEqual(entry["authority"], "official_claim")
         self.assertEqual(entry["path"], "rag/forum_official_claims.json")
-        self.assertEqual(entry["count"], 6)
+        self.assertEqual(entry["count"], 169)
         self.assertEqual(sources.index(entry), sources.index(by_id["forum_notes"]) + 1)
 
     def test_main_ai_context_read_order_and_priors_note(self):
@@ -149,13 +149,13 @@ class RagBuildMainTests(unittest.TestCase):
     def test_main_summary_reports_claims_count(self):
         summary = self._run_main()
         self.assertIs(summary["ok"], True)
-        self.assertEqual(summary["forum_official_claims"], 6)
+        self.assertEqual(summary["forum_official_claims"], 169)
 
     def test_search_index_includes_official_claims(self):
         self._run_main()
         index = json.loads((self.out / "rag" / "search_index.json").read_text(encoding="utf-8"))
         claim_rows = [item for item in index["items"] if item["type"] == "forum_official_claim"]
-        self.assertEqual(len(claim_rows), 6)
+        self.assertEqual(len(claim_rows), 169)
         self.assertEqual([row["id"] for row in claim_rows], EXPECTED_CLAIM_IDS)
         for row in claim_rows:
             self.assertEqual(row["path"], "rag/forum_official_claims.json")
