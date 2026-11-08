@@ -1,0 +1,128 @@
+{
+  "schema": "slf_forum_official_claims_v1",
+  "generatedAt": "2026-11-08T06:00:00Z",
+  "generatedBy": "delivery orchestrator session (Peace Duke), owner-approved read-only research scope",
+  "authorityRule": "Dave = developer: his answers are treated as truth (owner directive). Eywa = official admin source (forum admin badge observed). Both are account-reported claims, NOT independently verified engine laws.",
+  "provenance": {
+    "method": "unauthenticated reads of public forum pages; pages archived verbatim",
+    "archive": "shared/slf-forum-sources-2026-11-08/ (6 HTML + 6 TXT)",
+    "topics": [
+      "https://slf.fm/forum/view_topic.php?t=71060 (Генератор 5.61), pages 221-223",
+      "https://slf.fm/forum/view_topic.php?t=30682 (Список предложений), pages 337-339"
+    ],
+    "coverageLimitation": "6 pages only. Full-forum crawl blocked by robots.txt (HTTP 200, wildcard 'Disallow: /', /forum not in allow list). No crawler used, no UA masking. Closed/deleted content not accessible unauthenticated and was not faked.",
+    "quotes": "verbatim from archived HTML; ellipses mark truncation, wording preserved"
+  },
+  "categoryTaxonomy": {
+    "mechanics": "how the engine reportedly works (version-tagged where applicable)",
+    "historical-stats": "cohort/aggregate statistics over a stated period; NOT a per-match forecast",
+    "roadmap": "announced future changes",
+    "product": "product behavior explanations (non-generator)"
+  },
+  "claims": [
+    {
+      "id": "C1",
+      "category": "mechanics",
+      "versionTag": "generator-5.61",
+      "author": "Eywa",
+      "authorRole": "forum admin (badge observed in archive)",
+      "postId": 5270340,
+      "permalink": "https://slf.fm/forum/view_post.php?m=5270340",
+      "topic": "t=71060 Генератор 5.61, p.223",
+      "postedAt": "2026-11-08T03:50 forum time",
+      "claim": "Матч состоит из 19 отрезков по 5 минут; каждый отрезок генерируется прямо перед показом, за 10-30 секунд, с перечитыванием состава, тактики, физики, морали и ролей. Смена тактики или замена специально сдвигают ближайший отрезок, чтобы правка успела вступить в силу. Генератор читает больше десятка тактических настроек (темп, длинные передачи, фланг атаки, удары, навесы, дриблинг, прессинг, линия обороны, угловые); количество вступивших в силу правок пишется в комментарий матча.",
+      "explicitDenials": [
+        "Заранее выбранного счёта в генераторе нет",
+        "Целевой квоты 45-25-30 в генераторе нет (проценты - итог, не план)",
+        "Подтягивания слабых игроков под средний уровень команды нет: чем ниже скилл, тем чаще игрок ошибается"
+      ],
+      "notStated": ["формула пересчёта отрезка", "точный список всех читаемых настроек сверх перечисленных"],
+      "quote": "«Матч — это 19 отрезков по 5 минут, и каждый генерируется прямо перед показом, за 10–30 секунд. Каждый раз заново читаются ваш состав, тактика, физика, мораль, роли. Заранее выбранного счёта и целевых «45–25–30» в генераторе нет.»"
+    },
+    {
+      "id": "C2",
+      "category": "mechanics",
+      "versionTag": null,
+      "author": "Eywa",
+      "authorRole": "forum admin (badge observed in archive)",
+      "postId": 5270336,
+      "permalink": "https://slf.fm/forum/view_post.php?m=5270336",
+      "topic": "t=30682 Список предложений, p.339",
+      "postedAt": "2026-11-08T02:31 forum time",
+      "claim": "Тренер, пришедший на матч, даёт +7 к морали всей команды дома и +5 в гостях, что составляет примерно +2% к силе каждого игрока на весь матч. Кто не пришёл - прибавки не получает. Без подписки Gold у менеджера нет ни одной замены.",
+      "notStated": ["формула пересчёта морали в силу", "кап бонуса"],
+      "quote": "«Тренер на матче — +7 к морали всей команды дома и +5 в гостях. Это примерно +2 % к силе каждого игрока на весь матч.»"
+    },
+    {
+      "id": "C3",
+      "category": "historical-stats",
+      "versionTag": null,
+      "author": "Eywa",
+      "authorRole": "forum admin (badge observed in archive)",
+      "postId": 5270336,
+      "permalink": "https://slf.fm/forum/view_post.php?m=5270336",
+      "topic": "t=30682 Список предложений, p.339",
+      "postedAt": "2026-11-08T02:31 forum time",
+      "claim": "Когорта: все матчи чемпионатов с 15.10 по 07.11 (81 тыс.): при разнице силы 200+ фаворит побеждает в 93,5% (ничья 5%, поражение 1,4%); при 150-199 - 81% побед; при 100-149 - 70% побед; при разнице меньше 50 - 42% побед («почти лотерея»).",
+      "caveat": "когортная статистика, не индивидуальный прогноз матча",
+      "quote": "«сильнее на 200+: фаворит побеждает в 93,5 %, ничья — 5 %, поражение — 1,4 %»"
+    },
+    {
+      "id": "C4",
+      "category": "mechanics",
+      "versionTag": "generator-5.61",
+      "author": "Eywa",
+      "authorRole": "forum admin (badge observed in archive)",
+      "postId": 5270236,
+      "permalink": "https://slf.fm/forum/view_post.php?m=5270236",
+      "topic": "t=71060 Генератор 5.61, p.223",
+      "postedAt": null,
+      "postedAtNote": "между 2026-11-07 и 2026-11-08 (страница снята 2026-11-08)",
+      "claim": "В КТ (коммерческих турнирах) работает тот же генератор, что в чемпионатах и кубках; отдельного «режима случайности» для КТ нет. Сопроводительная когорта: 177 тыс. КТ-матчей за последний месяц, больше половины - разница силы меньше 3% (фаворит побеждает 45%, ничья 25%, соперник 30%); при преимуществе 7-12% проигрыш только в 8%; при 12%+ - в 2%.",
+      "explicitDenials": ["отдельного КТ-RNG / режима случайности для КТ нет"],
+      "caveat": "сопроводительные проценты - когортная статистика, не закон для отдельного матча",
+      "quote": "«В КТ работает тот же генератор, что в чемпионатах и кубках. Отдельного «режима случайности» для КТ нет.»"
+    },
+    {
+      "id": "C5",
+      "category": "historical-stats",
+      "versionTag": null,
+      "author": "Eywa",
+      "authorRole": "forum admin (badge observed in archive)",
+      "postId": 5270226,
+      "permalink": "https://slf.fm/forum/view_post.php?m=5270226",
+      "topic": "t=30682 Список предложений, p.339",
+      "postedAt": null,
+      "postedAtNote": "после 07.11.2026 17:59 (правка цитируемого поста), страница снята 2026-11-08",
+      "claim": "Сезонная статистика: 80 тыс. матчей, 200 тыс. голов. Доли голов по отрезкам: 1-15 - 10,7%, 16-30 - 14,1%, 31-45+ - 17,6%, 46-60 - 16,6%, 61-75 - 17,9%, 76-90+ - 23,1%. На 90' и позже - около 6% голов. Заявленное сравнение: в реальном футболе на последние 15 минут приходится 21-29% голов (АПЛ 22,6%), по Opta в АПЛ на 90'+ - 9% (23/24), 9,3% (24/25), 13,2% (25/26). Явно заявлено: распределение голов совпадает с реальным, менять его не будут.",
+      "caveat": "доли голов по когорте, не пер-матчевая вероятность",
+      "roadmapSignal": "явный отказ менять распределение поздних голов",
+      "quote": "«80 тыс. матчей этого сезона, 200 тыс. голов. … 76–90+ — 23,1 %. … На 90′ и позже у нас забивают около 6 % голов. … Распределение голов совпадает с реальным, менять его не будем.»"
+    },
+    {
+      "id": "C6",
+      "category": "product",
+      "versionTag": null,
+      "author": "Dave",
+      "authorRole": "developer (owner directive: answers treated as truth); Gold badge observed",
+      "postId": 5260047,
+      "permalink": "https://slf.fm/forum/view_post.php?m=5260047",
+      "topic": "t=30682 Список предложений, p.337",
+      "postedAt": null,
+      "postedAtNote": "до 07.11.2026 (страница 337 в архиве)",
+      "claim": "Финансовый мониторинг отвечает на вопрос «сколько очков нужно набрать, чтобы покрыть ЗП игроков» - это математический расчёт, а не экономика и не индивидуальная цель клуба. Ожидания вроде 4,4 или 5,9 очка за игру - не баг: для доминатора лиги даже 3 очка может не хватить на покрытие ЗП. Ни экономика, ни мониторинг не ставят индивидуальных целей клубам.",
+      "roadmapAdjacent": "в том же посте: реформа имиджа давно анонсирована в дорожной карте и будет реализована к сезону 2027/1",
+      "quote": "«Финансовый мониторинг - это не экономика, он отвечает на простой вопрос „сколько очков нужно набрать, чтобы покрыть ЗП игроков“ и делает математический расчёт.»"
+    }
+  ],
+  "identityCaveats": [
+    "У Eywa наблюдён бейдж админа форума, у Dave - Gold; наличие бейджа здесь не доказательство отсутствия админ-доступа где-либо ещё.",
+    "Публичные полные профили редиректят на онбординг; личность бота, доступ к backend DB или исходникам не доказаны.",
+    "Все утверждения - account-reported claims с пермалинками; независимой проверки движком не было."
+  ],
+  "impactOnExperiment": {
+    "rule": "Forum claims are priors, not engine laws. No automatic scoring changes.",
+    "seedPriors": "+3 seed-приоры (specs/381) остаются гипотезами; официальные заявления хранятся с провенансом отдельно от выведенных эвристик.",
+    "tacticalLabRelevance": "C1 (сдвиг ближайшего отрезка при смене тактики) и C2 (тренерский бонус ~+2% силы) - кандидаты в ковариаты/границы экспозиции для Tactical Lab P03; C4 (единый генератор КТ) - аргумент в дискуссии о пулинге, но не разрешает её (см. p03-reassessment-2026-11-08.md)."
+  }
+}

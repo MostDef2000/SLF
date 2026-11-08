@@ -75,6 +75,18 @@ class ManifestIntegrityTests(unittest.TestCase):
         with self.assertRaisesRegex(ExportIntegrityError, "missing required"):
             verify(self.root)
 
+    def test_forum_official_claims_is_required(self):
+        # Pins the forum official claims artifact against silent removal from REQUIRED_ARTIFACTS.
+        self.assertIn("forumOfficialClaims", REQUIRED_ARTIFACTS)
+
+    def test_missing_forum_official_claims_entry_fails_closed(self):
+        path = self.root / "manifest.json"
+        manifest = json.loads(path.read_text())
+        del manifest["files"]["forumOfficialClaims"]
+        path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ExportIntegrityError, "missing required entries"):
+            verify(self.root)
+
 
 if __name__ == "__main__":
     unittest.main()

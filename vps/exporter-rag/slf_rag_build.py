@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import os
 import re
@@ -205,6 +206,35 @@ def build_forum_notes():
 
     return rows
 
+def build_forum_official_claims():
+    source_path = Path(__file__).resolve().parent / "forum_official_claims.json"
+
+    try:
+        with open(source_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:
+        raise RuntimeError(f"forum_official_claims: cannot read source file {source_path}: {exc}")
+
+    if not isinstance(data, dict):
+        raise RuntimeError("forum_official_claims: top-level value must be a dict")
+
+    if data.get("schema") != "slf_forum_official_claims_v1":
+        raise RuntimeError(f"forum_official_claims: unexpected schema {data.get('schema')!r}, expected 'slf_forum_official_claims_v1'")
+
+    claims = data.get("claims")
+    if not isinstance(claims, list) or not claims:
+        raise RuntimeError("forum_official_claims: 'claims' must be a non-empty list")
+
+    for index, claim in enumerate(claims):
+        if not isinstance(claim, dict):
+            raise RuntimeError(f"forum_official_claims: claim at index {index} is not a dict")
+        for field in ("id", "author", "permalink", "category"):
+            value = claim.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise RuntimeError(f"forum_official_claims: claim {claim.get('id') or index} has invalid {field!r}: {value!r}")
+
+    return data
+
 def build_match_evidence():
     rows = []
 
@@ -340,6 +370,8 @@ def main():
 
     rule_extracts = build_rule_extracts()
     forum_notes = build_forum_notes()
+    official_claims = build_forum_official_claims()
+    write_json(rag_dir / "forum_official_claims.json", official_claims)
     match_evidence = build_match_evidence()
     tactical_cases = build_tactical_cases(match_evidence)
     knowledge_pack = build_knowledge_pack(tactical_cases)
@@ -356,6 +388,19 @@ def main():
         "items": search_index
     })
     write_json(tactics_dir / "knowledge-pack.latest.json", knowledge_pack)
+
+    manifest_path = OUT / "manifest.json"
+    manifest = read_json(manifest_path, {})
+    if isinstance(manifest, dict):
+        files = manifest.setdefault("files", {})
+        raw = (rag_dir / "forum_official_claims.json").read_bytes()
+        files["forumOfficialClaims"] = {
+            "path": "rag/forum_official_claims.json",
+            "exists": True,
+            "sizeBytes": len(raw),
+            "sha256": hashlib.sha256(raw).hexdigest()
+        }
+        write_json(manifest_path, manifest)
 
     catalog = {
         "schema": "slf_rag_catalog_v1",
@@ -381,6 +426,13 @@ def main():
                 "authority": "soft_heuristic",
                 "path": "rag/forum_notes.jsonl",
                 "count": len(forum_notes)
+            },
+            {
+                "id": "forum_official_claims",
+                "type": "official_claims",
+                "authority": "official_claim",
+                "path": "rag/forum_official_claims.json",
+                "count": len(official_claims["claims"])
             },
             {
                 "id": "match_evidence",
@@ -419,9 +471,10 @@ Read order for ChatGPT / Strategy Agent:
 3. `rag/tactical_cases.jsonl`
 4. `rag/rule_extracts.jsonl`
 5. `rag/forum_notes.jsonl`
-6. `rag/match_evidence.jsonl`
-7. `wiki/chunks.json`
-8. `data/preset_effects_summary.json`
+6. `rag/forum_official_claims.json`
+7. `rag/match_evidence.jsonl`
+8. `wiki/chunks.json`
+9. `data/preset_effects_summary.json`
 
 Runtime userscript should read only:
 
@@ -431,6 +484,7 @@ Notes:
 
 - `rule_extracts` are derived from wiki chunks.
 - `forum_notes` placeholder until forum_faq export is connected.
+- `forum_official_claims` are account-reported claims from official forum posts (Dave = developer, Eywa = admin). They are priors, NOT engine laws, and are kept separate from derived heuristics.
 - `tactical_cases` currently contain seed rules and will later be enriched from observed match evidence.
 """
     write_text(OUT / "ai_context.md", ai_context)
@@ -440,6 +494,7 @@ Notes:
         "out": str(OUT),
         "rule_extracts": len(rule_extracts),
         "forum_notes": len(forum_notes),
+        "forum_official_claims": len(official_claims["claims"]),
         "match_evidence": len(match_evidence),
         "tactical_cases": len(tactical_cases),
         "search_index": len(search_index),
