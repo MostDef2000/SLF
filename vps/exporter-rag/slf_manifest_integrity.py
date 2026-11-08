@@ -21,6 +21,7 @@ REQUIRED_ARTIFACTS = {
     "presetEvidence561",
     "tacticalLabSummary",
     "tacticalLabQuality",
+    "forumOfficialClaims",
 }
 
 
