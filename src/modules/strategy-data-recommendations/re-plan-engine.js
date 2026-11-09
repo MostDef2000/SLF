@@ -65,8 +65,10 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
         const own = state.ownCrossSummary;
         if (own?.total >= 2) {
             if (own.signal === 'open_play_crosses_bad') {
-                plan.developer.push(`Кроссы с игры не работают: ${own.openPlay.won}/${own.openPlay.total}; не усиливать обычные навесы без нового адресата.`);
-                plan.controls.push('Атака: не повышать навесы; искать низовой вход, пас между линиями или полупространства.');
+                // C323 (#405 F2): настройка «навесы» влияет только на верховые кроссы;
+                // низовой вход driven by острота/центр/диагонали — qualify aerial vs ground.
+                plan.developer.push(`Кроссы с игры не работают: ${own.openPlay.won}/${own.openPlay.total}; проверьте отдельно верховые и низовые; настройка навесов влияет только на верховые (C323).`);
+                plan.controls.push('Атака: не повышать навесы верхом; низовой вход — острота передач, атаки по центру, диагонали (C323).');
             } else if (own.signal === 'crosses_bad_total') {
                 plan.developer.push(`Кроссы в целом слабые: ${own.won}/${own.total}; стандарты/навесы не должны быть главным планом атаки.`);
             }
@@ -172,7 +174,7 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
 
         if (score.state === 'winning' && minute >= 70) {
             if (xgGap > 0.35 || xtGap > 0.25 || state.tags.includes('opponent_crosses_dangerous')) return { name: 'Simeone_Compact442_def4', reason: 'ведём поздно, соперник создаёт давление — компактнее без полного автобуса' };
-            return { name: 'Pep_BoxControl_bal2', reason: 'ведём и контролируем: убрать хаос, держать мяч и не раскрывать переходы' };
+            return { name: 'Pep_BoxControl_bal2', reason: 'ведём и контролируем: снизить риск, держать мяч и не раскрывать переходы' };
         }
 
         if (score.state === 'losing' && minute >= 80) {
@@ -195,7 +197,7 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
         }
 
         if (defenseBad && attackUnder) {
-            return { name: 'Pep_BoxControl_bal2', reason: 'оба канала недобирают — reset через контроль и снижение хаоса' };
+            return { name: 'Pep_BoxControl_bal2', reason: 'оба канала недобирают — reset через контроль и снижение риска' };
         }
 
         if (xgGap > 0.65 || xtGap > 0.55) {
@@ -226,7 +228,7 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
             return { name: 'Pep_TwoThreeFive_att3', reason: 'есть атакующий momentum и низкий брак — можно дожимать позиционно' };
         }
 
-        return { name: 'Pep_BoxControl_bal2', reason: 'без явного перекоса лучший baseline — контроль, снижение хаоса и подготовка следующего среза' };
+        return { name: 'Pep_BoxControl_bal2', reason: 'без явного перекоса лучший baseline — контроль, снижение риска и подготовка следующего среза' };
     },
 
     shouldRecommendSchemeChange(snapshot, state, urgency, presetName) {

@@ -70,7 +70,20 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
             const minute = engine.num(engine.getMetric(snapshot, context, 'minute', ['effectiveMinute', 'baseMinute']), 0);
             const scoreState = engine.getScoreState(snapshot, context);
             const scoreDiff = engine.getScoreDiff(snapshot, context);
-            const generationWindowIndex = engine.num(snapshot?.generationWindow?.index, Math.max(0, Math.floor(minute / 10)));
+            // #405 F6 (C1, review-corrected): the fallback derives the analytical
+            // generation window from the model's own window boundaries — the SAME
+            // field/unit the snapshot carries (generationWindow.index, windows
+            // 1-7; 0 = unknown minute). The naive Math.floor(minute/10) bucket is
+            // gone. The 5-minute SEGMENTS model stays additive in
+            // getTargetWindowAfterChange (F5) and is deliberately NOT used here:
+            // this field is consumed as a window counter by hysteresis
+            // (applyHysteresis heldWindows; cah-decision-core
+            // detectedPresetSinceWindow), so segment-space values (1-19) would mix
+            // units across snapshots, inflate heldWindows and weaken the hold guard.
+            const fallbackWindowIndex = typeof MatchTimingModel !== 'undefined' && MatchTimingModel && typeof MatchTimingModel.getWindow === 'function'
+                ? ((MatchTimingModel.getWindow(minute) || {}).index || 0)
+                : 0;
+            const generationWindowIndex = engine.num(snapshot?.generationWindow?.index, fallbackWindowIndex);
 
             const myXg = engine.num(context?.myXg ?? context?.myXG ?? my.xG);
             const oppXg = engine.num(context?.oppXg ?? context?.oppXG ?? opp.xG);

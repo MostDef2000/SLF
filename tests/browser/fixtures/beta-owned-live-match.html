@@ -234,10 +234,16 @@
     <label><input type="checkbox" name="priority_r"> Правый фланг</label>
   </div>
 
-  <!-- the ONE deliberate radio group (style): precedence test vs β seg style -->
+  <!-- the ONE deliberate radio group (style): precedence test vs β seg style.
+       Values span the full native style domain (1–5) so the P04 base vector's
+       style:'3' stays resolvable (issue #405); radio-group presence still wins
+       over the β seg group per the issue #377 precedence rule. -->
   <div class="legacy_style">
     <label><input type="radio" name="style" value="1"> Акцент атаки</label>
     <label><input type="radio" name="style" value="2" checked> Баланс</label>
+    <label><input type="radio" name="style" value="3"> Балансирующий прессинг</label>
+    <label><input type="radio" name="style" value="4"> Скоростные контратаки</label>
+    <label><input type="radio" name="style" value="5"> Тотальный контроль</label>
   </div>
 
   <!-- tab area: cards exist ONLY under «Сравнение» -->

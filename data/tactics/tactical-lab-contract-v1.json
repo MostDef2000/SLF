@@ -21,25 +21,24 @@
     "separateLineupCard": false
   },
   "population": {
-    "populationVersion": "slf_tactical_lab_561_p03",
-    "supersedesPopulationVersion": "slf_tactical_lab_561_p02",
-    "supersessionReason": "P02 provided enough exploratory evidence to move to targeted repeat validation of the most informative positive, replay and negative-control candidates.",
-    "parentPopulationVersion": "slf_tactical_lab_561_p02",
+    "populationVersion": "slf_tactical_lab_561_p04",
+    "supersedesPopulationVersion": "slf_tactical_lab_561_p03",
+    "supersessionReason": "P03 validation repeats established the attribution baseline; P04 moves to one-factor-at-a-time hypothesis genomes on the production base vector (issue #405), with P02+P03 in-flight assignments preserved.",
     "genomeVersion": "slf_tactical_genome_v1",
     "genomeScope": "tactical_controls_only",
     "size": 6,
     "deterministic": true,
     "immutableIds": true,
     "groups": {
-      "validation_repeat": 6
+      "hypothesis_factor": 6
     },
     "selectionWeightsPct": {
-      "EXP-561-P02-0012": 35,
-      "EXP-561-P02-0018": 35,
-      "EXP-561-P02-0040": 10,
-      "EXP-561-P02-0058": 10,
-      "EXP-561-P02-0011": 5,
-      "EXP-561-P02-0055": 5
+      "EXP-561-P04-0001": 35,
+      "EXP-561-P04-0002": 35,
+      "EXP-561-P04-0003": 10,
+      "EXP-561-P04-0004": 10,
+      "EXP-561-P04-0005": 5,
+      "EXP-561-P04-0006": 5
     },
     "nativeControlDomains": {
       "def_line": ["1", "2", "3"],
@@ -68,7 +67,8 @@
     "oneSuccessfulActivationPerMatch": true,
     "populationSupersessionMayReplaceOlderAssignment": true,
     "preservedAssignmentPopulationVersions": [
-      "slf_tactical_lab_561_p02"
+      "slf_tactical_lab_561_p02",
+      "slf_tactical_lab_561_p03"
     ]
   },
   "application": {

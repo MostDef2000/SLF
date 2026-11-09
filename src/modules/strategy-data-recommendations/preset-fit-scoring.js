@@ -50,10 +50,15 @@
         const avoids = list(traits?.avoids);
         const strengths = list(traits?.strengths);
         const ownCrossBad = hasTag(state, 'own_open_play_crosses_bad') || hasTag(state, 'own_crosses_bad_total');
-        const wideOrCross = strengths.some(x => /cross|wide|wing/i.test(String(x))) || String(traits?.build || '').includes('wide');
+        // #405 F4 (C323): the cross setting covers AERIAL crosses only; ground
+        // crosses are driven by острота передач / центр / диагонали (C316, C326),
+        // not by width. Only an explicit cross trait takes the aerial-cross
+        // conflict penalty; width/wing-only traits no longer do. The explicit
+        // own_crosses_bad avoid-bonus path below is unchanged.
+        const aerialCross = strengths.some(x => /cross/i.test(String(x)));
 
         if (ownCrossBad && avoids.includes('own_crosses_bad')) addReason(result, 2, 'пресет явно избегает плохих кроссов');
-        if (ownCrossBad && wideOrCross && !avoids.includes('own_crosses_bad')) addReason(result, -3, 'кроссы/ширина конфликтуют с плохими кроссами');
+        if (ownCrossBad && aerialCross && !avoids.includes('own_crosses_bad')) addReason(result, -3, 'верховые кроссы пресета конфликтуют с плохими кроссами (C323)');
         if (hasTag(state, 'opponent_crosses_dangerous') && avoids.includes('opponent_crosses_dangerous')) addReason(result, 1, 'пресет учитывает риск опасных кроссов соперника');
 
         return result;

@@ -361,13 +361,15 @@ def assert_fm2026_priority_readback(page: Page):
 
 
 def assert_fm2026_lab_ready(page: Page):
-    # Game id measured against the deterministic P03 assignment: EXP-561-P03-
-    # 0001 (parent EXP-561-P02-0012) carries controls.priority ["left","right"]
-    # — the only condition that can freeze the apply button once the control
-    # grid is complete. Guard the RED bite if the assignment ever drifts.
+    # Game id measured against the deterministic P04 assignment: hash32(
+    # 'slf_tactical_lab_561_p04|e2e-fm2026-a') % 100 = 78 → EXP-561-P04-0003,
+    # the weight-10 aerial_cross arm. Every P04 genome carries controls.priority
+    # [] — the apply button no longer freezes via priority lanes at all; once
+    # the 14 non-priority radio lanes resolve, controlsAvailable() is satisfied
+    # and the button goes ready. Pin the exact id so assignment drift stays RED.
     page.wait_for_selector("#slf-tactical-lab-panel", timeout=10000)
     experiment_id = page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id")
-    assert experiment_id == "EXP-561-P03-0001", experiment_id
+    assert experiment_id == "EXP-561-P04-0003", experiment_id
     add_tactic_radio_grid(page)
     try:
         page.wait_for_function(
@@ -384,10 +386,11 @@ def assert_fm2026_lab_ready(page: Page):
           return button ? {text: button.textContent.trim(), disabled: button.disabled} : null;
         }""")
         raise AssertionError(
-            "Tactical Lab apply button stayed stuck with the dirs priority group present: "
+            "Tactical Lab apply button never reached ready: "
             f"expected {LAB_READY_TEXT!r} enabled within 10 s, observed {state!r} — "
-            "controlsAvailable() must accept .tc-seg priority toggles when the old-design "
-            "priority inputs are absent (issue #375)."
+            "P04 genomes carry priority [], so readiness is gated only by the 14 "
+            "non-priority radio lanes (controlsAvailable must resolve them once "
+            "add_tactic_radio_grid has run)."
         )
 
 
@@ -477,8 +480,8 @@ def assert_owned_live(page: Page):
     assert page.locator("#slf-tactical-lab-panel").count() == 1
     assert page.locator("#slf-parser-recommendation > #slf-tactical-lab-panel").count() == 1
     experiment_id = page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id")
-    assert experiment_id and experiment_id.startswith("EXP-561-P03-"), experiment_id
-    assert page.locator("#slf-tactical-lab-panel").get_attribute("data-population-version") == "slf_tactical_lab_561_p03"
+    assert experiment_id and experiment_id.startswith("EXP-561-P04-"), experiment_id
+    assert page.locator("#slf-tactical-lab-panel").get_attribute("data-population-version") == "slf_tactical_lab_561_p04"
     assert "blind challenger" in page.locator("#slf-tactical-lab-status").text_content()
     assert "расстановка игроков не меняется" in page.locator("#slf-tactical-lab-detail").text_content()
 
@@ -591,7 +594,7 @@ def assert_owned_live(page: Page):
     assert record["telemetryContext"]["scoreState"] == "winning"
     assert record["source"]["scriptVersion"] == EXPECTED_VERSION
     assert record["tacticalLab"]["assignment"]["experimentId"] == experiment_id
-    assert record["tacticalLab"]["populationVersion"] == "slf_tactical_lab_561_p03"
+    assert record["tacticalLab"]["populationVersion"] == "slf_tactical_lab_561_p04"
 
     page.evaluate("""
       const card = document.querySelector('.control_lineup[data-player="p-lw"]');
@@ -645,9 +648,9 @@ def assert_owned_live(page: Page):
     lab_state = page.evaluate(
         "JSON.parse(localStorage.getItem('slf_manual_match_state_v2:e2e-owned') || '{}').tacticalLab"
     )
-    assert lab_state["populationVersion"] == "slf_tactical_lab_561_p03"
+    assert lab_state["populationVersion"] == "slf_tactical_lab_561_p04"
     assert lab_state["assignment"]["experimentId"] == experiment_id
-    assert lab_state["assignment"]["populationVersion"] == "slf_tactical_lab_561_p03"
+    assert lab_state["assignment"]["populationVersion"] == "slf_tactical_lab_561_p04"
     assert lab_state["activation"]["status"] == "active"
     assert lab_state["activation"]["startedAtMinute"] is not None
     assert lab_state["activation"]["entryContext"]["productionRecommendation"] is not None
@@ -665,7 +668,7 @@ def assert_owned_live(page: Page):
     assert lab_snapshot_records, lab_snapshot_records
     assert len({item["snapshotKey"] for item in lab_snapshot_records}) == 1, lab_snapshot_records
     assert all(item["tacticalLabEvent"]["experimentId"] == experiment_id for item in lab_snapshot_records)
-    assert all(item["tacticalLabEvent"]["populationVersion"] == "slf_tactical_lab_561_p03" for item in lab_snapshot_records)
+    assert all(item["tacticalLabEvent"]["populationVersion"] == "slf_tactical_lab_561_p04" for item in lab_snapshot_records)
     assert all(item["tacticalLabEvent"]["extra"]["applicationScope"] == "tactical_controls_only" for item in lab_snapshot_records)
     assert "tactical_lab_activation" in lab_snapshot_records[0]["snapshotKey"]
 
@@ -982,11 +985,18 @@ def assert_hybrid_priority_checkbox_authoritative_apply(page: Page):
     assert checked == [True, None, True], checked
 
 
-def assert_hybrid_lab_controls_unavailable(page: Page):
-    # A legacy checkbox pins the page to the checkbox family: the lab apply
-    # button must stay disabled because the β priority toggles it would drive
-    # are ignored by the engine on such pages (issue #377).
+def assert_hybrid_lab_ready_priority_free_genome(page: Page):
+    # P04 genomes all carry controls.priority [] (one-factor arms over
+    # P04_BASE), so the issue #377 family gate in controlsAvailable() — which
+    # only covers the priority lanes the genome actually drives — has nothing
+    # to reject on this page: a legacy checkbox must NOT block lab readiness
+    # any more. (Under P03 the assigned genome carried ["left","right"] and
+    # the button stayed disabled here.) e2e-hybrid-lab deterministically maps
+    # to EXP-561-P04-0005; pin it so a drift back to a priority-carrying
+    # genome cannot silently invert this case.
     page.wait_for_selector("#slf-tactical-lab-panel", timeout=10000)
+    experiment_id = page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id")
+    assert experiment_id == "EXP-561-P04-0005", experiment_id
     add_hybrid_priority_checkbox(page, "priority_c")
     add_tactic_radio_grid(page)
     try:
@@ -999,31 +1009,27 @@ def assert_hybrid_lab_controls_unavailable(page: Page):
             timeout=10000,
         )
     except PlaywrightTimeoutError:
-        # Negative assertion with a positive control: the sibling case
-        # fm2026-lab-ready (same fixture, no foreign checkbox) positively
-        # waits for the ready button text, so this timeout can only be the
-        # priority-family gate. Assert the non-priority native lanes are
-        # present in the DOM to rule out a vacuous timeout.
+        # Positive control: rule out a vacuous timeout — the non-priority
+        # native lanes must all be present, so a failure here is the lab
+        # readiness gate itself, not missing radio inputs.
         missing = page.evaluate(
             """ranges => Object.keys(ranges).filter(name =>
                  !document.querySelector(`input[name="${name}"]`))""",
             TACTIC_RADIO_RANGES,
         )
         assert not missing, (
-            "Tactical Lab apply timeout must come from the priority-family gate, "
+            "Tactical Lab apply timeout must come from the readiness gate, "
             f"not missing non-priority controls; missing lanes: {missing}"
         )
-        return  # expected: the apply button stays disabled on hybrid markup
-    state = page.evaluate("""() => {
-      const button = document.getElementById('slf-tactical-lab-apply');
-      return button ? {text: button.textContent.trim(), disabled: button.disabled} : null;
-    }""")
-    raise AssertionError(
-        "Tactical Lab apply button became available on hybrid markup — "
-        f"expected it to stay disabled (legacy checkbox present ⇒ β toggles ignored); "
-        f"observed {state!r} — controlsAvailable() must follow the engine's family "
-        "precedence (issue #377)."
-    )
+        state = page.evaluate("""() => {
+          const button = document.getElementById('slf-tactical-lab-apply');
+          return button ? {text: button.textContent.trim(), disabled: button.disabled} : null;
+        }""")
+        raise AssertionError(
+            "Tactical Lab apply button stayed disabled on hybrid markup — a P04 "
+            "genome drives no priority lane, so the checkbox-family gate must not "
+            f"block readiness; observed {state!r}, missing lanes: {missing}"
+        )
 
 
 def main():
@@ -1045,7 +1051,7 @@ def main():
         ("fm2026-compact-recommendation", "/game.php?id=e2e-fm2026-prio&fixture=fm2026", "success", assert_fm2026_compact_recommendation),
         ("hybrid-priority-preflight-rejects-button-lane", "/game.php?id=e2e-hybrid-prio&fixture=fm2026", "success", assert_hybrid_priority_preflight_rejects_button_lane),
         ("hybrid-priority-checkbox-authoritative-apply", "/game.php?id=e2e-hybrid-prio&fixture=fm2026", "success", assert_hybrid_priority_checkbox_authoritative_apply),
-        ("hybrid-lab-controls-unavailable", "/game.php?id=e2e-hybrid-lab&fixture=fm2026", "success", assert_hybrid_lab_controls_unavailable),
+        ("hybrid-lab-priority-free-genome-ready", "/game.php?id=e2e-hybrid-lab&fixture=fm2026", "success", assert_hybrid_lab_ready_priority_free_genome),
         ("lab-exposure-finished-parse", "/game.php?id=e2e-owned&fixture=owned", "success", assert_lab_exposure_finished_parse),
     ]
 

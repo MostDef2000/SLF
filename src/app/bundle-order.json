@@ -1122,6 +1122,13 @@
               "num"
             ],
             "phase": "runtime"
+          },
+          {
+            "file": "src/modules/match-reading/match-state-parser.js",
+            "symbols": [
+              "MatchTimingModel"
+            ],
+            "phase": "runtime"
           }
         ],
         "hostCapabilities": []
