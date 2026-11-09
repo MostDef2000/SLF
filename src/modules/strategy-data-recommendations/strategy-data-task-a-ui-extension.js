@@ -219,7 +219,7 @@
     const FINAL_CONTROL_LABELS = {
         def_line: 'линия', press_line: 'прессинг', def_width: 'ширина', press_intense: 'интенс',
         build_type: 'выход', build_temp: 'темп', build_long: 'диаг', build_fast: 'касание',
-        style: 'стиль', pass_risk: 'риск', dribble: 'дриблинг', cross: 'кроссы',
+        style: 'стиль', pass_risk: 'риск', dribble: 'дриблинг', cross: 'навесы верхом',
         corner: 'угловые', shot: 'удары', priority: 'фланги'
     };
     const FINAL_GROUP_KEYS = {

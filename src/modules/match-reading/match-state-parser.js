@@ -5,6 +5,15 @@
         OFFICIAL_MATCH_MINUTES: 90,
         REAL_MATCH_MINUTES: 36,
         GAME_MINUTES_PER_REAL_MINUTE: 90 / 36,
+        // #405 F5 (C1): the 2026 generator produces the match as 19 segments of
+        // 5 official minutes each; every segment is generated right before it is
+        // shown, and a tactics change shifts the NEAREST segment. Segment 19
+        // covers stoppage (91-95). The analytical GENERATION_WINDOWS below are
+        // kept unchanged for persisted-telemetry compatibility; segment fields
+        // are additive and never reinterpret historic window values (C234:
+        // автозамена проверяется раз в пятиминутку).
+        SEGMENT_MINUTES: 5,
+        SEGMENT_COUNT: 19,
         GENERATION_WINDOWS: [
             { index: 1, from: 1, to: 15, label: '01-15', generationMinutes: 15, realMinutes: 6, phase: 'first_half' },
             { index: 2, from: 16, to: 30, label: '16-30', generationMinutes: 15, realMinutes: 6, phase: 'first_half' },
@@ -49,8 +58,56 @@
         },
 
         getTargetWindowAfterChange(minute) {
+            // #405 F5 (C1): a tactics change shifts the nearest 5-minute segment,
+            // so the corrected application target is the next segment boundary.
+            // Legacy GENERATION_WINDOWS fields keep their analytical values (the
+            // freeze/effect consumers compare against snapshot.generationWindow
+            // indices); the corrected target is carried additively in segment*.
             const current = this.getWindow(minute);
-            return current.next || current;
+            const legacy = current.next || current;
+            const segment = this.getSegment(minute);
+            const nextSegment = segment.next || segment;
+            return Object.assign({}, legacy, {
+                segmentIndex: nextSegment.index,
+                segmentFrom: nextSegment.from,
+                segmentTo: nextSegment.to,
+                segmentLabel: nextSegment.label,
+                segmentPhase: nextSegment.phase,
+                segmentIsStoppage: nextSegment.isStoppage
+            });
+        },
+
+        // #405 F5 (C1): 5-minute segment identity. Unknown minute → 0 (unknown),
+        // stoppage minutes 91+ clamp into segment 19 (91-95).
+        getSegmentIndex(minute) {
+            const n = Number(minute);
+            if (!Number.isFinite(n) || n < 1) return 0;
+            return Math.min(Math.max(Math.ceil(Math.floor(n) / this.SEGMENT_MINUTES), 1), this.SEGMENT_COUNT);
+        },
+
+        getSegment(minute) {
+            const index = this.getSegmentIndex(minute);
+            if (!index) {
+                return { index: 0, from: 0, to: 0, label: '0', minutes: this.SEGMENT_MINUTES, phase: 'unknown', isStoppage: false, next: null };
+            }
+            const next = index < this.SEGMENT_COUNT ? this.buildSegment(index + 1) : null;
+            return Object.assign(this.buildSegment(index), { next });
+        },
+
+        buildSegment(index) {
+            const from = (index - 1) * this.SEGMENT_MINUTES + 1;
+            const to = index * this.SEGMENT_MINUTES;
+            const isStoppage = index === this.SEGMENT_COUNT;
+            const pad = value => String(value).padStart(2, '0');
+            return {
+                index,
+                from,
+                to,
+                label: `${pad(from)}-${pad(to)}`,
+                minutes: this.SEGMENT_MINUTES,
+                phase: isStoppage ? 'stoppage' : index <= 9 ? 'first_half' : 'second_half',
+                isStoppage
+            };
         },
 
         getLegacyTenMinuteBucket(minute) {

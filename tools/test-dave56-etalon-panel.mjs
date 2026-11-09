@@ -143,9 +143,9 @@ const BUTTON_RE = /<button id="slf-final-tactic-apply-btn" type="button" data-to
   const titleMatch = html.match(/Рекомендация:<\/b> ([^<]*)/);
   assert.ok(titleMatch, 'preset title present');
   assert.equal(titleMatch[1], 'Emery_BalancedBase_v11.', 'preset title = engine action preset');
-  assert.ok(html.includes('<div>Вектор: оборона линия/прессинг/ширина/интенс: 1/1/1/2 · построение выход/темп/диаг/касание: 1/1/1/1 · стиль: 1 · атака риск/дриблинг/кроссы/угловые/удары: 2/2/2/1/2 · фланги: Л+П</div>'),
-    'grouped vector line (оборона/построение/стиль/атака + фланги)');
-  assert.ok(html.includes('<div>Δ: линия 3→1 · прессинг 3→1 · ширина 3→1 · интенс 4→2 · выход 3→1 · темп 3→1 · диаг 3→1 · касание 3→1 · стиль 4→1 · риск 3→2 · кроссы 3→2 · угловые 2→1 · фланги →left+right</div>'),
+  assert.ok(html.includes('<div>Вектор: оборона линия/прессинг/ширина/интенс: 1/1/1/2 · построение выход/темп/диаг/касание: 1/1/1/1 · стиль: 1 · атака риск/дриблинг/навесы верхом/угловые/удары: 2/2/2/1/2 · фланги: Л+П</div>'),
+    'grouped vector line (оборона/построение/стиль/атака + фланги) — #405 F1: cross label = навесы верхом (C323)');
+  assert.ok(html.includes('<div>Δ: линия 3→1 · прессинг 3→1 · ширина 3→1 · интенс 4→2 · выход 3→1 · темп 3→1 · диаг 3→1 · касание 3→1 · стиль 4→1 · риск 3→2 · навесы верхом 3→2 · угловые 2→1 · фланги →left+right</div>'),
     'Δ line over changed controls + priority vs current (dribble/shot equal under v12 → omitted by the renderer)');
   assert.ok(html.includes('оборона/построение/стиль ← эталон d5+b5+s1'), 'provenance line: etalon blocks');
   assert.ok(html.includes('атака ← пресет Emery_BalancedBase_v11'), 'provenance line: attack from preset');

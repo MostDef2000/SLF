@@ -70,7 +70,15 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
             const minute = engine.num(engine.getMetric(snapshot, context, 'minute', ['effectiveMinute', 'baseMinute']), 0);
             const scoreState = engine.getScoreState(snapshot, context);
             const scoreDiff = engine.getScoreDiff(snapshot, context);
-            const generationWindowIndex = engine.num(snapshot?.generationWindow?.index, Math.max(0, Math.floor(minute / 10)));
+            // #405 F6 (C1): the fallback derives from the corrected 5-minute
+            // segment model (19 segments; a tactics change shifts the nearest
+            // segment) instead of implying a 10-minute generation bucket. The
+            // snapshot value stays preferred; 0 = segment identity unknown
+            // (missing MatchTimingModel or unknown minute).
+            const fallbackSegmentIndex = typeof MatchTimingModel !== 'undefined' && MatchTimingModel && typeof MatchTimingModel.getSegmentIndex === 'function'
+                ? MatchTimingModel.getSegmentIndex(minute)
+                : 0;
+            const generationWindowIndex = engine.num(snapshot?.generationWindow?.index, fallbackSegmentIndex);
 
             const myXg = engine.num(context?.myXg ?? context?.myXG ?? my.xG);
             const oppXg = engine.num(context?.oppXg ?? context?.oppXG ?? opp.xG);

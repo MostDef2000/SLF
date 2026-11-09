@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.4.345
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- specs/405-tactics-2026-revision/plan.md
+- specs/405-tactics-2026-revision/spec.md
+- specs/405-tactics-2026-revision/tasks.md
+
+Approved base commit:
+- 193172e78999aba70e11214299af6f2e8950d5bf
+
+Approved commit:
+- 3d35087308cc115efc485263269612344113b623
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.344
 
 ### Automatic latest-only build
