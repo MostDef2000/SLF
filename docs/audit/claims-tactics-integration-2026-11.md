@@ -312,3 +312,91 @@ Follow-up backlog (no owner action requested by this document):
 2. **Continued unchanged P03 observation** — population, weights, and blindness rules stay frozen; the funnel is the only thing that should grow.
 3. **Later protocol design** — only if the owner wants §8 directions promoted to state 2 (approved protocol).
 4. **Eventual gated retune proposal** — only after `readyForRetune` = true, and even then as a proposal, not an automatic retune.
+
+## Wave 3 — 2026-only profile-tab crawl (C170+)
+
+Appended 2026-11-09. Sections 1–10 above are left untouched; this section extends the audit with the wave-3 corpus growth (C170–C396). One supersession of record: §10's bullet «No new crawling: the owner closed the crawl; the claims file is the fixed corpus» is **superseded by the owner-authorized wave-3 profile-tab crawl described here** (the bullet itself is left in place, unedited).
+
+### Method and owner scope decision
+
+- **Method.** Authenticated crawl of the four forum profile tabs (z1s, Eywa, Forward, Dave) on slf.fm, **2026 posts only** (owner directive), followed by a curation pass (186 claim candidates) and a canonical-body fetch (`bodies.jsonl`, 186/186 matched) used for quote verification and date cross-checks. Raw crawl artifacts stay in ephemeral scratch, not in the repo.
+- **Owner scope decision:** C1–C169 are kept byte-identical (deep-equal proof below); wave-3 adds only new claims C170–C396. No old claim was edited, re-categorized, or re-dated; conflicts are registered only via the new `conflictsWithSuspected` field on new claims (bare old-claim IDs; the corpus had zero conflict fields before wave 3).
+- Corpus totals: 396 claims, schema `slf_forum_official_claims_v1` unchanged. New-claim date range 2026-01-01..2026-11-09 across 186 unique posts.
+
+### Author roles (authority rule, extended in the corpus `authorityRule`)
+
+| Author | Role | Standing |
+| --- | --- | --- |
+| z1s | founder | words treated as truth as-is (owner directive) |
+| Eywa | forum admin (badge observed in archive) | official admin source |
+| Forward | community (advanced user close to administration) | **NOT an official source** — one user's account, not project statements |
+| Dave | developer (Gold badge observed) | answers treated as truth (owner directive) |
+
+All remain account-reported claims, not independently verified engine laws.
+
+### Counts
+
+Author blocks (ID convention below): z1s **C170–C231 = 62** (21 posts, of which 4 dense changelog posts split into 45 claims), Eywa **C232–C241 = 10**, Forward **C242–C309 = 68**, Dave **C310–C396 = 87**. Total new = 227; corpus 396.
+
+Per category (wave-3 claims): mechanics **98**, product **107**, historical-stats **12**, roadmap **10**. Per author × category: z1s product 55 / roadmap 3 / mechanics 4; Eywa product 4 / mechanics 6; Forward mechanics 36 / product 20 / historical-stats 10 / roadmap 2; Dave mechanics 52 / product 28 / roadmap 5 / historical-stats 2.
+
+### ID convention
+
+Author blocks in fixed order z1s → Eywa → Forward → Dave; within a block, `postedAt` ascending (tiebreak postId ascending); split siblings occupy consecutive IDs at the parent post's chronological position, ordered by body position. `versionTag: null` for all new claims (candidates carry no version assignment; corpus semantics: null = unversioned). `postedAt` = `"<YYYY-MM-DDTHH:MM> forum time"` for all new claims (C1–C3 precedent), `postedAtNote` carried verbatim from candidates.
+
+### Split register (4 posts → 45 claims)
+
+| Post (z1s changelog) | Sibling IDs | Claims |
+| --- | --- | --- |
+| 5265150 «что изменилось за 13–15 октября» | C174–C178 | 5 |
+| 5265833 «отчет за 17 октября» (+18.10 part) | C180–C189 | 10 |
+| 5266050 «итоги 18 октября» | C190–C204 | 15 |
+| 5266671 «Отчёт за 18–21 октября» | C207–C221 | 15 |
+
+Split siblings inherit the parent category (`product`) with **one exception**: 5266671 fact «товарищеские матчи сборных снова на общем генераторе» is `mechanics` (corpus taxonomy: mechanics = engine/generator). Borderline dense posts kept whole (one-claim precedent C20/C27): 5267942 (Г6 информ-табло), 5269635 (one incident), Dave 5.6 changelog posts, Eywa 5270562/5270564. Note: C209 and C223 state the same fact (проигравшая команда несёт мяч к центру после гола) from different posts — the convention is post-based, so such overlap is natural and retrieval may double-count the fact.
+
+### Apparent-conflict register (wave-3 additions; old claims never edited)
+
+17 registrations via `conflictsWithSuspected` on new claims (bare old-claim IDs):
+
+| Old claim | New claims (wave-3) | Substance |
+| --- | --- | --- |
+| C95 | C173, C221, C264, C304, C335 | контроль хаоса/змейка announced as working (2024) vs «отменили»/«больше нет» (2026) and Forward's «накопленный xG влияет» vs C95's «не влияет»; C221: товарняки сборных снова на общем генераторе vs C95's «ползунок только в КТ 2.0 и товарищеских матчах» (скоуз C95 устарел) |
+| C96 | C173, C304, C335 | калибровка ползунка (2024) vs «контроля хаоса больше нет (забыт)» |
+| C97 | C173, C304, C335 | статистика контроля хаоса (2024-08) — same feature era |
+| C125 | C173, C304, C335 | референдум/квантование контроля (2025-01) vs removal statements |
+| C65 | C190, C378, C388, C389 | три источника (SB/TM/АИ) конкурируют (2025-10) vs Soccerway скрыт/«до 2025 был», текущие источники ТМ/SD (2026) |
+| C146 | C240 | комиссия по талантам закрыта (2026-11) vs концепция индексации с «актуальным талантом (скаут/комиссия)» (2025-11) |
+| C81 | C240 | слабое/смежное: отказ от комиссии (2021) vs полное закрытие (2026) — разные события, комиссия работала в промежутке; зарегистрировано как suspected |
+| C90 | C246, C299 | «отказ от потолков» (2015) vs Forward: потолок существует (2026); экономика «введена в 2017» vs Экономика 2.0 анонс 2014/ввод 2015 |
+| C66 | C299 | дата ввода новой экономики |
+| C28 | C313, C314, C330 | мануал «Игроки-якоря» (2022) vs «отменены игроки-якори» в 5.6 (2026-01) |
+| C9 | C333 | лидерство: «1 пункт = 1% морали» не реализовано (2019) vs реализовано в 5.6 |
+| C36 | C379 | роль ПИ у CD: уточнение правил (тройка/пара) — уточнение, не снятие |
+| C119 | C388 | источники скилл-обсчёта ТМ/СВ/АИ (2015) vs текущие источники ТМ/SD (2026) |
+| C63 | C389 | Soccerway-проверка заявок (2022) vs Soccerway в прошлом (до 2025) |
+
+Checked and cleared (reviewed, no contradiction registered): C98 vs Forward 5270478 (механизм змейки описан совместимо); C28 vs Forward 5197534/5200896/5204213 (якоря: расширения/позже-правки, не противоречие мануалу); C137 vs C389 (C137 — историческое описание интеграции 2013); C22 vs C269 (Forward 5205391 дословно подтверждает мануал — корроборация, 12 общих токенов, не конфликт).
+
+### Quote-fix register (100 fixes, all verified)
+
+- **13 Forward composite quotes**: candidate quotes joined segments with `…`; each segment verified whitespace-normalized verbatim in the canonical body and rejoined with `" … "` (corpus C5 precedent). Includes Forward 5217298 (needsBodyFetch): quote rebuilt from the fetched body, both segments verified.
+- **87 Dave quotes**: wrapped in `«…»` (all 87 Dave candidates were unwrapped; corpus convention is wrapped).
+- Every new quote (all 227) appears whitespace-normalized verbatim in `bodies.jsonl` text for its postId — 186/186 canonical bodies matched.
+
+### postedAt cross-check
+
+Candidate `dateISO` vs body `dataUnix` rendered in Europe/Moscow, tolerance ±1 day: **0 mismatches** across 227 claims. No flags added to notes on this basis. C240/C241 dates were today-relative on the profile tab, resolved against the crawl date and verified against body `dataUnix` (Europe/Moscow, delta 0 days for both).
+
+### Gaps and caveats
+
+- `needsTopicContext` = 5 claims (understanding depends on topic context); `confidence=low` = 66 claims (folded into `notes`).
+- Candidate extras folded into `notes` (confidence, needsTopicContext, needsBodyFetch, textLikelyTruncated, roadmapAdjacent-as-boolean — corpus C6 keeps `roadmapAdjacent` as a descriptive string, so booleans could not map directly).
+- New fields `conflictsWithSuspected` and `notes` exist only on wave-3 claims (C1–C169 untouched).
+- versionTag null for all new claims: candidates carry no version assignment.
+
+### Verification of record
+
+- C1–C169 deep-equal vs pre-wave-3 snapshot: sha256 of the claims array `e0d3ab7d565ed1fece2b5a87d3362ddd22340858026a9d201e2ffd2de5cd73ba` in both snapshot and final file; list equality True.
+- Final file: schema `slf_forum_official_claims_v1` unchanged; 396 claims; ids unique and contiguous C1..C396.
+- Test suite `vps/exporter-rag/test_slf_rag_build.py` (pins updated to 396): `Ran 12 tests ... OK`.
