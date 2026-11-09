@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.346
+// @version      4.4.347
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.346',
-        scriptVersion: '4.4.346',
+        version: '4.4.347',
+        scriptVersion: '4.4.347',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.346',
+        scriptVersion: '4.4.347',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -7121,15 +7121,20 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
             const minute = engine.num(engine.getMetric(snapshot, context, 'minute', ['effectiveMinute', 'baseMinute']), 0);
             const scoreState = engine.getScoreState(snapshot, context);
             const scoreDiff = engine.getScoreDiff(snapshot, context);
-            // #405 F6 (C1): the fallback derives from the corrected 5-minute
-            // segment model (19 segments; a tactics change shifts the nearest
-            // segment) instead of implying a 10-minute generation bucket. The
-            // snapshot value stays preferred; 0 = segment identity unknown
-            // (missing MatchTimingModel or unknown minute).
-            const fallbackSegmentIndex = typeof MatchTimingModel !== 'undefined' && MatchTimingModel && typeof MatchTimingModel.getSegmentIndex === 'function'
-                ? MatchTimingModel.getSegmentIndex(minute)
+            // #405 F6 (C1, review-corrected): the fallback derives the analytical
+            // generation window from the model's own window boundaries — the SAME
+            // field/unit the snapshot carries (generationWindow.index, windows
+            // 1-7; 0 = unknown minute). The naive Math.floor(minute/10) bucket is
+            // gone. The 5-minute SEGMENTS model stays additive in
+            // getTargetWindowAfterChange (F5) and is deliberately NOT used here:
+            // this field is consumed as a window counter by hysteresis
+            // (applyHysteresis heldWindows; cah-decision-core
+            // detectedPresetSinceWindow), so segment-space values (1-19) would mix
+            // units across snapshots, inflate heldWindows and weaken the hold guard.
+            const fallbackWindowIndex = typeof MatchTimingModel !== 'undefined' && MatchTimingModel && typeof MatchTimingModel.getWindow === 'function'
+                ? ((MatchTimingModel.getWindow(minute) || {}).index || 0)
                 : 0;
-            const generationWindowIndex = engine.num(snapshot?.generationWindow?.index, fallbackSegmentIndex);
+            const generationWindowIndex = engine.num(snapshot?.generationWindow?.index, fallbackWindowIndex);
 
             const myXg = engine.num(context?.myXg ?? context?.myXG ?? my.xG);
             const oppXg = engine.num(context?.oppXg ?? context?.oppXG ?? opp.xG);
@@ -26541,15 +26546,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.346',
-        scriptVersion: '4.4.346',
+        version: '4.4.347',
+        scriptVersion: '4.4.347',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.346',
+        scriptVersion: '4.4.347',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

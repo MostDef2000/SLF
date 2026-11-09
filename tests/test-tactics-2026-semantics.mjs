@@ -12,13 +12,17 @@
 //       controllable chaos mechanism exists).
 //   F4  aerial-cross fit penalty applies only to explicit cross traits;
 //       width-only traits are no longer penalized as aerial-cross conflicts
-//       (C323) — ranking changes are asserted.
+//       (C323) — asserted on synthetic future-schema fixtures; a real-registry
+//       case pins that production TRAITS (no strengths key) never take the
+//       penalty (no production ranking change).
 //   F5  19×5-minute segment model (C1: матч — 19 отрезков по 5 минут, каждый
 //       генерируется прямо перед показом; смена тактики сдвигает ближайший
 //       отрезок) alongside the legacy analytical GENERATION_WINDOWS; legacy
 //       window fields keep their values (persisted telemetry compatibility).
-//   F6  generationWindowIndex fallback derives from the 5-minute segment
-//       model instead of the retired 10-minute bucket implication.
+//   F6  generationWindowIndex fallback derives the analytical generation window
+//       from the model's own window boundaries (same window-space unit, 1-7, the
+//       snapshot carries and hysteresis consumes) instead of the retired
+//       10-minute bucket implication.
 //   F7  high-press presets (press_intense>=3) carry a user-facing ПИ-role
 //       note (C324, C379) — a note, not a veto; entry conditions unchanged.
 //   R1  tripwire: all 13×15 PRESETS numeric vectors stay byte-identical.
@@ -77,6 +81,10 @@ const Fit = scoringSandbox.RecommendationEngine;
 {
     const ownCrossBad = { tags: ['own_open_play_crosses_bad'] };
 
+    // Synthetic-strengths fixtures (a)-(e): fixture shape for FUTURE trait
+    // schemas — production TRAITS carry no `strengths` key at all (covered by
+    // the real-registry case (f) below).
+
     // (a) explicit cross trait still takes the aerial-cross conflict penalty
     const crossFit = Fit.scorePresetCrossFit(
         { strengths: ['aerial_crosses'], avoids: [], build: 'patient_progression' },
@@ -134,6 +142,52 @@ const Fit = scoringSandbox.RecommendationEngine;
     assert.equal(crossRanked.parts.cross.score, -3, 'F4: cross-trait preset fit score carries the -3 penalty');
     assert.ok(!wideRanked.reasons.some(reason => reason.delta === -3), 'F4: wide-only preset is not aerial-cross penalized');
     assert.ok(wideRanked.score > crossRanked.score, 'F4: ranking changes — wide-only preset now outranks cross-trait preset under bad own crosses');
+
+    // (f) real-registry case: production TRAITS (active-preset-registry.js)
+    // carry NO `strengths` key for any of the 13 presets, and the only `build`
+    // containing 'wide' (Conte_WideChannels_v11) avoids 'own_crosses_bad' — so
+    // the pre-#405 penalty branch was already unreachable in production. Pin
+    // the real shapes: no preset takes the -3 penalty; Conte keeps the +2
+    // avoid-bonus. (Review MAJOR-1: no production ranking change.)
+    const registrySandbox = {
+        console, Date, Math, JSON, Number, String, Object, Array, Set, Map, Promise,
+        setTimeout: () => 0, clearTimeout: () => {},
+        localStorage: { getItem: () => null },
+        document: { readyState: 'complete', querySelector: () => null, defaultView: null }
+    };
+    registrySandbox.window = registrySandbox;
+    registrySandbox.globalThis = registrySandbox;
+    registrySandbox.window.SLFCurrentActionHintEngine = { schema: 'slf_rule_decision_v11_tactical_suite', run: () => ({}) };
+    registrySandbox.RecommendationEngine = {
+        getPresetLadder() { return []; },
+        applyProgressionGuard(candidate) { return candidate; }
+    };
+    vm.createContext(registrySandbox);
+    vm.runInContext(read('src/modules/tactics-presets/active-preset-registry.js'), registrySandbox, { filename: 'active-preset-registry.js' });
+    const RealRegistry = registrySandbox.window.SLFActivePresetRegistry;
+    assert.ok(RealRegistry?.traits, 'real registry exposes traits');
+    const realTraitNames = Object.keys(RealRegistry.traits);
+    assert.equal(realTraitNames.length, 13, 'real registry carries all 13 presets');
+    assert.equal(
+        realTraitNames.filter(name => 'strengths' in (RealRegistry.traits[name] || {})).length,
+        0,
+        'F4 fact: production TRAITS carry no strengths key for any preset'
+    );
+    for (const name of realTraitNames) {
+        const fit = Fit.scorePresetCrossFit(RealRegistry.traits[name], ownCrossBad);
+        assert.ok(fit.score >= 0, `F4: real traits ${name} take no aerial-cross penalty (score ${fit.score} >= 0)`);
+        assert.ok(!fit.reasons.some(reason => reason.delta === -3), `F4: real traits ${name} produce no -3 penalty reason`);
+    }
+    const conteFit = Fit.scorePresetCrossFit(RealRegistry.traits.Conte_WideChannels_v11, ownCrossBad);
+    assert.equal(conteFit.score, 2, 'F4: Conte avoid-bonus score is exactly +2 on real traits');
+    assert.ok(
+        RealRegistry.traits['Conte_WideChannels_v11'].avoids.includes('own_crosses_bad'),
+        'F4: Conte avoids own_crosses_bad on real traits'
+    );
+    assert.ok(
+        conteFit.reasons.some(reason => reason.delta === 2),
+        'F4: Conte_WideChannels_v11 gets the +2 own_crosses_bad avoid-bonus on real traits'
+    );
 }
 
 // --- F5: 19×5-minute segment model + legacy windows (C1, C234) -----------------
@@ -203,7 +257,7 @@ const Timing = timingSandbox.window.__slf405Timing.MatchTimingModel;
     assert.equal(Timing.getLegacyTenMinuteBucket(5), '1-10', 'legacy 10-minute bucket start boundary unchanged');
 }
 
-// --- F6: generationWindowIndex fallback derives from the segment model --------
+// --- F6: generationWindowIndex fallback derives the analytical window ---------
 const cahSandbox = {
     console, Date, Math, JSON, Number, String, Object, Array, Set, Map, Promise,
     setTimeout: () => 0, clearTimeout: () => {},
@@ -220,16 +274,18 @@ vm.runInContext(read('src/modules/strategy-data-recommendations/cah-runtime-cont
 const Cah = cahSandbox.window.SLFCurrentActionHintEngine;
 
 {
-    // Fallback (no snapshot.generationWindow): 5-minute segment index (C1).
+    // Fallback (no snapshot.generationWindow): analytical window index from the
+    // model's own window boundaries — the SAME unit snapshot.generationWindow
+    // .index carries and applyHysteresis/detectedPresetSinceWindow consume.
     assert.equal(
         Cah.MatchDecisionSignals.build(Cah, { minute: 12 }, {}, null).generationWindowIndex,
-        3,
-        'F6: fallback window index = 5-minute segment (minute 12 → segment 3, not the legacy 10-minute bucket 1)'
+        1,
+        'F6: fallback window index is window-space (minute 12 → analytical window 1, not a segment/bucket index)'
     );
     assert.equal(
         Cah.MatchDecisionSignals.build(Cah, { minute: 91 }, {}, null).generationWindowIndex,
-        19,
-        'F6: stoppage minute 91 → segment 19'
+        7,
+        'F6: stoppage minute 91 clamps into the final analytical window 7'
     );
     // Snapshot value stays preferred (fallback only).
     assert.equal(

@@ -1,5 +1,33 @@
 # Changelog
 
+## 4.4.347
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- docs/audit/preset-vector-revision-2026-11.md
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/tactics-presets/tactical-lab-v1.js
+- tests/test-tactical-lab-p04-transition.mjs
+- tools/test-tactical-situation-diversity.mjs
+
+Approved base commit:
+- 823c82f29eb40b5fc0855fdef2cc4fa480f0f9ff
+
+Approved commit:
+- ccbeb056cefe023b6db3c5ac053ebbe5bb680ce2
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.346
 
 ### Automatic latest-only build

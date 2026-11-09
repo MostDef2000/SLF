@@ -110,8 +110,8 @@ Numeric values unchanged, not validated; retune gate unmet (41/60 linked) for al
 1. **F1 — cross control label** (`strategy-data-task-a-ui-extension.js`, FINAL_CONTROL_LABELS).
    Before: `cross: 'кроссы'`. After: `cross: 'навесы верхом'`. C323: настройка влияет только на верховые
    кроссы. Note: this label renders in the final-merge vector/Δ lines; `tools/test-dave56-etalon-panel.mjs`
-   asserts the old label text and needs a companion 2-line update (outside this order's allowed paths —
-   flagged to the orchestrator).
+   asserts the old label text; the companion 2-line update to `tools/test-dave56-etalon-panel.mjs`
+   (lines 146–148) was applied by the orchestrator in the same PR.
 2. **F2 — cross advice qualifies aerial vs ground** (`re-plan-engine.js`, open_play_crosses_bad branch).
    Before: developer «Кроссы с игры не работают: …; не усиливать обычные навесы без нового адресата.» /
    control «Атака: не повышать навесы; искать низовой вход, пас между линиями или полупространства.»
@@ -126,8 +126,16 @@ Numeric values unchanged, not validated; retune gate unmet (41/60 linked) for al
    Before: `wideOrCross = /cross|wide|wing/ on strengths || build includes 'wide'` → −3 under bad own
    crosses for width traits too. After: the −3 aerial-cross penalty applies only when a strength/trait
    explicitly says cross; width-only traits no longer take it (C323: ground crosses = острота/центр/
-   диагонали, not width). The `own_crosses_bad` avoid-bonus (+2) path is unchanged. **Ranking changes by
-   design** — covered by tests/test-tactics-2026-semantics.mjs (F4 section).
+   диагонали, not width). The `own_crosses_bad` avoid-bonus (+2) path is unchanged. **Production
+   framing (review-corrected):** production TRAITS (`active-preset-registry.js`, TRAITS map) carry **no
+   `strengths` key for any of the 13 presets** (keys: requires, avoids, attackLanes, build, tempo, press,
+   risk), and the only `build` value containing 'wide' is Conte_WideChannels_v11's
+   `fixed_lineup_wide_channels` — whose avoids include `own_crosses_bad`. The pre-#405 penalty branch
+   (`wideOrCross && !avoids.includes('own_crosses_bad')`) was therefore **already unreachable in
+   production**: F4's real effect is removing the width conflation for future trait shapes and aligning
+   the reason text with C323 — **no production ranking change**. Covered by
+   tests/test-tactics-2026-semantics.mjs (F4 section: synthetic future-schema fixtures + real-registry
+   case over all 13 TRAITS).
 5. **F5 — 19×5-minute SEGMENTS model** (`match-state-parser.js`, MatchTimingModel). Additive:
    `SEGMENT_MINUTES=5`, `SEGMENT_COUNT=19`, `getSegmentIndex`, `getSegment` (segment 19 = stoppage 91-95);
    `getTargetWindowAfterChange` now also carries `segmentIndex/From/To/Label/Phase/IsStoppage` targeting
@@ -135,9 +143,14 @@ Numeric values unchanged, not validated; retune gate unmet (41/60 linked) for al
    проверяется раз в пятиминутку). Legacy GENERATION_WINDOWS fields, `getWindow`, and
    `getLegacyTenMinuteBucket` are byte-identical to base — historic telemetry is not reinterpreted.
 6. **F6 — generationWindowIndex fallback** (`cah-runtime-context.js`). Before: `Math.floor(minute/10)`
-   (implied a 10-minute generation bucket). After: fallback derives from the corrected model via
-   `MatchTimingModel.getSegmentIndex(minute)` (5-minute segment index; 0 = unknown); snapshot
-   `generationWindow.index` stays preferred.
+   (implied a 10-minute generation bucket). After (review-corrected): the fallback derives the
+   **analytical generation window** from the model's own window boundaries via
+   `MatchTimingModel.getWindow(minute).index` — the same window-space unit (1-7; 0 = unknown) the
+   snapshot carries and hysteresis consumes (`applyHysteresis` heldWindows; `detectedPresetSinceWindow`);
+   snapshot `generationWindow.index` stays preferred. An earlier R2 draft used
+   `getSegmentIndex(minute)` (segment-space 1-19) — rejected in review: mixing units across snapshots
+   inflates heldWindows and weakens the hold guard. The 5-minute SEGMENTS model stays additive in
+   `getTargetWindowAfterChange` (F5) and is not used here.
 7. **F7 — high-press ПИ note** (`active-preset-registry.js`, user-facing note text only). For presets with
    `press_intense>=3` (Guardiola_ControlledPush_v11, Guardiola_PositionalSiege_v11, Conte_WideChannels_v11,
    Klopp_LateGegenpress_v11, Flick_LeadPressHold_v12) the usage guidance now carries: «Для высокого
@@ -148,12 +161,14 @@ Numeric values unchanged, not validated; retune gate unmet (41/60 linked) for al
 ## §5b Acceptance cases (executable)
 
 `tests/test-tactics-2026-semantics.mjs` (node, real modules in a vm sandbox):
-F1 label lock; F2/F3 wording locks; F4 aerial-vs-width split incl. ranking impact and unchanged avoid-bonus;
+F1 label lock; F2/F3 wording locks; F4 aerial-vs-width split (synthetic future-schema fixtures + real-registry
+case: production TRAITS carry no `strengths` key, so no production ranking change; unchanged avoid-bonus);
 F5 segment model (19×5, boundaries, stoppage clamp, contiguity, next-segment target, legacy windows intact);
-F6 fallback derivation + snapshot preference + unknown→0; F7 note present for high-press recommendations
-(Conte/Flick), absent for low-press (Emery), not a veto; R1 tripwire over all 13×15 vectors.
+F6 window-space fallback derivation + snapshot preference + unknown→0; F7 note present for high-press
+recommendations (Conte/Flick), absent for low-press (Emery), not a veto; R1 tripwire over all 13×15 vectors.
 RED evidence captured before the fixes (F1 assert fail; F4 wide-only −3; F5 SEGMENT_COUNT undefined;
-F6 fallback=1; F7 note absent); GREEN after.
+F6 fallback=1; F7 note absent); GREEN after. Review-fix RED evidence: F6 window-space expectations
+(12→1, 91→7) failed against the segment-space draft (actual 3/19) before the code fix.
 
 ## §6 Registered conflicts touching tactics (unresolved)
 
