@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.347
+// @version      4.4.364
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.347',
-        scriptVersion: '4.4.347',
+        version: '4.4.364',
+        scriptVersion: '4.4.364',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.347',
+        scriptVersion: '4.4.364',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -1840,10 +1840,8 @@ const DomUtils = {
     (function scheduleTacticalLabV1() {
         const LEGACY_P02_VERSION = 'slf_tactical_lab_561_p02';
         const LEGACY_P02_CODE = 'P02';
-        const LEGACY_P03_VERSION = 'slf_tactical_lab_561_p03';
-        const LEGACY_P03_CODE = 'P03';
-        const POPULATION_VERSION = 'slf_tactical_lab_561_p04';
-        const POPULATION_CODE = 'P04';
+        const POPULATION_VERSION = 'slf_tactical_lab_561_p03';
+        const POPULATION_CODE = 'P03';
         const GENOME_VERSION = 'slf_tactical_genome_v1';
         const POPULATION_SIZE = 6;
         const P03_SELECTION = [
@@ -1853,33 +1851,6 @@ const DomUtils = {
             {parentExperimentId:'EXP-561-P02-0058',weight:10},
             {parentExperimentId:'EXP-561-P02-0011',weight:5},
             {parentExperimentId:'EXP-561-P02-0055',weight:5}
-        ];
-        // P04 base = Emery_BalancedBase_v11 vector, hard-coded (same convention as
-        // seedPresets below) so registry drift can never silently rewrite lab
-        // genomes. Source: active-preset-registry.js PRESETS.Emery_BalancedBase_v11
-        // at base 823c82f29eb40b5fc0855fdef2cc4fa480f0f9ff.
-        const P04_BASE = {def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'2',build_long:'2',build_fast:'2',style:'3',pass_risk:'2',dribble:'2',cross:'2',corner:'1',shot:'2',priority:[]};
-        // P04 one-factor-at-a-time hypothesis arms (spec 405 R3). Each genome varies
-        // EXACTLY ONE control from P04_BASE; weights 35/35/10/10/5/5. The hypothesis
-        // code travels in origin (`hypothesis_factor:<code>`) — telemetry-safe, no
-        // new experiment fields:
-        //   press_roles      H1 (C324, C329): higher press intensity — outcome/fitness
-        //                    effect; ПИ role coverage is a user responsibility
-        //                    (registry note F7), the lab measures the vector effect only.
-        //   line_transition  H2 (C325): higher line → transition exposure after a
-        //                    broken press.
-        //   aerial_cross     H3 (C323): cross affects aerial crosses only.
-        //   center_pass_risk H4 (C316, C326): center attacks work through passes,
-        //                    not dribbling.
-        //   control_base_a/b (C1, C234): exact P04_BASE repeats — variance control +
-        //                    application-timing observation.
-        const P04_SELECTION = [
-            {code:'press_roles',weight:35,vary:{press_intense:'3'}},
-            {code:'line_transition',weight:35,vary:{press_line:'3'}},
-            {code:'aerial_cross',weight:10,vary:{cross:'3'}},
-            {code:'center_pass_risk',weight:10,vary:{pass_risk:'3'}},
-            {code:'control_base_a',weight:5,vary:null},
-            {code:'control_base_b',weight:5,vary:null}
         ];
         const PANEL_ID = 'slf-tactical-lab-panel';
         const BUTTON_ID = 'slf-tactical-lab-apply';
@@ -1917,7 +1888,6 @@ const DomUtils = {
         const labControlKeys = Object.keys(ranges);
         let population = null;
         let legacyP02Population = null;
-        let legacyP03Population = null;
         let cachedState = null;
         let cachedGameId = '';
         let flushPromise = null;
@@ -2059,30 +2029,13 @@ const DomUtils = {
             return result;
         }
 
-        // P03 builder kept for legacy resolution: in-flight P03 assignments must
-        // stay resolvable (and attributable) after the P04 switch. Population
-        // code/version are passed EXPLICITLY (P02-builder pattern): makeExperiment's
-        // defaults now point at P04, and the pre-switch builder implicitly relied
-        // on them being P03.
-        function buildP03Population() {
+        function buildPopulation() {
             const p02 = legacyP02Population || (legacyP02Population = buildP02Population());
-            const p03Options = {populationCode:LEGACY_P03_CODE,populationVersion:LEGACY_P03_VERSION,generation:2};
             return P03_SELECTION.map((selection, index) => {
                 const parent = p02.find(item => item.experimentId === selection.parentExperimentId);
                 if (!parent) throw new Error(`[SLF Tactical Lab] missing P03 validation parent ${selection.parentExperimentId}`);
                 return makeExperiment(index, 'validation_repeat', parent.controls, parent.experimentId, 0, {
-                    ...p03Options,
-                    selectionWeightPct:selection.weight
-                });
-            });
-        }
-
-        function buildPopulation() {
-            return P04_SELECTION.map((selection, index) => {
-                const controls = clone(P04_BASE);
-                if (selection.vary) Object.assign(controls, selection.vary);
-                return makeExperiment(index, `hypothesis_factor:${selection.code}`, controls, null, mutationDistance(P04_BASE, controls), {
-                    generation:3,
+                    generation:2,
                     selectionWeightPct:selection.weight
                 });
             });
@@ -2177,16 +2130,16 @@ const DomUtils = {
             }
             return items[items.length - 1];
         }
-        function preserveLegacyAssignment(state) {
+        function preserveLegacyP02Assignment(state) {
             const version = String(state?.assignment?.populationVersion || state?.populationVersion || '');
-            return !!state?.assignment && (version === LEGACY_P02_VERSION || version === LEGACY_P03_VERSION);
+            return !!state?.assignment && version === LEGACY_P02_VERSION;
         }
         function ensureAssignment(snapshot) {
             const gameId = getGameId(snapshot);
             const state = loadState(gameId);
             if (!state) return null;
             const assignmentVersion = String(state.assignment?.populationVersion || state.populationVersion || '');
-            if (!state.assignment || (assignmentVersion !== POPULATION_VERSION && !preserveLegacyAssignment(state))) {
+            if (!state.assignment || (assignmentVersion !== POPULATION_VERSION && !preserveLegacyP02Assignment(state))) {
                 const selected = selectExperiment(gameId);
                 state.populationVersion = POPULATION_VERSION;
                 state.assignment = {
@@ -2209,9 +2162,7 @@ const DomUtils = {
             const assignmentVersion = String(state?.assignment?.populationVersion || state?.populationVersion || '');
             const items = assignmentVersion === LEGACY_P02_VERSION
                 ? (legacyP02Population || (legacyP02Population = buildP02Population()))
-                : assignmentVersion === LEGACY_P03_VERSION
-                    ? (legacyP03Population || (legacyP03Population = buildP03Population()))
-                    : (population || (population = buildPopulation()));
+                : (population || (population = buildPopulation()));
             return items.find(item => item.experimentId === state?.assignment?.experimentId) || null;
         }
         function isOwnedLive(snapshot) {
@@ -2782,15 +2733,6 @@ const DomUtils = {
         OFFICIAL_MATCH_MINUTES: 90,
         REAL_MATCH_MINUTES: 36,
         GAME_MINUTES_PER_REAL_MINUTE: 90 / 36,
-        // #405 F5 (C1): the 2026 generator produces the match as 19 segments of
-        // 5 official minutes each; every segment is generated right before it is
-        // shown, and a tactics change shifts the NEAREST segment. Segment 19
-        // covers stoppage (91-95). The analytical GENERATION_WINDOWS below are
-        // kept unchanged for persisted-telemetry compatibility; segment fields
-        // are additive and never reinterpret historic window values (C234:
-        // автозамена проверяется раз в пятиминутку).
-        SEGMENT_MINUTES: 5,
-        SEGMENT_COUNT: 19,
         GENERATION_WINDOWS: [
             { index: 1, from: 1, to: 15, label: '01-15', generationMinutes: 15, realMinutes: 6, phase: 'first_half' },
             { index: 2, from: 16, to: 30, label: '16-30', generationMinutes: 15, realMinutes: 6, phase: 'first_half' },
@@ -2835,56 +2777,8 @@ const DomUtils = {
         },
 
         getTargetWindowAfterChange(minute) {
-            // #405 F5 (C1): a tactics change shifts the nearest 5-minute segment,
-            // so the corrected application target is the next segment boundary.
-            // Legacy GENERATION_WINDOWS fields keep their analytical values (the
-            // freeze/effect consumers compare against snapshot.generationWindow
-            // indices); the corrected target is carried additively in segment*.
             const current = this.getWindow(minute);
-            const legacy = current.next || current;
-            const segment = this.getSegment(minute);
-            const nextSegment = segment.next || segment;
-            return Object.assign({}, legacy, {
-                segmentIndex: nextSegment.index,
-                segmentFrom: nextSegment.from,
-                segmentTo: nextSegment.to,
-                segmentLabel: nextSegment.label,
-                segmentPhase: nextSegment.phase,
-                segmentIsStoppage: nextSegment.isStoppage
-            });
-        },
-
-        // #405 F5 (C1): 5-minute segment identity. Unknown minute → 0 (unknown),
-        // stoppage minutes 91+ clamp into segment 19 (91-95).
-        getSegmentIndex(minute) {
-            const n = Number(minute);
-            if (!Number.isFinite(n) || n < 1) return 0;
-            return Math.min(Math.max(Math.ceil(Math.floor(n) / this.SEGMENT_MINUTES), 1), this.SEGMENT_COUNT);
-        },
-
-        getSegment(minute) {
-            const index = this.getSegmentIndex(minute);
-            if (!index) {
-                return { index: 0, from: 0, to: 0, label: '0', minutes: this.SEGMENT_MINUTES, phase: 'unknown', isStoppage: false, next: null };
-            }
-            const next = index < this.SEGMENT_COUNT ? this.buildSegment(index + 1) : null;
-            return Object.assign(this.buildSegment(index), { next });
-        },
-
-        buildSegment(index) {
-            const from = (index - 1) * this.SEGMENT_MINUTES + 1;
-            const to = index * this.SEGMENT_MINUTES;
-            const isStoppage = index === this.SEGMENT_COUNT;
-            const pad = value => String(value).padStart(2, '0');
-            return {
-                index,
-                from,
-                to,
-                label: `${pad(from)}-${pad(to)}`,
-                minutes: this.SEGMENT_MINUTES,
-                phase: isStoppage ? 'stoppage' : index <= 9 ? 'first_half' : 'second_half',
-                isStoppage
-            };
+            return current.next || current;
         },
 
         getLegacyTenMinuteBucket(minute) {
@@ -6284,10 +6178,8 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
         const own = state.ownCrossSummary;
         if (own?.total >= 2) {
             if (own.signal === 'open_play_crosses_bad') {
-                // C323 (#405 F2): настройка «навесы» влияет только на верховые кроссы;
-                // низовой вход driven by острота/центр/диагонали — qualify aerial vs ground.
-                plan.developer.push(`Кроссы с игры не работают: ${own.openPlay.won}/${own.openPlay.total}; проверьте отдельно верховые и низовые; настройка навесов влияет только на верховые (C323).`);
-                plan.controls.push('Атака: не повышать навесы верхом; низовой вход — острота передач, атаки по центру, диагонали (C323).');
+                plan.developer.push(`Кроссы с игры не работают: ${own.openPlay.won}/${own.openPlay.total}; не усиливать обычные навесы без нового адресата.`);
+                plan.controls.push('Атака: не повышать навесы; искать низовой вход, пас между линиями или полупространства.');
             } else if (own.signal === 'crosses_bad_total') {
                 plan.developer.push(`Кроссы в целом слабые: ${own.won}/${own.total}; стандарты/навесы не должны быть главным планом атаки.`);
             }
@@ -6393,7 +6285,7 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
 
         if (score.state === 'winning' && minute >= 70) {
             if (xgGap > 0.35 || xtGap > 0.25 || state.tags.includes('opponent_crosses_dangerous')) return { name: 'Simeone_Compact442_def4', reason: 'ведём поздно, соперник создаёт давление — компактнее без полного автобуса' };
-            return { name: 'Pep_BoxControl_bal2', reason: 'ведём и контролируем: снизить риск, держать мяч и не раскрывать переходы' };
+            return { name: 'Pep_BoxControl_bal2', reason: 'ведём и контролируем: убрать хаос, держать мяч и не раскрывать переходы' };
         }
 
         if (score.state === 'losing' && minute >= 80) {
@@ -6416,7 +6308,7 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
         }
 
         if (defenseBad && attackUnder) {
-            return { name: 'Pep_BoxControl_bal2', reason: 'оба канала недобирают — reset через контроль и снижение риска' };
+            return { name: 'Pep_BoxControl_bal2', reason: 'оба канала недобирают — reset через контроль и снижение хаоса' };
         }
 
         if (xgGap > 0.65 || xtGap > 0.55) {
@@ -6447,7 +6339,7 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
             return { name: 'Pep_TwoThreeFive_att3', reason: 'есть атакующий momentum и низкий брак — можно дожимать позиционно' };
         }
 
-        return { name: 'Pep_BoxControl_bal2', reason: 'без явного перекоса лучший baseline — контроль, снижение риска и подготовка следующего среза' };
+        return { name: 'Pep_BoxControl_bal2', reason: 'без явного перекоса лучший baseline — контроль, снижение хаоса и подготовка следующего среза' };
     },
 
     shouldRecommendSchemeChange(snapshot, state, urgency, presetName) {
@@ -6700,15 +6592,10 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
         const avoids = list(traits?.avoids);
         const strengths = list(traits?.strengths);
         const ownCrossBad = hasTag(state, 'own_open_play_crosses_bad') || hasTag(state, 'own_crosses_bad_total');
-        // #405 F4 (C323): the cross setting covers AERIAL crosses only; ground
-        // crosses are driven by острота передач / центр / диагонали (C316, C326),
-        // not by width. Only an explicit cross trait takes the aerial-cross
-        // conflict penalty; width/wing-only traits no longer do. The explicit
-        // own_crosses_bad avoid-bonus path below is unchanged.
-        const aerialCross = strengths.some(x => /cross/i.test(String(x)));
+        const wideOrCross = strengths.some(x => /cross|wide|wing/i.test(String(x))) || String(traits?.build || '').includes('wide');
 
         if (ownCrossBad && avoids.includes('own_crosses_bad')) addReason(result, 2, 'пресет явно избегает плохих кроссов');
-        if (ownCrossBad && aerialCross && !avoids.includes('own_crosses_bad')) addReason(result, -3, 'верховые кроссы пресета конфликтуют с плохими кроссами (C323)');
+        if (ownCrossBad && wideOrCross && !avoids.includes('own_crosses_bad')) addReason(result, -3, 'кроссы/ширина конфликтуют с плохими кроссами');
         if (hasTag(state, 'opponent_crosses_dangerous') && avoids.includes('opponent_crosses_dangerous')) addReason(result, 1, 'пресет учитывает риск опасных кроссов соперника');
 
         return result;
@@ -7121,20 +7008,7 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
             const minute = engine.num(engine.getMetric(snapshot, context, 'minute', ['effectiveMinute', 'baseMinute']), 0);
             const scoreState = engine.getScoreState(snapshot, context);
             const scoreDiff = engine.getScoreDiff(snapshot, context);
-            // #405 F6 (C1, review-corrected): the fallback derives the analytical
-            // generation window from the model's own window boundaries — the SAME
-            // field/unit the snapshot carries (generationWindow.index, windows
-            // 1-7; 0 = unknown minute). The naive Math.floor(minute/10) bucket is
-            // gone. The 5-minute SEGMENTS model stays additive in
-            // getTargetWindowAfterChange (F5) and is deliberately NOT used here:
-            // this field is consumed as a window counter by hysteresis
-            // (applyHysteresis heldWindows; cah-decision-core
-            // detectedPresetSinceWindow), so segment-space values (1-19) would mix
-            // units across snapshots, inflate heldWindows and weaken the hold guard.
-            const fallbackWindowIndex = typeof MatchTimingModel !== 'undefined' && MatchTimingModel && typeof MatchTimingModel.getWindow === 'function'
-                ? ((MatchTimingModel.getWindow(minute) || {}).index || 0)
-                : 0;
-            const generationWindowIndex = engine.num(snapshot?.generationWindow?.index, fallbackWindowIndex);
+            const generationWindowIndex = engine.num(snapshot?.generationWindow?.index, Math.max(0, Math.floor(minute / 10)));
 
             const myXg = engine.num(context?.myXg ?? context?.myXG ?? my.xG);
             const oppXg = engine.num(context?.oppXg ?? context?.oppXG ?? opp.xG);
@@ -8270,13 +8144,6 @@ TacticalKnowledgePack.init();
     const STYLE_GROUPS=[{style:'5',label:'Атака+ · _att2',suffix:'_att2'},{style:'4',label:'Атака · _att1',suffix:'_att1'},{style:'3',label:'Обычный · _neutr',suffix:'_neutr'},{style:'2',label:'Защита · _def1',suffix:'_def1'},{style:'1',label:'Защ+ · _def2',suffix:'_def2'}];
     const DISPLAY_ORDER=Object.keys(DISPLAY_META).sort((a,b)=>Number(DISPLAY_META[b].style)-Number(DISPLAY_META[a].style)||(a==='standard'?-1:b==='standard'?1:String(DISPLAY_META[a].trainer).localeCompare(String(DISPLAY_META[b].trainer),'en')||String(LABELS[a]).localeCompare(String(LABELS[b]),'en')));
     const META={"Emery_BalancedBase_v11":{"group":"balance","rank":3,"role":"default_start","title":"Unai Emery — Balanced Base","idea":"Плавное продвижение с сохранением структуры","use":"Старт матча при отсутствии выраженного тактического кризиса","risk":"Сила этого варианта пока не доказана матчами"},"Mourinho_CleanCounter_v11":{"group":"balance","rank":3,"role":"pressure_counter","title":"José Mourinho — Clean Counter","idea":"Компактная контратака через свободный первый пас","use":"Подтверждённый выход из давления","risk":"Не применять, если первый пас перекрыт"},"Guardiola_PressEscape_v11":{"group":"balance","rank":2,"role":"pressure_escape","title":"Pep Guardiola — Press Escape","idea":"Короткий выход из прессинга","use":"Давление соперника без чистого контрвыхода","risk":"Может снижать темп продвижения"},"Arteta_SafePossession_v11":{"group":"balance","rank":1,"role":"possession_control","title":"Mikel Arteta — Safe Possession [manual only]","idea":"Низкорисковая циркуляция без перестроения игроков","use":"Только ручная диагностика","risk":"Не рекомендовать автоматически: три отрицательных матча"},"Guardiola_PressCooldown_v11":{"group":"defensive","rank":2,"role":"press_cooldown","title":"Pep Guardiola — Press Cooldown","idea":"Снизить энергозатраты прессинга","use":"Усталость без необходимости срочно догонять","risk":"Не для позднего отставания"},"Guardiola_ControlledPush_v11":{"group":"attack","rank":3,"role":"controlled_chase","title":"Pep Guardiola — Controlled Push","idea":"Умеренное наращивание атак без смены состава","use":"Нужен гол, но нет оснований для all-in","risk":"Возможен рост потерь"},"Guardiola_PositionalSiege_v11":{"group":"attack","rank":4,"role":"positional_siege","title":"Pep Guardiola — Positional Siege","idea":"Позиционный дожим на прежней четвёрке защитников","use":"Поздний дожим без угрозы контратак","risk":"Высокий риск переходов соперника"},"Conte_WideChannels_v11":{"group":"balance","rank":4,"role":"width_attack","title":"Antonio Conte — Wide Channels","idea":"Атаки через LW и RW/RM при прежней линии обороны","use":"Центр закрыт, фланги качественны","risk":"Пустые подачи/контратаки"},"Klopp_LateGegenpress_v11":{"group":"attack","rank":4,"role":"late_high_pressure","title":"Jürgen Klopp — Late Gegenpress","idea":"Краткий всплеск прессинга без смены схемы","use":"Позднее отставание при хорошей физике","risk":"Усталость и потери"},"Simeone_CompactLead_v11":{"group":"defensive","rank":4,"role":"protect_lead","title":"Diego Simeone — Compact Lead","idea":"Закрыть пространство, сохранить прежние 11 позиций","use":"Позднее преимущество без срочной осады","risk":"При чрезмерной пассивности возможен навал"},"Simeone_EmergencyBlock_v11":{"group":"defensive","rank":5,"role":"emergency_lock","title":"Diego Simeone — Emergency Block","idea":"Временный низкий блок без перестановок","use":"Экстренное давление, следующий отрезок пересмотреть","risk":"Нельзя держать без пересмотра"},"Allegri_LeadOutlet_v11":{"group":"defensive","rank":3,"role":"protect_lead_with_outlet","title":"Massimiliano Allegri — Lead Outlet","idea":"Удержание с безопасным выходом первым пасом","use":"Позднее преимущество при доступном выходе","risk":"Без первого паса лучше компактная защита"},"Flick_LeadPressHold_v12":{"group":"defensive","rank":3,"role":"lead_press_hold","title":"Hansi Flick — Lead Press Hold","idea":"Удержание преимущества активным прессингом вместо пассивного блока","use":"Преимущество в один гол против прессинга выше плана, окно 60–85 минут","risk":"Дорогой прессинг: не применять при усталости, браке или угрозе переходов"}};
-    // C324/C379 (#405 F7): high press (press_intense>=3) needs 1–3 ПИ roles,
-    // and with a CD pair the ПИ role on a CD does not work. User-facing note
-    // appended to the preset usage guidance (it flows into recommendation
-    // reasons via meta.use) — NOT a hard veto, NOT an entry-condition change;
-    // PRESETS numeric vectors are untouched.
-    const HIGH_PRESS_ROLE_NOTE='Для высокого прессинга назначьте 1–3 ПИ; при паре CD роль ПИ у CD не работает (C324, C379)';
-    Object.entries(PRESETS).forEach(([name,preset])=>{if(Number(preset.press_intense)>=3&&META[name])META[name]=Object.assign({},META[name],{use:`${META[name].use}. ${HIGH_PRESS_ROLE_NOTE}`});});
     const TRAITS={"Emery_BalancedBase_v11":{"requires":[],"avoids":["late_emergency_chase","transition_crisis"],"attackLanes":["center","left","right"],"build":"fixed_lineup_patient_progression","tempo":"medium","press":"low","risk":"low"},"Mourinho_CleanCounter_v11":{"requires":["confirmed_counter_exit"],"avoids":["counter_exit_blocked","press_fatigue","high_bad_actions"],"attackLanes":["left","right","center"],"build":"confirmed_counter_outlet","tempo":"medium_high","press":"low","risk":"medium"},"Guardiola_PressEscape_v11":{"requires":["pressure_without_counter_exit"],"avoids":["urgent_chase"],"attackLanes":["center"],"build":"press_resistant_control","tempo":"low","press":"low","risk":"low"},"Arteta_SafePossession_v11":{"requires":["manual_selection_only"],"avoids":["late_emergency_chase"],"attackLanes":["center","left","right"],"build":"structural_control","tempo":"medium","press":"medium","risk":"medium"},"Guardiola_PressCooldown_v11":{"requires":["press_fatigue"],"avoids":["late_emergency_chase"],"attackLanes":["center","right"],"build":"cooldown_outlet","tempo":"low","press":"very_low","risk":"low"},"Guardiola_ControlledPush_v11":{"requires":["need_goal_or_attack_need"],"avoids":["very_high_bad_actions"],"attackLanes":["center","left","right"],"build":"controlled_push","tempo":"high","press":"medium","risk":"medium_high"},"Guardiola_PositionalSiege_v11":{"requires":["attacking_momentum","transition_control"],"avoids":["transition_threat","press_fatigue"],"attackLanes":["center","left","right"],"build":"fixed_back_four_positional_siege","tempo":"high","press":"high","risk":"very_high"},"Conte_WideChannels_v11":{"requires":["wide_quality","center_closed"],"avoids":["own_crosses_bad","opponent_crosses_dangerous"],"attackLanes":["left","right"],"build":"fixed_lineup_wide_channels","tempo":"medium_high","press":"medium","risk":"high"},"Klopp_LateGegenpress_v11":{"requires":["late_need_goal","fitness"],"avoids":["press_fatigue","high_bad_actions","transition_threat"],"attackLanes":["center","left","right"],"build":"gegenpress_424","tempo":"very_high","press":"very_high","risk":"very_high"},"Simeone_CompactLead_v11":{"requires":["protect_lead"],"avoids":["urgent_chase"],"attackLanes":["left","right"],"build":"compact442","tempo":"low","press":"low","risk":"low"},"Simeone_EmergencyBlock_v11":{"requires":["mandatory_reassessment_next_window"],"avoids":["permanent_losing_state"],"attackLanes":[],"build":"temporary_emergency_lock","tempo":"very_low","press":"very_low","risk":"very_low"},"Allegri_LeadOutlet_v11":{"requires":["protect_lead","safe_first_pass"],"avoids":["urgent_chase"],"attackLanes":["left","right","center"],"build":"safe_lead_outlet","tempo":"low","press":"very_low","risk":"low"},"Flick_LeadPressHold_v12":{"requires":["lead_one_goal","opponent_press_vector_high"],"avoids":["transition_threat","high_bad_actions"],"attackLanes":["center","left","right"],"build":"lead_press_hold_4231","tempo":"high","press":"high","risk":"medium_high"}};
     const ROLE_CONTRACTS={"Emery_BalancedBase_v11":{"presetId":"Emery_BalancedBase_v11","role":"default_start","primarySituation":"default_start","allowedSituations":["pressure_escape"],"entryConditions":["balanced_opposition","same_fixed_lineup"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Mourinho_CleanCounter_v11":{"presetId":"Mourinho_CleanCounter_v11","role":"pressure_counter","primarySituation":"pressure_counter","allowedSituations":["pressure_escape"],"entryConditions":["confirmed_counter_exit","только подтверждённый чистый контрвыход"],"exitConditions":[],"hardVetoes":["подтверждённый чистый выход","нет блокировки первого паса"],"riskClass":"medium","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PressEscape_v11":{"presetId":"Guardiola_PressEscape_v11","role":"pressure_escape","primarySituation":"pressure_escape","allowedSituations":["default_start"],"entryConditions":["pressure_without_counter_exit","давление без открытого контрвыхода"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Arteta_SafePossession_v11":{"presetId":"Arteta_SafePossession_v11","role":"possession_control","primarySituation":"possession_control","allowedSituations":[],"entryConditions":["manual_only","underperforming_in_three_user_matches"],"exitConditions":[],"hardVetoes":["manual_only_diagnostic"],"riskClass":"low","fallbackEligible":false,"manualOnly":true,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PressCooldown_v11":{"presetId":"Guardiola_PressCooldown_v11","role":"press_cooldown","primarySituation":"press_cooldown","allowedSituations":["pressure_escape","default_start"],"entryConditions":["press_fatigue","усталость/рост брака"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_ControlledPush_v11":{"presetId":"Guardiola_ControlledPush_v11","role":"controlled_chase","primarySituation":"controlled_chase","allowedSituations":["positional_siege","default_start"],"entryConditions":["need_goal_or_attack_need","нужен гол без экстренного all-in"],"exitConditions":[],"hardVetoes":[],"riskClass":"medium_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PositionalSiege_v11":{"presetId":"Guardiola_PositionalSiege_v11","role":"positional_siege","primarySituation":"positional_siege","allowedSituations":["controlled_chase","late_high_pressure"],"entryConditions":["attacking_momentum","transition_control","моментум при контроле переходов"],"exitConditions":[],"hardVetoes":["запрещено при угрозе переходов и усталости"],"riskClass":"very_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Conte_WideChannels_v11":{"presetId":"Conte_WideChannels_v11","role":"width_attack","primarySituation":"width_attack","allowedSituations":["positional_siege"],"entryConditions":["wide_quality","center_closed","закрытый центр, качественные фланги"],"exitConditions":[],"hardVetoes":[],"riskClass":"high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Klopp_LateGegenpress_v11":{"presetId":"Klopp_LateGegenpress_v11","role":"late_high_pressure","primarySituation":"late_high_pressure","allowedSituations":["positional_siege"],"entryConditions":["late_need_goal","fitness","позднее отставание и хорошая физика"],"exitConditions":[],"hardVetoes":["только поздняя погоня","физика должна быть достаточна"],"riskClass":"very_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Simeone_CompactLead_v11":{"presetId":"Simeone_CompactLead_v11","role":"protect_lead","primarySituation":"protect_lead","allowedSituations":["emergency_lock","default_start"],"entryConditions":["protect_lead","небольшое преимущество без осады"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Simeone_EmergencyBlock_v11":{"presetId":"Simeone_EmergencyBlock_v11","role":"emergency_lock","primarySituation":"emergency_lock","allowedSituations":["protect_lead"],"entryConditions":["mandatory_reassessment_next_window","экстренная осада при отсутствии выхода"],"exitConditions":[],"hardVetoes":["только временная экстренная оборона"],"riskClass":"very_low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Allegri_LeadOutlet_v11":{"presetId":"Allegri_LeadOutlet_v11","role":"protect_lead_with_outlet","primarySituation":"protect_lead_with_outlet","allowedSituations":["protect_lead","default_start"],"entryConditions":["protect_lead","safe_first_pass","преимущество и доступен первый пас"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Flick_LeadPressHold_v12":{"presetId":"Flick_LeadPressHold_v12","role":"lead_press_hold","primarySituation":"lead_press_hold","allowedSituations":["protect_lead"],"entryConditions":["lead_one_goal","opponent_press_vector_high","преимущество в один гол против прессинга выше плана"],"exitConditions":[],"hardVetoes":["вне окна 60–85 минут при преимуществе","вектор прессинга соперника ниже +20%"],"riskClass":"medium_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"}};
     const SCHEME_STATES={"midblock_control_4231":"Fixed 4-2-3-1 RW/RM — Unai Emery — Balanced Base","midblock_counter_4411":"Fixed 4-2-3-1 RW/RM — José Mourinho — Clean Counter","box_control":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Press Escape","arteta_control":"Fixed 4-2-3-1 RW/RM — Mikel Arteta — Safe Possession","press_cooldown":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Press Cooldown","controlled_push":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Controlled Push","positional_325":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Positional Siege","wingback_width":"Fixed 4-2-3-1 RW/RM — Antonio Conte — Wide Channels","gegenpress_424":"Fixed 4-2-3-1 RW/RM — Jürgen Klopp — Late Gegenpress","compact_442":"Fixed 4-2-3-1 RW/RM — Diego Simeone — Compact Lead","low_block_541":"Fixed 4-2-3-1 RW/RM — Diego Simeone — Emergency Block","lead_outlet_4141":"Fixed 4-2-3-1 RW/RM — Massimiliano Allegri — Lead Outlet","lead_press_hold_4231":"Fixed 4-2-3-1 RW/RM — Hansi Flick — Lead Press Hold"};
@@ -11489,7 +11356,7 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
     const FINAL_CONTROL_LABELS = {
         def_line: 'линия', press_line: 'прессинг', def_width: 'ширина', press_intense: 'интенс',
         build_type: 'выход', build_temp: 'темп', build_long: 'диаг', build_fast: 'касание',
-        style: 'стиль', pass_risk: 'риск', dribble: 'дриблинг', cross: 'навесы верхом',
+        style: 'стиль', pass_risk: 'риск', dribble: 'дриблинг', cross: 'кроссы',
         corner: 'угловые', shot: 'удары', priority: 'фланги'
     };
     const FINAL_GROUP_KEYS = {
@@ -26546,15 +26413,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.347',
-        scriptVersion: '4.4.347',
+        version: '4.4.364',
+        scriptVersion: '4.4.364',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.347',
+        scriptVersion: '4.4.364',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
