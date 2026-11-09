@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.345
+// @version      4.4.346
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.345',
-        scriptVersion: '4.4.345',
+        version: '4.4.346',
+        scriptVersion: '4.4.346',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.345',
+        scriptVersion: '4.4.346',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -1840,8 +1840,10 @@ const DomUtils = {
     (function scheduleTacticalLabV1() {
         const LEGACY_P02_VERSION = 'slf_tactical_lab_561_p02';
         const LEGACY_P02_CODE = 'P02';
-        const POPULATION_VERSION = 'slf_tactical_lab_561_p03';
-        const POPULATION_CODE = 'P03';
+        const LEGACY_P03_VERSION = 'slf_tactical_lab_561_p03';
+        const LEGACY_P03_CODE = 'P03';
+        const POPULATION_VERSION = 'slf_tactical_lab_561_p04';
+        const POPULATION_CODE = 'P04';
         const GENOME_VERSION = 'slf_tactical_genome_v1';
         const POPULATION_SIZE = 6;
         const P03_SELECTION = [
@@ -1851,6 +1853,33 @@ const DomUtils = {
             {parentExperimentId:'EXP-561-P02-0058',weight:10},
             {parentExperimentId:'EXP-561-P02-0011',weight:5},
             {parentExperimentId:'EXP-561-P02-0055',weight:5}
+        ];
+        // P04 base = Emery_BalancedBase_v11 vector, hard-coded (same convention as
+        // seedPresets below) so registry drift can never silently rewrite lab
+        // genomes. Source: active-preset-registry.js PRESETS.Emery_BalancedBase_v11
+        // at base 823c82f29eb40b5fc0855fdef2cc4fa480f0f9ff.
+        const P04_BASE = {def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'2',build_long:'2',build_fast:'2',style:'3',pass_risk:'2',dribble:'2',cross:'2',corner:'1',shot:'2',priority:[]};
+        // P04 one-factor-at-a-time hypothesis arms (spec 405 R3). Each genome varies
+        // EXACTLY ONE control from P04_BASE; weights 35/35/10/10/5/5. The hypothesis
+        // code travels in origin (`hypothesis_factor:<code>`) — telemetry-safe, no
+        // new experiment fields:
+        //   press_roles      H1 (C324, C329): higher press intensity — outcome/fitness
+        //                    effect; ПИ role coverage is a user responsibility
+        //                    (registry note F7), the lab measures the vector effect only.
+        //   line_transition  H2 (C325): higher line → transition exposure after a
+        //                    broken press.
+        //   aerial_cross     H3 (C323): cross affects aerial crosses only.
+        //   center_pass_risk H4 (C316, C326): center attacks work through passes,
+        //                    not dribbling.
+        //   control_base_a/b (C1, C234): exact P04_BASE repeats — variance control +
+        //                    application-timing observation.
+        const P04_SELECTION = [
+            {code:'press_roles',weight:35,vary:{press_intense:'3'}},
+            {code:'line_transition',weight:35,vary:{press_line:'3'}},
+            {code:'aerial_cross',weight:10,vary:{cross:'3'}},
+            {code:'center_pass_risk',weight:10,vary:{pass_risk:'3'}},
+            {code:'control_base_a',weight:5,vary:null},
+            {code:'control_base_b',weight:5,vary:null}
         ];
         const PANEL_ID = 'slf-tactical-lab-panel';
         const BUTTON_ID = 'slf-tactical-lab-apply';
@@ -1888,6 +1917,7 @@ const DomUtils = {
         const labControlKeys = Object.keys(ranges);
         let population = null;
         let legacyP02Population = null;
+        let legacyP03Population = null;
         let cachedState = null;
         let cachedGameId = '';
         let flushPromise = null;
@@ -2029,13 +2059,30 @@ const DomUtils = {
             return result;
         }
 
-        function buildPopulation() {
+        // P03 builder kept for legacy resolution: in-flight P03 assignments must
+        // stay resolvable (and attributable) after the P04 switch. Population
+        // code/version are passed EXPLICITLY (P02-builder pattern): makeExperiment's
+        // defaults now point at P04, and the pre-switch builder implicitly relied
+        // on them being P03.
+        function buildP03Population() {
             const p02 = legacyP02Population || (legacyP02Population = buildP02Population());
+            const p03Options = {populationCode:LEGACY_P03_CODE,populationVersion:LEGACY_P03_VERSION,generation:2};
             return P03_SELECTION.map((selection, index) => {
                 const parent = p02.find(item => item.experimentId === selection.parentExperimentId);
                 if (!parent) throw new Error(`[SLF Tactical Lab] missing P03 validation parent ${selection.parentExperimentId}`);
                 return makeExperiment(index, 'validation_repeat', parent.controls, parent.experimentId, 0, {
-                    generation:2,
+                    ...p03Options,
+                    selectionWeightPct:selection.weight
+                });
+            });
+        }
+
+        function buildPopulation() {
+            return P04_SELECTION.map((selection, index) => {
+                const controls = clone(P04_BASE);
+                if (selection.vary) Object.assign(controls, selection.vary);
+                return makeExperiment(index, `hypothesis_factor:${selection.code}`, controls, null, mutationDistance(P04_BASE, controls), {
+                    generation:3,
                     selectionWeightPct:selection.weight
                 });
             });
@@ -2130,16 +2177,16 @@ const DomUtils = {
             }
             return items[items.length - 1];
         }
-        function preserveLegacyP02Assignment(state) {
+        function preserveLegacyAssignment(state) {
             const version = String(state?.assignment?.populationVersion || state?.populationVersion || '');
-            return !!state?.assignment && version === LEGACY_P02_VERSION;
+            return !!state?.assignment && (version === LEGACY_P02_VERSION || version === LEGACY_P03_VERSION);
         }
         function ensureAssignment(snapshot) {
             const gameId = getGameId(snapshot);
             const state = loadState(gameId);
             if (!state) return null;
             const assignmentVersion = String(state.assignment?.populationVersion || state.populationVersion || '');
-            if (!state.assignment || (assignmentVersion !== POPULATION_VERSION && !preserveLegacyP02Assignment(state))) {
+            if (!state.assignment || (assignmentVersion !== POPULATION_VERSION && !preserveLegacyAssignment(state))) {
                 const selected = selectExperiment(gameId);
                 state.populationVersion = POPULATION_VERSION;
                 state.assignment = {
@@ -2162,7 +2209,9 @@ const DomUtils = {
             const assignmentVersion = String(state?.assignment?.populationVersion || state?.populationVersion || '');
             const items = assignmentVersion === LEGACY_P02_VERSION
                 ? (legacyP02Population || (legacyP02Population = buildP02Population()))
-                : (population || (population = buildPopulation()));
+                : assignmentVersion === LEGACY_P03_VERSION
+                    ? (legacyP03Population || (legacyP03Population = buildP03Population()))
+                    : (population || (population = buildPopulation()));
             return items.find(item => item.experimentId === state?.assignment?.experimentId) || null;
         }
         function isOwnedLive(snapshot) {
@@ -26492,15 +26541,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.345',
-        scriptVersion: '4.4.345',
+        version: '4.4.346',
+        scriptVersion: '4.4.346',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.345',
+        scriptVersion: '4.4.346',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

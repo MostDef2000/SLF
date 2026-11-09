@@ -1,5 +1,39 @@
 # Changelog
 
+## 4.4.346
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- docs/audit/preset-vector-revision-2026-11.md
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/app/bundle-order.json
+- src/modules/match-reading/match-state-parser.js
+- src/modules/strategy-data-recommendations/cah-runtime-context.js
+- src/modules/strategy-data-recommendations/preset-fit-scoring.js
+- src/modules/strategy-data-recommendations/re-plan-engine.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- src/modules/tactics-presets/active-preset-registry.js
+- tests/test-tactics-2026-semantics.mjs
+- tools/test-dave56-etalon-panel.mjs
+
+Approved base commit:
+- 3d35087308cc115efc485263269612344113b623
+
+Approved commit:
+- 823c82f29eb40b5fc0855fdef2cc4fa480f0f9ff
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.345
 
 ### Automatic latest-only build

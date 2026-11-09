@@ -261,7 +261,7 @@ assert.match(tacticalLabRuntime,/POPULATION_SIZE\s*=\s*6/);
 assert.match(tacticalLabRuntime,/LEGACY_P02_VERSION\s*=\s*'slf_tactical_lab_561_p02'/);
 assert.match(tacticalLabRuntime,/slf_tactical_lab_561_p03/);
 assert.match(tacticalLabRuntime,/buildP02Population/,'P02 generator must remain available to reproduce exact validation parents and finish existing P02 assignments');
-assert.match(tacticalLabRuntime,/preserveLegacyP02Assignment/,'existing P02 assignments must not be silently rerolled into P03');
+assert.match(tacticalLabRuntime,/preserveLegacyAssignment/,'existing P02/P03 assignments must not be silently rerolled into P04 (#405 transition: preserve covers P02+P03)');
 for(const id of ['EXP-561-P02-0012','EXP-561-P02-0018','EXP-561-P02-0040','EXP-561-P02-0058','EXP-561-P02-0011','EXP-561-P02-0055']) assert.match(tacticalLabRuntime,new RegExp(id));
 assert.match(tacticalLabRuntime,/selectionWeightPct/,'P03 assignment weights must be explicit in runtime population metadata');
 for(const origin of ['production_mutation','orthogonal','deterministic_random','extreme']) assert.match(tacticalLabRuntime,new RegExp(`'${origin}'`));

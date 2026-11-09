@@ -162,13 +162,29 @@ C313↔C28; C314↔C28; C330↔C28; C333↔C9; C335↔C96/C95/C97/C125; C379↔C
 All remain **unresolved** by design: this revision registers, never resolves. Forward-authored claims
 (C264, C304) are context only.
 
-## §7 P04 pointer and retune gate
+## §7 P04 implementation and retune gate
 
-- **P04** (experiment population in `tactical-lab-v1.js`: genomes from the hypothesis table — press
-  roles/fitness C324/C329; transition exposure C325; aerial vs ground crosses C323; center priority vs
-  dribbling C316/C326; application timing C1/C234) is a **separate change** on a follow-up order
-  (tactical-lab-v1.js is a forbidden path for this order). Design inputs: worker3 report §P04
-  (one factor at a time, pre-registered endpoints, game-confirmed linked phases).
+- **P04 implemented** (same PR, `tactical-lab-v1.js`): active population switched to
+  `slf_tactical_lab_561_p04` (generation 3). Six one-factor-at-a-time genomes on a hard-coded
+  `P04_BASE` (Emery_BalancedBase_v11 vector at base `823c82f`, immune to registry drift), weights
+  35/35/10/10/5/5, hypothesis code carried in `origin` (`hypothesis_factor:<code>`):
+
+  | # | code | weight | varied factor | hypothesis (claims) |
+  |---|------|-------:|---------------|---------------------|
+  | 1 | press_roles | 35 | press_intense 2→3 | H1: press intensity outcome/fitness effect (C324, C329); ПИ role coverage is a user responsibility (§5 F7), the lab measures the vector effect only |
+  | 2 | line_transition | 35 | press_line 2→3 | H2: higher line → transition exposure after a broken press (C325) |
+  | 3 | aerial_cross | 10 | cross 2→3 | H3: cross affects aerial crosses only (C323) |
+  | 4 | center_pass_risk | 10 | pass_risk 2→3 | H4: center attacks work through passes, not dribbling (C316, C326) |
+  | 5 | control_base_a | 5 | none | exact base repeat — variance control + application-timing observation (C1, C234) |
+  | 6 | control_base_b | 5 | none | exact base repeat — second variance control |
+
+- **Transition protocol:** in-flight P02 **and** P03 assignments are preserved (`preserveLegacyAssignment`
+  covers both versions; activation/completed state survives byte-identical); `experimentFor` resolves P03
+  via the kept `buildP03Population` (explicit population options — required after the defaults switched
+  to P04, caught RED-first by `tests/test-tactical-lab-p04-transition.mjs` T6); P02 builder unchanged;
+  selection hash untouched; new games draw P04; zero stored-state migration. P03 stops receiving new
+  assignments once this ships; its 41 linked finished results stay attributable.
+- **P04 is experimental and distinct from production retuning:** lab genomes are experiment vectors, not
+  preset changes; the 13 production vectors above remain `unchanged, not validated`.
 - **Retune gate status:** unmet — 41/60 eligible linked phases across the preset set,
-  `readyForRetune=false`. Numeric retuning stays blocked until the gate is met; the matrix above records
-  every cell as `unchanged, not validated`.
+  `readyForRetune=false`. Numeric retuning stays blocked until the gate is met.
