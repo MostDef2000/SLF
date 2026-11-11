@@ -90,6 +90,10 @@ class ShimElement {
   get parentElement() { return this.parentNode; }
   get firstChild() { return this._children[0] || null; }
 
+  // #417 compaction reads `Array.from(listRoot.children)` — expose the live
+  // child list (DOM `children` is live; Array.from snapshots it).
+  get children() { return this._children; }
+
   get textContent() { return this._text; }
   set textContent(value) { this._text = String(value ?? ''); }
 
@@ -134,6 +138,24 @@ class ShimElement {
     const index = ref ? this._children.indexOf(ref) : -1;
     if (index === -1) this._children.push(node);
     else this._children.splice(index, 0, node);
+    return node;
+  }
+
+  // #417 compaction inserts the «показать ещё» toggle via
+  // listRoot.insertAdjacentElement('afterend', toggleBtn). Only that position
+  // is implemented; anything else fails loudly instead of being swallowed by
+  // the production try/catch (which would turn a regression into a no-op).
+  insertAdjacentElement(position, node) {
+    if (position !== 'afterend') {
+      throw new Error(`DOM shim: unsupported insertAdjacentElement position: ${position}`);
+    }
+    const parent = this.parentNode;
+    if (!parent) throw new Error('DOM shim: insertAdjacentElement(afterend) on a detached node');
+    const index = parent._children.indexOf(this);
+    if (index === -1) throw new Error('DOM shim: insertAdjacentElement(afterend) — node not found in its parent');
+    if (node.parentNode) node.parentNode._removeChild(node);
+    node.parentNode = parent;
+    parent._children.splice(index + 1, 0, node);
     return node;
   }
 
@@ -424,9 +446,59 @@ function buildGameMintDoc({ withCards = true, withTeamGeneralContent = false } =
   return { doc, field, mint, cols, general };
 }
 
+// Issue #417: team4 mint design where the «Мои тактики» card hosts a
+// [data-tc-list] of tactic rows — the compaction target. The site renders one
+// row per saved tactic and marks the ACTIVE tactic with .tc-pill--cur either
+// on the row itself or on a button inside it. markIndices lists the rows to
+// mark; markInner puts the mark on an inner button instead of the row.
+// The card also carries the 14 hidden pill radios so waitForTacticReady
+// resolves (>=10 named radios inside the .tc.mint target) — the radios are
+// card children, NOT list children, so they never count as tactic rows.
+function buildMintTacticsListDoc({ rows = 5, markIndices = [], markInner = false } = {}) {
+  const doc = createDocument();
+  const mint = doc.createElement('div');
+  mint.classList.add('tc', 'mint');
+  const card = doc.createElement('div');
+  card.classList.add('mint-card', 'tc-tactics');
+  addTacticRadios(doc, card);
+  const list = doc.createElement('div');
+  list.attrs['data-tc-list'] = '';
+  for (let i = 0; i < rows; i++) {
+    const row = doc.createElement('div');
+    row.classList.add('tc-pill-row');
+    if (markIndices.includes(i)) {
+      if (markInner) {
+        const btn = doc.createElement('button');
+        btn.classList.add('tc-pill', 'tc-pill--cur');
+        row.appendChild(btn);
+      } else {
+        row.classList.add('tc-pill--cur');
+      }
+    }
+    list.appendChild(row);
+  }
+  card.appendChild(list);
+  mint.appendChild(card);
+  doc.body.appendChild(mint);
+  return { doc, mint, card, list };
+}
+
 // --- sandbox + real module load ---------------------------------------------------
 
-function makeSandbox(location, doc) {
+// #417: installNativeTacticsCompaction() bails when MutationObserver is
+// undefined, so the compaction path (and getActiveTacticRow) never runs. This
+// stub exists only so the guard passes; the callback is never fired (no
+// mutations are simulated) — the tests observe the synchronous
+// compactNativeTacticsBlock() call that installNativeTacticsCompaction makes
+// right after observer.observe().
+class MutationObserverStub {
+  constructor(callback) { this._callback = callback; }
+  observe() {}
+  disconnect() {}
+  takeRecords() { return []; }
+}
+
+function makeSandbox(location, doc, extra = {}) {
   const sandbox = {
     console: { log() {}, warn() {}, error() {}, info() {}, debug() {} },
     Date, Math, JSON, Number, String, Object, Array, Set, Map, Promise, RegExp, Error,
@@ -459,6 +531,9 @@ function makeSandbox(location, doc) {
     findBetaTacticButton: () => null,
     normalizePresets: data => data
   };
+  // Opt-in extra globals (e.g. MutationObserver for the #417 compaction
+  // cases). Existing cases pass nothing → their sandbox is unchanged.
+  Object.assign(sandbox, extra);
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
   return sandbox;
@@ -695,4 +770,110 @@ function withTimeout(promise, ms, label) {
   assert.equal(container.classList.contains('slf-team4-tactic-header-selector'), false, 'game mint (both anchors): no header-selector class');
 }
 
-console.log('team4 tactic dropdown mount: old design header mount (insertBefore/appendChild + class + style), new design form-first-child fallback, no-form wrap fallback, fm2026 mint card-anchored mount, mint no-card first-child fallback, game.php smoke, game.php mint-view mounts (direct child of .tc.mint before the .tc-cols grid, never a grid child) + no-mint-no-radios never mounts + mint beats a present .team_general_content on game.php (B1 priority pin): OK');
+// --- (5) Issue #417: active tactic row selection in the native compaction -----
+// getActiveTacticRow(rows) is a closure-local helper inside addDropdown,
+// reached only through compactNativeTacticsBlock() (called synchronously by
+// installNativeTacticsCompaction() during addDropdown). It is not exported,
+// so these cases drive it through the REAL mount path with a MutationObserver
+// stub and assert the OBSERVABLE contract: after compaction, exactly the
+// active row keeps style.display '' (visible) and every other row is folded
+// to 'none'. The «показать ещё» toggle must also be created — its presence
+// proves the compaction ran to completion rather than being swallowed by the
+// production try/catch (a silent no-op would leave every row untouched).
+//
+// Fixture: team4 mint design .tc.mint > .mint-card.tc-tactics > [data-tc-list]
+// > rows. The card also hosts the 14 hidden pill radios so waitForTacticReady
+// resolves; the radios are card children, not list children, so they never
+// count as tactic rows.
+const COMPACTION_SANDBOX = { MutationObserver: MutationObserverStub };
+
+function assertRowDisplays(list, visibleIndex, label) {
+  const rows = list._children;
+  rows.forEach((row, i) => {
+    const expected = i === visibleIndex ? '' : 'none';
+    assert.equal(
+      row.style.display, expected,
+      `${label}: row ${i} must be ${expected === '' ? 'visible (display "")' : 'folded (display "none")'}`
+    );
+  });
+}
+
+function assertToggleCreated(card, label) {
+  const toggle = card._children.find(el => el.tagName === 'button' && el.dataset.slfTacticsToggle === '1');
+  assert.ok(toggle, `${label}: «показать ещё» toggle created (compaction ran to completion, not a swallowed no-op)`);
+}
+
+// (5a) Active row marked ON THE ROW ITSELF → that row stays visible.
+{
+  const { doc, list } = buildMintTacticsListDoc({ rows: 5, markIndices: [2] });
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc, COMPACTION_SANDBOX));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'active row on the row itself (case 5a)');
+
+  assert.ok(doc.getElementById('slf-tactics-dropdown'), '5a: dropdown mounted (addDropdown ran to completion)');
+  assert.equal(list._children.length, 5, '5a fixture sanity: 5 tactic rows in the list');
+  assert.equal(list._children[2].classList.contains('tc-pill--cur'), true, '5a fixture sanity: row 2 carries .tc-pill--cur on itself');
+  assertRowDisplays(list, 2, '5a (mark on row)');
+  assertToggleCreated(list.parentNode, '5a (mark on row)');
+}
+
+// (5b) Active row marked ON AN INNER ELEMENT → that row stays visible.
+{
+  const { doc, list } = buildMintTacticsListDoc({ rows: 5, markIndices: [3], markInner: true });
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc, COMPACTION_SANDBOX));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'active row on inner element (case 5b)');
+
+  assert.ok(doc.getElementById('slf-tactics-dropdown'), '5b: dropdown mounted (addDropdown ran to completion)');
+  assert.equal(list._children[3].classList.contains('tc-pill--cur'), false, '5b fixture sanity: row 3 itself is NOT marked');
+  assert.ok(list._children[3].querySelector('.tc-pill--cur'), '5b fixture sanity: row 3 has an inner .tc-pill--cur element');
+  assertRowDisplays(list, 3, '5b (mark on inner element)');
+  assertToggleCreated(list.parentNode, '5b (mark on inner element)');
+}
+
+// (5c) No active row → fall back to the FIRST row.
+{
+  const { doc, list } = buildMintTacticsListDoc({ rows: 5, markIndices: [] });
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc, COMPACTION_SANDBOX));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'no active row fallback (case 5c)');
+
+  assert.ok(doc.getElementById('slf-tactics-dropdown'), '5c: dropdown mounted (addDropdown ran to completion)');
+  assert.equal(
+    list._children.some(row => row.classList.contains('tc-pill--cur') || row.querySelector('.tc-pill--cur')),
+    false, '5c fixture sanity: no row is marked'
+  );
+  assertRowDisplays(list, 0, '5c (no mark → first row)');
+  assertToggleCreated(list.parentNode, '5c (no mark → first row)');
+}
+
+// (5d) Empty rows array → getActiveTacticRow([]) returns undefined.
+// NOTE: via the public path this is UNREACHABLE — compactNativeTacticsBlock
+// early-returns on `!foldable.length` (rows < 4) BEFORE calling
+// getActiveTacticRow, so an empty list never reaches the helper. The
+// observable contract for an empty list is therefore: no rows are touched,
+// no toggle is created, and nothing throws. We pin that here; the literal
+// `undefined` return is a pure-function property that only a module-level
+// extraction (out of scope) could assert directly.
+{
+  const { doc, list, card } = buildMintTacticsListDoc({ rows: 0, markIndices: [] });
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc, COMPACTION_SANDBOX));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'empty rows (case 5d)');
+
+  assert.ok(doc.getElementById('slf-tactics-dropdown'), '5d: dropdown mounted (addDropdown ran to completion)');
+  assert.equal(list._children.length, 0, '5d (empty list): no rows to fold — nothing touched');
+  const toggle = card._children.find(el => el.tagName === 'button' && el.dataset.slfTacticsToggle === '1');
+  assert.equal(toggle, undefined, '5d (empty list): no «показать ещё» toggle created (nothing foldable)');
+}
+
+// (5e) Multiple active rows → the FIRST match wins.
+{
+  const { doc, list } = buildMintTacticsListDoc({ rows: 5, markIndices: [0, 3] });
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc, COMPACTION_SANDBOX));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'multiple active rows (case 5e)');
+
+  assert.ok(doc.getElementById('slf-tactics-dropdown'), '5e: dropdown mounted (addDropdown ran to completion)');
+  assert.equal(list._children[0].classList.contains('tc-pill--cur'), true, '5e fixture sanity: row 0 is marked');
+  assert.equal(list._children[3].classList.contains('tc-pill--cur'), true, '5e fixture sanity: row 3 is ALSO marked');
+  assertRowDisplays(list, 0, '5e (multiple marks → first match)');
+  assertToggleCreated(list.parentNode, '5e (multiple marks → first match)');
+}
+
+console.log('team4 tactic dropdown mount: old design header mount (insertBefore/appendChild + class + style), new design form-first-child fallback, no-form wrap fallback, fm2026 mint card-anchored mount, mint no-card first-child fallback, game.php smoke, game.php mint-view mounts (direct child of .tc.mint before the .tc-cols grid, never a grid child) + no-mint-no-radios never mounts + mint beats a present .team_general_content on game.php (B1 priority pin) + #417 active tactic row selection (mark on row / mark on inner element / no-mark first-row fallback / empty list no-op / multiple marks first-match): OK');
