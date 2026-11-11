@@ -261,9 +261,11 @@
 
         readPageUserId() {
             // foot_login_id is the site's page-global login id — present on
-            // team4.php?action=tactic AND match pages (verified in saved page
-            // dumps). Same unsafeWindow fallback pattern as
-            // native-template-api.js resolvePageWindow.
+            // team4.php?action=tactic AND match pages. The site declares it as
+            // a top-level `let foot_login_id = ...;` (team4.php line 2027): a
+            // lexical global, so NO window/unsafeWindow property exists and
+            // the property reads below are best-effort; the in-realm eval and
+            // document.scripts fallbacks are what resolve it on the live site.
             try {
                 if (typeof unsafeWindow !== 'undefined' && unsafeWindow && unsafeWindow.foot_login_id != null) {
                     return String(unsafeWindow.foot_login_id);
@@ -272,6 +274,35 @@
             if (typeof window !== 'undefined' && window && window.foot_login_id != null) {
                 return String(window.foot_login_id);
             }
+            // In-realm indirect eval: a method call on unsafeWindow (not the
+            // bare `eval` identifier) runs in the page realm's global scope,
+            // where the lexical `let foot_login_id` binding is visible. It
+            // reads that one binding and executes no page code; CSP on slf.fm
+            // is absent (verified via response headers). Any failure -> null.
+            try {
+                if (typeof unsafeWindow !== 'undefined' && unsafeWindow) {
+                    const viaEval = unsafeWindow.eval(
+                        "typeof foot_login_id === 'number' || typeof foot_login_id === 'string' ? String(foot_login_id) : null"
+                    );
+                    if (typeof viaEval === 'string' && /^\d+$/.test(viaEval)) {
+                        return viaEval;
+                    }
+                }
+            } catch (_) { /* eval blocked or sandbox absent */ }
+            // CSP-independent last resort: scan inline <script> text for the
+            // declaration (no live binding needed). Declaration forms only
+            // (`let`/`const`/`var`): a bare top-level assignment creates a
+            // window property that the property-read path above already
+            // catches; non-declaration matches like `obj.foot_login_id = N`
+            // must never be resolved — account isolation.
+            try {
+                if (typeof document !== 'undefined' && document && document.scripts) {
+                    for (const s of document.scripts) {
+                        const match = /(?:^|[^A-Za-z0-9_$])(?:let|const|var)\s+foot_login_id\s*=\s*(\d+)/.exec(s.textContent);
+                        if (match) return match[1];
+                    }
+                }
+            } catch (_) { /* no DOM access */ }
             return null;
         },
 
