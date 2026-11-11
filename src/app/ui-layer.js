@@ -637,6 +637,13 @@ if (!isTacticPage) return;
             row.append(select, applyBtn, saveBtn, deleteBtn, exportBtn, importBtn, migrateBtn);
             container.append(title, row, schemeLabel);
 
+            function getActiveTacticRow(rows) {
+                return rows.find(row =>
+                    row.classList.contains('tc-pill--cur') ||
+                    row.querySelector('.tc-pill--cur')
+                ) || rows[0];
+            }
+
             // Issue #415: fold the native «Мои тактики» card — the site
             // renders one row per saved tactic, which pushes the plugin
             // panel far down the page. Keep the first 3 rows visible and
@@ -659,13 +666,23 @@ if (!isTacticPage) return;
 
                     if (!foldable.length) {
                         if (toggle) toggle.style.display = 'none';
+                        rows.forEach(row => {
+                            row.style.display = '';
+                        });
                         return;
                     }
 
+                    // Issue #417: when collapsed, keep only the ACTIVE
+                    // tactic's row visible instead of the first three —
+                    // the site marks it with .tc-pill--cur on the row or
+                    // on a button inside it. No marked row → fall back
+                    // to the first row.
+                    const activeRow = getActiveTacticRow(rows);
+
                     const expanded = toggle?.dataset.slfExpanded === '1';
 
-                    foldable.forEach(row => {
-                        row.style.display = expanded ? '' : 'none';
+                    rows.forEach(row => {
+                        row.style.display = (expanded || row === activeRow) ? '' : 'none';
                     });
 
                     if (toggle) {
