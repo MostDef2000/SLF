@@ -104,6 +104,7 @@ def assert_header_selector(page: Page):
             headerRight: hr.right,
             overflow: document.documentElement.scrollWidth - innerWidth,
             buttons: node.querySelectorAll('button').length,
+            migrate: !!node.querySelector('button[title="Перенести пресеты в шаблоны сайта"]'),
             options: node.querySelectorAll('select option').length,
             duplicateCount: document.querySelectorAll('#slf-tactics-dropdown').length,
             bridgeClassRemaining: document.getElementById('team-tactic-form').classList.contains('team_general_content')
@@ -120,7 +121,10 @@ def assert_header_selector(page: Page):
     assert evidence["left"] >= evidence["headerLeft"] - 1, evidence
     assert evidence["right"] <= evidence["headerRight"] + 1, evidence
     assert evidence["overflow"] <= 1, evidence
-    assert evidence["buttons"] == 5, evidence
+    # Issue #409 wave 2 added the preset-migration button to the control row
+    # (6 controls: apply/save/delete/export/import/migrate).
+    assert evidence["buttons"] == 6, evidence
+    assert evidence["migrate"] is True, evidence
     assert evidence["options"] >= 10, evidence
     assert evidence["duplicateCount"] == 1, evidence
     assert evidence["bridgeClassRemaining"] is False, evidence
