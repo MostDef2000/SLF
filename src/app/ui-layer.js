@@ -690,6 +690,7 @@ if (!isTacticPage) return;
             };
 
             const installNativeTacticsCompaction = () => {
+                if (typeof MutationObserver === 'undefined') return;
                 if (!document.body) return;
 
                 // The site renders the tactics list asynchronously and may
