@@ -791,7 +791,13 @@ def assert_offline_bootstrap(page: Page):
     page.wait_for_selector("#slf-manual-recommendation-btn")
     page.wait_for_selector("#slf-tactics-dropdown")
     rows = request_rows(page)
-    assert any("/api/tactics" in row["url"] for row in rows), rows
+    # Issue #409 wave 1 retired the bootstrap VPS tactics sync — the canonical
+    # store is now native site templates; the ONLY remaining /api/tactics read
+    # is the manual migration's one-time import (preset-migration.js,
+    # user-triggered, never on bootstrap). This flipped assertion is a
+    # retirement guard: it fails on pre-wave-1 code, where the sync attempt
+    # exists.
+    assert not any("/api/tactics" in row["url"] for row in rows), rows
     assert page.locator("#slf-match-parser-panel").count() == 1
 
 
