@@ -54,7 +54,20 @@ const item = (id, name, time, data, userId = 6945) => ({
 });
 const clone = value => JSON.parse(JSON.stringify(value));
 
-function makeSandbox() {
+function makeSandbox(options = {}) {
+    // footLoginId:
+    //   'property' (default) — foot_login_id as a plain sandbox-object property
+    //     (the pre-#413 assumption; what every existing test relies on).
+    //   'lexical' — a top-level `let foot_login_id = 6945;` in the page realm,
+    //     the LIVE-SITE condition (team4.php?action=tactic line 2027). A lexical
+    //     global does NOT create a window/unsafeWindow property, so the sandbox
+    //     object has no foot_login_id property; the binding lives in the realm's
+    //     global lexical environment and is only reachable by in-realm evaluation.
+    //   'absent' — no binding at all (used with a fake document for the
+    //     CSP-independent DOM fallback).
+    // document: an optional fake document (e.g. { scripts: [{ textContent }] })
+    //     exposed to the realm for the DOM-fallback path.
+    const { footLoginId = 'property', document: fakeDocument } = options;
     const warnings = [];
     const storage = new Map();
     const context = {
@@ -81,8 +94,19 @@ function makeSandbox() {
     context.globalThis = context;
     // Page-global login id (present on tactic AND match pages): the read-time
     // scope validation compares it against the cache envelope's user_id.
-    context.foot_login_id = 6945;
+    if (footLoginId === 'property') {
+        context.foot_login_id = 6945;
+    }
+    if (fakeDocument) {
+        context.document = fakeDocument;
+    }
     vm.createContext(context);
+    if (footLoginId === 'lexical') {
+        // The binding persists in the context's global lexical environment
+        // across scripts; it is realm-global, so it is visible to every script
+        // loaded into this context (including the storage source below).
+        vm.runInContext('let foot_login_id = 6945;', context);
+    }
     vm.runInContext(nativeSource, context, { filename: 'native-template-api.js' });
     vm.runInContext(`${storageSource}\n;globalThis.__PS = PresetStorage;`, context, {
         filename: 'preset-storage.js'
@@ -756,6 +780,96 @@ const envelopeOf = storage => JSON.parse(storage.get(NATIVE_KEY));
         'acknowledged-progress rule: acked new id (3002) persisted, first old copy (6001) delete acked and applied, failing old copy (6002) stays'
     );
     assert.deepEqual(clone(env.managedNames), ['Dup'], 'the applied name is plugin-managed even on partial_replace');
+}
+
+// ---- 26. #413: foot_login_id as a LEXICAL global (live-site condition) ------
+{
+    // The live site (team4.php?action=tactic, line 2027) declares
+    // `let foot_login_id = 6945;` at the top level. A top-level `let` is a
+    // lexical global: it does NOT create a window/unsafeWindow property, so
+    // the property reads cannot see it. The live page ALSO carries the
+    // declaration as inline <script> text (verified in Playwright: the
+    // document.scripts scan returns '6945'), which the declaration-only DOM
+    // scan resolves. In-realm eval is prohibited by the repo's security
+    // governance (tools/test-security-boundaries.mjs bans /\beval\s*\(/ in
+    // src/**), so the supported contract is property reads + declaration-only
+    // DOM scan. This test asserts the OUTCOME on the live-site shape (lexical
+    // binding AND inline declaration text), not the mechanism: whichever
+    // supported path does the work, readPageUserId() must resolve '6945' —
+    // otherwise readScopedNativeCache() always returns null and the
+    // migration gate blocks the owner's ⬆️ button.
+    const { ps, context } = makeSandbox({
+        footLoginId: 'lexical',
+        document: { scripts: [{ textContent: 'let foot_login_id = 6945;' }] }
+    });
+    // Precondition: the binding is NOT a property of the sandbox object —
+    // that is exactly the bug's trigger.
+    assert.equal(
+        context.foot_login_id, undefined,
+        'lexical foot_login_id is not a sandbox-object property (live-site precondition)'
+    );
+    // Precondition: the binding IS present in the realm (the live-site
+    // condition) even though it is not property-readable. The check runs in
+    // the test harness (vm.runInContext), not in src.
+    assert.equal(
+        vm.runInContext(
+            `(0,eval)("typeof foot_login_id !== 'undefined' ? String(foot_login_id) : null")`,
+            context
+        ),
+        '6945',
+        'the lexical binding is present in the realm (test precondition)'
+    );
+    // The actual assertion: the real method must resolve the live-site shape.
+    assert.equal(
+        ps.readPageUserId(), '6945',
+        'readPageUserId must resolve foot_login_id on the live-site shape (lexical binding + inline declaration), not only a window property'
+    );
+}
+
+// ---- 27. #413: CSP-independent DOM fallback (document.scripts scan) ---------
+{
+    // No foot_login_id binding at all (neither a window property nor a lexical
+    // global), but the page's inline <script> text carries the declaration. A
+    // strict CSP that blocks eval would defeat the in-realm-eval fallback, so
+    // readPageUserId must also be able to recover the id by scanning
+    // document.scripts textContent.
+    const { ps, context } = makeSandbox({
+        footLoginId: 'absent',
+        document: { scripts: [{ textContent: 'let foot_login_id = 6945;' }] }
+    });
+    assert.equal(
+        context.foot_login_id, undefined,
+        'no foot_login_id property (precondition)'
+    );
+    assert.equal(
+        ps.readPageUserId(), '6945',
+        'readPageUserId must recover foot_login_id from document.scripts when no live binding exists'
+    );
+}
+
+// ---- 28. #413: DOM scan must NOT resolve a foreign property assignment -------
+{
+    // Account-isolation guard (peer-review finding F3): the document.scripts
+    // fallback must resolve DECLARATIONS only (let/const/var foot_login_id = N).
+    // A non-declaration assignment in script text — e.g. `obj.foot_login_id =
+    // 111;`, a property write on some other object — is never the page's login
+    // id. A bare top-level assignment (foot_login_id = 111;) creates a window
+    // property, which the property-read path already catches; so the DOM scan
+    // only needs declaration forms. If the scan matched property assignments,
+    // readScopedNativeCache could serve ANOTHER user's cached templates
+    // (envelope userId '111' would validate against the foreign id).
+    const { ps, context } = makeSandbox({
+        footLoginId: 'absent',
+        document: { scripts: [{ textContent: 'obj.foot_login_id = 111;' }] }
+    });
+    assert.equal(
+        context.foot_login_id, undefined,
+        'no foot_login_id property (precondition)'
+    );
+    assert.equal(
+        ps.readPageUserId(), null,
+        'readPageUserId must NOT resolve a foreign property assignment in script text (account isolation)'
+    );
 }
 
 console.log('OK: PresetStorage native facade, scoped cache, fallbacks, scope isolation and the awaited saveCustom write protocol all verified');
