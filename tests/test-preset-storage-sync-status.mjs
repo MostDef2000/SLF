@@ -1,8 +1,13 @@
 #!/usr/bin/env node
-// B6: PresetStorage server-sync failures must not be silent.
-// - failed delete-key / merge posts record lastSyncError/lastSyncAt + console.warn
-// - loadFromServerAndMerge onError/final-catch records the failure, stays fail-open
-//   (callback still fires, local presets still returned), and warns exactly once.
+// B6 (rewritten for #409): PresetStorage failures must not be silent.
+// Native-failure equivalents — the sandbox deliberately does NOT provide
+// NativeTemplateApi (the module guard makes the store unavailable):
+// - saveCustom fails LOUD: structured SLFPresetWriteError (native_unavailable),
+//   lastSyncError/lastSyncAt recorded, console.warn fired, nothing persisted;
+// - loadFromServerAndMerge stays fail-open: resolves (never rejects), the
+//   callback fires exactly once per call on every outcome;
+// - reads fail open: pre-migration local presets keep working, the legacy
+//   storage key is never touched by failed writes.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,7 +22,7 @@ const source = fs.readFileSync(
 
 const STORAGE_KEY = 'slf_tactics_test_v1';
 
-function buildSandbox(api) {
+function buildSandbox() {
     const warnings = [];
     const storage = new Map();
     const context = {
@@ -34,10 +39,12 @@ function buildSandbox(api) {
         Date,
         JSON,
         Promise,
-        CONFIG: { STORAGE_KEY, COLLECTIONS: { TACTICS: 'tactics' } },
-        Api: api,
-        BASE_PRESETS: {},
-        BASE_LABELS: {},
+        // Deliberately NO NativeTemplateApi here: the module guard must keep
+        // preset-storage.js standalone-safe and fail open (pre-migration
+        // continuity) instead of crashing the sandbox.
+        CONFIG: { STORAGE_KEY },
+        BASE_PRESETS: { standard: { def_line: '2', press_line: '2', priority: [] } },
+        BASE_LABELS: { standard: 'Стандарт' },
         DEFAULT_CUSTOM_PRESETS: {},
         debugWarn: (...args) => warnings.push(args.map(String).join(' '))
     };
@@ -48,22 +55,7 @@ function buildSandbox(api) {
     return { PresetStorage: context.__PresetStorage, warnings, storage };
 }
 
-const flush = () => new Promise(resolve => setImmediate(resolve));
-
-// Failing API: get() invokes onError(error, response) then still rejects;
-// post() rejects (transport failure without any error callback).
-const serverError = Object.assign(new Error('VPS 500'), { status: 500 });
-const api = {
-    get(url, onSuccess, onError) {
-        if (onError) onError(serverError, { status: 500 });
-        return Promise.reject(serverError);
-    },
-    post(url, body, label) {
-        return Promise.reject(Object.assign(new Error(`post failed: ${label}`), { label }));
-    }
-};
-
-const { PresetStorage, warnings, storage } = buildSandbox(api);
+const { PresetStorage, warnings, storage } = buildSandbox();
 
 const LOCAL_PRESETS = {
     My_Local_Preset: { def_line: '2', press_line: '3', corner: '1', priority: [] },
@@ -73,47 +65,52 @@ storage.set(STORAGE_KEY, JSON.stringify(LOCAL_PRESETS));
 
 assert.equal(PresetStorage.lastSyncError, null, 'initial lastSyncError must be null');
 assert.equal(PresetStorage.lastSyncAt, null, 'initial lastSyncAt must be null');
+assert.equal(PresetStorage.readSource, 'unavailable', 'initial readSource is unavailable');
+assert.equal(PresetStorage.nativeStale, true, 'initial nativeStale is true');
 
-// 1. saveCustom: delete-key post (Old_Preset) and merge post both fail.
-PresetStorage.saveCustom({ My_Local_Preset: LOCAL_PRESETS.My_Local_Preset });
-await flush();
-await flush();
+// 1. saveCustom with an unreachable native store: fails LOUD, persists nothing.
+const localBefore = storage.get(STORAGE_KEY);
+await assert.rejects(
+    () => PresetStorage.saveCustom({ My_Local_Preset: LOCAL_PRESETS.My_Local_Preset }),
+    error => error.name === 'SLFPresetWriteError' && error.code === 'native_unavailable',
+    'saveCustom must throw a structured SLFPresetWriteError when the store is unreachable'
+);
 
 assert.ok(
-    PresetStorage.lastSyncError && PresetStorage.lastSyncError.includes('tactics merge'),
-    `merge failure must be recorded in lastSyncError, got: ${JSON.stringify(PresetStorage.lastSyncError)}`
+    PresetStorage.lastSyncError && PresetStorage.lastSyncError.includes('native save (store unreachable)'),
+    `save failure must be recorded in lastSyncError, got: ${JSON.stringify(PresetStorage.lastSyncError)}`
 );
 assert.equal(typeof PresetStorage.lastSyncAt, 'number', 'lastSyncAt must be set on failure');
 assert.ok(PresetStorage.lastSyncAt > 0, 'lastSyncAt must be a timestamp');
 assert.ok(
-    warnings.some(w => w.includes('sync failure') && w.includes('tactics merge')),
-    `console.warn must fire on merge failure, warnings: ${JSON.stringify(warnings)}`
+    warnings.some(w => w.includes('sync failure') && w.includes('native save (store unreachable)')),
+    `console.warn must fire on the failed save, warnings: ${JSON.stringify(warnings)}`
 );
-assert.ok(
-    warnings.some(w => w.includes('delete-key (Old_Preset)')),
-    `console.warn must fire on delete-key failure, warnings: ${JSON.stringify(warnings)}`
+assert.equal(
+    storage.get(STORAGE_KEY),
+    JSON.stringify(LOCAL_PRESETS),
+    'a failed save must never touch the pre-migration local storage'
 );
 
-// 2. loadFromServerAndMerge: server error path.
-const warnsBeforeLoad = warnings.length;
-let callbackRan = false;
-const loadResult = await PresetStorage.loadFromServerAndMerge(() => {
-    callbackRan = true;
-});
+// 2. loadFromServerAndMerge: fail-open, callback fires exactly once per call.
+let callbackCount = 0;
+const loadResult = await PresetStorage.loadFromServerAndMerge(() => { callbackCount += 1; });
+await PresetStorage.loadFromServerAndMerge(() => { callbackCount += 1; });
 
-assert.equal(loadResult, undefined, 'loadFromServerAndMerge must stay fail-open (resolve, not reject)');
-assert.equal(callbackRan, true, 'callback must still fire after a server error');
-assert.ok(
-    PresetStorage.lastSyncError.includes('tactics load'),
-    `load failure must be recorded in lastSyncError, got: ${JSON.stringify(PresetStorage.lastSyncError)}`
-);
-assert.ok(warnings.length > warnsBeforeLoad, 'console.warn must fire on load failure');
-const loadWarnings = warnings.slice(warnsBeforeLoad).filter(w => w.includes('tactics load'));
-assert.equal(loadWarnings.length, 1, `exactly one warning per load failure, got: ${loadWarnings.length}`);
+assert.equal(loadResult, undefined, 'loadFromServerAndMerge must resolve (fail-open), never reject');
+assert.equal(callbackCount, 2, 'callback must fire exactly once per call (two calls -> two firings)');
 
-// 3. Fail-open: local presets are still returned after the sync failures.
+// 3. Fail-open reads: pre-migration presets are still served after the failures.
 const local = PresetStorage.loadCustom();
 assert.ok(local.My_Local_Preset, 'local presets must still be returned after sync failures');
 assert.equal(local.My_Local_Preset.def_line, '2', 'local preset content must be intact');
 
-console.log('OK: preset-storage sync failures are recorded (lastSyncError/lastSyncAt), warned, and fail-open');
+const all = PresetStorage.getAllPresets();
+assert.ok(all.My_Local_Preset, 'getAllPresets serves the pre-migration composite');
+assert.ok(all.standard, 'BASE_PRESETS overlay present while the native store is unavailable');
+
+const labels = PresetStorage.getAllLabels();
+assert.equal(labels.My_Local_Preset, 'My_Local_Preset', 'labels fall back to the name');
+assert.equal(labels.standard, 'Стандарт', 'BASE_LABELS served in the fallback');
+
+console.log('OK: preset-storage native-store failures are loud (SLFPresetWriteError + lastSyncError/lastSyncAt + console.warn), reads stay fail-open, callback fires exactly once');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.364
+// @version      4.4.370
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.364',
-        scriptVersion: '4.4.364',
+        version: '4.4.370',
+        scriptVersion: '4.4.370',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.364',
+        scriptVersion: '4.4.370',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -1002,6 +1002,485 @@ const DomUtils = {
 // <<< src/core/api.js
 
 
+// >>> src/modules/tactics-presets/native-template-api.js
+    // 3a. Native Site Template API (issue #409)
+    // ============================================================
+
+    // Native site templates are the canonical preset store (issue #409).
+    // Inventory is page-embedded (window.TACTIC_CFG.items on team4.php
+    // ?action=tactic and match pages; share.php is readonly and is never
+    // ingested). Writes go through same-origin manager POSTs to
+    // /ajax/team3.9.php (a=tactic_save / tactic_rename / tactic_delete).
+    // Verified live protocol facts (owner-account probe, 2026-11-11):
+    // - the endpoint answers JSON with a lying `Content-Type: text/html`;
+    //   parsing must ignore the header and validate the body schema;
+    // - no CSRF hash is involved for team3.9.php (the hash belongs to
+    //   tactic_ajax.php apply only — do not add one here);
+    // - same-name save creates a NEW template (no upsert), so an update is
+    //   save-new + delete-old;
+    // - the server rejects saves above the non-VIP2 template limit; rejections
+    //   must surface loudly, never as optimistic success.
+
+    const NativeTemplateMapping = (() => {
+        // Site template data: 17 numeric fields. Plugin preset vectors carry
+        // the same 14 controls as decimal strings plus a priority array
+        // (['left','center','right'] subset); membership maps directly to the
+        // priority bits (1 = direction prioritized, [] = 0/0/0 «без
+        // приоритета» — never expanded to all-ones, never «disable attacks»).
+        const CONTROL_DOMAINS = {
+            def_line: [1, 3],
+            press_line: [1, 3],
+            def_width: [1, 3],
+            press_intense: [1, 5],
+            build_type: [1, 3],
+            build_temp: [1, 3],
+            build_long: [1, 3],
+            build_fast: [1, 3],
+            style: [1, 5],
+            pass_risk: [1, 5],
+            dribble: [1, 5],
+            cross: [1, 3],
+            corner: [1, 2],
+            shot: [1, 3]
+        };
+        const CONTROL_KEYS = Object.keys(CONTROL_DOMAINS);
+        const PRIORITY_BITS = [
+            { key: 'priority_l', direction: 'left' },
+            { key: 'priority_c', direction: 'center' },
+            { key: 'priority_r', direction: 'right' }
+        ];
+        const PRIORITY_DIRECTIONS = PRIORITY_BITS.map(bit => bit.direction);
+        const SITE_DATA_KEYS = CONTROL_KEYS.concat(PRIORITY_BITS.map(bit => bit.key));
+
+        function invalid(code, message) {
+            return { ok: false, code, message };
+        }
+
+        function coerceControl(key, raw, domain) {
+            const min = domain[0];
+            const max = domain[1];
+            const expected = `${key}: expected an integer ${min}..${max}`;
+            if (raw == null || typeof raw === 'boolean') {
+                return invalid('invalid_value', `${expected}, got ${String(raw)}`);
+            }
+            let value = raw;
+            if (typeof value === 'string') {
+                const text = value.trim();
+                if (!/^[0-9]+$/.test(text)) {
+                    return invalid('invalid_value', `${expected}, got ${JSON.stringify(value)}`);
+                }
+                value = Number(text);
+            }
+            if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value)) {
+                return invalid('invalid_value', `${expected}, got ${String(raw)}`);
+            }
+            if (value < min || value > max) {
+                return invalid('out_of_range', `${key}: ${value} is out of range ${min}..${max}`);
+            }
+            return { ok: true, value };
+        }
+
+        function coercePriorityBit(key, raw) {
+            let value = raw;
+            if (typeof value === 'string') {
+                const text = value.trim();
+                if (!/^[0-9]+$/.test(text)) {
+                    return invalid('invalid_value', `${key}: expected 0 or 1, got ${JSON.stringify(value)}`);
+                }
+                value = Number(text);
+            }
+            if (typeof value !== 'number' || !Number.isInteger(value) || (value !== 0 && value !== 1)) {
+                return invalid('invalid_value', `${key}: expected 0 or 1, got ${String(raw)}`);
+            }
+            return { ok: true, value };
+        }
+
+        function siteDataToPluginVector(siteData) {
+            if (!siteData || typeof siteData !== 'object' || Array.isArray(siteData)) {
+                return invalid('malformed_vector', 'template data must be an object of 17 numeric fields');
+            }
+
+            const vector = {};
+
+            for (const key of CONTROL_KEYS) {
+                if (!Object.prototype.hasOwnProperty.call(siteData, key)) {
+                    return invalid('malformed_vector', `template data is missing "${key}"`);
+                }
+                const coerced = coerceControl(key, siteData[key], CONTROL_DOMAINS[key]);
+                if (!coerced.ok) return coerced;
+                vector[key] = String(coerced.value);
+            }
+
+            // Missing priority bits are malformed, not zero: a native template
+            // without all three bits is rejected instead of silently losing
+            // its direction semantics.
+            vector.priority = [];
+            for (const bit of PRIORITY_BITS) {
+                if (!Object.prototype.hasOwnProperty.call(siteData, bit.key)) {
+                    return invalid('malformed_vector', `template data is missing "${bit.key}"`);
+                }
+                const coerced = coercePriorityBit(bit.key, siteData[bit.key]);
+                if (!coerced.ok) return coerced;
+                if (coerced.value === 1) vector.priority.push(bit.direction);
+            }
+
+            return { ok: true, data: vector };
+        }
+
+        function pluginVectorToSiteData(vector) {
+            if (!vector || typeof vector !== 'object' || Array.isArray(vector)) {
+                return invalid('malformed_vector', 'preset vector must be an object');
+            }
+
+            const siteData = {};
+
+            for (const key of CONTROL_KEYS) {
+                if (!Object.prototype.hasOwnProperty.call(vector, key)) {
+                    return invalid('incomplete_vector', `preset vector is missing "${key}"`);
+                }
+                const coerced = coerceControl(key, vector[key], CONTROL_DOMAINS[key]);
+                if (!coerced.ok) return coerced;
+                siteData[key] = coerced.value;
+            }
+
+            if (!Array.isArray(vector.priority)) {
+                return invalid('incomplete_vector', 'preset vector is missing the priority array');
+            }
+            const seen = Object.create(null);
+            for (const member of vector.priority) {
+                if (PRIORITY_DIRECTIONS.indexOf(member) === -1) {
+                    return invalid('invalid_priority', `unknown priority member ${JSON.stringify(member)}`);
+                }
+                if (seen[member]) {
+                    return invalid('invalid_priority', `duplicate priority member "${member}"`);
+                }
+                seen[member] = true;
+            }
+
+            // Membership <-> bit, [] <-> 0/0/0. Empty priority stays empty:
+            // attacks go everywhere, it is never expanded to all-ones and
+            // never treated as «disable attacks».
+            siteData.priority_l = vector.priority.indexOf('left') !== -1 ? 1 : 0;
+            siteData.priority_c = vector.priority.indexOf('center') !== -1 ? 1 : 0;
+            siteData.priority_r = vector.priority.indexOf('right') !== -1 ? 1 : 0;
+
+            return { ok: true, siteData };
+        }
+
+        function pluginVectorsEqual(a, b) {
+            if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+            for (const key of CONTROL_KEYS) {
+                if (String(a[key]) !== String(b[key])) return false;
+            }
+            const pa = Array.isArray(a.priority) ? a.priority.slice().sort() : [];
+            const pb = Array.isArray(b.priority) ? b.priority.slice().sort() : [];
+            return pa.join('|') === pb.join('|');
+        }
+
+        function siteItemToInventoryItem(raw) {
+            if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+                return invalid('malformed_item', 'native template item is not an object');
+            }
+            const id = raw.id == null ? '' : String(raw.id);
+            if (!id) {
+                return invalid('malformed_item', 'native template item is missing id');
+            }
+            if (typeof raw.name !== 'string' || !raw.name.trim()) {
+                return invalid('malformed_item', `native template ${id} has no usable name`);
+            }
+            const vector = siteDataToPluginVector(raw.data);
+            if (!vector.ok) {
+                return invalid(vector.code, `native template ${id}: ${vector.message}`);
+            }
+            return {
+                ok: true,
+                item: {
+                    id,
+                    userId: raw.user_id == null ? '' : String(raw.user_id),
+                    name: raw.name,
+                    data: vector.data,
+                    time: raw.time == null ? null : String(raw.time),
+                    order: Number.isFinite(Number(raw.order)) ? Number(raw.order) : 0
+                }
+            };
+        }
+
+        return {
+            CONTROL_DOMAINS,
+            CONTROL_KEYS,
+            PRIORITY_BITS,
+            PRIORITY_DIRECTIONS,
+            SITE_DATA_KEYS,
+            siteDataToPluginVector,
+            pluginVectorToSiteData,
+            pluginVectorsEqual,
+            siteItemToInventoryItem
+        };
+    })();
+
+    const NativeTemplateApi = (() => {
+        const MANAGER_URL = '/ajax/team3.9.php';
+        const REQUEST_TIMEOUT_MS = 15000;
+
+        function resolvePageWindow() {
+            // Userscript runs sandboxed; page globals (TACTIC_CFG, page fetch)
+            // live on unsafeWindow. Same fallback pattern as
+            // match-rendering-compatibility.js / version-badge.js.
+            try {
+                if (typeof unsafeWindow !== 'undefined' && unsafeWindow) return unsafeWindow;
+            } catch (_) { /* no userscript sandbox */ }
+            if (typeof window !== 'undefined' && window) return window;
+            return globalThis;
+        }
+
+        function isReadonlyTemplatePage() {
+            // share.php renders shared templates read-only; it must never be
+            // ingested as inventory even if a config object appears there.
+            try {
+                if (typeof location !== 'undefined' && location && /share\.php/.test(String(location.pathname || ''))) {
+                    return true;
+                }
+            } catch (_) { /* no location in this context */ }
+            return false;
+        }
+
+        function readTemplateConfig() {
+            if (isReadonlyTemplatePage()) {
+                return {
+                    ok: false,
+                    code: 'readonly_page',
+                    items: null,
+                    message: 'share.php is a readonly template view; it is never ingested as inventory'
+                };
+            }
+            const pageWindow = resolvePageWindow();
+            const config = pageWindow ? pageWindow.TACTIC_CFG : null;
+            // Validated envelope: a present-but-empty items list is a real
+            // (valid-empty) inventory; a missing config is NOT an empty list.
+            if (!config || typeof config !== 'object' || !Array.isArray(config.items)) {
+                return {
+                    ok: false,
+                    code: 'config_missing',
+                    items: null,
+                    message: 'page-embedded template config (window.TACTIC_CFG.items) is not available on this page'
+                };
+            }
+            return { ok: true, code: 'ok', items: config.items, message: '' };
+        }
+
+        function parseManagerBody(action, text) {
+            if (typeof text !== 'string' || !text.trim()) {
+                return { ok: false, code: 'empty_response', message: `native template endpoint returned an empty body for ${action}` };
+            }
+            let payload;
+            try {
+                // Content-Type lies (text/html) — parse the body regardless.
+                payload = JSON.parse(text);
+            } catch (_) {
+                return {
+                    ok: false,
+                    code: 'not_json',
+                    message: `native template endpoint returned a non-JSON body for ${action} (expired session or HTML error page?)`
+                };
+            }
+            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+                return { ok: false, code: 'not_json', message: `native template endpoint returned ${typeof payload} instead of a JSON object for ${action}` };
+            }
+            if (payload.success !== 1) {
+                return {
+                    ok: false,
+                    code: 'server_rejected',
+                    serverCode: payload.success,
+                    message: `native template endpoint rejected ${action} (success=${JSON.stringify(payload.success)})`
+                };
+            }
+            return { ok: true, payload };
+        }
+
+        function validateTacticPayload(tactic) {
+            if (!tactic || typeof tactic !== 'object' || Array.isArray(tactic)) {
+                return { ok: false, code: 'invalid_payload', message: 'native template response carries no tactic object' };
+            }
+            const id = tactic.id == null ? '' : String(tactic.id);
+            if (!id) {
+                return { ok: false, code: 'invalid_payload', message: 'native template response is missing tactic.id' };
+            }
+            const vector = NativeTemplateMapping.siteDataToPluginVector(tactic.data);
+            if (!vector.ok) {
+                return { ok: false, code: 'invalid_payload', message: `native template response has invalid tactic.data: ${vector.message}` };
+            }
+            return {
+                ok: true,
+                tactic: {
+                    id,
+                    userId: tactic.user_id == null ? '' : String(tactic.user_id),
+                    name: typeof tactic.name === 'string' ? tactic.name : String(tactic.name ?? ''),
+                    data: vector.data,
+                    time: tactic.time == null ? null : String(tactic.time),
+                    order: Number.isFinite(Number(tactic.order)) ? Number(tactic.order) : 0
+                }
+            };
+        }
+
+        function serializeSaveBody(name, siteData) {
+            const parts = [`name=${encodeURIComponent(String(name))}`];
+            NativeTemplateMapping.SITE_DATA_KEYS.forEach(key => {
+                parts.push(`data[${key}]=${encodeURIComponent(String(siteData[key]))}`);
+            });
+            return parts.join('&');
+        }
+
+        function serializeIdBody(fields) {
+            const parts = [];
+            Object.keys(fields).forEach(key => {
+                parts.push(`${key}=${encodeURIComponent(String(fields[key]))}`);
+            });
+            return parts.join('&');
+        }
+
+        function managerRequest(action, body, options) {
+            const timeoutMs = options && Number.isFinite(options.timeoutMs)
+                ? options.timeoutMs
+                : REQUEST_TIMEOUT_MS;
+
+            return new Promise(resolve => {
+                const pageWindow = resolvePageWindow();
+                const pageFetch = pageWindow && typeof pageWindow.fetch === 'function'
+                    ? pageWindow.fetch.bind(pageWindow)
+                    : (typeof fetch === 'function' ? fetch : null);
+
+                if (!pageFetch) {
+                    resolve({
+                        ok: false,
+                        code: 'transport_unavailable',
+                        message: 'no fetch transport available for native template requests'
+                    });
+                    return;
+                }
+
+                let settled = false;
+                const finish = result => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    resolve(result);
+                };
+
+                const timer = setTimeout(() => {
+                    finish({
+                        ok: false,
+                        code: 'timeout',
+                        message: `native template request ${action} timed out after ${timeoutMs}ms; the server outcome is unknown`
+                    });
+                }, timeoutMs);
+
+                let request;
+                try {
+                    request = Promise.resolve(pageFetch(`${MANAGER_URL}?a=${action}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                        body,
+                        credentials: 'same-origin'
+                    }));
+                } catch (error) {
+                    finish({
+                        ok: false,
+                        code: 'network',
+                        message: `native template request ${action} failed: ${error && error.message ? error.message : 'unknown error'}`
+                    });
+                    return;
+                }
+
+                request.then(response => {
+                    const status = response && typeof response.status === 'number' ? response.status : 0;
+                    if (status && (status < 200 || status >= 300)) {
+                        finish({ ok: false, code: `http_${status}`, message: `native template endpoint returned HTTP ${status} for ${action}` });
+                        return null;
+                    }
+                    if (!response || typeof response.text !== 'function') {
+                        finish({ ok: false, code: 'unknown_outcome', message: `native template request ${action} returned no readable response; the server outcome is unknown` });
+                        return null;
+                    }
+                    return response.text().then(text => finish(parseManagerBody(action, text)));
+                }).catch(error => {
+                    finish({
+                        ok: false,
+                        code: 'network',
+                        message: `native template request ${action} failed: ${error && error.message ? error.message : 'unknown error'}`
+                    });
+                });
+            });
+        }
+
+        function readInventory() {
+            const config = readTemplateConfig();
+            if (!config.ok) {
+                return { ok: false, code: config.code, items: [], malformed: [], message: config.message };
+            }
+            const items = [];
+            const malformed = [];
+            config.items.forEach((raw, index) => {
+                const parsed = NativeTemplateMapping.siteItemToInventoryItem(raw);
+                if (parsed.ok) items.push(parsed.item);
+                else malformed.push({ index, code: parsed.code, message: parsed.message });
+            });
+            return {
+                ok: true,
+                code: 'ok',
+                items,
+                malformed,
+                message: malformed.length
+                    ? `${malformed.length} malformed native template item(s) skipped`
+                    : ''
+            };
+        }
+
+        async function saveTemplate(name, pluginVector, options) {
+            const site = NativeTemplateMapping.pluginVectorToSiteData(pluginVector);
+            if (!site.ok) {
+                return { ok: false, code: site.code, message: `template "${name}" rejected: ${site.message}` };
+            }
+            const result = await managerRequest('tactic_save', serializeSaveBody(name, site.siteData), options);
+            if (!result.ok) return result;
+            const tactic = validateTacticPayload(result.payload.tactic);
+            if (!tactic.ok) return tactic;
+            return { ok: true, tactic: tactic.tactic };
+        }
+
+        async function renameTemplate(id, name, options) {
+            const body = serializeIdBody({ id, name });
+            const result = await managerRequest('tactic_rename', body, options);
+            if (!result.ok) return result;
+            const tactic = validateTacticPayload(result.payload.tactic);
+            if (!tactic.ok) return tactic;
+            return { ok: true, tactic: tactic.tactic };
+        }
+
+        async function deleteTemplate(id, options) {
+            const result = await managerRequest('tactic_delete', serializeIdBody({ id }), options);
+            // {success:1} with no tactic payload is the documented delete ack.
+            if (!result.ok) return result;
+            return { ok: true };
+        }
+
+        const api = {
+            MANAGER_URL,
+            REQUEST_TIMEOUT_MS,
+            mapping: NativeTemplateMapping,
+            readTemplateConfig,
+            readInventory,
+            saveTemplate,
+            renameTemplate,
+            deleteTemplate
+        };
+
+        return api;
+    })();
+
+    // ============================================================
+// <<< src/modules/tactics-presets/native-template-api.js
+
+
 // >>> src/modules/tactics-presets/preset-storage.js
     // 3. Preset Storage
     // ============================================================
@@ -1115,10 +1594,24 @@ const DomUtils = {
     }
 
     const PresetStorage = {
-        // Diagnostics for the last server-sync failure. Sync stays fail-open
-        // (local presets keep working), but failures must not be silent.
+        // Diagnostics for the last preset-store failure. Reads stay fail-open
+        // (cached/pre-migration presets keep working), but failures must not be
+        // silent. Native writes (#409) fail loud: they throw a structured
+        // SLFPresetWriteError that the UI surfaces, and the read cache is
+        // updated only from acknowledged responses.
         lastSyncError: null,
         lastSyncAt: null,
+        // Where the last read was served from: 'native' (fresh page-config
+        // ingest), 'cache' (validated localStorage fallback), 'unavailable'.
+        readSource: 'unavailable',
+        nativeStale: true,
+        lastSuccessfulRefreshAt: null,
+        // Fingerprint of the page-config snapshot consumed by the last
+        // ingest. The embedded TACTIC_CFG.items is a page-load snapshot: a
+        // re-read that is byte-identical carries no new information and must
+        // not wipe acknowledged writes out of the cache (a save is acked by
+        // the server but the embedded config only updates on reload).
+        lastIngestFingerprint: null,
 
         recordSyncFailure(context, error) {
             const message = error && error.message ? error.message : String(error || 'unknown error');
@@ -1200,6 +1693,258 @@ const DomUtils = {
         },
 
         loadCustom() {
+            const source = this.refreshNativeState();
+
+            if (source === 'unavailable') {
+                return this.loadLegacyLocalPresets();
+            }
+
+            const cached = this.readScopedNativeCache();
+            return this.inventoryToPresetMap(cached ? cached.items : []);
+        },
+
+        // ---- native site-template store (issue #409) --------------------
+        // Native site templates are the canonical preset store. localStorage
+        // holds only a read cache under a CONSTANT key: it is scoped by
+        // VALIDATION at read time (served as a preset source only when the
+        // page global foot_login_id matches the envelope's site user_id —
+        // shared-browser account isolation), not by a per-user key. It
+        // persists id/name/data/time — never share_token/share_url. The
+        // recurring VPS tactics sync (merge / delete-key posts and the GET
+        // merge) is retired; the VPS tactics collection config itself is
+        // untouched (wave 2 migrates it).
+
+        nativeCacheKey() {
+            return `${CONFIG.STORAGE_KEY}_native_v1`;
+        },
+
+        nativeApiAvailable() {
+            // Standalone-safe guard (same pattern as isTacticObject above):
+            // the module must keep loading in test sandboxes that assemble
+            // preset-storage.js alone.
+            return typeof NativeTemplateApi !== 'undefined'
+                && !!NativeTemplateApi
+                && typeof NativeTemplateApi.readInventory === 'function';
+        },
+
+        readNativeCache() {
+            try {
+                const raw = localStorage.getItem(this.nativeCacheKey());
+                if (!raw) return null;
+
+                const parsed = JSON.parse(raw);
+                if (!parsed || parsed.schema !== 'slf_native_preset_cache_v1' || !Array.isArray(parsed.items)) {
+                    return null;
+                }
+                return parsed;
+            } catch (e) {
+                debugWarn('[SLF] Ошибка чтения кэша нативных шаблонов', e);
+                return null;
+            }
+        },
+
+        readPageUserId() {
+            // foot_login_id is the site's page-global login id — present on
+            // team4.php?action=tactic AND match pages (verified in saved page
+            // dumps). Same unsafeWindow fallback pattern as
+            // native-template-api.js resolvePageWindow.
+            try {
+                if (typeof unsafeWindow !== 'undefined' && unsafeWindow && unsafeWindow.foot_login_id != null) {
+                    return String(unsafeWindow.foot_login_id);
+                }
+            } catch (_) { /* no userscript sandbox */ }
+            if (typeof window !== 'undefined' && window && window.foot_login_id != null) {
+                return String(window.foot_login_id);
+            }
+            return null;
+        },
+
+        readScopedNativeCache() {
+            // The cache key is constant, so the envelope is scoped by
+            // VALIDATION at read time: it may serve presets only when the
+            // page's current user (foot_login_id) matches the envelope's
+            // user. Without the page global, or on a mismatch, the cache is
+            // not a valid source (shared-browser account isolation) — reads
+            // treat it as unavailable. Internal reads that overwrite the
+            // cache with fresh page data (persistNativeInventory) use the
+            // raw readNativeCache instead.
+            const cached = this.readNativeCache();
+            if (!cached) return null;
+
+            const pageUserId = this.readPageUserId();
+            if (pageUserId == null) return null;
+            if (cached.userId == null || cached.userId === 'null') return null;
+            if (pageUserId !== String(cached.userId)) return null;
+            return cached;
+        },
+
+        persistNativeInventory(items, userId, managedNames) {
+            const previous = this.readNativeCache();
+            const sameScope = !!(previous
+                && previous.userId != null
+                && previous.userId !== 'null'
+                && previous.userId === userId);
+
+            const envelope = {
+                schema: 'slf_native_preset_cache_v1',
+                userId: userId,
+                fetchedAt: Date.now(),
+                // Persist only id/name/data/time — never share_token/share_url.
+                items: (items || []).map(item => ({
+                    id: item.id,
+                    userId: item.userId,
+                    name: item.name,
+                    data: item.data,
+                    time: item.time
+                })),
+                managedNames: Array.isArray(managedNames)
+                    ? managedNames.slice()
+                    : (sameScope && Array.isArray(previous.managedNames) ? previous.managedNames.slice() : [])
+            };
+
+            const fingerprint = JSON.stringify({
+                userId: envelope.userId,
+                items: envelope.items,
+                managedNames: envelope.managedNames
+            });
+            const previousFingerprint = previous
+                ? JSON.stringify({
+                    userId: previous.userId,
+                    items: previous.items,
+                    managedNames: previous.managedNames || []
+                })
+                : null;
+
+            if (fingerprint !== previousFingerprint) {
+                localStorage.setItem(this.nativeCacheKey(), JSON.stringify(envelope));
+            }
+            return envelope;
+        },
+
+        nativeItemIsNewer(a, b) {
+            // The site allows same-name templates (verified: ids 5143+5144).
+            // Reads resolve duplicates to the freshest item (latest time,
+            // then highest id); writes reconcile EVERY copy of the name —
+            // saveCustom deletes all same-name copies on update/delete, so
+            // an older duplicate can never resurface after the next read.
+            const timeA = Number(a && a.time) || 0;
+            const timeB = Number(b && b.time) || 0;
+            if (timeA !== timeB) return timeA > timeB;
+            const na = Number(a && a.id) || 0;
+            const nb = Number(b && b.id) || 0;
+            if (na !== nb) return na > nb;
+            return String(a && a.id) > String(b && b.id);
+        },
+
+        inventoryToPresetMap(items) {
+            const byName = {};
+            (Array.isArray(items) ? items : []).forEach(item => {
+                if (!item || !item.name || !item.data) return;
+                if (!byName[item.name] || this.nativeItemIsNewer(item, byName[item.name])) {
+                    byName[item.name] = item;
+                }
+            });
+
+            const map = {};
+            Object.keys(byName).forEach(name => {
+                const data = byName[name].data;
+                const preset = {};
+                Object.keys(data).forEach(key => {
+                    if (key === 'priority') return;
+                    preset[key] = String(data[key]);
+                });
+                preset.priority = Array.isArray(data.priority) ? data.priority.slice() : [];
+                map[name] = preset;
+            });
+            return filterDeprecatedPresetMap(map);
+        },
+
+        pluginVectorsEqual(a, b) {
+            if (typeof NativeTemplateMapping === 'undefined' || !NativeTemplateMapping) return false;
+            return NativeTemplateMapping.pluginVectorsEqual(a, b);
+        },
+
+        refreshNativeState() {
+            let read = null;
+            if (this.nativeApiAvailable()) {
+                try {
+                    read = NativeTemplateApi.readInventory();
+                } catch (error) {
+                    this.recordSyncFailure('native inventory read', error);
+                    read = null;
+                }
+            }
+
+            if (read && read.ok) {
+                if (read.malformed && read.malformed.length) {
+                    // Malformed native items are skipped and reported — they
+                    // are malformed, never silently treated as zero values.
+                    debugWarn('[SLF] PresetStorage:', read.message);
+                }
+                // A valid-empty inventory is canonical: it clears the cache.
+                // An all-malformed read keeps the previous cache instead of
+                // canonically wiping known-good state on a transient parse
+                // surprise.
+                if (read.items.length || !(read.malformed && read.malformed.length)) {
+                    const fingerprint = JSON.stringify(read.items);
+                    if (fingerprint !== this.lastIngestFingerprint) {
+                        // Scope: the items' owner, or — for a valid-empty
+                        // inventory, which carries no user_id — the page
+                        // user, so the read-time scope validation can serve
+                        // the (empty) envelope for this account.
+                        const userId = read.items.length
+                            ? String(read.items[0].userId || '')
+                            : this.readPageUserId();
+                        this.persistNativeInventory(read.items, userId, null);
+                        this.lastIngestFingerprint = fingerprint;
+                        this.readSource = 'native';
+                        this.nativeStale = false;
+                        this.lastSuccessfulRefreshAt = Date.now();
+                        return 'native';
+                    }
+                    // Unchanged page snapshot. The fingerprint is per-tab
+                    // in-memory state while the cache lives in shared
+                    // localStorage: another tab of the same browser under a
+                    // DIFFERENT account may have overwritten the constant-key
+                    // cache since our ingest. Validate the cache scope before
+                    // serving it: a valid scoped envelope still reflects this
+                    // ingest plus acknowledged writes — keep serving it (the
+                    // anti-wipe purpose of the fingerprint check). A foreign
+                    // envelope, a missing page user or a wiped cache is never
+                    // served — re-persist the fresh same-page snapshot (our
+                    // own session's data) and report a native read.
+                    if (this.readScopedNativeCache()) {
+                        this.readSource = 'cache';
+                        this.nativeStale = false;
+                        return 'cache';
+                    }
+                    const userId = read.items.length
+                        ? String(read.items[0].userId || '')
+                        : this.readPageUserId();
+                    this.persistNativeInventory(read.items, userId, null);
+                    this.readSource = 'native';
+                    this.nativeStale = false;
+                    this.lastSuccessfulRefreshAt = Date.now();
+                    return 'native';
+                }
+            }
+
+            const cached = this.readScopedNativeCache();
+            if (cached) {
+                this.readSource = 'cache';
+                this.nativeStale = true;
+                return 'cache';
+            }
+
+            this.readSource = 'unavailable';
+            this.nativeStale = true;
+            return 'unavailable';
+        },
+
+        loadLegacyLocalPresets() {
+            // Pre-migration continuity only: with no native config and no
+            // native cache, the pre-migration local presets stay readable until the
+            // wave-2 migration coordinator moves them into native templates.
             const local = this.loadLocalRaw();
 
             if (!local) {
@@ -1210,59 +1955,316 @@ const DomUtils = {
             return local;
         },
 
-        saveCustom(customPresets) {
-            const previous = this.loadLocalRaw() || {};
+        getManagedPresetNames() {
+            const envelope = this.readScopedNativeCache();
+            return envelope && Array.isArray(envelope.managedNames) ? envelope.managedNames.slice() : [];
+        },
+
+        recordMigratedTemplate(ackedTactic) {
+            // Migration seam (#409 wave 2): record ONE acknowledged
+            // NativeTemplateApi.saveTemplate ack into the scoped cache —
+            // no re-ingest, no deletes (the migration coordinator must never
+            // delete anything). The name joins managedNames so file-import
+            // replacement semantics keep covering migrated presets.
+            if (!ackedTactic || !ackedTactic.id || !ackedTactic.name) return null;
+
+            const previous = this.readNativeCache();
+            const items = previous && Array.isArray(previous.items)
+                ? previous.items.filter(item => item && item.id !== ackedTactic.id)
+                : [];
+            items.push({
+                id: ackedTactic.id,
+                userId: ackedTactic.userId,
+                name: ackedTactic.name,
+                data: ackedTactic.data,
+                time: ackedTactic.time
+            });
+
+            const managedNames = new Set(previous && Array.isArray(previous.managedNames)
+                ? previous.managedNames
+                : []);
+            managedNames.add(ackedTactic.name);
+
+            // Scope: the acked item carries the server-side user_id; an
+            // emptied cache keeps the previous scope (same rule as
+            // saveCustom's persistProgress).
+            const userId = String(ackedTactic.userId || (previous && previous.userId) || this.readPageUserId() || '');
+            return this.persistNativeInventory(items, userId, Array.from(managedNames));
+        },
+
+        async saveCustom(customPresets, options) {
+            const opts = options || {};
+            // Strict option validation before any state change: an unknown
+            // delete mode is a caller bug and must fail loud, not fall
+            // through to a silent default.
+            if (opts.deleteMissing != null && ['all', 'managed', 'none'].indexOf(opts.deleteMissing) === -1) {
+                const error = new Error(`неизвестный режим удаления «${String(opts.deleteMissing)}» (допустимо: all, managed, none); ничего не сохранено`);
+                error.name = 'SLFPresetWriteError';
+                error.code = 'invalid_option';
+                this.recordSyncFailure('native save (invalid option)', error);
+                throw error;
+            }
+            // 'all' (default): replacement semantics for the full map (save /
+            // delete callers pass complete maps). 'managed': deletes only
+            // previously plugin-managed names (file import must never delete
+            // native templates it does not own — full reconciliation is wave
+            // 2). 'none': add/update only.
+            const deleteMode = opts.deleteMissing || 'all';
+
+            if (!this.nativeApiAvailable()) {
+                const error = new Error('хранилище нативных шаблонов недоступно (модуль не загружен); ничего не сохранено');
+                error.name = 'SLFPresetWriteError';
+                error.code = 'native_unavailable';
+                this.recordSyncFailure('native save (store unreachable)', error);
+                throw error;
+            }
+
+            const source = this.refreshNativeState();
+            // Depth defense: the write plan must be built from a scoped
+            // envelope only. After refreshNativeState the scoped read always
+            // succeeds on writable paths (a fresh ingest just wrote our
+            // envelope; the unchanged-snapshot path validated scope); null
+            // here means no valid source — the !envelope check below fails
+            // loud instead of planning against a foreign envelope.
+            const envelope = this.readScopedNativeCache();
+
+            if (source === 'unavailable' || !envelope) {
+                const error = new Error('хранилище нативных шаблонов недоступно (нет конфигурации страницы и кэша); ничего не сохранено');
+                error.name = 'SLFPresetWriteError';
+                error.code = 'native_unavailable';
+                this.recordSyncFailure('native save (store unreachable)', error);
+                throw error;
+            }
+
+            // Stale-write gate: writes must happen only against a fresh or
+            // unchanged-snapshot inventory. A stale cache (page config
+            // unreadable, fallback served) may not reflect the server state —
+            // writing blind against it is wrong even though deleting an
+            // already-dead id is idempotent. Fail loud, write nothing.
+            if (this.nativeStale) {
+                const error = new Error('состояние шаблонов устарело — обновите страницу; ничего не сохранено');
+                error.name = 'SLFPresetWriteError';
+                error.code = 'native_stale';
+                this.recordSyncFailure('native save (stale state)', error);
+                throw error;
+            }
+
             const normalized = normalizePresets(customPresets);
-            const deleteKeys = Object.keys(previous).filter(key => !Object.prototype.hasOwnProperty.call(normalized, key));
-            this.saveLocalOnly(normalized);
-            deleteKeys.forEach(key => {
-                void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=delete-key`, { key }, 'tactics delete').catch(error => {
-                    this.recordSyncFailure(`tactics delete-key (${key})`, error);
+            const managedNames = new Set(Array.isArray(envelope.managedNames) ? envelope.managedNames : []);
+            // The site allows same-name templates (verified ids 5143+5144):
+            // group ALL copies by name. Writes must reconcile every copy —
+            // deleting only the freshest would leave older duplicates that
+            // resurface in the facade after the next read.
+            const previousByName = {};
+            const previousIdsByName = {};
+            envelope.items.forEach(item => {
+                if (!previousIdsByName[item.name]) previousIdsByName[item.name] = [];
+                previousIdsByName[item.name].push(item);
+                if (!previousByName[item.name] || this.nativeItemIsNewer(item, previousByName[item.name])) {
+                    previousByName[item.name] = item;
+                }
+            });
+
+            // Pre-validate every vector before touching the network: a batch
+            // containing an incomplete vector must fail without writing.
+            const plannedSaves = [];
+            const normalizedNames = Object.keys(normalized);
+            for (const name of normalizedNames) {
+                const site = NativeTemplateMapping.pluginVectorToSiteData(normalized[name]);
+                if (!site.ok) {
+                    const error = new Error(`пресет «${name}» отклонён: ${site.message}`);
+                    error.name = 'SLFPresetWriteError';
+                    error.code = site.code;
+                    this.recordSyncFailure('native save (invalid vector)', error);
+                    throw error;
+                }
+
+                const existing = Object.prototype.hasOwnProperty.call(previousByName, name)
+                    ? previousByName[name]
+                    : null;
+                if (existing && this.pluginVectorsEqual(existing.data, normalized[name])) continue;
+
+                plannedSaves.push({
+                    name,
+                    vector: normalized[name],
+                    oldIds: (previousIdsByName[name] || []).map(item => item.id)
                 });
-            });
-            void Api.post(`${CONFIG.COLLECTIONS.TACTICS}?mode=merge`, normalized, 'tactics merge').catch(error => {
-                this.recordSyncFailure('tactics merge', error);
-            });
+            }
+
+            const plannedDeletes = [];
+            if (deleteMode !== 'none') {
+                Object.keys(previousIdsByName).forEach(name => {
+                    if (Object.prototype.hasOwnProperty.call(normalized, name)) return;
+                    if (deleteMode === 'managed' && !managedNames.has(name)) return;
+                    // Retired built-in names stay display-filtered but are
+                    // never auto-deleted from the native store.
+                    if (isDeprecatedHentaPreset(name)) return;
+                    // Every id of every name being deleted — same-name
+                    // duplicates must not survive a delete.
+                    previousIdsByName[name].forEach(item => plannedDeletes.push(item));
+                });
+            }
+
+            const inventoryById = {};
+            envelope.items.forEach(item => { inventoryById[item.id] = item; });
+            const applied = [];
+            const removed = [];
+            const removedNames = new Set();
+            const replacedOldIds = [];
+
+            const persistProgress = () => {
+                const items = Object.keys(inventoryById).map(id => inventoryById[id]);
+                // Keep the envelope scoped: acked items carry the server-side
+                // user_id; an emptied inventory keeps the previous scope.
+                const userId = items.length
+                    ? String(items[0].userId || '')
+                    : envelope.userId;
+                this.persistNativeInventory(items, userId, Array.from(managedNames));
+            };
+
+            try {
+                for (const step of plannedSaves) {
+                    const ack = await NativeTemplateApi.saveTemplate(step.name, step.vector, opts);
+                    if (!ack.ok) {
+                        const error = new Error(`не удалось сохранить шаблон «${step.name}»: ${ack.message || ack.code}`);
+                        error.name = 'SLFPresetWriteError';
+                        error.code = ack.code || 'save_failed';
+                        error.serverCode = ack.serverCode != null ? ack.serverCode : null;
+                        error.partial = { applied: applied.slice(), removed: removed.slice() };
+                        throw error;
+                    }
+
+                    // Record the acknowledged save BEFORE reconciling old
+                    // copies: a partial_replace below must still leave the
+                    // acked new template in the persisted cache (at that
+                    // point the server holds new + old).
+                    inventoryById[ack.tactic.id] = {
+                        id: ack.tactic.id,
+                        userId: ack.tactic.userId,
+                        name: step.name,
+                        data: ack.tactic.data,
+                        time: ack.tactic.time,
+                        order: ack.tactic.order
+                    };
+                    managedNames.add(step.name);
+                    applied.push(step.name);
+
+                    if (step.oldIds.length) {
+                        for (const oldId of step.oldIds) {
+                            const del = await NativeTemplateApi.deleteTemplate(oldId, opts);
+                            if (!del.ok) {
+                                const error = new Error(`шаблон «${step.name}» сохранён (id ${ack.tactic.id}), но старая копия (id ${oldId}) не удалена: ${del.message || del.code}`);
+                                error.name = 'SLFPresetWriteError';
+                                error.code = 'partial_replace';
+                                error.serverCode = del.serverCode != null ? del.serverCode : null;
+                                error.partial = { applied: applied.slice(), removed: removed.slice() };
+                                throw error;
+                            }
+                            delete inventoryById[oldId];
+                            replacedOldIds.push(oldId);
+                        }
+                    }
+
+                    persistProgress();
+                }
+
+                for (const item of plannedDeletes) {
+                    const del = await NativeTemplateApi.deleteTemplate(item.id, opts);
+                    if (!del.ok) {
+                        const error = new Error(`не удалось удалить шаблон «${item.name}» (id ${item.id}): ${del.message || del.code}`);
+                        error.name = 'SLFPresetWriteError';
+                        error.code = del.code || 'delete_failed';
+                        error.serverCode = del.serverCode != null ? del.serverCode : null;
+                        error.partial = { applied: applied.slice(), removed: removed.slice() };
+                        throw error;
+                    }
+                    delete inventoryById[item.id];
+                    managedNames.delete(item.name);
+                    // A name with several same-name copies is reported once.
+                    if (!removedNames.has(item.name)) {
+                        removedNames.add(item.name);
+                        removed.push(item.name);
+                    }
+                    persistProgress();
+                }
+            } catch (error) {
+                // Persist acknowledged progress, then rethrow loudly — the
+                // caller (ui-layer) surfaces the message; never console-only.
+                persistProgress();
+                if (!error || error.name !== 'SLFPresetWriteError') {
+                    this.recordSyncFailure('native save', error);
+                }
+                throw error;
+            }
+
+            return { ok: true, applied, removed, replacedOldIds };
         },
 
         loadFromServerAndMerge(callback) {
-            let failureRecorded = false;
-            return Api.get(
-                CONFIG.COLLECTIONS.TACTICS,
-                data => {
-                    const serverData = normalizePresets(data);
-                    const localData = this.loadLocalRaw() || {};
-                    this.saveLocalOnly(Object.assign({}, localData, serverData));
-
+            // Compatibility alias (#409): the VPS tactics collection is
+            // retired as a transport. "Server sync" is now a fresh read of
+            // the page-embedded native inventory (cache fallback off-page).
+            // The callback fires EXACTLY once on every outcome, including
+            // failure — bootstrap.js depends on that contract.
+            let fired = false;
+            const once = () => {
+                if (fired) return;
+                fired = true;
+                // A throwing callback must not escape (the old Api.get
+                // promise chain absorbed callback throws); it is recorded
+                // and swallowed. The callback still fires exactly once.
+                try {
                     if (callback) callback();
-                },
-                (error, response) => {
-                    // Api.get calls onError(error, response) and then the
-                    // promise still rejects; record the server-rejection
-                    // context here and keep the fail-open callback contract.
-                    failureRecorded = true;
-                    this.recordSyncFailure('tactics load (server error)', error);
-                    if (callback) callback();
+                } catch (error) {
+                    this.recordSyncFailure('preset refresh callback', error);
                 }
-            ).catch(error => {
-                // Transport-level failures reject without ever reaching onError.
-                if (!failureRecorded) this.recordSyncFailure('tactics load failed', error);
-                return undefined;
-            });
+            };
+
+            try {
+                this.refreshNativeState();
+            } catch (error) {
+                this.recordSyncFailure('native refresh failed', error);
+            }
+
+            once();
+            return Promise.resolve(undefined);
         },
 
         getAllPresets() {
-            // Built-in canonical library wins over older locally/server-saved copies with the same names.
-            // Exact retired SLF built-in IDs are removed at the storage boundary; unique user presets remain.
-            return filterDeprecatedPresetMap(Object.assign({}, this.loadCustom(), BASE_PRESETS));
+            // Native cutover (#409): the native inventory owns the vectors.
+            // Built-in registry vectors remain seed definitions and are NOT
+            // overlaid anymore — native absence is canonical. The pre-migration
+            // composite (local + BASE_PRESETS) is served only while the
+            // native store is entirely unreachable (no page config and no
+            // cache), so pre-migration sessions keep working.
+            const source = this.refreshNativeState();
+
+            if (source !== 'unavailable') {
+                const cached = this.readScopedNativeCache();
+                return this.inventoryToPresetMap(cached ? cached.items : []);
+            }
+
+            return filterDeprecatedPresetMap(Object.assign({}, this.loadLegacyLocalPresets(), BASE_PRESETS));
         },
 
         getAllLabels() {
-            const customPresets = this.loadCustom();
-            const labels = Object.assign({}, BASE_LABELS);
+            const source = this.refreshNativeState();
+            let labels;
 
-            for (let key in customPresets) {
-                labels[key] = BASE_LABELS[key] || key;
+            if (source !== 'unavailable') {
+                const cached = this.readScopedNativeCache();
+                const presets = this.inventoryToPresetMap(cached ? cached.items : []);
+                labels = {};
+                Object.keys(presets).forEach(key => {
+                    labels[key] = BASE_LABELS[key] || key;
+                });
+            } else {
+                const customPresets = this.loadLegacyLocalPresets();
+                labels = Object.assign({}, BASE_LABELS);
+
+                for (let key in customPresets) {
+                    labels[key] = BASE_LABELS[key] || key;
+                }
             }
 
             return filterDeprecatedPresetMap(labels);
@@ -1271,6 +2273,441 @@ const DomUtils = {
 
     // ============================================================
 // <<< src/modules/tactics-presets/preset-storage.js
+
+
+// >>> src/modules/tactics-presets/preset-migration.js
+    // 3b. Preset Migration Coordinator (issue #409, wave 2)
+    // ============================================================
+
+    // One-time, owner-triggered migration of pre-migration preset sources
+    // into native site templates. Sources, in precedence order (later wins
+    // on a name collision for the vector to import):
+    //   built-in seeds (BASE_PRESETS — 'standard' + the active registry suite
+    //   installed at load) < legacy localStorage customs (CONFIG.STORAGE_KEY)
+    //   < VPS tactics collection (one-time read of the retired transport's
+    //   data archive; read failure is non-fatal) < DEFAULT_CUSTOM_PRESETS.
+    // DESTINATION-WINS: a name that already exists in the native inventory is
+    // NEVER overwritten — the site template is canonical and the user's
+    // manual edits must not be clobbered (skipped with reason 'exists').
+    //
+    // The persisted receipt (slf_preset_migration_receipt_v1) is the identity
+    // sidecar: applied[] maps preset name → site template id, so telemetry
+    // and the tactical lab keep working by name while the id map stays
+    // reconcilable. A name already in the receipt is skipped on re-run
+    // (idempotency); a server save-limit rejection aborts the remaining
+    // queue loudly and a re-run resumes from the receipt. An AMBIGUOUS save
+    // outcome (network/timeout/unknown_outcome/empty_response/not_json — the
+    // server may have created the template) is recorded in receipt.unknown
+    // and the receipt is persisted after EVERY ack (incremental persistence:
+    // an interruption cannot lose acked progress); a re-run skips unknown
+    // names conservatively (unknown_outcome_previous — never risk a duplicate
+    // + quota burn; the owner clears the receipt after checking the site).
+    //
+    // Safety invariants (pinned by tests/test-preset-migration.mjs):
+    // - writes go through NativeTemplateApi.saveTemplate directly — migration
+    //   NEVER deletes (no tactic_delete call is ever issued);
+    // - deprecated names are never imported;
+    // - NO automatic trigger: run() executes only from the ui-layer button
+    //   (site mutations stay owner-controlled; never on page load).
+
+    const PresetMigration = (() => {
+
+        const RECEIPT_KEY = 'slf_preset_migration_receipt_v1';
+        const RECEIPT_SCHEMA = 'slf_preset_migration_receipt_v1';
+
+        const SOURCE_LABELS = {
+            seed: 'встроенный пресет',
+            legacy_local: 'локальный пресет (до миграции)',
+            vps_tactics: 'VPS-коллекция tactics',
+            default_custom: 'встроенный пользовательский пресет'
+        };
+
+        function emptyReceipt() {
+            return {
+                schema: RECEIPT_SCHEMA,
+                ts: 0,
+                applied: [],
+                skipped: [],
+                // Ambiguous-outcome saves (network/timeout/unknown_outcome/
+                // empty_response/not_json): the server MAY have created the
+                // template — recorded here (never in applied, no id exists);
+                // a re-run skips these names (unknown_outcome_previous).
+                unknown: [],
+                vectorFingerprints: {}
+            };
+        }
+
+        function readReceipt() {
+            try {
+                const raw = localStorage.getItem(RECEIPT_KEY);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                if (!parsed || parsed.schema !== RECEIPT_SCHEMA || !Array.isArray(parsed.applied)) return null;
+                return parsed;
+            } catch (error) {
+                debugWarn('[SLF] PresetMigration: не удалось прочитать квитанцию миграции', error);
+                return null;
+            }
+        }
+
+        function writeReceipt(receipt) {
+            try {
+                localStorage.setItem(RECEIPT_KEY, JSON.stringify(receipt));
+            } catch (error) {
+                debugWarn('[SLF] PresetMigration: не удалось сохранить квитанцию миграции', error);
+            }
+        }
+
+        // Compact stable fingerprint of the imported vector (canonical
+        // site-data form, keys in SITE_DATA_KEYS order) — lets a future audit
+        // compare what was imported without storing full vectors in the
+        // receipt. djb2 over the serialized 17 fields; no crypto dependency.
+        function fingerprintVector(vector) {
+            if (typeof NativeTemplateMapping === 'undefined' || !NativeTemplateMapping) return null;
+            const site = NativeTemplateMapping.pluginVectorToSiteData(vector);
+            if (!site.ok) return null;
+            const canonical = NativeTemplateMapping.SITE_DATA_KEYS
+                .map(key => `${key}:${site.siteData[key]}`)
+                .join('|');
+            let hash = 5381;
+            for (let i = 0; i < canonical.length; i++) {
+                hash = ((hash << 5) + hash + canonical.charCodeAt(i)) >>> 0;
+            }
+            return `fp${hash.toString(16)}`;
+        }
+
+        // One source merged into the candidate map. The map arrives RAW:
+        // normalizePresets does the shape coercion (decimal strings, priority
+        // array) and drops non-tactic objects and deprecated names at the
+        // boundary — deprecated names are scanned from the RAW keys first and
+        // reported as skipped (never silently dropped, never imported).
+        // Returns the number of entries the source contributed.
+        function mergeSource(map, source, merged, skipped) {
+            Object.keys(map || {}).forEach(name => {
+                if (PresetStorage.isRetiredBuiltInPreset(name) && !skipped.some(entry => entry.name === name)) {
+                    skipped.push({ name, reason: 'deprecated' });
+                }
+            });
+            const normalized = normalizePresets(map);
+            Object.keys(normalized).forEach(name => {
+                merged[name] = { vector: normalized[name], source };
+            });
+            return Object.keys(normalized).length;
+        }
+
+        function readLegacyLocalRaw() {
+            // Raw read of the pre-migration localStorage customs: deprecated
+            // keys must survive to the merge so they are REPORTED as skipped
+            // (normalizePresets would silently drop them). Read-only — the
+            // migration never rewrites the legacy key.
+            try {
+                const raw = localStorage.getItem(CONFIG.STORAGE_KEY);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        async function readVpsTactics() {
+            // One-time read of the retired VPS tactics collection (data
+            // archive — the collection stays on the VPS, the code stops
+            // using it after this read). The RAW body is returned and
+            // normalized at merge time (same parse as the pre-#409 sync:
+            // normalizePresets over the response body) so deprecated keys
+            // are reported, not silently dropped.
+            const result = await Api.getPromise(CONFIG.COLLECTIONS.TACTICS, 'preset migration: vps tactics read');
+            return result && result.data;
+        }
+
+        async function run(options) {
+            const opts = options || {};
+            const dryRun = opts.dryRun === true;
+            const created = [];
+            const skipped = [];
+            const failed = [];
+            const sources = [];
+
+            // Write discipline (same gates as saveCustom): migration writes
+            // only against a fresh or unchanged-snapshot scoped inventory.
+            if (!PresetStorage.nativeApiAvailable()) {
+                return failUnavailable('native_unavailable', 'хранилище нативных шаблонов недоступно (модуль не загружен)');
+            }
+            const sourceState = PresetStorage.refreshNativeState();
+            if (sourceState === 'unavailable') {
+                return failUnavailable('native_unavailable', 'хранилище нативных шаблонов недоступно (нет конфигурации страницы и кэша); откройте страницу тактики');
+            }
+            if (PresetStorage.nativeStale) {
+                return failUnavailable('native_stale', 'состояние шаблонов устарело — обновите страницу тактики и повторите миграцию');
+            }
+            const envelope = PresetStorage.readScopedNativeCache();
+            if (!envelope) {
+                return failUnavailable('native_unavailable', 'хранилище нативных шаблонов недоступно (нет валидного кэша для текущего пользователя)');
+            }
+
+            // Read-time consistency check: mark receipt entries whose site
+            // template disappeared (deleted externally). Informational only —
+            // no background jobs; a stale name is still skipped on re-run
+            // (receipt idempotency) until the receipt is cleared.
+            const reconciliation = reconcileReceipt(!dryRun);
+            const receipt = reconciliation.receipt || emptyReceipt();
+
+            const appliedNames = new Set(receipt.applied.map(entry => entry.name));
+            const inventoryNames = new Set(envelope.items.map(item => item.name));
+
+            // Sources in precedence order — later wins on a name collision.
+            const merged = {};
+            mergeSource(BASE_PRESETS, 'seed', merged, skipped);
+            const legacyLocal = readLegacyLocalRaw();
+            if (legacyLocal) mergeSource(legacyLocal, 'legacy_local', merged, skipped);
+            try {
+                const vpsPresets = await readVpsTactics();
+                const vpsCount = mergeSource(vpsPresets, 'vps_tactics', merged, skipped);
+                sources.push({ source: 'vps_tactics', ok: true, count: vpsCount });
+            } catch (error) {
+                // Non-fatal: the collection is an archive; migration proceeds
+                // with the remaining sources and reports the skip.
+                sources.push({
+                    source: 'vps_tactics',
+                    ok: false,
+                    reason: error && error.message ? error.message : String(error || 'unknown error')
+                });
+            }
+            mergeSource(DEFAULT_CUSTOM_PRESETS, 'default_custom', merged, skipped);
+
+            let aborted = false;
+
+            // Incremental receipt state (review fix B): applied/unknown/fingerprints
+            // are mutable accumulators persisted after EVERY ack and every
+            // unknown-outcome recording — an interruption can no longer lose
+            // acked progress. `unknown` carries names whose save outcome is
+            // ambiguous (the server MAY have created the template; no id is
+            // known, so they are NOT applied).
+            const appliedOut = receipt.applied.slice();
+            const unknownOut = Array.isArray(receipt.unknown)
+                ? receipt.unknown.filter(entry => entry && entry.name).slice()
+                : [];
+            const fingerprintsOut = Object.assign({}, receipt.vectorFingerprints);
+            const unknownNames = new Set(unknownOut.map(entry => entry.name));
+
+            const persistReceipt = () => {
+                const snapshot = {
+                    schema: RECEIPT_SCHEMA,
+                    ts: Date.now(),
+                    applied: appliedOut.slice(),
+                    skipped: skipped.slice(),
+                    unknown: unknownOut.slice(),
+                    vectorFingerprints: Object.assign({}, fingerprintsOut)
+                };
+                if (reconciliation.stale && reconciliation.stale.length) {
+                    snapshot.stale = reconciliation.stale.slice();
+                    snapshot.reconciledAt = Date.now();
+                }
+                writeReceipt(snapshot);
+                return snapshot;
+            };
+
+            let outReceipt = null;
+            try {
+                for (const name of Object.keys(merged)) {
+                    // Deprecated names are never imported (defense in depth —
+                    // normalizePresets already filters them at the source).
+                    if (PresetStorage.isRetiredBuiltInPreset(name)) {
+                        skipped.push({ name, reason: 'deprecated' });
+                        continue;
+                    }
+                    // Idempotency: a name already in the receipt is never
+                    // re-imported (a re-run after full success issues zero saves).
+                    if (appliedNames.has(name)) {
+                        skipped.push({ name, reason: 'already_migrated' });
+                        continue;
+                    }
+                    // Conservative unknown-outcome skip: a previous run recorded
+                    // an ambiguous save outcome for this name (the server MAY
+                    // have created the template). Never re-save blindly — that
+                    // risks a duplicate + quota burn; the owner checks the site
+                    // template list and clears the receipt if it was not created.
+                    if (unknownNames.has(name)) {
+                        skipped.push({ name, reason: 'unknown_outcome_previous' });
+                        continue;
+                    }
+                    // DESTINATION-WINS: the site template is canonical; a name
+                    // that already exists in the native inventory is never
+                    // overwritten and the existing vector is never touched.
+                    if (inventoryNames.has(name)) {
+                        skipped.push({ name, reason: 'exists' });
+                        continue;
+                    }
+                    if (aborted) {
+                        // Loud quota/transport abort: the receipt reports exactly
+                        // what remains; a re-run resumes these names.
+                        skipped.push({ name, reason: 'aborted_after_rejection' });
+                        continue;
+                    }
+
+                    // Pre-validate the vector before touching the network (same
+                    // discipline as saveCustom): an invalid vector fails its own
+                    // entry without aborting the rest of the queue.
+                    const site = NativeTemplateMapping.pluginVectorToSiteData(merged[name].vector);
+                    if (!site.ok) {
+                        failed.push({ name, code: site.code, message: `${name}: ${site.message}` });
+                        continue;
+                    }
+
+                    if (dryRun) {
+                        created.push({ name, id: null, source: merged[name].source });
+                        continue;
+                    }
+
+                    const ack = await NativeTemplateApi.saveTemplate(name, merged[name].vector, opts);
+                    if (!ack.ok) {
+                        const code = ack.code || 'save_failed';
+                        if (code === 'server_rejected') {
+                            // DEFINITE rejection: nothing was created, a re-run
+                            // retries this name correctly.
+                            failed.push({
+                                name,
+                                code,
+                                message: `не удалось создать шаблон «${name}»: ${ack.message || code}`
+                            });
+                        } else {
+                            // AMBIGUOUS outcome (network/timeout/unknown_outcome/
+                            // empty_response/not_json): the request MAY have
+                            // reached the server and the template MAY exist.
+                            // Record it as unknown (never applied — no id is
+                            // known), persist the receipt immediately, abort.
+                            // A re-run skips the name (unknown_outcome_previous):
+                            // never risk a duplicate + quota burn; the owner
+                            // reloads the page, checks the site template list
+                            // and clears the receipt if it was not created.
+                            unknownOut.push({ name, source: merged[name].source, ts: Date.now() });
+                            failed.push({
+                                name,
+                                code,
+                                message: 'исход сохранения неизвестен — шаблон мог создаться; проверьте список шаблонов на сайте после обновления страницы'
+                            });
+                            persistReceipt();
+                        }
+                        aborted = true;
+                        continue;
+                    }
+
+                    // Acknowledged save → record into the scoped cache through
+                    // the facade seam (envelope + managedNames), never a delete.
+                    // A cache-write failure (localStorage quota) must NOT lose
+                    // the acked save: the name still lands in applied/created;
+                    // the cache re-ingests on the next page load.
+                    try {
+                        PresetStorage.recordMigratedTemplate(ack.tactic);
+                    } catch (cacheError) {
+                        debugWarn('[SLF] PresetMigration: шаблон создан, но локальный кэш не обновился (перечитается при загрузке страницы)', cacheError);
+                    }
+                    inventoryNames.add(name);
+                    appliedNames.add(name);
+                    appliedOut.push({
+                        name,
+                        id: ack.tactic.id,
+                        source: merged[name].source
+                    });
+                    const fp = fingerprintVector(merged[name].vector);
+                    if (fp) fingerprintsOut[name] = fp;
+                    created.push({ name, id: ack.tactic.id, source: merged[name].source });
+                    // Incremental persistence: the receipt survives an
+                    // interruption after every acknowledged save.
+                    persistReceipt();
+                }
+            } finally {
+                // Guarantee: the receipt reflects the acked state on ANY exit
+                // path (the loop completes normally today; the finally covers
+                // future exception paths).
+                if (!dryRun) outReceipt = persistReceipt();
+            }
+
+            if (dryRun) {
+                return {
+                    ok: failed.length === 0,
+                    code: failed.length ? 'invalid_vector' : 'ok',
+                    message: failed.length ? 'некоторые векторы некорректны' : '',
+                    created,
+                    skipped,
+                    failed,
+                    receipt: null,
+                    sources,
+                    aborted,
+                    staleNames: reconciliation.stale || []
+                };
+            }
+
+            // outReceipt was persisted by the finally above (incremental
+            // persistence: after every ack/unknown recording AND on loop exit —
+            // the receipt survives any interruption with the acked state).
+            return {
+                ok: failed.length === 0,
+                code: failed.length ? (aborted ? 'aborted' : 'completed_with_errors') : 'ok',
+                message: failed.length ? (failed[0].message || failed[0].code) : '',
+                created,
+                skipped,
+                failed,
+                receipt: outReceipt,
+                sources,
+                aborted,
+                staleNames: reconciliation.stale || []
+            };
+        }
+
+        function failUnavailable(code, message) {
+            return {
+                ok: false,
+                code,
+                message,
+                created: [],
+                skipped: [],
+                failed: [],
+                receipt: null,
+                sources: [],
+                aborted: false,
+                staleNames: []
+            };
+        }
+
+        function reconcileReceipt(persist) {
+            const receipt = readReceipt();
+            if (!receipt) return { receipt: null, stale: [] };
+
+            const envelope = PresetStorage.readScopedNativeCache();
+            if (!envelope) {
+                // Nothing to reconcile against (off-page / foreign scope):
+                // report without marking — never guess staleness.
+                return { receipt, stale: [], unavailable: true };
+            }
+
+            const ids = new Set(envelope.items.map(item => String(item.id)));
+            const stale = [];
+            receipt.applied.forEach(entry => {
+                if (entry && entry.id && !ids.has(String(entry.id)) && stale.indexOf(entry.name) === -1) {
+                    stale.push(entry.name);
+                }
+            });
+
+            if (stale.length && persist) {
+                receipt.stale = stale.slice();
+                receipt.reconciledAt = Date.now();
+                writeReceipt(receipt);
+            }
+            return { receipt, stale };
+        }
+
+        return {
+            RECEIPT_KEY,
+            run,
+            reconcileReceipt,
+            sourceLabel: source => SOURCE_LABELS[source] || String(source || '')
+        };
+    })();
+
+    // ============================================================
+// <<< src/modules/tactics-presets/preset-migration.js
 
 
 // >>> src/modules/tactics-presets/tactic-control-engine.js
@@ -1840,8 +3277,10 @@ const DomUtils = {
     (function scheduleTacticalLabV1() {
         const LEGACY_P02_VERSION = 'slf_tactical_lab_561_p02';
         const LEGACY_P02_CODE = 'P02';
-        const POPULATION_VERSION = 'slf_tactical_lab_561_p03';
-        const POPULATION_CODE = 'P03';
+        const LEGACY_P03_VERSION = 'slf_tactical_lab_561_p03';
+        const LEGACY_P03_CODE = 'P03';
+        const POPULATION_VERSION = 'slf_tactical_lab_561_p04';
+        const POPULATION_CODE = 'P04';
         const GENOME_VERSION = 'slf_tactical_genome_v1';
         const POPULATION_SIZE = 6;
         const P03_SELECTION = [
@@ -1851,6 +3290,33 @@ const DomUtils = {
             {parentExperimentId:'EXP-561-P02-0058',weight:10},
             {parentExperimentId:'EXP-561-P02-0011',weight:5},
             {parentExperimentId:'EXP-561-P02-0055',weight:5}
+        ];
+        // P04 base = Emery_BalancedBase_v11 vector, hard-coded (same convention as
+        // seedPresets below) so registry drift can never silently rewrite lab
+        // genomes. Source: active-preset-registry.js PRESETS.Emery_BalancedBase_v11
+        // at base 823c82f29eb40b5fc0855fdef2cc4fa480f0f9ff.
+        const P04_BASE = {def_line:'2',press_line:'2',def_width:'2',press_intense:'2',build_type:'2',build_temp:'2',build_long:'2',build_fast:'2',style:'3',pass_risk:'2',dribble:'2',cross:'2',corner:'1',shot:'2',priority:[]};
+        // P04 one-factor-at-a-time hypothesis arms (spec 405 R3). Each genome varies
+        // EXACTLY ONE control from P04_BASE; weights 35/35/10/10/5/5. The hypothesis
+        // code travels in origin (`hypothesis_factor:<code>`) — telemetry-safe, no
+        // new experiment fields:
+        //   press_roles      H1 (C324, C329): higher press intensity — outcome/fitness
+        //                    effect; ПИ role coverage is a user responsibility
+        //                    (registry note F7), the lab measures the vector effect only.
+        //   line_transition  H2 (C325): higher line → transition exposure after a
+        //                    broken press.
+        //   aerial_cross     H3 (C323): cross affects aerial crosses only.
+        //   center_pass_risk H4 (C316, C326): center attacks work through passes,
+        //                    not dribbling.
+        //   control_base_a/b (C1, C234): exact P04_BASE repeats — variance control +
+        //                    application-timing observation.
+        const P04_SELECTION = [
+            {code:'press_roles',weight:35,vary:{press_intense:'3'}},
+            {code:'line_transition',weight:35,vary:{press_line:'3'}},
+            {code:'aerial_cross',weight:10,vary:{cross:'3'}},
+            {code:'center_pass_risk',weight:10,vary:{pass_risk:'3'}},
+            {code:'control_base_a',weight:5,vary:null},
+            {code:'control_base_b',weight:5,vary:null}
         ];
         const PANEL_ID = 'slf-tactical-lab-panel';
         const BUTTON_ID = 'slf-tactical-lab-apply';
@@ -1888,6 +3354,7 @@ const DomUtils = {
         const labControlKeys = Object.keys(ranges);
         let population = null;
         let legacyP02Population = null;
+        let legacyP03Population = null;
         let cachedState = null;
         let cachedGameId = '';
         let flushPromise = null;
@@ -2029,13 +3496,30 @@ const DomUtils = {
             return result;
         }
 
-        function buildPopulation() {
+        // P03 builder kept for legacy resolution: in-flight P03 assignments must
+        // stay resolvable (and attributable) after the P04 switch. Population
+        // code/version are passed EXPLICITLY (P02-builder pattern): makeExperiment's
+        // defaults now point at P04, and the pre-switch builder implicitly relied
+        // on them being P03.
+        function buildP03Population() {
             const p02 = legacyP02Population || (legacyP02Population = buildP02Population());
+            const p03Options = {populationCode:LEGACY_P03_CODE,populationVersion:LEGACY_P03_VERSION,generation:2};
             return P03_SELECTION.map((selection, index) => {
                 const parent = p02.find(item => item.experimentId === selection.parentExperimentId);
                 if (!parent) throw new Error(`[SLF Tactical Lab] missing P03 validation parent ${selection.parentExperimentId}`);
                 return makeExperiment(index, 'validation_repeat', parent.controls, parent.experimentId, 0, {
-                    generation:2,
+                    ...p03Options,
+                    selectionWeightPct:selection.weight
+                });
+            });
+        }
+
+        function buildPopulation() {
+            return P04_SELECTION.map((selection, index) => {
+                const controls = clone(P04_BASE);
+                if (selection.vary) Object.assign(controls, selection.vary);
+                return makeExperiment(index, `hypothesis_factor:${selection.code}`, controls, null, mutationDistance(P04_BASE, controls), {
+                    generation:3,
                     selectionWeightPct:selection.weight
                 });
             });
@@ -2130,16 +3614,16 @@ const DomUtils = {
             }
             return items[items.length - 1];
         }
-        function preserveLegacyP02Assignment(state) {
+        function preserveLegacyAssignment(state) {
             const version = String(state?.assignment?.populationVersion || state?.populationVersion || '');
-            return !!state?.assignment && version === LEGACY_P02_VERSION;
+            return !!state?.assignment && (version === LEGACY_P02_VERSION || version === LEGACY_P03_VERSION);
         }
         function ensureAssignment(snapshot) {
             const gameId = getGameId(snapshot);
             const state = loadState(gameId);
             if (!state) return null;
             const assignmentVersion = String(state.assignment?.populationVersion || state.populationVersion || '');
-            if (!state.assignment || (assignmentVersion !== POPULATION_VERSION && !preserveLegacyP02Assignment(state))) {
+            if (!state.assignment || (assignmentVersion !== POPULATION_VERSION && !preserveLegacyAssignment(state))) {
                 const selected = selectExperiment(gameId);
                 state.populationVersion = POPULATION_VERSION;
                 state.assignment = {
@@ -2162,7 +3646,9 @@ const DomUtils = {
             const assignmentVersion = String(state?.assignment?.populationVersion || state?.populationVersion || '');
             const items = assignmentVersion === LEGACY_P02_VERSION
                 ? (legacyP02Population || (legacyP02Population = buildP02Population()))
-                : (population || (population = buildPopulation()));
+                : assignmentVersion === LEGACY_P03_VERSION
+                    ? (legacyP03Population || (legacyP03Population = buildP03Population()))
+                    : (population || (population = buildPopulation()));
             return items.find(item => item.experimentId === state?.assignment?.experimentId) || null;
         }
         function isOwnedLive(snapshot) {
@@ -2733,6 +4219,15 @@ const DomUtils = {
         OFFICIAL_MATCH_MINUTES: 90,
         REAL_MATCH_MINUTES: 36,
         GAME_MINUTES_PER_REAL_MINUTE: 90 / 36,
+        // #405 F5 (C1): the 2026 generator produces the match as 19 segments of
+        // 5 official minutes each; every segment is generated right before it is
+        // shown, and a tactics change shifts the NEAREST segment. Segment 19
+        // covers stoppage (91-95). The analytical GENERATION_WINDOWS below are
+        // kept unchanged for persisted-telemetry compatibility; segment fields
+        // are additive and never reinterpret historic window values (C234:
+        // автозамена проверяется раз в пятиминутку).
+        SEGMENT_MINUTES: 5,
+        SEGMENT_COUNT: 19,
         GENERATION_WINDOWS: [
             { index: 1, from: 1, to: 15, label: '01-15', generationMinutes: 15, realMinutes: 6, phase: 'first_half' },
             { index: 2, from: 16, to: 30, label: '16-30', generationMinutes: 15, realMinutes: 6, phase: 'first_half' },
@@ -2777,8 +4272,56 @@ const DomUtils = {
         },
 
         getTargetWindowAfterChange(minute) {
+            // #405 F5 (C1): a tactics change shifts the nearest 5-minute segment,
+            // so the corrected application target is the next segment boundary.
+            // Legacy GENERATION_WINDOWS fields keep their analytical values (the
+            // freeze/effect consumers compare against snapshot.generationWindow
+            // indices); the corrected target is carried additively in segment*.
             const current = this.getWindow(minute);
-            return current.next || current;
+            const legacy = current.next || current;
+            const segment = this.getSegment(minute);
+            const nextSegment = segment.next || segment;
+            return Object.assign({}, legacy, {
+                segmentIndex: nextSegment.index,
+                segmentFrom: nextSegment.from,
+                segmentTo: nextSegment.to,
+                segmentLabel: nextSegment.label,
+                segmentPhase: nextSegment.phase,
+                segmentIsStoppage: nextSegment.isStoppage
+            });
+        },
+
+        // #405 F5 (C1): 5-minute segment identity. Unknown minute → 0 (unknown),
+        // stoppage minutes 91+ clamp into segment 19 (91-95).
+        getSegmentIndex(minute) {
+            const n = Number(minute);
+            if (!Number.isFinite(n) || n < 1) return 0;
+            return Math.min(Math.max(Math.ceil(Math.floor(n) / this.SEGMENT_MINUTES), 1), this.SEGMENT_COUNT);
+        },
+
+        getSegment(minute) {
+            const index = this.getSegmentIndex(minute);
+            if (!index) {
+                return { index: 0, from: 0, to: 0, label: '0', minutes: this.SEGMENT_MINUTES, phase: 'unknown', isStoppage: false, next: null };
+            }
+            const next = index < this.SEGMENT_COUNT ? this.buildSegment(index + 1) : null;
+            return Object.assign(this.buildSegment(index), { next });
+        },
+
+        buildSegment(index) {
+            const from = (index - 1) * this.SEGMENT_MINUTES + 1;
+            const to = index * this.SEGMENT_MINUTES;
+            const isStoppage = index === this.SEGMENT_COUNT;
+            const pad = value => String(value).padStart(2, '0');
+            return {
+                index,
+                from,
+                to,
+                label: `${pad(from)}-${pad(to)}`,
+                minutes: this.SEGMENT_MINUTES,
+                phase: isStoppage ? 'stoppage' : index <= 9 ? 'first_half' : 'second_half',
+                isStoppage
+            };
         },
 
         getLegacyTenMinuteBucket(minute) {
@@ -6178,8 +7721,10 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
         const own = state.ownCrossSummary;
         if (own?.total >= 2) {
             if (own.signal === 'open_play_crosses_bad') {
-                plan.developer.push(`Кроссы с игры не работают: ${own.openPlay.won}/${own.openPlay.total}; не усиливать обычные навесы без нового адресата.`);
-                plan.controls.push('Атака: не повышать навесы; искать низовой вход, пас между линиями или полупространства.');
+                // C323 (#405 F2): настройка «навесы» влияет только на верховые кроссы;
+                // низовой вход driven by острота/центр/диагонали — qualify aerial vs ground.
+                plan.developer.push(`Кроссы с игры не работают: ${own.openPlay.won}/${own.openPlay.total}; проверьте отдельно верховые и низовые; настройка навесов влияет только на верховые (C323).`);
+                plan.controls.push('Атака: не повышать навесы верхом; низовой вход — острота передач, атаки по центру, диагонали (C323).');
             } else if (own.signal === 'crosses_bad_total') {
                 plan.developer.push(`Кроссы в целом слабые: ${own.won}/${own.total}; стандарты/навесы не должны быть главным планом атаки.`);
             }
@@ -6285,7 +7830,7 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
 
         if (score.state === 'winning' && minute >= 70) {
             if (xgGap > 0.35 || xtGap > 0.25 || state.tags.includes('opponent_crosses_dangerous')) return { name: 'Simeone_Compact442_def4', reason: 'ведём поздно, соперник создаёт давление — компактнее без полного автобуса' };
-            return { name: 'Pep_BoxControl_bal2', reason: 'ведём и контролируем: убрать хаос, держать мяч и не раскрывать переходы' };
+            return { name: 'Pep_BoxControl_bal2', reason: 'ведём и контролируем: снизить риск, держать мяч и не раскрывать переходы' };
         }
 
         if (score.state === 'losing' && minute >= 80) {
@@ -6308,7 +7853,7 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
         }
 
         if (defenseBad && attackUnder) {
-            return { name: 'Pep_BoxControl_bal2', reason: 'оба канала недобирают — reset через контроль и снижение хаоса' };
+            return { name: 'Pep_BoxControl_bal2', reason: 'оба канала недобирают — reset через контроль и снижение риска' };
         }
 
         if (xgGap > 0.65 || xtGap > 0.55) {
@@ -6339,7 +7884,7 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
             return { name: 'Pep_TwoThreeFive_att3', reason: 'есть атакующий momentum и низкий брак — можно дожимать позиционно' };
         }
 
-        return { name: 'Pep_BoxControl_bal2', reason: 'без явного перекоса лучший baseline — контроль, снижение хаоса и подготовка следующего среза' };
+        return { name: 'Pep_BoxControl_bal2', reason: 'без явного перекоса лучший baseline — контроль, снижение риска и подготовка следующего среза' };
     },
 
     shouldRecommendSchemeChange(snapshot, state, urgency, presetName) {
@@ -6592,10 +8137,15 @@ if (typeof RecommendationEngine !== 'undefined' && RecommendationEngine) {
         const avoids = list(traits?.avoids);
         const strengths = list(traits?.strengths);
         const ownCrossBad = hasTag(state, 'own_open_play_crosses_bad') || hasTag(state, 'own_crosses_bad_total');
-        const wideOrCross = strengths.some(x => /cross|wide|wing/i.test(String(x))) || String(traits?.build || '').includes('wide');
+        // #405 F4 (C323): the cross setting covers AERIAL crosses only; ground
+        // crosses are driven by острота передач / центр / диагонали (C316, C326),
+        // not by width. Only an explicit cross trait takes the aerial-cross
+        // conflict penalty; width/wing-only traits no longer do. The explicit
+        // own_crosses_bad avoid-bonus path below is unchanged.
+        const aerialCross = strengths.some(x => /cross/i.test(String(x)));
 
         if (ownCrossBad && avoids.includes('own_crosses_bad')) addReason(result, 2, 'пресет явно избегает плохих кроссов');
-        if (ownCrossBad && wideOrCross && !avoids.includes('own_crosses_bad')) addReason(result, -3, 'кроссы/ширина конфликтуют с плохими кроссами');
+        if (ownCrossBad && aerialCross && !avoids.includes('own_crosses_bad')) addReason(result, -3, 'верховые кроссы пресета конфликтуют с плохими кроссами (C323)');
         if (hasTag(state, 'opponent_crosses_dangerous') && avoids.includes('opponent_crosses_dangerous')) addReason(result, 1, 'пресет учитывает риск опасных кроссов соперника');
 
         return result;
@@ -7008,7 +8558,20 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
             const minute = engine.num(engine.getMetric(snapshot, context, 'minute', ['effectiveMinute', 'baseMinute']), 0);
             const scoreState = engine.getScoreState(snapshot, context);
             const scoreDiff = engine.getScoreDiff(snapshot, context);
-            const generationWindowIndex = engine.num(snapshot?.generationWindow?.index, Math.max(0, Math.floor(minute / 10)));
+            // #405 F6 (C1, review-corrected): the fallback derives the analytical
+            // generation window from the model's own window boundaries — the SAME
+            // field/unit the snapshot carries (generationWindow.index, windows
+            // 1-7; 0 = unknown minute). The naive Math.floor(minute/10) bucket is
+            // gone. The 5-minute SEGMENTS model stays additive in
+            // getTargetWindowAfterChange (F5) and is deliberately NOT used here:
+            // this field is consumed as a window counter by hysteresis
+            // (applyHysteresis heldWindows; cah-decision-core
+            // detectedPresetSinceWindow), so segment-space values (1-19) would mix
+            // units across snapshots, inflate heldWindows and weaken the hold guard.
+            const fallbackWindowIndex = typeof MatchTimingModel !== 'undefined' && MatchTimingModel && typeof MatchTimingModel.getWindow === 'function'
+                ? ((MatchTimingModel.getWindow(minute) || {}).index || 0)
+                : 0;
+            const generationWindowIndex = engine.num(snapshot?.generationWindow?.index, fallbackWindowIndex);
 
             const myXg = engine.num(context?.myXg ?? context?.myXG ?? my.xG);
             const oppXg = engine.num(context?.oppXg ?? context?.oppXG ?? opp.xG);
@@ -8144,6 +9707,13 @@ TacticalKnowledgePack.init();
     const STYLE_GROUPS=[{style:'5',label:'Атака+ · _att2',suffix:'_att2'},{style:'4',label:'Атака · _att1',suffix:'_att1'},{style:'3',label:'Обычный · _neutr',suffix:'_neutr'},{style:'2',label:'Защита · _def1',suffix:'_def1'},{style:'1',label:'Защ+ · _def2',suffix:'_def2'}];
     const DISPLAY_ORDER=Object.keys(DISPLAY_META).sort((a,b)=>Number(DISPLAY_META[b].style)-Number(DISPLAY_META[a].style)||(a==='standard'?-1:b==='standard'?1:String(DISPLAY_META[a].trainer).localeCompare(String(DISPLAY_META[b].trainer),'en')||String(LABELS[a]).localeCompare(String(LABELS[b]),'en')));
     const META={"Emery_BalancedBase_v11":{"group":"balance","rank":3,"role":"default_start","title":"Unai Emery — Balanced Base","idea":"Плавное продвижение с сохранением структуры","use":"Старт матча при отсутствии выраженного тактического кризиса","risk":"Сила этого варианта пока не доказана матчами"},"Mourinho_CleanCounter_v11":{"group":"balance","rank":3,"role":"pressure_counter","title":"José Mourinho — Clean Counter","idea":"Компактная контратака через свободный первый пас","use":"Подтверждённый выход из давления","risk":"Не применять, если первый пас перекрыт"},"Guardiola_PressEscape_v11":{"group":"balance","rank":2,"role":"pressure_escape","title":"Pep Guardiola — Press Escape","idea":"Короткий выход из прессинга","use":"Давление соперника без чистого контрвыхода","risk":"Может снижать темп продвижения"},"Arteta_SafePossession_v11":{"group":"balance","rank":1,"role":"possession_control","title":"Mikel Arteta — Safe Possession [manual only]","idea":"Низкорисковая циркуляция без перестроения игроков","use":"Только ручная диагностика","risk":"Не рекомендовать автоматически: три отрицательных матча"},"Guardiola_PressCooldown_v11":{"group":"defensive","rank":2,"role":"press_cooldown","title":"Pep Guardiola — Press Cooldown","idea":"Снизить энергозатраты прессинга","use":"Усталость без необходимости срочно догонять","risk":"Не для позднего отставания"},"Guardiola_ControlledPush_v11":{"group":"attack","rank":3,"role":"controlled_chase","title":"Pep Guardiola — Controlled Push","idea":"Умеренное наращивание атак без смены состава","use":"Нужен гол, но нет оснований для all-in","risk":"Возможен рост потерь"},"Guardiola_PositionalSiege_v11":{"group":"attack","rank":4,"role":"positional_siege","title":"Pep Guardiola — Positional Siege","idea":"Позиционный дожим на прежней четвёрке защитников","use":"Поздний дожим без угрозы контратак","risk":"Высокий риск переходов соперника"},"Conte_WideChannels_v11":{"group":"balance","rank":4,"role":"width_attack","title":"Antonio Conte — Wide Channels","idea":"Атаки через LW и RW/RM при прежней линии обороны","use":"Центр закрыт, фланги качественны","risk":"Пустые подачи/контратаки"},"Klopp_LateGegenpress_v11":{"group":"attack","rank":4,"role":"late_high_pressure","title":"Jürgen Klopp — Late Gegenpress","idea":"Краткий всплеск прессинга без смены схемы","use":"Позднее отставание при хорошей физике","risk":"Усталость и потери"},"Simeone_CompactLead_v11":{"group":"defensive","rank":4,"role":"protect_lead","title":"Diego Simeone — Compact Lead","idea":"Закрыть пространство, сохранить прежние 11 позиций","use":"Позднее преимущество без срочной осады","risk":"При чрезмерной пассивности возможен навал"},"Simeone_EmergencyBlock_v11":{"group":"defensive","rank":5,"role":"emergency_lock","title":"Diego Simeone — Emergency Block","idea":"Временный низкий блок без перестановок","use":"Экстренное давление, следующий отрезок пересмотреть","risk":"Нельзя держать без пересмотра"},"Allegri_LeadOutlet_v11":{"group":"defensive","rank":3,"role":"protect_lead_with_outlet","title":"Massimiliano Allegri — Lead Outlet","idea":"Удержание с безопасным выходом первым пасом","use":"Позднее преимущество при доступном выходе","risk":"Без первого паса лучше компактная защита"},"Flick_LeadPressHold_v12":{"group":"defensive","rank":3,"role":"lead_press_hold","title":"Hansi Flick — Lead Press Hold","idea":"Удержание преимущества активным прессингом вместо пассивного блока","use":"Преимущество в один гол против прессинга выше плана, окно 60–85 минут","risk":"Дорогой прессинг: не применять при усталости, браке или угрозе переходов"}};
+    // C324/C379 (#405 F7): high press (press_intense>=3) needs 1–3 ПИ roles,
+    // and with a CD pair the ПИ role on a CD does not work. User-facing note
+    // appended to the preset usage guidance (it flows into recommendation
+    // reasons via meta.use) — NOT a hard veto, NOT an entry-condition change;
+    // PRESETS numeric vectors are untouched.
+    const HIGH_PRESS_ROLE_NOTE='Для высокого прессинга назначьте 1–3 ПИ; при паре CD роль ПИ у CD не работает (C324, C379)';
+    Object.entries(PRESETS).forEach(([name,preset])=>{if(Number(preset.press_intense)>=3&&META[name])META[name]=Object.assign({},META[name],{use:`${META[name].use}. ${HIGH_PRESS_ROLE_NOTE}`});});
     const TRAITS={"Emery_BalancedBase_v11":{"requires":[],"avoids":["late_emergency_chase","transition_crisis"],"attackLanes":["center","left","right"],"build":"fixed_lineup_patient_progression","tempo":"medium","press":"low","risk":"low"},"Mourinho_CleanCounter_v11":{"requires":["confirmed_counter_exit"],"avoids":["counter_exit_blocked","press_fatigue","high_bad_actions"],"attackLanes":["left","right","center"],"build":"confirmed_counter_outlet","tempo":"medium_high","press":"low","risk":"medium"},"Guardiola_PressEscape_v11":{"requires":["pressure_without_counter_exit"],"avoids":["urgent_chase"],"attackLanes":["center"],"build":"press_resistant_control","tempo":"low","press":"low","risk":"low"},"Arteta_SafePossession_v11":{"requires":["manual_selection_only"],"avoids":["late_emergency_chase"],"attackLanes":["center","left","right"],"build":"structural_control","tempo":"medium","press":"medium","risk":"medium"},"Guardiola_PressCooldown_v11":{"requires":["press_fatigue"],"avoids":["late_emergency_chase"],"attackLanes":["center","right"],"build":"cooldown_outlet","tempo":"low","press":"very_low","risk":"low"},"Guardiola_ControlledPush_v11":{"requires":["need_goal_or_attack_need"],"avoids":["very_high_bad_actions"],"attackLanes":["center","left","right"],"build":"controlled_push","tempo":"high","press":"medium","risk":"medium_high"},"Guardiola_PositionalSiege_v11":{"requires":["attacking_momentum","transition_control"],"avoids":["transition_threat","press_fatigue"],"attackLanes":["center","left","right"],"build":"fixed_back_four_positional_siege","tempo":"high","press":"high","risk":"very_high"},"Conte_WideChannels_v11":{"requires":["wide_quality","center_closed"],"avoids":["own_crosses_bad","opponent_crosses_dangerous"],"attackLanes":["left","right"],"build":"fixed_lineup_wide_channels","tempo":"medium_high","press":"medium","risk":"high"},"Klopp_LateGegenpress_v11":{"requires":["late_need_goal","fitness"],"avoids":["press_fatigue","high_bad_actions","transition_threat"],"attackLanes":["center","left","right"],"build":"gegenpress_424","tempo":"very_high","press":"very_high","risk":"very_high"},"Simeone_CompactLead_v11":{"requires":["protect_lead"],"avoids":["urgent_chase"],"attackLanes":["left","right"],"build":"compact442","tempo":"low","press":"low","risk":"low"},"Simeone_EmergencyBlock_v11":{"requires":["mandatory_reassessment_next_window"],"avoids":["permanent_losing_state"],"attackLanes":[],"build":"temporary_emergency_lock","tempo":"very_low","press":"very_low","risk":"very_low"},"Allegri_LeadOutlet_v11":{"requires":["protect_lead","safe_first_pass"],"avoids":["urgent_chase"],"attackLanes":["left","right","center"],"build":"safe_lead_outlet","tempo":"low","press":"very_low","risk":"low"},"Flick_LeadPressHold_v12":{"requires":["lead_one_goal","opponent_press_vector_high"],"avoids":["transition_threat","high_bad_actions"],"attackLanes":["center","left","right"],"build":"lead_press_hold_4231","tempo":"high","press":"high","risk":"medium_high"}};
     const ROLE_CONTRACTS={"Emery_BalancedBase_v11":{"presetId":"Emery_BalancedBase_v11","role":"default_start","primarySituation":"default_start","allowedSituations":["pressure_escape"],"entryConditions":["balanced_opposition","same_fixed_lineup"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Mourinho_CleanCounter_v11":{"presetId":"Mourinho_CleanCounter_v11","role":"pressure_counter","primarySituation":"pressure_counter","allowedSituations":["pressure_escape"],"entryConditions":["confirmed_counter_exit","только подтверждённый чистый контрвыход"],"exitConditions":[],"hardVetoes":["подтверждённый чистый выход","нет блокировки первого паса"],"riskClass":"medium","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PressEscape_v11":{"presetId":"Guardiola_PressEscape_v11","role":"pressure_escape","primarySituation":"pressure_escape","allowedSituations":["default_start"],"entryConditions":["pressure_without_counter_exit","давление без открытого контрвыхода"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Arteta_SafePossession_v11":{"presetId":"Arteta_SafePossession_v11","role":"possession_control","primarySituation":"possession_control","allowedSituations":[],"entryConditions":["manual_only","underperforming_in_three_user_matches"],"exitConditions":[],"hardVetoes":["manual_only_diagnostic"],"riskClass":"low","fallbackEligible":false,"manualOnly":true,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PressCooldown_v11":{"presetId":"Guardiola_PressCooldown_v11","role":"press_cooldown","primarySituation":"press_cooldown","allowedSituations":["pressure_escape","default_start"],"entryConditions":["press_fatigue","усталость/рост брака"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_ControlledPush_v11":{"presetId":"Guardiola_ControlledPush_v11","role":"controlled_chase","primarySituation":"controlled_chase","allowedSituations":["positional_siege","default_start"],"entryConditions":["need_goal_or_attack_need","нужен гол без экстренного all-in"],"exitConditions":[],"hardVetoes":[],"riskClass":"medium_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PositionalSiege_v11":{"presetId":"Guardiola_PositionalSiege_v11","role":"positional_siege","primarySituation":"positional_siege","allowedSituations":["controlled_chase","late_high_pressure"],"entryConditions":["attacking_momentum","transition_control","моментум при контроле переходов"],"exitConditions":[],"hardVetoes":["запрещено при угрозе переходов и усталости"],"riskClass":"very_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Conte_WideChannels_v11":{"presetId":"Conte_WideChannels_v11","role":"width_attack","primarySituation":"width_attack","allowedSituations":["positional_siege"],"entryConditions":["wide_quality","center_closed","закрытый центр, качественные фланги"],"exitConditions":[],"hardVetoes":[],"riskClass":"high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Klopp_LateGegenpress_v11":{"presetId":"Klopp_LateGegenpress_v11","role":"late_high_pressure","primarySituation":"late_high_pressure","allowedSituations":["positional_siege"],"entryConditions":["late_need_goal","fitness","позднее отставание и хорошая физика"],"exitConditions":[],"hardVetoes":["только поздняя погоня","физика должна быть достаточна"],"riskClass":"very_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Simeone_CompactLead_v11":{"presetId":"Simeone_CompactLead_v11","role":"protect_lead","primarySituation":"protect_lead","allowedSituations":["emergency_lock","default_start"],"entryConditions":["protect_lead","небольшое преимущество без осады"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Simeone_EmergencyBlock_v11":{"presetId":"Simeone_EmergencyBlock_v11","role":"emergency_lock","primarySituation":"emergency_lock","allowedSituations":["protect_lead"],"entryConditions":["mandatory_reassessment_next_window","экстренная осада при отсутствии выхода"],"exitConditions":[],"hardVetoes":["только временная экстренная оборона"],"riskClass":"very_low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Allegri_LeadOutlet_v11":{"presetId":"Allegri_LeadOutlet_v11","role":"protect_lead_with_outlet","primarySituation":"protect_lead_with_outlet","allowedSituations":["protect_lead","default_start"],"entryConditions":["protect_lead","safe_first_pass","преимущество и доступен первый пас"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Flick_LeadPressHold_v12":{"presetId":"Flick_LeadPressHold_v12","role":"lead_press_hold","primarySituation":"lead_press_hold","allowedSituations":["protect_lead"],"entryConditions":["lead_one_goal","opponent_press_vector_high","преимущество в один гол против прессинга выше плана"],"exitConditions":[],"hardVetoes":["вне окна 60–85 минут при преимуществе","вектор прессинга соперника ниже +20%"],"riskClass":"medium_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"}};
     const SCHEME_STATES={"midblock_control_4231":"Fixed 4-2-3-1 RW/RM — Unai Emery — Balanced Base","midblock_counter_4411":"Fixed 4-2-3-1 RW/RM — José Mourinho — Clean Counter","box_control":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Press Escape","arteta_control":"Fixed 4-2-3-1 RW/RM — Mikel Arteta — Safe Possession","press_cooldown":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Press Cooldown","controlled_push":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Controlled Push","positional_325":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Positional Siege","wingback_width":"Fixed 4-2-3-1 RW/RM — Antonio Conte — Wide Channels","gegenpress_424":"Fixed 4-2-3-1 RW/RM — Jürgen Klopp — Late Gegenpress","compact_442":"Fixed 4-2-3-1 RW/RM — Diego Simeone — Compact Lead","low_block_541":"Fixed 4-2-3-1 RW/RM — Diego Simeone — Emergency Block","lead_outlet_4141":"Fixed 4-2-3-1 RW/RM — Massimiliano Allegri — Lead Outlet","lead_press_hold_4231":"Fixed 4-2-3-1 RW/RM — Hansi Flick — Lead Press Hold"};
@@ -10604,12 +12174,18 @@ if (!isTacticPage) return;
                     return;
                 }
 
-                this.showSaveDialog(currentTactic, name => {
-                    const customPresets = PresetStorage.loadCustom();
-                    customPresets[name] = currentTactic;
-                    PresetStorage.saveCustom(customPresets);
-                    refreshSelect(name);
-                    updateSchemeLabel();
+                this.showSaveDialog(currentTactic, async name => {
+                    try {
+                        const customPresets = PresetStorage.loadCustom();
+                        customPresets[name] = currentTactic;
+                        // Native write (#409): no optimistic success — the
+                        // dropdown refreshes only after the site ack.
+                        await PresetStorage.saveCustom(customPresets);
+                        refreshSelect(name);
+                        updateSchemeLabel();
+                    } catch (error) {
+                        alert(`Не удалось сохранить тактику: ${error && error.message ? error.message : 'неизвестная ошибка'}`);
+                    }
                 });
             });
 
@@ -10617,7 +12193,7 @@ if (!isTacticPage) return;
             deleteBtn.textContent = '🗑️';
             deleteBtn.title = 'Удалить выбранный пресет';
             deleteBtn.style.cssText = 'padding:5px 8px;background:#444;color:#fff;border:1px solid #666;border-radius:3px;cursor:pointer;font-size:16px;';
-            deleteBtn.addEventListener('click', () => {
+            deleteBtn.addEventListener('click', async () => {
                 const name = select.value;
 
                 if (Object.prototype.hasOwnProperty.call(BASE_PRESETS, name)) {
@@ -10634,10 +12210,14 @@ if (!isTacticPage) return;
 
                 if (!confirm(`Удалить "${name}"?`)) return;
 
-                delete customPresets[name];
-                PresetStorage.saveCustom(customPresets);
-                refreshSelect();
-                updateSchemeLabel();
+                try {
+                    delete customPresets[name];
+                    await PresetStorage.saveCustom(customPresets);
+                    refreshSelect();
+                    updateSchemeLabel();
+                } catch (error) {
+                    alert(`Не удалось удалить пресет: ${error && error.message ? error.message : 'неизвестная ошибка'}`);
+                }
             });
 
             const exportBtn = document.createElement('button');
@@ -10673,18 +12253,44 @@ if (!isTacticPage) return;
                     const reader = new FileReader();
 
                     reader.onload = ev => {
+                        let imported;
                         try {
-                            const imported = normalizePresets(JSON.parse(ev.target.result));
-                            if (!confirm('Импорт заменит все пользовательские пресеты локально и на VPS. Продолжить?')) return;
-
-                            PresetStorage.saveCustom(imported);
-                            refreshSelect();
-                            updateSchemeLabel();
-
-                            alert('Пресеты импортированы!');
+                            imported = normalizePresets(JSON.parse(ev.target.result));
                         } catch (ex) {
                             alert('Ошибка: неверный формат файла.');
+                            return;
                         }
+
+                        // Native-store import (#409): replacement semantics
+                        // apply only to the plugin-managed subset. Native
+                        // templates absent from the file are never deleted —
+                        // full reconciliation is the wave-2 migration's job.
+                        const current = PresetStorage.loadCustom();
+                        const managed = new Set(PresetStorage.getManagedPresetNames ? PresetStorage.getManagedPresetNames() : []);
+                        const importedNames = Object.keys(imported);
+                        const addNames = importedNames.filter(name => !Object.prototype.hasOwnProperty.call(current, name));
+                        const updateNames = importedNames.filter(name => Object.prototype.hasOwnProperty.call(current, name));
+                        const deleteNames = Object.keys(current).filter(name =>
+                            !Object.prototype.hasOwnProperty.call(imported, name) && managed.has(name));
+
+                        const previewParts = [
+                            addNames.length ? `добавлены: ${addNames.join(', ')}` : null,
+                            updateNames.length ? `обновлены: ${updateNames.join(', ')}` : null,
+                            deleteNames.length ? `удалены (управляемые пресеты): ${deleteNames.join(', ')}` : null
+                        ].filter(Boolean);
+                        const previewText = previewParts.length ? previewParts.join('; ') : 'изменений нет';
+                        if (!confirm(`Импорт пресетов из файла (${importedNames.length} шт.): ${previewText}. Сайтовые шаблоны, отсутствующие в файле, удалены не будут. Продолжить?`)) return;
+
+                        (async () => {
+                            try {
+                                const result = await PresetStorage.saveCustom(imported, { deleteMissing: 'managed' });
+                                refreshSelect();
+                                updateSchemeLabel();
+                                alert(`Пресеты импортированы: сохранено ${result.applied.length}, удалено ${result.removed.length}.`);
+                            } catch (error) {
+                                alert(`Импорт не завершён: ${error && error.message ? error.message : 'неизвестная ошибка'}`);
+                            }
+                        })();
                     };
 
                     reader.readAsText(file);
@@ -10693,7 +12299,61 @@ if (!isTacticPage) return;
                 input.click();
             });
 
-            row.append(select, applyBtn, saveBtn, deleteBtn, exportBtn, importBtn);
+            // Migration to native site templates (#409 wave 2): the button
+            // is the ONLY trigger — PresetMigration.run() never executes on
+            // page load. Preview (dry-run) → explicit confirm → awaited run
+            // → loud receipt summary, same alert() convention as the other
+            // preset-store errors.
+            const migrateBtn = document.createElement('button');
+            migrateBtn.textContent = '⬆️';
+            migrateBtn.title = 'Перенести пресеты в шаблоны сайта';
+            migrateBtn.style.cssText = 'padding:5px 8px;background:#444;color:#fff;border:1px solid #666;border-radius:3px;cursor:pointer;font-size:16px;';
+            migrateBtn.addEventListener('click', async () => {
+                migrateBtn.disabled = true;
+                try {
+                    const preview = await PresetMigration.run({ dryRun: true });
+                    if (preview.code === 'native_unavailable' || preview.code === 'native_stale') {
+                        alert(`Миграция недоступна: ${preview.message || preview.code}`);
+                        return;
+                    }
+
+                    const createText = preview.created.length
+                        ? `Будут созданы шаблоны сайта: ${preview.created.map(entry =>
+                            `${entry.name} [${PresetMigration.sourceLabel(entry.source)}]`).join(', ')}.`
+                        : 'Новых шаблонов не будет.';
+                    const skipText = preview.skipped.length
+                        ? ` Пропущены (уже существуют/перенесены): ${preview.skipped.map(entry => entry.name).join(', ')}.`
+                        : '';
+                    const failText = preview.failed.length
+                        ? ` Некорректные векторы: ${preview.failed.map(entry => entry.name).join(', ')}.`
+                        : '';
+                    if (!confirm(`Перенос пресетов в шаблоны сайта. ${createText}${skipText}${failText} Существующие шаблоны сайта не перезаписываются, удаления не выполняются. Если вы меняли шаблоны сайта в другой вкладке — обновите эту страницу и запустите перенос заново. Продолжить?`)) return;
+
+                    const result = await PresetMigration.run();
+                    if (result.ok === false && result.created.length === 0) {
+                        // True failure (failUnavailable gate or an abort with
+                        // nothing created): never show the success summary.
+                        // A partial success (completed_with_errors with acked
+                        // saves) falls through to the summary below, which
+                        // already appends the first error.
+                        alert(`Миграция не выполнена: ${result.message || result.code}`);
+                        return;
+                    }
+                    refreshSelect();
+                    updateSchemeLabel();
+                    const firstError = result.failed.length
+                        ? ` Первая ошибка: ${result.failed[0].message || result.failed[0].code}.`
+                        : '';
+                    const summaryHeader = result.ok === false ? 'Миграция частично выполнена' : 'Миграция завершена';
+                    alert(`${summaryHeader}: создано ${result.created.length}, пропущено ${result.skipped.length}, ошибок ${result.failed.length}.${firstError}`);
+                } catch (error) {
+                    alert(`Миграция не выполнена: ${error && error.message ? error.message : 'неизвестная ошибка'}`);
+                } finally {
+                    migrateBtn.disabled = false;
+                }
+            });
+
+            row.append(select, applyBtn, saveBtn, deleteBtn, exportBtn, importBtn, migrateBtn);
             container.append(title, row, schemeLabel);
 
             // fm2026 match tactic view (issue #370 follow-up): on radio-less
@@ -11356,7 +13016,7 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
     const FINAL_CONTROL_LABELS = {
         def_line: 'линия', press_line: 'прессинг', def_width: 'ширина', press_intense: 'интенс',
         build_type: 'выход', build_temp: 'темп', build_long: 'диаг', build_fast: 'касание',
-        style: 'стиль', pass_risk: 'риск', dribble: 'дриблинг', cross: 'кроссы',
+        style: 'стиль', pass_risk: 'риск', dribble: 'дриблинг', cross: 'навесы верхом',
         corner: 'угловые', shot: 'удары', priority: 'фланги'
     };
     const FINAL_GROUP_KEYS = {
@@ -26413,15 +28073,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.364',
-        scriptVersion: '4.4.364',
+        version: '4.4.370',
+        scriptVersion: '4.4.370',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.364',
+        scriptVersion: '4.4.370',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

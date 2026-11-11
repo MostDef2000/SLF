@@ -1,6 +1,6 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
-  "reviewedAt": "2026-10-16",
+  "reviewedAt": "2026-11-11",
   "reviewCandidateCount": 60,
   "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains. Issue #333 extension: direct symbol-level review of two active Tactical Suite v10 modules containing exact read-only old preset aliases; no deletion or new runtime behavior authorized by this evidence.",
   "classificationDefinitions": {
@@ -568,6 +568,15 @@
         "Legacy-shaped identifiers (LEGACY_PANEL_ID, suppressLegacyPanel) reference the EXTERNAL legacy side panel #slf-team4-championship-table: after a successful mount the module disarms the legacy placement controller (panel.dataset.slfRosterSideActive='0'), mirrors the legacy module's own cleanup branch (366px grid / overflow layout classes removed) and detaches the panel — an external cleanup target, not retained in-module legacy code.",
         "Registered in bundle-order dependency audit (91 modules, check-bundle-order OK).",
         "E2E-covered by tests/browser/test_team4_champ_table_swap.py (RED on the base artifact, GREEN on the built artifact)."
+      ]
+    },
+    {
+      "file": "src/modules/tactics-presets/preset-migration.js",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Issue #409 wave 2 (2026-11-11): new migration coordinator importing pre-migration presets onto native site templates; registered in src/app/bundle-order.json (94 modules, check-bundle-order green) and covered by 14 standalone node scenarios (tests/test-preset-migration.mjs).",
+        "The literal legacy/deprecated markers are semantic, not stale: readLegacyLocalRaw() and the legacy_local source label name the REAL pre-migration localStorage store (CONFIG.STORAGE_KEY) the migration reads once; the word deprecated marks the defense-in-depth guard that EXCLUDES retired preset names from import (PresetStorage.isRetiredBuiltInPreset).",
+        "No legacy code paths exist to extract: the module is new, issues only NativeTemplateApi.saveTemplate (never delete/rename — verified by two independent adversarial reviews), and its only localStorage writes are the migration receipt and the scoped cache via the recordMigratedTemplate seam."
       ]
     }
   ],

@@ -453,12 +453,18 @@ if (!isTacticPage) return;
                     return;
                 }
 
-                this.showSaveDialog(currentTactic, name => {
-                    const customPresets = PresetStorage.loadCustom();
-                    customPresets[name] = currentTactic;
-                    PresetStorage.saveCustom(customPresets);
-                    refreshSelect(name);
-                    updateSchemeLabel();
+                this.showSaveDialog(currentTactic, async name => {
+                    try {
+                        const customPresets = PresetStorage.loadCustom();
+                        customPresets[name] = currentTactic;
+                        // Native write (#409): no optimistic success — the
+                        // dropdown refreshes only after the site ack.
+                        await PresetStorage.saveCustom(customPresets);
+                        refreshSelect(name);
+                        updateSchemeLabel();
+                    } catch (error) {
+                        alert(`Не удалось сохранить тактику: ${error && error.message ? error.message : 'неизвестная ошибка'}`);
+                    }
                 });
             });
 
@@ -466,7 +472,7 @@ if (!isTacticPage) return;
             deleteBtn.textContent = '🗑️';
             deleteBtn.title = 'Удалить выбранный пресет';
             deleteBtn.style.cssText = 'padding:5px 8px;background:#444;color:#fff;border:1px solid #666;border-radius:3px;cursor:pointer;font-size:16px;';
-            deleteBtn.addEventListener('click', () => {
+            deleteBtn.addEventListener('click', async () => {
                 const name = select.value;
 
                 if (Object.prototype.hasOwnProperty.call(BASE_PRESETS, name)) {
@@ -483,10 +489,14 @@ if (!isTacticPage) return;
 
                 if (!confirm(`Удалить "${name}"?`)) return;
 
-                delete customPresets[name];
-                PresetStorage.saveCustom(customPresets);
-                refreshSelect();
-                updateSchemeLabel();
+                try {
+                    delete customPresets[name];
+                    await PresetStorage.saveCustom(customPresets);
+                    refreshSelect();
+                    updateSchemeLabel();
+                } catch (error) {
+                    alert(`Не удалось удалить пресет: ${error && error.message ? error.message : 'неизвестная ошибка'}`);
+                }
             });
 
             const exportBtn = document.createElement('button');
@@ -522,18 +532,44 @@ if (!isTacticPage) return;
                     const reader = new FileReader();
 
                     reader.onload = ev => {
+                        let imported;
                         try {
-                            const imported = normalizePresets(JSON.parse(ev.target.result));
-                            if (!confirm('Импорт заменит все пользовательские пресеты локально и на VPS. Продолжить?')) return;
-
-                            PresetStorage.saveCustom(imported);
-                            refreshSelect();
-                            updateSchemeLabel();
-
-                            alert('Пресеты импортированы!');
+                            imported = normalizePresets(JSON.parse(ev.target.result));
                         } catch (ex) {
                             alert('Ошибка: неверный формат файла.');
+                            return;
                         }
+
+                        // Native-store import (#409): replacement semantics
+                        // apply only to the plugin-managed subset. Native
+                        // templates absent from the file are never deleted —
+                        // full reconciliation is the wave-2 migration's job.
+                        const current = PresetStorage.loadCustom();
+                        const managed = new Set(PresetStorage.getManagedPresetNames ? PresetStorage.getManagedPresetNames() : []);
+                        const importedNames = Object.keys(imported);
+                        const addNames = importedNames.filter(name => !Object.prototype.hasOwnProperty.call(current, name));
+                        const updateNames = importedNames.filter(name => Object.prototype.hasOwnProperty.call(current, name));
+                        const deleteNames = Object.keys(current).filter(name =>
+                            !Object.prototype.hasOwnProperty.call(imported, name) && managed.has(name));
+
+                        const previewParts = [
+                            addNames.length ? `добавлены: ${addNames.join(', ')}` : null,
+                            updateNames.length ? `обновлены: ${updateNames.join(', ')}` : null,
+                            deleteNames.length ? `удалены (управляемые пресеты): ${deleteNames.join(', ')}` : null
+                        ].filter(Boolean);
+                        const previewText = previewParts.length ? previewParts.join('; ') : 'изменений нет';
+                        if (!confirm(`Импорт пресетов из файла (${importedNames.length} шт.): ${previewText}. Сайтовые шаблоны, отсутствующие в файле, удалены не будут. Продолжить?`)) return;
+
+                        (async () => {
+                            try {
+                                const result = await PresetStorage.saveCustom(imported, { deleteMissing: 'managed' });
+                                refreshSelect();
+                                updateSchemeLabel();
+                                alert(`Пресеты импортированы: сохранено ${result.applied.length}, удалено ${result.removed.length}.`);
+                            } catch (error) {
+                                alert(`Импорт не завершён: ${error && error.message ? error.message : 'неизвестная ошибка'}`);
+                            }
+                        })();
                     };
 
                     reader.readAsText(file);
@@ -542,7 +578,61 @@ if (!isTacticPage) return;
                 input.click();
             });
 
-            row.append(select, applyBtn, saveBtn, deleteBtn, exportBtn, importBtn);
+            // Migration to native site templates (#409 wave 2): the button
+            // is the ONLY trigger — PresetMigration.run() never executes on
+            // page load. Preview (dry-run) → explicit confirm → awaited run
+            // → loud receipt summary, same alert() convention as the other
+            // preset-store errors.
+            const migrateBtn = document.createElement('button');
+            migrateBtn.textContent = '⬆️';
+            migrateBtn.title = 'Перенести пресеты в шаблоны сайта';
+            migrateBtn.style.cssText = 'padding:5px 8px;background:#444;color:#fff;border:1px solid #666;border-radius:3px;cursor:pointer;font-size:16px;';
+            migrateBtn.addEventListener('click', async () => {
+                migrateBtn.disabled = true;
+                try {
+                    const preview = await PresetMigration.run({ dryRun: true });
+                    if (preview.code === 'native_unavailable' || preview.code === 'native_stale') {
+                        alert(`Миграция недоступна: ${preview.message || preview.code}`);
+                        return;
+                    }
+
+                    const createText = preview.created.length
+                        ? `Будут созданы шаблоны сайта: ${preview.created.map(entry =>
+                            `${entry.name} [${PresetMigration.sourceLabel(entry.source)}]`).join(', ')}.`
+                        : 'Новых шаблонов не будет.';
+                    const skipText = preview.skipped.length
+                        ? ` Пропущены (уже существуют/перенесены): ${preview.skipped.map(entry => entry.name).join(', ')}.`
+                        : '';
+                    const failText = preview.failed.length
+                        ? ` Некорректные векторы: ${preview.failed.map(entry => entry.name).join(', ')}.`
+                        : '';
+                    if (!confirm(`Перенос пресетов в шаблоны сайта. ${createText}${skipText}${failText} Существующие шаблоны сайта не перезаписываются, удаления не выполняются. Если вы меняли шаблоны сайта в другой вкладке — обновите эту страницу и запустите перенос заново. Продолжить?`)) return;
+
+                    const result = await PresetMigration.run();
+                    if (result.ok === false && result.created.length === 0) {
+                        // True failure (failUnavailable gate or an abort with
+                        // nothing created): never show the success summary.
+                        // A partial success (completed_with_errors with acked
+                        // saves) falls through to the summary below, which
+                        // already appends the first error.
+                        alert(`Миграция не выполнена: ${result.message || result.code}`);
+                        return;
+                    }
+                    refreshSelect();
+                    updateSchemeLabel();
+                    const firstError = result.failed.length
+                        ? ` Первая ошибка: ${result.failed[0].message || result.failed[0].code}.`
+                        : '';
+                    const summaryHeader = result.ok === false ? 'Миграция частично выполнена' : 'Миграция завершена';
+                    alert(`${summaryHeader}: создано ${result.created.length}, пропущено ${result.skipped.length}, ошибок ${result.failed.length}.${firstError}`);
+                } catch (error) {
+                    alert(`Миграция не выполнена: ${error && error.message ? error.message : 'неизвестная ошибка'}`);
+                } finally {
+                    migrateBtn.disabled = false;
+                }
+            });
+
+            row.append(select, applyBtn, saveBtn, deleteBtn, exportBtn, importBtn, migrateBtn);
             container.append(title, row, schemeLabel);
 
             // fm2026 match tactic view (issue #370 follow-up): on radio-less

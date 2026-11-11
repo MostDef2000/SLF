@@ -1,5 +1,176 @@
 # Changelog
 
+## 4.4.370
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- specs/409-presets-native-templates/plan.md
+- specs/409-presets-native-templates/spec.md
+- specs/409-presets-native-templates/tasks.md
+- src/app/bundle-order.json
+- src/app/ui-layer.js
+- src/modules/tactics-presets/native-template-api.js
+- src/modules/tactics-presets/preset-storage.js
+- tests/test-native-template-api.mjs
+- tests/test-native-template-mapping.mjs
+- tests/test-preset-native-storage.mjs
+- tests/test-preset-storage-sync-status.mjs
+
+Approved base commit:
+- 7eb115454ba1abcf4c09e05c6f1be563ee548764
+
+Approved commit:
+- 657e3f9b02eb4b0b9eceae40ee8d677f679faa76
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.369
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- specs/409-presets-native-templates/plan.md
+- specs/409-presets-native-templates/spec.md
+- specs/409-presets-native-templates/tasks.md
+- src/app/bundle-order.json
+- src/app/ui-layer.js
+- src/modules/tactics-presets/native-template-api.js
+- src/modules/tactics-presets/preset-storage.js
+- tests/test-native-template-api.mjs
+- tests/test-native-template-mapping.mjs
+- tests/test-preset-native-storage.mjs
+- tests/test-preset-storage-sync-status.mjs
+
+Approved base commit:
+- 7eb115454ba1abcf4c09e05c6f1be563ee548764
+
+Approved commit:
+- 657e3f9b02eb4b0b9eceae40ee8d677f679faa76
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.368
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- specs/409-presets-native-templates/plan.md
+- specs/409-presets-native-templates/spec.md
+- specs/409-presets-native-templates/tasks.md
+- src/app/bundle-order.json
+- src/app/ui-layer.js
+- src/modules/tactics-presets/native-template-api.js
+- src/modules/tactics-presets/preset-storage.js
+- tests/test-native-template-api.mjs
+- tests/test-native-template-mapping.mjs
+- tests/test-preset-native-storage.mjs
+- tests/test-preset-storage-sync-status.mjs
+
+Approved base commit:
+- 7eb115454ba1abcf4c09e05c6f1be563ee548764
+
+Approved commit:
+- 657e3f9b02eb4b0b9eceae40ee8d677f679faa76
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.367
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- vps/exporter-rag/slf_rag_build.py
+- vps/exporter-rag/test_slf_rag_build.py
+
+Approved base commit:
+- ef8ad9e673e316dd783530bb1228d9a2edbdc713
+
+Approved commit:
+- 7eb115454ba1abcf4c09e05c6f1be563ee548764
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.366
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- vps/exporter-rag/slf_rag_build.py
+- vps/exporter-rag/test_slf_rag_build.py
+
+Approved base commit:
+- ef8ad9e673e316dd783530bb1228d9a2edbdc713
+
+Approved commit:
+- 7eb115454ba1abcf4c09e05c6f1be563ee548764
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.365
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- vps/exporter-rag/slf_rag_build.py
+- vps/exporter-rag/test_slf_rag_build.py
+
+Approved base commit:
+- ef8ad9e673e316dd783530bb1228d9a2edbdc713
+
+Approved commit:
+- 7eb115454ba1abcf4c09e05c6f1be563ee548764
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.364
 
 ### Automatic latest-only build

@@ -10,7 +10,9 @@
     "src/modules/transfer-analyzer/config.js",
     "src/core/dom-utils.js",
     "src/core/api.js",
+    "src/modules/tactics-presets/native-template-api.js",
     "src/modules/tactics-presets/preset-storage.js",
+    "src/modules/tactics-presets/preset-migration.js",
     "src/modules/tactics-presets/tactic-control-engine.js",
     "src/modules/tactics-presets/tactic-control-bridge.js",
     "src/modules/tactics-presets/tactical-lab-v1.js",
@@ -100,7 +102,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 92,
+    "expectedModuleCount": 94,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -282,6 +284,26 @@
         ]
       },
       {
+        "file": "src/modules/tactics-presets/native-template-api.js",
+        "declares": [
+          "NativeTemplateMapping",
+          "NativeTemplateApi"
+        ],
+        "public": [
+          "NativeTemplateMapping",
+          "NativeTemplateApi"
+        ],
+        "requires": [],
+        "hostCapabilities": [
+          "window",
+          "unsafeWindow",
+          "fetch",
+          "setTimeout",
+          "clearTimeout",
+          "location"
+        ]
+      },
+      {
         "file": "src/modules/tactics-presets/preset-storage.js",
         "declares": [
           "ALLOWED_HENTA_PRESET",
@@ -310,9 +332,57 @@
             "phase": "runtime"
           },
           {
+            "file": "src/modules/tactics-presets/native-template-api.js",
+            "symbols": [
+              "NativeTemplateApi",
+              "NativeTemplateMapping"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "localStorage"
+        ]
+      },
+      {
+        "file": "src/modules/tactics-presets/preset-migration.js",
+        "declares": [
+          "PresetMigration"
+        ],
+        "public": [
+          "PresetMigration"
+        ],
+        "requires": [
+          {
+            "file": "src/core/config.js",
+            "symbols": [
+              "BASE_PRESETS",
+              "CONFIG",
+              "DEFAULT_CUSTOM_PRESETS",
+              "debugWarn"
+            ],
+            "phase": "runtime"
+          },
+          {
             "file": "src/core/api.js",
             "symbols": [
               "Api"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/native-template-api.js",
+            "symbols": [
+              "NativeTemplateApi",
+              "NativeTemplateMapping"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/preset-storage.js",
+            "symbols": [
+              "PresetStorage",
+              "normalizePresets"
             ],
             "phase": "runtime"
           }
@@ -1427,6 +1497,13 @@
             "file": "src/core/api.js",
             "symbols": [
               "fetchCanonicalApiStatus"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/tactics-presets/preset-migration.js",
+            "symbols": [
+              "PresetMigration"
             ],
             "phase": "runtime"
           },
