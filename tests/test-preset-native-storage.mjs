@@ -786,19 +786,31 @@ const envelopeOf = storage => JSON.parse(storage.get(NATIVE_KEY));
 {
     // The live site (team4.php?action=tactic, line 2027) declares
     // `let foot_login_id = 6945;` at the top level. A top-level `let` is a
-    // lexical global: it does NOT create a window/unsafeWindow property.
-    // readPageUserId() must still resolve it — otherwise
-    // readScopedNativeCache() always returns null and the migration gate
-    // blocks the owner's ⬆️ button.
-    const { ps, context } = makeSandbox({ footLoginId: 'lexical' });
+    // lexical global: it does NOT create a window/unsafeWindow property, so
+    // the property reads cannot see it. The live page ALSO carries the
+    // declaration as inline <script> text (verified in Playwright: the
+    // document.scripts scan returns '6945'), which the declaration-only DOM
+    // scan resolves. In-realm eval is prohibited by the repo's security
+    // governance (tools/test-security-boundaries.mjs bans /\beval\s*\(/ in
+    // src/**), so the supported contract is property reads + declaration-only
+    // DOM scan. This test asserts the OUTCOME on the live-site shape (lexical
+    // binding AND inline declaration text), not the mechanism: whichever
+    // supported path does the work, readPageUserId() must resolve '6945' —
+    // otherwise readScopedNativeCache() always returns null and the
+    // migration gate blocks the owner's ⬆️ button.
+    const { ps, context } = makeSandbox({
+        footLoginId: 'lexical',
+        document: { scripts: [{ textContent: 'let foot_login_id = 6945;' }] }
+    });
     // Precondition: the binding is NOT a property of the sandbox object —
     // that is exactly the bug's trigger.
     assert.equal(
         context.foot_login_id, undefined,
         'lexical foot_login_id is not a sandbox-object property (live-site precondition)'
     );
-    // Precondition: the binding IS present in the realm, reachable only by
-    // in-realm evaluation (indirect eval).
+    // Precondition: the binding IS present in the realm (the live-site
+    // condition) even though it is not property-readable. The check runs in
+    // the test harness (vm.runInContext), not in src.
     assert.equal(
         vm.runInContext(
             `(0,eval)("typeof foot_login_id !== 'undefined' ? String(foot_login_id) : null")`,
@@ -807,10 +819,10 @@ const envelopeOf = storage => JSON.parse(storage.get(NATIVE_KEY));
         '6945',
         'the lexical binding is present in the realm (test precondition)'
     );
-    // The actual assertion: the real method must resolve the lexical global.
+    // The actual assertion: the real method must resolve the live-site shape.
     assert.equal(
         ps.readPageUserId(), '6945',
-        'readPageUserId must resolve a lexical-global foot_login_id, not only a window property'
+        'readPageUserId must resolve foot_login_id on the live-site shape (lexical binding + inline declaration), not only a window property'
     );
 }
 

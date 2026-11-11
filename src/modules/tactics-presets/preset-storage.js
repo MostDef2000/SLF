@@ -263,9 +263,15 @@
             // foot_login_id is the site's page-global login id — present on
             // team4.php?action=tactic AND match pages. The site declares it as
             // a top-level `let foot_login_id = ...;` (team4.php line 2027): a
-            // lexical global, so NO window/unsafeWindow property exists and
-            // the property reads below are best-effort; the in-realm eval and
-            // document.scripts fallbacks are what resolve it on the live site.
+            // lexical global, so NO window/unsafeWindow property exists for
+            // the declaration form. Supported resolution paths: (1) the
+            // property reads below — a bare top-level assignment creates a
+            // window property they catch — and (2) the declaration-only
+            // document.scripts scan, which resolves lexical `let`/`const`/
+            // `var` declarations in inline scripts, the form the live site
+            // uses. In-realm eval is not a supported path: the repo's
+            // security governance (tools/test-security-boundaries.mjs) bans
+            // dynamic execution sinks in src/**.
             try {
                 if (typeof unsafeWindow !== 'undefined' && unsafeWindow && unsafeWindow.foot_login_id != null) {
                     return String(unsafeWindow.foot_login_id);
@@ -274,21 +280,6 @@
             if (typeof window !== 'undefined' && window && window.foot_login_id != null) {
                 return String(window.foot_login_id);
             }
-            // In-realm indirect eval: a method call on unsafeWindow (not the
-            // bare `eval` identifier) runs in the page realm's global scope,
-            // where the lexical `let foot_login_id` binding is visible. It
-            // reads that one binding and executes no page code; CSP on slf.fm
-            // is absent (verified via response headers). Any failure -> null.
-            try {
-                if (typeof unsafeWindow !== 'undefined' && unsafeWindow) {
-                    const viaEval = unsafeWindow.eval(
-                        "typeof foot_login_id === 'number' || typeof foot_login_id === 'string' ? String(foot_login_id) : null"
-                    );
-                    if (typeof viaEval === 'string' && /^\d+$/.test(viaEval)) {
-                        return viaEval;
-                    }
-                }
-            } catch (_) { /* eval blocked or sandbox absent */ }
             // CSP-independent last resort: scan inline <script> text for the
             // declaration (no live binding needed). Declaration forms only
             // (`let`/`const`/`var`): a bare top-level assignment creates a
