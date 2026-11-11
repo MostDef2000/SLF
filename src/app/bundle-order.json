@@ -10,6 +10,7 @@
     "src/modules/transfer-analyzer/config.js",
     "src/core/dom-utils.js",
     "src/core/api.js",
+    "src/modules/tactics-presets/native-template-api.js",
     "src/modules/tactics-presets/preset-storage.js",
     "src/modules/tactics-presets/tactic-control-engine.js",
     "src/modules/tactics-presets/tactic-control-bridge.js",
@@ -100,7 +101,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 92,
+    "expectedModuleCount": 93,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -282,6 +283,26 @@
         ]
       },
       {
+        "file": "src/modules/tactics-presets/native-template-api.js",
+        "declares": [
+          "NativeTemplateMapping",
+          "NativeTemplateApi"
+        ],
+        "public": [
+          "NativeTemplateMapping",
+          "NativeTemplateApi"
+        ],
+        "requires": [],
+        "hostCapabilities": [
+          "window",
+          "unsafeWindow",
+          "fetch",
+          "setTimeout",
+          "clearTimeout",
+          "location"
+        ]
+      },
+      {
         "file": "src/modules/tactics-presets/preset-storage.js",
         "declares": [
           "ALLOWED_HENTA_PRESET",
@@ -310,9 +331,10 @@
             "phase": "runtime"
           },
           {
-            "file": "src/core/api.js",
+            "file": "src/modules/tactics-presets/native-template-api.js",
             "symbols": [
-              "Api"
+              "NativeTemplateApi",
+              "NativeTemplateMapping"
             ],
             "phase": "runtime"
           }

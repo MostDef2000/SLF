@@ -453,12 +453,18 @@ if (!isTacticPage) return;
                     return;
                 }
 
-                this.showSaveDialog(currentTactic, name => {
-                    const customPresets = PresetStorage.loadCustom();
-                    customPresets[name] = currentTactic;
-                    PresetStorage.saveCustom(customPresets);
-                    refreshSelect(name);
-                    updateSchemeLabel();
+                this.showSaveDialog(currentTactic, async name => {
+                    try {
+                        const customPresets = PresetStorage.loadCustom();
+                        customPresets[name] = currentTactic;
+                        // Native write (#409): no optimistic success — the
+                        // dropdown refreshes only after the site ack.
+                        await PresetStorage.saveCustom(customPresets);
+                        refreshSelect(name);
+                        updateSchemeLabel();
+                    } catch (error) {
+                        alert(`Не удалось сохранить тактику: ${error && error.message ? error.message : 'неизвестная ошибка'}`);
+                    }
                 });
             });
 
@@ -466,7 +472,7 @@ if (!isTacticPage) return;
             deleteBtn.textContent = '🗑️';
             deleteBtn.title = 'Удалить выбранный пресет';
             deleteBtn.style.cssText = 'padding:5px 8px;background:#444;color:#fff;border:1px solid #666;border-radius:3px;cursor:pointer;font-size:16px;';
-            deleteBtn.addEventListener('click', () => {
+            deleteBtn.addEventListener('click', async () => {
                 const name = select.value;
 
                 if (Object.prototype.hasOwnProperty.call(BASE_PRESETS, name)) {
@@ -483,10 +489,14 @@ if (!isTacticPage) return;
 
                 if (!confirm(`Удалить "${name}"?`)) return;
 
-                delete customPresets[name];
-                PresetStorage.saveCustom(customPresets);
-                refreshSelect();
-                updateSchemeLabel();
+                try {
+                    delete customPresets[name];
+                    await PresetStorage.saveCustom(customPresets);
+                    refreshSelect();
+                    updateSchemeLabel();
+                } catch (error) {
+                    alert(`Не удалось удалить пресет: ${error && error.message ? error.message : 'неизвестная ошибка'}`);
+                }
             });
 
             const exportBtn = document.createElement('button');
@@ -522,18 +532,44 @@ if (!isTacticPage) return;
                     const reader = new FileReader();
 
                     reader.onload = ev => {
+                        let imported;
                         try {
-                            const imported = normalizePresets(JSON.parse(ev.target.result));
-                            if (!confirm('Импорт заменит все пользовательские пресеты локально и на VPS. Продолжить?')) return;
-
-                            PresetStorage.saveCustom(imported);
-                            refreshSelect();
-                            updateSchemeLabel();
-
-                            alert('Пресеты импортированы!');
+                            imported = normalizePresets(JSON.parse(ev.target.result));
                         } catch (ex) {
                             alert('Ошибка: неверный формат файла.');
+                            return;
                         }
+
+                        // Native-store import (#409): replacement semantics
+                        // apply only to the plugin-managed subset. Native
+                        // templates absent from the file are never deleted —
+                        // full reconciliation is the wave-2 migration's job.
+                        const current = PresetStorage.loadCustom();
+                        const managed = new Set(PresetStorage.getManagedPresetNames ? PresetStorage.getManagedPresetNames() : []);
+                        const importedNames = Object.keys(imported);
+                        const addNames = importedNames.filter(name => !Object.prototype.hasOwnProperty.call(current, name));
+                        const updateNames = importedNames.filter(name => Object.prototype.hasOwnProperty.call(current, name));
+                        const deleteNames = Object.keys(current).filter(name =>
+                            !Object.prototype.hasOwnProperty.call(imported, name) && managed.has(name));
+
+                        const previewParts = [
+                            addNames.length ? `добавлены: ${addNames.join(', ')}` : null,
+                            updateNames.length ? `обновлены: ${updateNames.join(', ')}` : null,
+                            deleteNames.length ? `удалены (управляемые пресеты): ${deleteNames.join(', ')}` : null
+                        ].filter(Boolean);
+                        const previewText = previewParts.length ? previewParts.join('; ') : 'изменений нет';
+                        if (!confirm(`Импорт пресетов из файла (${importedNames.length} шт.): ${previewText}. Сайтовые шаблоны, отсутствующие в файле, удалены не будут. Продолжить?`)) return;
+
+                        (async () => {
+                            try {
+                                const result = await PresetStorage.saveCustom(imported, { deleteMissing: 'managed' });
+                                refreshSelect();
+                                updateSchemeLabel();
+                                alert(`Пресеты импортированы: сохранено ${result.applied.length}, удалено ${result.removed.length}.`);
+                            } catch (error) {
+                                alert(`Импорт не завершён: ${error && error.message ? error.message : 'неизвестная ошибка'}`);
+                            }
+                        })();
                     };
 
                     reader.readAsText(file);

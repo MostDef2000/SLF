@@ -1,5 +1,71 @@
 # Changelog
 
+## 4.4.367
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- vps/exporter-rag/slf_rag_build.py
+- vps/exporter-rag/test_slf_rag_build.py
+
+Approved base commit:
+- ef8ad9e673e316dd783530bb1228d9a2edbdc713
+
+Approved commit:
+- 7eb115454ba1abcf4c09e05c6f1be563ee548764
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.366
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- vps/exporter-rag/slf_rag_build.py
+- vps/exporter-rag/test_slf_rag_build.py
+
+Approved base commit:
+- ef8ad9e673e316dd783530bb1228d9a2edbdc713
+
+Approved commit:
+- 7eb115454ba1abcf4c09e05c6f1be563ee548764
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.365
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- vps/exporter-rag/slf_rag_build.py
+- vps/exporter-rag/test_slf_rag_build.py
+
+Approved base commit:
+- ef8ad9e673e316dd783530bb1228d9a2edbdc713
+
+Approved commit:
+- 7eb115454ba1abcf4c09e05c6f1be563ee548764
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.364
 
 ### Automatic latest-only build
