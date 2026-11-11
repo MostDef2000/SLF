@@ -476,6 +476,38 @@
             return envelope && Array.isArray(envelope.managedNames) ? envelope.managedNames.slice() : [];
         },
 
+        recordMigratedTemplate(ackedTactic) {
+            // Migration seam (#409 wave 2): record ONE acknowledged
+            // NativeTemplateApi.saveTemplate ack into the scoped cache —
+            // no re-ingest, no deletes (the migration coordinator must never
+            // delete anything). The name joins managedNames so file-import
+            // replacement semantics keep covering migrated presets.
+            if (!ackedTactic || !ackedTactic.id || !ackedTactic.name) return null;
+
+            const previous = this.readNativeCache();
+            const items = previous && Array.isArray(previous.items)
+                ? previous.items.filter(item => item && item.id !== ackedTactic.id)
+                : [];
+            items.push({
+                id: ackedTactic.id,
+                userId: ackedTactic.userId,
+                name: ackedTactic.name,
+                data: ackedTactic.data,
+                time: ackedTactic.time
+            });
+
+            const managedNames = new Set(previous && Array.isArray(previous.managedNames)
+                ? previous.managedNames
+                : []);
+            managedNames.add(ackedTactic.name);
+
+            // Scope: the acked item carries the server-side user_id; an
+            // emptied cache keeps the previous scope (same rule as
+            // saveCustom's persistProgress).
+            const userId = String(ackedTactic.userId || (previous && previous.userId) || this.readPageUserId() || '');
+            return this.persistNativeInventory(items, userId, Array.from(managedNames));
+        },
+
         async saveCustom(customPresets, options) {
             const opts = options || {};
             // Strict option validation before any state change: an unknown

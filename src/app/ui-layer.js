@@ -578,7 +578,61 @@ if (!isTacticPage) return;
                 input.click();
             });
 
-            row.append(select, applyBtn, saveBtn, deleteBtn, exportBtn, importBtn);
+            // Migration to native site templates (#409 wave 2): the button
+            // is the ONLY trigger — PresetMigration.run() never executes on
+            // page load. Preview (dry-run) → explicit confirm → awaited run
+            // → loud receipt summary, same alert() convention as the other
+            // preset-store errors.
+            const migrateBtn = document.createElement('button');
+            migrateBtn.textContent = '⬆️';
+            migrateBtn.title = 'Перенести пресеты в шаблоны сайта';
+            migrateBtn.style.cssText = 'padding:5px 8px;background:#444;color:#fff;border:1px solid #666;border-radius:3px;cursor:pointer;font-size:16px;';
+            migrateBtn.addEventListener('click', async () => {
+                migrateBtn.disabled = true;
+                try {
+                    const preview = await PresetMigration.run({ dryRun: true });
+                    if (preview.code === 'native_unavailable' || preview.code === 'native_stale') {
+                        alert(`Миграция недоступна: ${preview.message || preview.code}`);
+                        return;
+                    }
+
+                    const createText = preview.created.length
+                        ? `Будут созданы шаблоны сайта: ${preview.created.map(entry =>
+                            `${entry.name} [${PresetMigration.sourceLabel(entry.source)}]`).join(', ')}.`
+                        : 'Новых шаблонов не будет.';
+                    const skipText = preview.skipped.length
+                        ? ` Пропущены (уже существуют/перенесены): ${preview.skipped.map(entry => entry.name).join(', ')}.`
+                        : '';
+                    const failText = preview.failed.length
+                        ? ` Некорректные векторы: ${preview.failed.map(entry => entry.name).join(', ')}.`
+                        : '';
+                    if (!confirm(`Перенос пресетов в шаблоны сайта. ${createText}${skipText}${failText} Существующие шаблоны сайта не перезаписываются, удаления не выполняются. Если вы меняли шаблоны сайта в другой вкладке — обновите эту страницу и запустите перенос заново. Продолжить?`)) return;
+
+                    const result = await PresetMigration.run();
+                    if (result.ok === false && result.created.length === 0) {
+                        // True failure (failUnavailable gate or an abort with
+                        // nothing created): never show the success summary.
+                        // A partial success (completed_with_errors with acked
+                        // saves) falls through to the summary below, which
+                        // already appends the first error.
+                        alert(`Миграция не выполнена: ${result.message || result.code}`);
+                        return;
+                    }
+                    refreshSelect();
+                    updateSchemeLabel();
+                    const firstError = result.failed.length
+                        ? ` Первая ошибка: ${result.failed[0].message || result.failed[0].code}.`
+                        : '';
+                    const summaryHeader = result.ok === false ? 'Миграция частично выполнена' : 'Миграция завершена';
+                    alert(`${summaryHeader}: создано ${result.created.length}, пропущено ${result.skipped.length}, ошибок ${result.failed.length}.${firstError}`);
+                } catch (error) {
+                    alert(`Миграция не выполнена: ${error && error.message ? error.message : 'неизвестная ошибка'}`);
+                } finally {
+                    migrateBtn.disabled = false;
+                }
+            });
+
+            row.append(select, applyBtn, saveBtn, deleteBtn, exportBtn, importBtn, migrateBtn);
             container.append(title, row, schemeLabel);
 
             // fm2026 match tactic view (issue #370 follow-up): on radio-less

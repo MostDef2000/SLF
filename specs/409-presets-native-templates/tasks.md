@@ -8,16 +8,16 @@
   - Save limit: 2 templates without VIP2+ (server rejects; site message «Без VIP 2+ можно сохранить до двух тактик»). Owner is VIP2 — unlimited; code must handle rejection loudly.
 - [x] T2. `src/modules/tactics-presets/native-template-api.js`: mapping + manager API + structured results (spec R1).
 - [x] T3. `preset-storage.js` rework: native-owned vectors, scoped cache, overlay removal, awaited `saveCustom`, `loadFromServerAndMerge` alias, diagnostics (spec R2/R4/R5); `ui-layer.js` three callers updated (spec R3).
-- [ ] T4. Migration coordinator: legacy preset → native template reconciliation, VPS tactics collection retirement/deletion, import reconciliation beyond the managed subset. **Wave-2 pending.**
-- [ ] T5. Identity sidecar: user-scoped cache validation beyond `user_id`-envelope, cross-account drift handling. **Wave-2 pending.**
-- [ ] T6. Tests (this wave): `tests/test-native-template-mapping.mjs`, `tests/test-native-template-api.mjs`, `tests/test-preset-native-storage.mjs`, rewritten `tests/test-preset-storage-sync-status.mjs` — all green, no live network.
+- [x] T4. Migration coordinator (DONE — wave 2, 2026-11-11; review fixes applied): `src/modules/tactics-presets/preset-migration.js` — `PresetMigration.run()` with source precedence seeds (BASE_PRESETS) < legacy localStorage (`CONFIG.STORAGE_KEY`, raw read) < VPS `Api.getPromise(COLLECTIONS.TACTICS)` one-time read (failure = non-fatal skipped source) < `DEFAULT_CUSTOM_PRESETS`; destination-wins (`exists` skip, never overwrites); quota/transport rejection aborts the queue loudly (`failed[]` + `aborted_after_rejection` skips, partial receipt persisted, re-run resumes); AMBIGUOUS outcomes (`network`/`timeout`/`unknown_outcome`/`empty_response`/`not_json`) recorded in receipt `unknown[]` + immediate persist, re-run skips `unknown_outcome_previous`; incremental receipt persistence (after every ack, try/finally); cache-write failure never loses an ack; deprecated names scanned from RAW source keys and reported `deprecated`, never imported; writes via `NativeTemplateApi.saveTemplate` only, zero deletes; NO auto-trigger (ui-layer button only, failed runs alert instead of the success summary). Pinned by `tests/test-preset-migration.mjs` (14 scenarios).
+- [x] T5. Identity sidecar (DONE — wave 2, 2026-11-11; review fixes applied): receipt at localStorage `slf_preset_migration_receipt_v1` (`{schema, ts, applied:[{name,id,source}], skipped, unknown, vectorFingerprints}`) is the name→site-template-id map; idempotent re-run (`already_migrated`); `reconcileReceipt(persist)` marks receipt entries whose site template disappeared externally as `stale` (+`reconciledAt`) without re-importing them, and reports `unavailable` (marks nothing) when the scope is unreadable; cache/managedNames updated through the `PresetStorage.recordMigratedTemplate` seam. Pinned by the same test file.
+- [x] T6. Tests (this wave): `tests/test-native-template-mapping.mjs`, `tests/test-native-template-api.mjs`, `tests/test-preset-native-storage.mjs`, rewritten `tests/test-preset-storage-sync-status.mjs` — all green, no live network. Wave 2 adds `tests/test-preset-migration.mjs` (vm sandbox, fetch/Api seams, no live network): precedence, destination-wins, idempotency, resumability, quota-rejection detail, deprecated raw-key scan, VPS-failure non-fatal, stale detection, dryRun-writes-nothing, explicit no-delete, ambiguous-outcome unknown list + conservative re-run, cache-write resilience, unreadable-scope reconcile.
 - [ ] T7. Independent review on the diff (different model family); orchestrator diff inspection.
 - [ ] T8. PR → canonical CI green → merge → automatic release evaluation → release verification (userscript artifacts) → Tampermonkey instruction.
 
 ## Definition of Done
 
 - All acceptance items A1–A8 (spec.md) demonstrably true with observed command output.
-- Wave-2 items (T4/T5) explicitly marked pending — their absence does not block this wave's PR.
+- Wave-2 items (T4/T5) implemented and pinned by `tests/test-preset-migration.mjs` (11 scenarios green).
 - No forbidden-path edits; generated outputs only via `tools/build-latest-userscript.mjs`.
 
 ## Constraints
