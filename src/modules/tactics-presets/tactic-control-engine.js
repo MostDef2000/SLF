@@ -255,3 +255,27 @@
         return true;
     }
 
+    // Issue #415: when the selected preset exists as a native site tactic,
+    // click that native row's load button so the site applies the tactic
+    // through its own code path. The vector apply via applyPresetAsync has
+    // already run at the call sites — this sync is additive, and any miss
+    // (no cache, no matching item, no button) silently keeps the vector result.
+    function syncWithNativeTactic(presetName) {
+        try {
+            const cached = PresetStorage.readScopedNativeCache();
+            if (!cached || !Array.isArray(cached.items) || !cached.items.length) return false;
+
+            const nativeItem = cached.items.find(item => item.name === presetName);
+            if (!nativeItem) return false;
+
+            const btn = document.querySelector('[data-tc-load="' + nativeItem.id + '"]');
+            if (!btn) return false;
+
+            nativeClick(btn);
+            return true;
+        } catch (error) {
+            debugWarn('[SLF] Нативная синхронизация тактики не удалась:', presetName, error);
+            return false;
+        }
+    }
+
