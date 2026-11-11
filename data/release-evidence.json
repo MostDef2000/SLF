@@ -1,53 +1,60 @@
 {
   "schema": "slf_release_evidence_v1",
-  "scriptVersion": "4.4.364",
+  "scriptVersion": "4.4.366",
   "releaseChannel": "github-tampermonkey",
-  "validationRevision": "e76229ef2c3937d3d6972e9b167ab435ac7a09b1",
-  "approvedBaseCommit": "8a034e383fbf1e80e0ddac690ecb309bee6d089d",
-  "approvedCommit": "e76229ef2c3937d3d6972e9b167ab435ac7a09b1",
+  "validationRevision": "ccdee1e62f21f0f6795e635b748b65b726516310",
+  "approvedBaseCommit": "ef8ad9e673e316dd783530bb1228d9a2edbdc713",
+  "approvedCommit": "ccdee1e62f21f0f6795e635b748b65b726516310",
   "approvedFiles": [
-    ".github/workflows/quality-integration.yml",
-    "data/audit/manual-match-symbol-review-v1.json",
+    "data/audit/runtime-reachability-review-v1.json",
     "data/quality/reliability-budget-v1.json",
-    "specs/325-tactical-suite-v9/spec.md",
-    "specs/381-tactical-knowledge-pack-hints/plan.md",
-    "specs/381-tactical-knowledge-pack-hints/spec.md",
-    "specs/381-tactical-knowledge-pack-hints/tasks.md",
+    "specs/409-presets-native-templates/plan.md",
+    "specs/409-presets-native-templates/spec.md",
+    "specs/409-presets-native-templates/tasks.md",
     "src/app/bundle-order.json",
-    "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
-    "src/modules/strategy-data-recommendations/tactical-knowledge-pack.js",
-    "src/modules/tactics-presets/active-preset-registry.js",
-    "tools/test-tactical-knowledge-pack.mjs"
+    "src/app/ui-layer.js",
+    "src/modules/tactics-presets/native-template-api.js",
+    "src/modules/tactics-presets/preset-migration.js",
+    "src/modules/tactics-presets/preset-storage.js",
+    "tests/browser/test_exact_userscript.py",
+    "tests/browser/test_team4_tactic_header_selector.py",
+    "tests/test-native-template-api.mjs",
+    "tests/test-native-template-mapping.mjs",
+    "tests/test-preset-migration.mjs",
+    "tests/test-preset-native-storage.mjs",
+    "tests/test-preset-storage-sync-status.mjs",
+    "vps/exporter-rag/slf_rag_build.py",
+    "vps/exporter-rag/test_slf_rag_build.py"
   ],
   "sourceBranch": "main",
-  "bundleManifestSha256": "caabced7ee88c904e1acbebd6fdebc7b57fc1ab107d07236b752e464db599d77",
-  "bundleFileCount": 92,
+  "bundleManifestSha256": "161966aa6155140bfda1d319419722225fad1a877b2eb2c18dcfbc7a0cae4d42",
+  "bundleFileCount": 94,
   "deterministicRebuildVerified": true,
   "releaseFiles": [
     {
       "path": "releases/latest.user.js",
-      "sha256": "2a65dd92d99f7cb7c118655e9de2027a14943ddd9581012d524f0de368296107",
-      "bytes": 1426126
+      "sha256": "65ef162c5e40b7c27f4f18d7100a0979b0f7eff802a1bab5c4365e5912f84e3b",
+      "bytes": 1511396
     },
     {
       "path": "releases/latest.meta.js",
-      "sha256": "50d1f90621bc93f57515f8a28b6e2a9ad9c6c8f481a8cd474f83dc74f768991c",
+      "sha256": "bbfe2868833c0fd6e12700a58a72586ff9e7ee5585043538695a0863a9b2e8a4",
       "bytes": 1389
     },
     {
       "path": "data/version.json",
-      "sha256": "600b4355f3c1dc1c73241796551cd68f5ddc248b1a9af4b3f9c91c0d81b9a03b",
-      "bytes": 1536
+      "sha256": "e41c29087e7305d1b46174ffd297922f0e7cb9ea7d4327a63e19aa00ef005b7e",
+      "bytes": 1779
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "bc1b81cefda7fe29db0c01b7b9cf0ccb2af988bcd2e096374c255e087ba661a5",
-      "bytes": 174263
+      "sha256": "b8ace35924d86417868f8fc0b8382d98d087f7f19090c8032e202eaa7bfa1300",
+      "bytes": 177366
     },
     {
       "path": "src/app/bundle-order.json",
-      "sha256": "caabced7ee88c904e1acbebd6fdebc7b57fc1ab107d07236b752e464db599d77",
-      "bytes": 76595
+      "sha256": "161966aa6155140bfda1d319419722225fad1a877b2eb2c18dcfbc7a0cae4d42",
+      "bytes": 78862
     }
   ],
   "buildFiles": [
@@ -99,9 +106,19 @@
       "bytes": 9900
     },
     {
+      "path": "src/modules/tactics-presets/native-template-api.js",
+      "sha256": "06ef1ade4cb3b2ce04715d36a94135f805c9cb89e923cba124e1a93473fdc079",
+      "bytes": 21189
+    },
+    {
       "path": "src/modules/tactics-presets/preset-storage.js",
-      "sha256": "8d590cafaa94b0735b78f68ddeb236310fe503b3c576f1d2b6bd55cf9239c1da",
-      "bytes": 10294
+      "sha256": "2f3bc2189c5a53640c008c7dd5024a476089bd3701696ce596380a9bbe561075",
+      "bytes": 36344
+    },
+    {
+      "path": "src/modules/tactics-presets/preset-migration.js",
+      "sha256": "e919c3dedfb2347ef2b5f11a35cac00be3adf46b36a4ce8b433ce9c1f3bd5929",
+      "bytes": 22033
     },
     {
       "path": "src/modules/tactics-presets/tactic-control-engine.js",
@@ -115,13 +132,13 @@
     },
     {
       "path": "src/modules/tactics-presets/tactical-lab-v1.js",
-      "sha256": "3f38e2a7f144e1fd8645b34e30e44013ef6b92caaf4372768b9dfdd82d410594",
-      "bytes": 54320
+      "sha256": "8929bfbb4a70dcd9e6bb24933e983cb95344e53247a7a6208cf031dab4a82c2f",
+      "bytes": 57626
     },
     {
       "path": "src/modules/match-reading/match-state-parser.js",
-      "sha256": "56137c3bf41a1203c510f7a872d48e4127e9129eb9bf04c4adca614634738cda",
-      "bytes": 8519
+      "sha256": "c7683269533330e01934d91b70e2ad6532a94a5d2438795d1d36a134d48734b7",
+      "bytes": 11469
     },
     {
       "path": "src/modules/match-reading/match-stats-parser.js",
@@ -200,13 +217,13 @@
     },
     {
       "path": "src/modules/strategy-data-recommendations/re-plan-engine.js",
-      "sha256": "cfcddf06c5ba8db508d28197b75479f6141d76db6d08d65a44664a9e26f14bd0",
-      "bytes": 27844
+      "sha256": "2c73e50ab41aaf7c3a87f2e4981509c43a8e21c92d95d319996d5cfdf3fb0158",
+      "bytes": 28196
     },
     {
       "path": "src/modules/strategy-data-recommendations/preset-fit-scoring.js",
-      "sha256": "94c7a6e0c6f3df2a216837e40d8b21342c64cd60173b3fd557d3037744c2ef66",
-      "bytes": 14279
+      "sha256": "ae7219d4b156ea62b2dd7a62ab8bc43960d708c65fd8e1dcdd4b003e18bc09fc",
+      "bytes": 14658
     },
     {
       "path": "src/modules/strategy-data-recommendations/current-action-hint-engine.js",
@@ -220,8 +237,8 @@
     },
     {
       "path": "src/modules/strategy-data-recommendations/cah-runtime-context.js",
-      "sha256": "acf1a92448eefea6e419ab1cc42c38e4dd60fcd27482f8aa12547e08ebdc877a",
-      "bytes": 32789
+      "sha256": "76967bb3a259fe1d5c25bd0adef6c73eab4f37e03dd032b063b2bcf8656fccc7",
+      "bytes": 33804
     },
     {
       "path": "src/modules/strategy-data-recommendations/cah-decision-core.js",
@@ -240,8 +257,8 @@
     },
     {
       "path": "src/modules/tactics-presets/active-preset-registry.js",
-      "sha256": "d73cb5043f9abaa933b8a3467778231b4cfef61474cc7c98daf8fff883838938",
-      "bytes": 38365
+      "sha256": "9ec8615bbb4f090c4d4bd10cb0422e3c58f74fa42093eddc2e2981fe47c34230",
+      "bytes": 39107
     },
     {
       "path": "src/modules/tactics-presets/tactic-preset-direction-policy.js",
@@ -290,8 +307,8 @@
     },
     {
       "path": "src/app/ui-layer.js",
-      "sha256": "d7666ca3982e552c46bca7cc811a6cd07ab123a3b572201266335797f41145da",
-      "bytes": 36024
+      "sha256": "ba0e77eeeb29c79c718782639a6a33bfe9faea4b319ab8c51b44f85c039bad43",
+      "bytes": 43035
     },
     {
       "path": "src/app/version-badge.js",
@@ -300,8 +317,8 @@
     },
     {
       "path": "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
-      "sha256": "6ea1b38a2fe2a14116db45c4a33de1a2f9069da9347fc0e7392e3d00f0e3cc5a",
-      "bytes": 42652
+      "sha256": "a0ffbdbbd5cd3e2b9ee76e25311228fe58dda42adaf0ffcb2b6c40f17bd55d2a",
+      "bytes": 42665
     },
     {
       "path": "src/modules/manual-match-telemetry/manual-state-integrity.js",
@@ -547,13 +564,13 @@
     },
     {
       "path": "vps/ops/deploy-code.sh",
-      "sha256": "110b1c34c29e68890039fb121a5f9fc998987beb75d6906ce7c33138b8137090",
-      "bytes": 9735
+      "sha256": "9988bd1c67bb2146fc22a278f6cab7f987bb1b6470b43fa3be4b1bf555540170",
+      "bytes": 10513
     },
     {
       "path": "vps/ops/rollback-code.sh",
-      "sha256": "d1998b6a8874004659492caafee2e825fca6fcaec0dd104fb31315a66f8d1583",
-      "bytes": 5554
+      "sha256": "4b16f367ea76e18bc1aa8584f151cf5c75fac86140c02c8baf26e21413e9bcc7",
+      "bytes": 5581
     },
     {
       "path": "vps/ops/verify_api_deployment.py",
