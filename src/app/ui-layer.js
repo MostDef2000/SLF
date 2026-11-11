@@ -429,6 +429,7 @@ if (!isTacticPage) return;
             select.addEventListener('change', async () => {
                 updateSchemeLabel();
                 await applyPresetAsync(select.value);
+                await syncWithNativeTactic(select.value);
             });
 
             const applyBtn = document.createElement('button');
@@ -438,6 +439,7 @@ if (!isTacticPage) return;
             applyBtn.addEventListener('click', async () => {
                 applyBtn.disabled = true;
                 await applyPresetAsync(select.value);
+                await syncWithNativeTactic(select.value);
                 applyBtn.disabled = false;
             });
 
@@ -634,6 +636,100 @@ if (!isTacticPage) return;
 
             row.append(select, applyBtn, saveBtn, deleteBtn, exportBtn, importBtn, migrateBtn);
             container.append(title, row, schemeLabel);
+
+            // Issue #415: fold the native «Мои тактики» card — the site
+            // renders one row per saved tactic, which pushes the plugin
+            // panel far down the page. Keep the first 3 rows visible and
+            // fold the rest behind a «показать ещё» toggle. Best-effort:
+            // no native card → silent no-op.
+            const compactNativeTacticsBlock = () => {
+                try {
+                    const nativeCard = document.querySelector('.mint-card.tc-tactics');
+                    const nativeList = document.querySelector('[data-tc-list]')
+                        || (nativeCard ? nativeCard.querySelector('[data-tc-list]') : null);
+                    const listRoot = nativeList || nativeCard;
+
+                    if (!listRoot) return;
+
+                    const rows = Array.from(listRoot.children);
+                    const foldable = rows.slice(3);
+                    const toggle = listRoot.parentElement
+                        ? listRoot.parentElement.querySelector('[data-slf-tactics-toggle]')
+                        : null;
+
+                    if (!foldable.length) {
+                        if (toggle) toggle.style.display = 'none';
+                        return;
+                    }
+
+                    const expanded = toggle?.dataset.slfExpanded === '1';
+
+                    foldable.forEach(row => {
+                        row.style.display = expanded ? '' : 'none';
+                    });
+
+                    if (toggle) {
+                        toggle.style.display = '';
+                        toggle.textContent = expanded ? 'скрыть' : 'показать ещё';
+                        return;
+                    }
+
+                    const toggleBtn = document.createElement('button');
+                    toggleBtn.type = 'button';
+                    toggleBtn.dataset.slfTacticsToggle = '1';
+                    toggleBtn.dataset.slfExpanded = '0';
+                    toggleBtn.textContent = 'показать ещё';
+                    toggleBtn.style.cssText =
+                        'margin:4px 0 0;padding:2px 8px;font-size:12px;cursor:pointer;background:#333;color:#fff;border:1px solid #555;border-radius:3px;';
+                    toggleBtn.addEventListener('click', () => {
+                        toggleBtn.dataset.slfExpanded = toggleBtn.dataset.slfExpanded === '1' ? '0' : '1';
+                        compactNativeTacticsBlock();
+                    });
+                    listRoot.insertAdjacentElement('afterend', toggleBtn);
+                } catch (_) { /* native block compaction is best-effort */ }
+            };
+
+            const installNativeTacticsCompaction = () => {
+                if (typeof MutationObserver === 'undefined') return;
+                if (!document.body) return;
+
+                // The site renders the tactics list asynchronously and may
+                // re-render it on its own actions: observe mutations and
+                // re-fold. Start body-wide until the card shows up (scan
+                // capped at 15s below), then re-scope to the card and
+                // disconnect after 10 card mutations — enough to re-fold
+                // re-renders from user actions (save/delete/move) without
+                // perpetual observation.
+                let scanningBody = !document.querySelector('.mint-card.tc-tactics');
+                let cardMutations = 0;
+                const observer = new MutationObserver(() => {
+                    if (scanningBody) {
+                        const card = document.querySelector('.mint-card.tc-tactics');
+                        if (!card) return;
+                        scanningBody = false;
+                        observer.disconnect();
+                        observer.observe(card, { childList: true, subtree: true });
+                    } else {
+                        cardMutations += 1;
+                    }
+                    compactNativeTacticsBlock();
+                    if (cardMutations >= 10) observer.disconnect();
+                });
+
+                observer.observe(
+                    scanningBody ? document.body : document.querySelector('.mint-card.tc-tactics'),
+                    { childList: true, subtree: true }
+                );
+                compactNativeTacticsBlock();
+
+                if (scanningBody) {
+                    setTimeout(() => {
+                        if (scanningBody) observer.disconnect();
+                    }, 15000);
+                }
+            };
+
+            installNativeTacticsCompaction();
 
             // fm2026 match tactic view (issue #370 follow-up): on radio-less
             // game.php pages the resolved target is the DIV.tc.mint.tc--match

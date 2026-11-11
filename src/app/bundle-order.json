@@ -402,7 +402,8 @@
           "getCurrentTactic",
           "applyPresetAsync",
           "findBetaTacticButton",
-          "findTacticControl"
+          "findTacticControl",
+          "syncWithNativeTactic"
         ],
         "public": [
           "getCurrentTactic",

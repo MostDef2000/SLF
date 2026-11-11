@@ -872,4 +872,105 @@ const envelopeOf = storage => JSON.parse(storage.get(NATIVE_KEY));
     );
 }
 
-console.log('OK: PresetStorage native facade, scoped cache, fallbacks, scope isolation and the awaited saveCustom write protocol all verified');
+// ---- 29. #415: syncWithNativeTactic — native row load-button sync -----------
+{
+    // The engine fragment (tactic-control-engine.js) is loaded into the SAME
+    // realm as preset-storage.js: the appended export line makes
+    // syncWithNativeTactic reachable, and the engine's `PresetStorage`
+    // reference resolves to the storage module's lexical global (the same
+    // mechanism the __PS export relies on). The fragment carries only
+    // top-level function declarations — no top-level executable code — so
+    // loading it is side-effect free.
+    const engineSource = read('src/modules/tactics-presets/tactic-control-engine.js');
+
+    // Persisted cache envelope item shape (persistNativeInventory):
+    // id/userId/name/data/time — never share_token/share_url.
+    const cachedItem = (id, name, time, data, userId = '6945') => ({
+        id: String(id), userId, name, data, time: String(time)
+    });
+    const seedNativeCache = (storage, items, userId = '6945') => storage.set(NATIVE_KEY, JSON.stringify({
+        schema: 'slf_native_preset_cache_v1',
+        userId,
+        fetchedAt: 1,
+        items,
+        managedNames: []
+    }));
+    // Fake native row load button: records every click, whether delivered
+    // through element.click() or the dispatchEvent fallback in nativeClick.
+    const makeFakeButton = () => {
+        const events = [];
+        return {
+            events,
+            click: () => events.push('click'),
+            dispatchEvent: event => { events.push(event.type); return true; },
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 10, height: 10 })
+        };
+    };
+    // buttons: map of exact querySelector string -> fake element.
+    const makeEngineSandbox = (buttons = {}) => {
+        const sandbox = makeSandbox({
+            document: { querySelector: selector => buttons[selector] || null }
+        });
+        vm.runInContext(
+            `${engineSource}\n;globalThis.__syncWithNativeTactic = syncWithNativeTactic;`,
+            sandbox.context,
+            { filename: 'tactic-control-engine.js' }
+        );
+        return sandbox;
+    };
+
+    // 29.1 matching native item + load button on the page -> true, clicked.
+    {
+        const button = makeFakeButton();
+        const { context, storage } = makeEngineSandbox({ '[data-tc-load="5174"]': button });
+        seedNativeCache(storage, [cachedItem('5174', 'Henta abuse', 100, SITE_A)]);
+
+        const result = context.__syncWithNativeTactic('Henta abuse');
+        assert.equal(result, true, 'matching native item with a load button -> true');
+        assert.deepEqual(button.events, ['click'], 'the native row load button was clicked exactly once');
+    }
+
+    // 29.2 no scoped cache -> false, nothing clicked.
+    {
+        const button = makeFakeButton();
+        const { context } = makeEngineSandbox({ '[data-tc-load="5174"]': button });
+        // No envelope seeded: readScopedNativeCache() -> null.
+
+        const result = context.__syncWithNativeTactic('Henta abuse');
+        assert.equal(result, false, 'no scoped native cache -> false');
+        assert.deepEqual(button.events, [], 'no click without a cache');
+    }
+
+    // 29.3 cache present but no item matches the preset name -> false.
+    {
+        const button = makeFakeButton();
+        const { context, storage } = makeEngineSandbox({ '[data-tc-load="5174"]': button });
+        seedNativeCache(storage, [cachedItem('5174', 'Henta abuse', 100, SITE_A)]);
+
+        const result = context.__syncWithNativeTactic('Some other preset');
+        assert.equal(result, false, 'no matching native item -> false');
+        assert.deepEqual(button.events, [], 'no click for a non-matching name');
+    }
+
+    // 29.4 matching item but no load button on the page -> false.
+    {
+        const { context, storage } = makeEngineSandbox({}); // empty page: no [data-tc-load] buttons
+        seedNativeCache(storage, [cachedItem('5174', 'Henta abuse', 100, SITE_A)]);
+
+        const result = context.__syncWithNativeTactic('Henta abuse');
+        assert.equal(result, false, 'matching item but no load button on the page -> false');
+    }
+
+    // 29.5 name match is case-sensitive -> false.
+    {
+        const button = makeFakeButton();
+        const { context, storage } = makeEngineSandbox({ '[data-tc-load="5174"]': button });
+        seedNativeCache(storage, [cachedItem('5174', 'Henta abuse', 100, SITE_A)]);
+
+        const result = context.__syncWithNativeTactic('henta abuse');
+        assert.equal(result, false, 'name match is case-sensitive');
+        assert.deepEqual(button.events, [], 'no click on a case-mismatched name');
+    }
+}
+
+console.log('OK: PresetStorage native facade, scoped cache, fallbacks, scope isolation, the awaited saveCustom write protocol and the #415 native-tactic load-button sync all verified');
