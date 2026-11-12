@@ -423,13 +423,49 @@ if (!isTacticPage) return;
                 schemeLabel.textContent = scheme ? `Схема: ${scheme}` : '';
             }
 
+            // Issue #419: mirror the site's active tactic into the plugin
+            // dropdown. The site marks the loaded tactic with .tc-pill--cur
+            // (on the [data-tc-load] button itself or on a row containing
+            // it); resolve its name via the native cache and select the
+            // matching option. Any miss (no marked button, no cache item,
+            // no matching option) keeps the current select value.
+            function syncSelectWithNativeActive() {
+                try {
+                    const marked = document.querySelector('[data-tc-load].tc-pill--cur')
+                        || document.querySelector('.tc-pill--cur [data-tc-load]');
+                    if (!marked) return;
+
+                    const nativeId = marked.getAttribute('data-tc-load');
+                    if (!nativeId) return;
+
+                    const cached = PresetStorage.readScopedNativeCache();
+                    const item = cached && Array.isArray(cached.items)
+                        ? cached.items.find(entry => entry.id === nativeId)
+                        : null;
+                    if (!item || !item.name) return;
+
+                    const option = Array.from(select.options).find(opt => opt.textContent === item.name);
+                    if (!option) return;
+
+                    // Guard against sync loops: mutate only on a real change
+                    // (programmatic value assignment never fires 'change',
+                    // but redundant label updates are skipped too).
+                    if (select.value !== option.value) {
+                        select.value = option.value;
+                        updateSchemeLabel();
+                    }
+                } catch (_) { /* native → select sync is best-effort */ }
+            }
+
             refreshSelect();
             updateSchemeLabel();
+            syncSelectWithNativeActive();
 
             select.addEventListener('change', async () => {
                 updateSchemeLabel();
                 await applyPresetAsync(select.value);
                 await syncWithNativeTactic(select.value);
+                syncSelectWithNativeActive();
             });
 
             const applyBtn = document.createElement('button');
@@ -440,6 +476,7 @@ if (!isTacticPage) return;
                 applyBtn.disabled = true;
                 await applyPresetAsync(select.value);
                 await syncWithNativeTactic(select.value);
+                syncSelectWithNativeActive();
                 applyBtn.disabled = false;
             });
 
@@ -638,6 +675,8 @@ if (!isTacticPage) return;
             container.append(title, row, schemeLabel);
 
             function getActiveTacticRow(rows) {
+                if (!rows || rows.length === 0) return undefined;
+
                 return rows.find(row =>
                     row.classList.contains('tc-pill--cur') ||
                     row.querySelector('.tc-pill--cur')
@@ -646,9 +685,10 @@ if (!isTacticPage) return;
 
             // Issue #415: fold the native «Мои тактики» card — the site
             // renders one row per saved tactic, which pushes the plugin
-            // panel far down the page. Keep the first 3 rows visible and
-            // fold the rest behind a «показать ещё» toggle. Best-effort:
-            // no native card → silent no-op.
+            // panel far down the page. Issue #419: when collapsed, keep
+            // ONLY the active tactic's row visible (first row as fallback;
+            // never hide all rows) and fold the rest behind a
+            // «показать ещё» toggle. Best-effort: no native card → no-op.
             const compactNativeTacticsBlock = () => {
                 try {
                     const nativeCard = document.querySelector('.mint-card.tc-tactics');
@@ -659,31 +699,31 @@ if (!isTacticPage) return;
                     if (!listRoot) return;
 
                     const rows = Array.from(listRoot.children);
-                    const foldable = rows.slice(3);
+
+                    // Issue #419: exactly one row stays visible when
+                    // collapsed — the ACTIVE tactic's row (site marks it
+                    // with .tc-pill--cur on the row or on a button inside
+                    // it), falling back to the first row. Empty list →
+                    // nothing to fold, never hide anything.
+                    const activeRow = getActiveTacticRow(rows);
+
+                    if (!activeRow) return;
+
                     const toggle = listRoot.parentElement
                         ? listRoot.parentElement.querySelector('[data-slf-tactics-toggle]')
                         : null;
-
-                    if (!foldable.length) {
-                        if (toggle) toggle.style.display = 'none';
-                        rows.forEach(row => {
-                            row.style.display = '';
-                        });
-                        return;
-                    }
-
-                    // Issue #417: when collapsed, keep only the ACTIVE
-                    // tactic's row visible instead of the first three —
-                    // the site marks it with .tc-pill--cur on the row or
-                    // on a button inside it. No marked row → fall back
-                    // to the first row.
-                    const activeRow = getActiveTacticRow(rows);
 
                     const expanded = toggle?.dataset.slfExpanded === '1';
 
                     rows.forEach(row => {
                         row.style.display = (expanded || row === activeRow) ? '' : 'none';
                     });
+
+                    // Single-row list: nothing to fold — hide a stale toggle.
+                    if (rows.length <= 1) {
+                        if (toggle) toggle.style.display = 'none';
+                        return;
+                    }
 
                     if (toggle) {
                         toggle.style.display = '';
@@ -730,6 +770,7 @@ if (!isTacticPage) return;
                         cardMutations += 1;
                     }
                     compactNativeTacticsBlock();
+                    syncSelectWithNativeActive();
                     if (cardMutations >= 10) observer.disconnect();
                 });
 
