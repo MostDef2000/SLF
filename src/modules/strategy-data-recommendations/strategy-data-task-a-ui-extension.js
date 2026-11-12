@@ -430,6 +430,100 @@
             + `<div style="margin-top:5px;">${rowsHtml}</div></details>`;
     }
 
+    // Match-time preset hints (presentation-only): role grouping + the existing
+    // META «use» text + a risk color derived from roleContracts.riskClass,
+    // appended to the «Подробнее» rows of the merged recommendation block.
+    // Read-only over window.SLFActivePresetRegistry; a preset without a
+    // contract renders without hints — this never throws and never touches
+    // recommendation logic or scoring.
+    const FINAL_HINT_RISK_COLORS = { green: '#75ff75', amber: '#ffd76a', red: '#ff7a7a' };
+    const FINAL_HINT_RISK_TONES = {
+        very_low: 'green', low: 'green',
+        medium: 'amber', medium_high: 'amber',
+        high: 'red', very_high: 'red'
+    };
+
+    function finalHintRegistry() {
+        if (typeof window === 'undefined') return null;
+        const registry = window.SLFActivePresetRegistry;
+        return registry && registry.roleContracts && typeof registry.roleContracts === 'object' ? registry : null;
+    }
+
+    function finalHintTruncate(text, limit) {
+        const clean = String(text || '').replace(/\s+/g, ' ').trim();
+        return clean.length <= limit ? clean : `${clean.slice(0, limit - 1).trimEnd()}…`;
+    }
+
+    function finalHintWhyText(registry, presetId) {
+        const use = String(registry.meta?.[presetId]?.use || '').trim();
+        if (use) {
+            const firstSentence = use.split('. ')[0] || use;
+            return finalHintTruncate(firstSentence.length <= 140 ? firstSentence : use, 140);
+        }
+        const conditions = registry.roleContracts[presetId]?.entryConditions;
+        const russian = (Array.isArray(conditions) ? conditions : []).map(String)
+            .find(text => /[А-Яа-яЁё]/.test(text));
+        return russian ? finalHintTruncate(russian, 140) : '';
+    }
+
+    function finalHintPresetTitle(presetId) {
+        const title = typeof RecommendationEngine !== 'undefined' && RecommendationEngine.getPresetTitle
+            ? RecommendationEngine.getPresetTitle(presetId) : null;
+        return title || presetId;
+    }
+
+    function finalTacticHintsHtml(snapshot, rec) {
+        try {
+            const registry = finalHintRegistry();
+            if (!registry) return '';
+
+            const ids = [];
+            const push = value => {
+                const id = String(value || '').trim();
+                if (id && !ids.includes(id)) ids.push(id);
+            };
+            if (rec && rec.base !== 'current_tactic') push(rec.presetId);
+            const candidates = Array.isArray(snapshot?.ruleDecision?.candidates) ? snapshot.ruleDecision.candidates : [];
+            for (const item of candidates) {
+                if (item && !item.vetoed) push(item.preset);
+            }
+            const hinted = ids.filter(id => Boolean(registry.roleContracts[id]));
+            if (!hinted.length) return '';
+
+            const groups = new Map();
+            for (const id of hinted) {
+                const role = String(registry.roleContracts[id].role || '').trim() || id;
+                if (!groups.has(role)) groups.set(role, []);
+                groups.get(role).push(id);
+            }
+
+            const rows = [];
+            for (const [role, presetIds] of groups) {
+                const items = presetIds.map(id => {
+                    const contract = registry.roleContracts[id];
+                    const tone = FINAL_HINT_RISK_TONES[String(contract.riskClass || '').trim()] || '';
+                    const color = tone ? FINAL_HINT_RISK_COLORS[tone] : '';
+                    const riskDot = color
+                        ? ` <span style="color:${color};" title="${etalonEscape(`риск: ${contract.riskClass}`)}">●</span>`
+                        : '';
+                    const manualMarker = contract.manualOnly
+                        ? ' · <span style="color:#8fd3ff;">ручной выбор</span>' : '';
+                    const why = finalHintWhyText(registry, id);
+                    return `<div style="margin:2px 0 2px 12px;line-height:1.35;">`
+                        + `${etalonEscape(finalHintPresetTitle(id))}${riskDot}${manualMarker}`
+                        + `${why ? ` — ${etalonEscape(why)}` : ''}</div>`;
+                });
+                rows.push(`<div style="margin-top:4px;"><span style="opacity:.7;">${etalonEscape(role)}</span>${items.join('')}</div>`);
+            }
+            return rows.length
+                ? `<div style="margin-top:5px;line-height:1.35;font-size:11px;opacity:.9;">`
+                    + `<b>Пресеты по ролям:</b>${rows.join('')}</div>`
+                : '';
+        } catch (_) {
+            return ''; // hints are presentation-only — never break the block
+        }
+    }
+
     function buildFinalTacticBlockHtml(snapshot, extras = {}) {
         try {
             const rec = snapshot?.ruleDecision?.finalTactic;
@@ -467,7 +561,8 @@
                 + `${referenceLine ? `<div style="opacity:.9;">${etalonEscape(referenceLine)}</div>` : ''}`
                 + `${insufficientText ? `<div>Эталон: недостаточно данных${insufficientText ? ` (${etalonEscape(insufficientText)})` : ''}</div>` : ''}`
                 + `${notes.length ? `<div style="opacity:.9;">Совет: ${etalonEscape(notes.join('; '))}</div>` : ''}`
-                + `${extras.decisionHtml || ''}${extras.candidateHtml || ''}`;
+                + `${extras.decisionHtml || ''}${extras.candidateHtml || ''}`
+                + finalTacticHintsHtml(snapshot, rec);
 
             return `<div style="line-height:1.4;margin-top:5px;border-top:1px solid #333;padding-top:5px;">`
                 + `${title}${etalonEscape(buildFinalTacticTitle(rec))}`
