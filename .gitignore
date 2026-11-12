@@ -2,3 +2,4 @@ opencode.json
 __pycache__/
 *.pyc
 var/
+.pytest_cache/
