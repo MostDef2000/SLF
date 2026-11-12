@@ -457,6 +457,64 @@ if (!isTacticPage) return;
                 } catch (_) { /* native → select sync is best-effort */ }
             }
 
+            // Issue #423: after a programmatic native click the site may
+            // leave .tc-pill--cur on the previously active row (or update
+            // it late), so the folded block would keep showing the old
+            // tactic. Give the site's click handler a moment to settle,
+            // then re-check the marker; if it still points nowhere, mark
+            // the selected preset's native row ourselves (best-effort) so
+            // the folded block and the select mirror the selection.
+            function markNativeTacticActive(nativeId) {
+                try {
+                    if (!nativeId) return false;
+
+                    const btn = document.querySelector('[data-tc-load="' + nativeId + '"]');
+                    if (!btn) return false;
+
+                    const nativeCard = document.querySelector('.mint-card.tc-tactics');
+                    const nativeList = document.querySelector('[data-tc-list]')
+                        || (nativeCard ? nativeCard.querySelector('[data-tc-list]') : null);
+                    const listRoot = nativeList || nativeCard;
+
+                    // The site marks the row or the button itself; clear
+                    // every current marker so exactly one tactic stays
+                    // active.
+                    const scope = listRoot || btn.closest('.mint-card.tc-tactics') || document;
+                    scope.querySelectorAll('.tc-pill--cur').forEach(el => el.classList.remove('tc-pill--cur'));
+
+                    // compactNativeTacticsBlock() folds by direct children
+                    // of the list root, so mark that row (or the button
+                    // when it is the row itself).
+                    const row = listRoot
+                        ? (Array.from(listRoot.children).find(child => child === btn || child.contains(btn)) || btn)
+                        : btn;
+                    row.classList.add('tc-pill--cur');
+                    return true;
+                } catch (_) {
+                    return false;
+                }
+            }
+
+            async function settleNativeActiveMarker(presetName) {
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    const marked = document.querySelector('[data-tc-load].tc-pill--cur')
+                        || document.querySelector('.tc-pill--cur [data-tc-load]');
+
+                    if (!marked) {
+                        const cached = PresetStorage.readScopedNativeCache();
+                        const item = cached && Array.isArray(cached.items)
+                            ? cached.items.find(entry => entry.name === presetName)
+                            : null;
+                        if (item && item.id) markNativeTacticActive(item.id);
+                    }
+
+                    compactNativeTacticsBlock();
+                    syncSelectWithNativeActive();
+                } catch (_) { /* native marker settle is best-effort */ }
+            }
+
             refreshSelect();
             updateSchemeLabel();
             syncSelectWithNativeActive();
@@ -465,7 +523,7 @@ if (!isTacticPage) return;
                 updateSchemeLabel();
                 await applyPresetAsync(select.value);
                 await syncWithNativeTactic(select.value);
-                syncSelectWithNativeActive();
+                await settleNativeActiveMarker(select.value);
             });
 
             const applyBtn = document.createElement('button');
@@ -476,7 +534,7 @@ if (!isTacticPage) return;
                 applyBtn.disabled = true;
                 await applyPresetAsync(select.value);
                 await syncWithNativeTactic(select.value);
-                syncSelectWithNativeActive();
+                await settleNativeActiveMarker(select.value);
                 applyBtn.disabled = false;
             });
 

@@ -173,6 +173,17 @@ class ShimElement {
 
   addEventListener(type, fn) { (this._listeners ||= []).push({ type, fn }); }
 
+  // #423: the change/apply handlers are driven by dispatching a synthetic
+  // event on the mounted select. Only the stored listeners for the event
+  // type are invoked (no bubbling, no default actions). No pre-#423 case
+  // dispatches, so this is opt-in-safe.
+  dispatchEvent(event) {
+    for (const { type, fn } of this._listeners || []) {
+      if (type === event.type) fn(event);
+    }
+    return true;
+  }
+
   // #419 sync reads marked.getAttribute('data-tc-load'). No pre-#419 case
   // calls it (no fixture carries a [data-tc-load] button), so adding it is
   // opt-in-safe: existing sandboxes are byte-identical in behavior.
@@ -197,6 +208,18 @@ class ShimElement {
       node = node.parentNode;
     }
     return null;
+  }
+
+  // #423: markNativeTacticActive resolves the row via
+  // `child === btn || child.contains(btn)`. No pre-#423 case calls contains
+  // (no [data-tc-load] button is ever marked), so this is opt-in-safe.
+  contains(node) {
+    let child = node;
+    while (child) {
+      if (child === this) return true;
+      child = child.parentNode;
+    }
+    return false;
   }
 
   querySelectorAll(selector) {
@@ -459,10 +482,15 @@ function buildGameMintDoc({ withCards = true, withTeamGeneralContent = false } =
 // loadIds[i] (when defined) sets data-tc-load on row i — the #421 tier-2
 // marker: a real tactic row carries a load button (data-tc-load), a
 // header/control row does not. Existing cases pass nothing → byte-identical.
+// loadButtons (issue #423, opt-in) appends BUTTON rows as direct children of
+// the list — the native load buttons the site marks with .tc-pill--cur. Each
+// entry { id, marked } creates a button.tc-pill with data-tc-load=id (when
+// id !== null) and, when marked, the tc-pill--cur class. Existing cases pass
+// nothing → byte-identical.
 // The card also carries the 14 hidden pill radios so waitForTacticReady
 // resolves (>=10 named radios inside the .tc.mint target) — the radios are
 // card children, NOT list children, so they never count as tactic rows.
-function buildMintTacticsListDoc({ rows = 5, markIndices = [], markInner = false, loadIds = [] } = {}) {
+function buildMintTacticsListDoc({ rows = 5, markIndices = [], markInner = false, loadIds = [], loadButtons = [] } = {}) {
   const doc = createDocument();
   const mint = doc.createElement('div');
   mint.classList.add('tc', 'mint');
@@ -485,6 +513,13 @@ function buildMintTacticsListDoc({ rows = 5, markIndices = [], markInner = false
       }
     }
     list.appendChild(row);
+  }
+  for (const { id = null, marked = false } of loadButtons) {
+    const btn = doc.createElement('button');
+    btn.classList.add('tc-pill');
+    if (marked) btn.classList.add('tc-pill--cur');
+    if (id !== null) btn.attrs['data-tc-load'] = id;
+    list.appendChild(btn);
   }
   card.appendChild(list);
   mint.appendChild(card);
@@ -1084,4 +1119,188 @@ function getSelect(doc, label) {
   assertToggleCreated(list.parentNode, '6e (3 rows, no mark → first row only)');
 }
 
-console.log('team4 tactic dropdown mount: old design header mount (insertBefore/appendChild + class + style), new design form-first-child fallback, no-form wrap fallback, fm2026 mint card-anchored mount, mint no-card first-child fallback, game.php smoke, game.php mint-view mounts (direct child of .tc.mint before the .tc-cols grid, never a grid child) + no-mint-no-radios never mounts + mint beats a present .team_general_content on game.php (B1 priority pin) + #417 active tactic row selection (mark on row / mark on inner element / no-mark first-row fallback / empty list no-op / multiple marks first-match) + #421 tier-2 data-tc-load fallback (header-first row folded, first tactic row kept / first-row-is-tactic stays visible) + #419 active tactic sync (empty-list stale-toggle early return / native→select sync on full match + no-change on each miss / 3-row list folds to first row, never all hidden): OK');
+// --- (7) Issue #423: settleNativeActiveMarker / markNativeTacticActive -----
+// After a programmatic native click the site may leave .tc-pill--cur on the
+// previously active row (or update it late), so the folded block would keep
+// showing the old tactic. The #423 fix adds settleNativeActiveMarker(presetName)
+// (a 100ms settle, then re-check the marker; if it points nowhere, mark the
+// selected preset's native row via markNativeTacticActive) and calls it from
+// the change/apply handlers instead of a bare syncSelectWithNativeActive().
+//
+// Both functions are closure-local inside addDropdown (not exported), so these
+// cases drive them through the REAL mount path: mount the dropdown, then
+// dispatch a synthetic 'change' event on the mounted select — the change
+// handler awaits settleNativeActiveMarker(select.value).
+//
+// Sandbox deltas (opt-in, existing cases untouched):
+//   - REAL setTimeout: the base stub `() => 0` never fires the callback, so
+//     the 100ms settle promise would hang the change handler forever;
+//   - no-op applyPresetAsync / syncWithNativeTactic: the vector apply and the
+//     native click are out of scope; the no-op native click models "the site
+//     did not update its .tc-pill--cur marker" — the scenario the settle
+//     logic must recover from.
+//
+// The preset KEY must equal the native tactic NAME: both syncWithNativeTactic
+// and settleNativeActiveMarker resolve the native item by
+// `item.name === presetName` where presetName is select.value (the key). So
+// the fixture uses a preset keyed 'Henta abuse' whose option textContent is
+// also 'Henta abuse' — the option's value is 'Henta abuse'.
+
+const SETTLE_EXTRA = {
+  MutationObserver: MutationObserverStub,
+  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  applyPresetAsync: async () => {},
+  syncWithNativeTactic: async () => {}
+};
+
+function makeSettleSandbox(doc, { labels, presets, cacheItems }) {
+  return makeSandbox(TEAM4_LOCATION, doc, {
+    ...SETTLE_EXTRA,
+    PresetStorage: {
+      getAllLabels: () => labels,
+      getAllPresets: () => presets,
+      loadCustom: () => ({}),
+      readScopedNativeCache: () => ({ items: cacheItems })
+    }
+  });
+}
+
+// Poll (host timers) until fn() is truthy or the deadline passes.
+async function waitForState(fn, label, timeoutMs = 2000) {
+  const start = Date.now();
+  while (!fn()) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(`${label}: expected state not reached within ${timeoutMs} ms`);
+    }
+    await new Promise(r => setTimeout(r, 10));
+  }
+}
+
+// Fixed host delay (negative cases where no state change is expected).
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Dispatch a synthetic 'change' on the mounted select (drives the change
+// handler → settleNativeActiveMarker). Returns the select.
+function triggerSelectChange(doc, label) {
+  const select = getSelect(doc, label);
+  select.dispatchEvent({ type: 'change' });
+  return select;
+}
+
+// (7a) The site did NOT update .tc-pill--cur (no marked button). The settle
+// resolves the preset's native id from the cache and marks the row itself.
+// DISCRIMINATOR: on pre-#423 code the change handler runs a bare
+// syncSelectWithNativeActive() (no marker to sync from) → the button stays
+// unmarked and the assertion below fails.
+{
+  const { doc } = buildMintTacticsListDoc({
+    rows: 0,
+    loadButtons: [{ id: '5174', marked: false }]
+  });
+  const btn = doc.querySelector('[data-tc-load="5174"]');
+  assert.ok(btn, '7a fixture sanity: [data-tc-load="5174"] button present');
+  assert.equal(btn.classList.contains('tc-pill--cur'), false, '7a fixture sanity: button is NOT marked (the site did not update the marker)');
+  const UI = loadUiLayer(makeSettleSandbox(doc, {
+    labels: { 'Henta abuse': 'Henta abuse' },
+    presets: { 'Henta abuse': { def_line: '3', style: '4' } },
+    cacheItems: [{ id: '5174', name: 'Henta abuse' }]
+  }));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'settle: site did not mark (case 7a)');
+
+  const select = triggerSelectChange(doc, '7a');
+  await waitForState(() => btn.classList.contains('tc-pill--cur'), '7a (settle marks the row)');
+
+  assert.equal(btn.classList.contains('tc-pill--cur'), true, '7a: settle marked the native row (the site left the marker stale)');
+  assert.equal(select.value, 'Henta abuse', '7a: select.value = the option value (synced from the freshly marked row)');
+}
+
+// (7b) The site DID mark the row (.tc-pill--cur already on the button). The
+// settle must NOT clear it — the site's own marker is respected, and the
+// select is synced to it. REGRESSION GUARD: passes on pre-#423 code too (a
+// bare syncSelectWithNativeActive also syncs a present marker); it pins that
+// the new settle path does not clobber the site's marker.
+{
+  const { doc } = buildMintTacticsListDoc({
+    rows: 0,
+    loadButtons: [{ id: '5174', marked: true }]
+  });
+  const btn = doc.querySelector('[data-tc-load="5174"]');
+  assert.ok(btn, '7b fixture sanity: [data-tc-load="5174"] button present');
+  assert.equal(btn.classList.contains('tc-pill--cur'), true, '7b fixture sanity: button is ALREADY marked (the site marked it)');
+  const UI = loadUiLayer(makeSettleSandbox(doc, {
+    labels: { 'Henta abuse': 'Henta abuse' },
+    presets: { 'Henta abuse': { def_line: '3', style: '4' } },
+    cacheItems: [{ id: '5174', name: 'Henta abuse' }]
+  }));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'settle: site marked (case 7b)');
+
+  const select = triggerSelectChange(doc, '7b');
+  // Wait past the 100ms settle window so the assertion reflects the settle's
+  // final state (the marker is present before AND after; the wait proves the
+  // settle ran and did not clear the site's marker).
+  await delay(300);
+
+  assert.equal(btn.classList.contains('tc-pill--cur'), true, '7b: the site\'s own marker is respected (settle did not clear it)');
+  assert.equal(select.value, 'Henta abuse', '7b: select.value = the option value (synced from the site\'s marker)');
+}
+
+// (7c) No cache item matches the preset name → the settle finds nothing to
+// mark, does not crash, and leaves select.value unchanged. NO-CRASH GUARD.
+{
+  const { doc } = buildMintTacticsListDoc({
+    rows: 0,
+    loadButtons: [{ id: '5174', marked: false }]
+  });
+  const btn = doc.querySelector('[data-tc-load="5174"]');
+  assert.ok(btn, '7c fixture sanity: [data-tc-load="5174"] button present');
+  const UI = loadUiLayer(makeSettleSandbox(doc, {
+    labels: { 'Henta abuse': 'Henta abuse' },
+    presets: { 'Henta abuse': { def_line: '3', style: '4' } },
+    cacheItems: [{ id: '9999', name: 'Other tactic' }] // no item named 'Henta abuse'
+  }));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'settle: no cache item (case 7c)');
+
+  const select = triggerSelectChange(doc, '7c');
+  const before = select.value;
+  await delay(300); // let the settle complete (it must not crash)
+
+  assert.equal(select.value, before, '7c: no matching cache item → select.value unchanged');
+  assert.equal(btn.classList.contains('tc-pill--cur'), false, '7c: no matching cache item → the row is NOT marked');
+}
+
+// (7d) markNativeTacticActive clears every current marker so exactly one
+// tactic stays active. A stale .tc-pill--cur marker (on a NON-load button, so
+// the settle's `if (!marked)` guard still proceeds — a marked load button
+// would short-circuit it) is cleared, and the selected preset's row (5174) is
+// the only one marked afterwards. DISCRIMINATOR: on pre-#423 code nothing
+// marks 5174 and the stale marker survives → both assertions fail.
+{
+  const { doc, list } = buildMintTacticsListDoc({
+    rows: 0,
+    loadButtons: [
+      { id: '5174', marked: false }, // the selected preset's row (unmarked)
+      { id: null, marked: true }      // a stale marker on a non-load button
+    ]
+  });
+  const btn5174 = list._children[0];
+  const staleBtn = list._children[1];
+  assert.equal(btn5174.getAttribute('data-tc-load'), '5174', '7d fixture sanity: row 0 carries data-tc-load="5174"');
+  assert.equal(staleBtn.getAttribute('data-tc-load'), null, '7d fixture sanity: row 1 is a non-load button (no data-tc-load)');
+  assert.equal(btn5174.classList.contains('tc-pill--cur'), false, '7d fixture sanity: 5174 is NOT marked');
+  assert.equal(staleBtn.classList.contains('tc-pill--cur'), true, '7d fixture sanity: the stale button IS marked');
+  const UI = loadUiLayer(makeSettleSandbox(doc, {
+    labels: { 'Henta abuse': 'Henta abuse' },
+    presets: { 'Henta abuse': { def_line: '3', style: '4' } },
+    cacheItems: [{ id: '5174', name: 'Henta abuse' }]
+  }));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'settle: clear previous markers (case 7d)');
+
+  const select = triggerSelectChange(doc, '7d');
+  await waitForState(() => btn5174.classList.contains('tc-pill--cur'), '7d (settle marks 5174)');
+
+  assert.equal(btn5174.classList.contains('tc-pill--cur'), true, '7d: the selected preset\'s row (5174) is marked');
+  assert.equal(staleBtn.classList.contains('tc-pill--cur'), false, '7d: the previous marker is cleared (exactly one tactic stays active)');
+  assert.equal(select.value, 'Henta abuse', '7d: select.value = the option value');
+}
+
+console.log('team4 tactic dropdown mount: old design header mount (insertBefore/appendChild + class + style), new design form-first-child fallback, no-form wrap fallback, fm2026 mint card-anchored mount, mint no-card first-child fallback, game.php smoke, game.php mint-view mounts (direct child of .tc.mint before the .tc-cols grid, never a grid child) + no-mint-no-radios never mounts + mint beats a present .team_general_content on game.php (B1 priority pin) + #417 active tactic row selection (mark on row / mark on inner element / no-mark first-row fallback / empty list no-op / multiple marks first-match) + #421 tier-2 data-tc-load fallback (header-first row folded, first tactic row kept / first-row-is-tactic stays visible) + #419 active tactic sync (empty-list stale-toggle early return / native→select sync on full match + no-change on each miss / 3-row list folds to first row, never all hidden) + #423 native click active marking (settle marks the row when the site left the marker stale / site-set marker respected / no-cache-item no-crash no-change / clears previous markers so exactly one tactic stays active): OK');
