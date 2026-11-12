@@ -222,6 +222,7 @@
       "riskClass": "low",
       "primarySituation": "press_cooldown",
       "allowedSituations": [
+        "press_cooldown",
         "pressure_escape",
         "default_start"
       ],
@@ -249,6 +250,7 @@
       "riskClass": "medium_high",
       "primarySituation": "controlled_chase",
       "allowedSituations": [
+        "controlled_chase",
         "positional_siege",
         "default_start"
       ],
@@ -276,6 +278,7 @@
       "riskClass": "very_high",
       "primarySituation": "positional_siege",
       "allowedSituations": [
+        "positional_siege",
         "controlled_chase",
         "late_high_pressure"
       ],
@@ -333,6 +336,7 @@
       "riskClass": "very_high",
       "primarySituation": "late_high_pressure",
       "allowedSituations": [
+        "late_high_pressure",
         "positional_siege"
       ],
       "fallbackEligible": false
@@ -387,6 +391,7 @@
       "riskClass": "very_low",
       "primarySituation": "emergency_lock",
       "allowedSituations": [
+        "emergency_lock",
         "protect_lead"
       ],
       "fallbackEligible": false
@@ -822,6 +827,7 @@
       "role": "press_cooldown",
       "primarySituation": "press_cooldown",
       "allowedSituations": [
+        "press_cooldown",
         "pressure_escape",
         "default_start"
       ],
@@ -871,6 +877,7 @@
       "role": "controlled_chase",
       "primarySituation": "controlled_chase",
       "allowedSituations": [
+        "controlled_chase",
         "positional_siege",
         "default_start"
       ],
@@ -920,6 +927,7 @@
       "role": "positional_siege",
       "primarySituation": "positional_siege",
       "allowedSituations": [
+        "positional_siege",
         "controlled_chase",
         "late_high_pressure"
       ],
@@ -1025,6 +1033,7 @@
       "role": "late_high_pressure",
       "primarySituation": "late_high_pressure",
       "allowedSituations": [
+        "late_high_pressure",
         "positional_siege"
       ],
       "entryConditions": [
@@ -1127,6 +1136,7 @@
       "role": "emergency_lock",
       "primarySituation": "emergency_lock",
       "allowedSituations": [
+        "emergency_lock",
         "protect_lead"
       ],
       "entryConditions": [
