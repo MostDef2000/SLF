@@ -79,32 +79,71 @@
         });
     }
 
-    function classify(context = {}) {
-        const c = normalizedContext(context);
-        if (c.emergencyLockRequired || (c.scoreState === 'winning' && c.minute >= 84 && c.underPressure && c.pressureRisk >= 55)) return 'emergency_lock';
-        if (c.pressFatigueRisk && !(c.scoreState === 'losing' && c.minute >= 70)) return 'press_cooldown';
+    // Situation classification with a read-only blocker trace (telemetry only).
+    // The precedence chain below is the single source of truth: classify()
+    // delegates to it and returns the same string as before — conditions,
+    // order and outcomes are byte-identical; only the trace is new.
+    // Trace entries describe situations whose win-condition was evaluated and
+    // failed (reasons reuse the veto wording where one exists); the winning
+    // situation itself is reported as classifiedSituation, never as a failure.
+    function classifyTraced(c = {}) {
+        const trace = [];
+        const blocked = (situation, reason) => { trace.push({ situation, ok:false, reason }); };
+        const win = situation => ({ situation, trace:trace.filter(entry => entry.situation !== situation) });
+        if (c.emergencyLockRequired || (c.scoreState === 'winning' && c.minute >= 84 && c.underPressure && c.pressureRisk >= 55)) return win('emergency_lock');
+        blocked('emergency_lock', 'аварийный lock не подтверждён');
+        if (c.pressFatigueRisk && !(c.scoreState === 'losing' && c.minute >= 70)) return win('press_cooldown');
+        blocked('press_cooldown', 'риск усталости прессинга не подтверждён');
         // v12 (#361): ведём счёт против соперника, прессингующего выше плана
         // (вектор прессинга соперника >= +20%) — активное прессующее удержание
         // вместо пассивного блока, окно 60–85 минут.
-        if (c.scoreState === 'winning' && c.minute >= 60 && c.minute <= 85 && c.opponentPressVector >= 20) return 'lead_press_hold';
+        if (c.scoreState === 'winning' && c.minute >= 60 && c.minute <= 85 && c.opponentPressVector >= 20) return win('lead_press_hold');
+        blocked('lead_press_hold', 'прессующее удержание только при преимуществе в окне 60–85 минут против вектора прессинга соперника ≥ +20%');
         if (c.scoreState === 'winning' && c.minute >= 65) {
-            return c.counterExitAvailable && !c.counterExitBlocked && !c.highBadActions
-                ? 'protect_lead_with_outlet' : 'protect_lead';
+            if (c.counterExitAvailable && !c.counterExitBlocked && !c.highBadActions) return win('protect_lead_with_outlet');
+            blocked('protect_lead_with_outlet', 'Удержание с выходом только при преимуществе и доступном первом пасе');
+            return win('protect_lead');
         }
+        blocked('protect_lead_with_outlet', 'удержание только при преимуществе после 65-й минуты');
+        blocked('protect_lead', 'удержание только при преимуществе после 65-й минуты');
         // Never choose counter from pressure alone: the clean first pass
         // must be explicitly observable, and pressure/fatigue vetoes apply.
         if (c.underPressure) {
             if (c.counterExitAvailable && !c.counterExitBlocked && !c.highBadActions && !c.pressFatigueRisk)
-                return 'pressure_counter';
-            return 'pressure_escape';
+                return win('pressure_counter');
+            blocked('pressure_counter', 'Контратака только с подтверждённым чистым выходом');
+            return win('pressure_escape');
         }
-        if (c.centerClosed && c.wideQuality && !c.ownCrossesBad && !c.opponentCrossesDangerous) return 'width_attack';
-        if (c.scoreState === 'losing' && c.minute >= 72 && c.attackNeed >= 65 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat) return 'late_high_pressure';
-        if ((c.attackingMomentum || c.attackNeed >= 58) && c.minute >= 55 && !c.transitionThreat && !c.highBadActions && !c.pressFatigueRisk) return 'positional_siege';
-        if ((c.scoreState === 'losing' && c.minute >= 45) || c.attackNeed >= 38) return 'controlled_chase';
+        blocked('pressure_counter', 'давление не подтверждено');
+        blocked('pressure_escape', 'давление не подтверждено');
+        if (c.centerClosed && c.wideQuality && !c.ownCrossesBad && !c.opponentCrossesDangerous) return win('width_attack');
+        blocked('width_attack', 'центр не закрыт либо фланговое преимущество не подтверждено');
+        if (c.scoreState === 'losing' && c.minute >= 72 && c.attackNeed >= 65 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat) return win('late_high_pressure');
+        blocked('late_high_pressure', 'поздняя погоня не подтверждена (счёт/минута/брак/усталость)');
+        if ((c.attackingMomentum || c.attackNeed >= 58) && c.minute >= 55 && !c.transitionThreat && !c.highBadActions && !c.pressFatigueRisk) return win('positional_siege');
+        blocked('positional_siege', 'позиционное зажатие не подтверждено (момент/минута/угроза переходов)');
+        if ((c.scoreState === 'losing' && c.minute >= 45) || c.attackNeed >= 38) return win('controlled_chase');
+        blocked('controlled_chase', 'погоня не подтверждена (счёт/минута/потребность в голе)');
         const strengthGap = Number(c.strengthGap ?? c.myStrengthGap ?? 0);
-        if (c.transitionThreat || (Number.isFinite(strengthGap) && strengthGap <= -8) || has(c, 'opponent_stronger')) return 'pressure_escape';
-        return 'default_start';
+        if (c.transitionThreat || (Number.isFinite(strengthGap) && strengthGap <= -8) || has(c, 'opponent_stronger')) return win('pressure_escape');
+        blocked('pressure_escape', 'угроза переходов или силовое отставание не подтверждены');
+        return win('default_start');
+    }
+
+    function classify(context = {}) {
+        return classifyTraced(normalizedContext(context)).situation;
+    }
+
+    // Telemetry-only: classification result + blocker trace for the decision
+    // record. Any failure here yields an empty trace — it never breaks the
+    // decision itself (the decision path above is untouched).
+    function situationTelemetry(c) {
+        try {
+            const traced = classifyTraced(c);
+            return { classifiedSituation:traced.situation, situationTrace:traced.trace };
+        } catch (_) {
+            return { classifiedSituation:null, situationTrace:[] };
+        }
     }
 
     function currentRisk() {
@@ -187,10 +226,11 @@
     function rank(context = {}) {
         const c = normalizedContext(context);
         const situation = classify(c);
+        const telemetry = situationTelemetry(c);
         const all = ACTIVE.map(name => scoreCandidate(name, c, situation));
         const eligible = all.filter(item => !item.vetoed && item.parts.rulePrior > 0)
             .sort((a, b) => b.score - a.score || a.preset.localeCompare(b.preset));
-        return { context:c, situation, all, eligible };
+        return { context:c, situation, classifiedSituation:telemetry.classifiedSituation, situationTrace:telemetry.situationTrace, all, eligible };
     }
 
     function choose(context = {}) {
@@ -200,6 +240,8 @@
             return {
                 name:null,
                 situation:ranked.situation,
+                classifiedSituation:ranked.classifiedSituation,
+                situationTrace:ranked.situationTrace,
                 reason:'Нет безопасной рекомендации — оставить текущую тактику',
                 selected:null,
                 runnerUp:ranked.eligible[0]||null,
@@ -216,6 +258,8 @@
         return {
             name:selected.preset,
             situation:ranked.situation,
+            classifiedSituation:ranked.classifiedSituation,
+            situationTrace:ranked.situationTrace,
             reason:`${ranked.situation}: ${registry.meta?.[selected.preset]?.use || 'tactical suite v11'}`,
             selected,
             runnerUp,
@@ -263,6 +307,18 @@
         const selected = choose(mergedContext);
         result.schema = SCHEMA;
         result.situationKey = selected.situation;
+        // Situation telemetry (additive fields only — recommendations, scores
+        // and vetoes are untouched). moment.context is the payload the
+        // telemetry layer persists verbatim as decisionContext.signals, so the
+        // classification trace is surfaced there for match exports.
+        result.classifiedSituation = selected.classifiedSituation ?? null;
+        result.situationTrace = Array.isArray(selected.situationTrace) ? selected.situationTrace : [];
+        try {
+            if (result.moment && typeof result.moment === 'object' && result.moment.context) {
+                result.moment.context.classifiedSituation = result.classifiedSituation;
+                result.moment.context.situationTrace = result.situationTrace;
+            }
+        } catch (_) { /* telemetry never breaks the decision */ }
         result.libraryVersion = SUITE;
         result.riskAppetite = currentRisk();
         result.margin = selected.margin;
