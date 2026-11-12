@@ -302,6 +302,12 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
                 strengthAdvantage: engine.round(strengthAdvantage),
                 strengthDisadvantage: engine.round(strengthDisadvantage),
                 gameMode,
+                // Situation telemetry (additive, telemetry-only): the direction
+                // policy overwrites both after classification. Defaults keep the
+                // persisted decisionContext.signals contract total (null / []) when
+                // the policy is not installed — the record is still written.
+                classifiedSituation:null,
+                situationTrace:[],
                 completeness: engine.round([
                     myPower > 0, oppPower > 0, minute > 0, scoreState !== 'unknown',
                     Number.isFinite(myXg), Number.isFinite(oppXg),
