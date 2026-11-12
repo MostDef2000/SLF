@@ -677,18 +677,36 @@ if (!isTacticPage) return;
             function getActiveTacticRow(rows) {
                 if (!rows || rows.length === 0) return undefined;
 
-                return rows.find(row =>
+                // The site's «сейчас» marker wins: .tc-pill--cur sits on the
+                // row itself or on a button inside it.
+                const marked = rows.find(row =>
                     row.classList.contains('tc-pill--cur') ||
                     row.querySelector('.tc-pill--cur')
-                ) || rows[0];
+                );
+                if (marked) return marked;
+
+                // Issue #421: rows[0] may be a header/control element rather
+                // than a tactic row (4.4.370 regression: that fallback folded
+                // every real tactic). Prefer the first row that actually
+                // carries a tactic button before the last-resort fallback.
+                const tacticLike = rows.find(row =>
+                    row.getAttribute('data-tc-load') !== null ||
+                    row.querySelector('[data-tc-load]')
+                );
+                if (tacticLike) return tacticLike;
+
+                return rows[0];
             }
 
             // Issue #415: fold the native «Мои тактики» card — the site
             // renders one row per saved tactic, which pushes the plugin
             // panel far down the page. Issue #419: when collapsed, keep
-            // ONLY the active tactic's row visible (first row as fallback;
-            // never hide all rows) and fold the rest behind a
-            // «показать ещё» toggle. Best-effort: no native card → no-op.
+            // ONLY the active tactic's row visible (never hide all rows)
+            // and fold the rest behind a «показать ещё» toggle. Issue
+            // #421: the fallback prefers a real tactic row ([data-tc-load])
+            // over rows[0] — on 4.4.370 rows[0] can be a header/control
+            // element, which folded every actual tactic. Best-effort:
+            // no native card → no-op.
             const compactNativeTacticsBlock = () => {
                 try {
                     const nativeCard = document.querySelector('.mint-card.tc-tactics');

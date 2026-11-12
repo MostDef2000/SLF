@@ -456,10 +456,13 @@ function buildGameMintDoc({ withCards = true, withTeamGeneralContent = false } =
 // row per saved tactic and marks the ACTIVE tactic with .tc-pill--cur either
 // on the row itself or on a button inside it. markIndices lists the rows to
 // mark; markInner puts the mark on an inner button instead of the row.
+// loadIds[i] (when defined) sets data-tc-load on row i — the #421 tier-2
+// marker: a real tactic row carries a load button (data-tc-load), a
+// header/control row does not. Existing cases pass nothing → byte-identical.
 // The card also carries the 14 hidden pill radios so waitForTacticReady
 // resolves (>=10 named radios inside the .tc.mint target) — the radios are
 // card children, NOT list children, so they never count as tactic rows.
-function buildMintTacticsListDoc({ rows = 5, markIndices = [], markInner = false } = {}) {
+function buildMintTacticsListDoc({ rows = 5, markIndices = [], markInner = false, loadIds = [] } = {}) {
   const doc = createDocument();
   const mint = doc.createElement('div');
   mint.classList.add('tc', 'mint');
@@ -471,6 +474,7 @@ function buildMintTacticsListDoc({ rows = 5, markIndices = [], markInner = false
   for (let i = 0; i < rows; i++) {
     const row = doc.createElement('div');
     row.classList.add('tc-pill-row');
+    if (loadIds[i] !== undefined) row.attrs['data-tc-load'] = loadIds[i];
     if (markIndices.includes(i)) {
       if (markInner) {
         const btn = doc.createElement('button');
@@ -850,11 +854,10 @@ function assertToggleCreated(card, label) {
 }
 
 // (5d) Empty rows array → getActiveTacticRow([]) returns undefined.
-// NOTE: via the public path this is UNREACHABLE — compactNativeTacticsBlock
-// early-returns on `!foldable.length` (rows < 4) BEFORE calling
-// getActiveTacticRow, so an empty list never reaches the helper. The
-// observable contract for an empty list is therefore: no rows are touched,
-// no toggle is created, and nothing throws. We pin that here; the literal
+// NOTE: via the public path the empty list DOES reach the helper (it returns
+// undefined), and compactNativeTacticsBlock then early-returns on `!activeRow`
+// BEFORE the toggle lookup — so no rows are touched, no toggle is created, and
+// nothing throws. We pin that observable contract here; the literal
 // `undefined` return is a pure-function property that only a module-level
 // extraction (out of scope) could assert directly.
 {
@@ -885,8 +888,8 @@ function assertToggleCreated(card, label) {
 // getActiveTacticRow([]) returns undefined, so compactNativeTacticsBlock returns
 // early BEFORE the toggle lookup. A stale toggle (left over from a previous
 // compaction run, e.g. after the site re-rendered the list empty) is therefore
-// UNTOUCHED. The pre-#419 code had no such early return: it fell into the
-// `!foldable.length` branch and HIDE the stale toggle. This is the only
+// UNTOUCHED. The pre-#419 code had no such early return: for an empty list it
+// still reached the toggle handling and HIDE the stale toggle. This is the only
 // observable that distinguishes the new early return from the old path (case 5d
 // passes on both, so it cannot prove the guard).
 {
@@ -903,6 +906,58 @@ function assertToggleCreated(card, label) {
   assert.ok(doc.getElementById('slf-tactics-dropdown'), '5f: dropdown mounted (addDropdown ran to completion)');
   assert.equal(list._children.length, 0, '5f fixture sanity: empty list');
   assert.equal(staleToggle.style.display, '', '5f (empty list): stale toggle UNTOUCHED — the !activeRow early return fires before the toggle lookup (pre-#419 code would have hidden it)');
+}
+
+// --- (5g) Issue #421 tier-2: rows[0] is a header (no data-tc-load), rows[1] is
+// a tactic (data-tc-load="5174"), no .tc-pill--cur marks anywhere. The pre-#421
+// fallback returned rows[0] (the header) and folded every real tactic; the #421
+// tier-2 prefers the first row that actually carries a tactic button, so rows[1]
+// stays visible and the header row is folded. This is the discriminator: on the
+// pre-#421 code the assertion below fails (row 0 visible, row 1 hidden).
+{
+  const { doc, list } = buildMintTacticsListDoc({
+    rows: 2,
+    markIndices: [],
+    loadIds: [undefined, '5174']
+  });
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc, COMPACTION_SANDBOX));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'tier-2 header-first row (case 5g)');
+
+  assert.ok(doc.getElementById('slf-tactics-dropdown'), '5g: dropdown mounted (addDropdown ran to completion)');
+  assert.equal(list._children.length, 2, '5g fixture sanity: 2 rows (header + tactic)');
+  assert.equal(list._children[0].getAttribute('data-tc-load'), null, '5g fixture sanity: row 0 (header) has NO data-tc-load');
+  assert.equal(list._children[1].getAttribute('data-tc-load'), '5174', '5g fixture sanity: row 1 (tactic) carries data-tc-load="5174"');
+  assert.equal(
+    list._children.some(row => row.classList.contains('tc-pill--cur') || row.querySelector('.tc-pill--cur')),
+    false, '5g fixture sanity: no row is marked (tier-1 must not fire)'
+  );
+  assertRowDisplays(list, 1, '5g (tier-2: header row folded, tactic row visible)');
+  assertToggleCreated(list.parentNode, '5g (tier-2: header row folded, tactic row visible)');
+}
+
+// --- (5h) Issue #421 tier-2: no marks anywhere, and the FIRST row carries
+// data-tc-load (a real tactic). Tier-2 resolves to rows[0], so the first row
+// stays visible when collapsed. Same observable as the tier-3 fallback, but
+// reached via the data-tc-load path — pins that tier-2 does not break the
+// common first-row-is-a-tactic case.
+{
+  const { doc, list } = buildMintTacticsListDoc({
+    rows: 5,
+    markIndices: [],
+    loadIds: ['5174', '5175', '5176', '5177', '5178']
+  });
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc, COMPACTION_SANDBOX));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'tier-2 first row is a tactic (case 5h)');
+
+  assert.ok(doc.getElementById('slf-tactics-dropdown'), '5h: dropdown mounted (addDropdown ran to completion)');
+  assert.equal(list._children.length, 5, '5h fixture sanity: 5 tactic rows');
+  assert.equal(list._children[0].getAttribute('data-tc-load'), '5174', '5h fixture sanity: row 0 carries data-tc-load="5174"');
+  assert.equal(
+    list._children.some(row => row.classList.contains('tc-pill--cur') || row.querySelector('.tc-pill--cur')),
+    false, '5h fixture sanity: no row is marked (tier-1 must not fire)'
+  );
+  assertRowDisplays(list, 0, '5h (tier-2: first row is a tactic → stays visible)');
+  assertToggleCreated(list.parentNode, '5h (tier-2: first row is a tactic → stays visible)');
 }
 
 // --- (6) Issue #419: syncSelectWithNativeActive mirrors the site's active tactic ---
@@ -1029,4 +1084,4 @@ function getSelect(doc, label) {
   assertToggleCreated(list.parentNode, '6e (3 rows, no mark → first row only)');
 }
 
-console.log('team4 tactic dropdown mount: old design header mount (insertBefore/appendChild + class + style), new design form-first-child fallback, no-form wrap fallback, fm2026 mint card-anchored mount, mint no-card first-child fallback, game.php smoke, game.php mint-view mounts (direct child of .tc.mint before the .tc-cols grid, never a grid child) + no-mint-no-radios never mounts + mint beats a present .team_general_content on game.php (B1 priority pin) + #417 active tactic row selection (mark on row / mark on inner element / no-mark first-row fallback / empty list no-op / multiple marks first-match) + #419 active tactic sync (empty-list stale-toggle early return / native→select sync on full match + no-change on each miss / <4-row list folds to first row, never all hidden): OK');
+console.log('team4 tactic dropdown mount: old design header mount (insertBefore/appendChild + class + style), new design form-first-child fallback, no-form wrap fallback, fm2026 mint card-anchored mount, mint no-card first-child fallback, game.php smoke, game.php mint-view mounts (direct child of .tc.mint before the .tc-cols grid, never a grid child) + no-mint-no-radios never mounts + mint beats a present .team_general_content on game.php (B1 priority pin) + #417 active tactic row selection (mark on row / mark on inner element / no-mark first-row fallback / empty list no-op / multiple marks first-match) + #421 tier-2 data-tc-load fallback (header-first row folded, first tactic row kept / first-row-is-tactic stays visible) + #419 active tactic sync (empty-list stale-toggle early return / native→select sync on full match + no-change on each miss / 3-row list folds to first row, never all hidden): OK');
