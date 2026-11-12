@@ -173,6 +173,11 @@ class ShimElement {
 
   addEventListener(type, fn) { (this._listeners ||= []).push({ type, fn }); }
 
+  // #419 sync reads marked.getAttribute('data-tc-load'). No pre-#419 case
+  // calls it (no fixture carries a [data-tc-load] button), so adding it is
+  // opt-in-safe: existing sandboxes are byte-identical in behavior.
+  getAttribute(name) { return this.attrs[name] ?? null; }
+
   get options() {
     const out = [];
     const walk = node => {
@@ -876,4 +881,152 @@ function assertToggleCreated(card, label) {
   assertToggleCreated(list.parentNode, '5e (multiple marks → first match)');
 }
 
-console.log('team4 tactic dropdown mount: old design header mount (insertBefore/appendChild + class + style), new design form-first-child fallback, no-form wrap fallback, fm2026 mint card-anchored mount, mint no-card first-child fallback, game.php smoke, game.php mint-view mounts (direct child of .tc.mint before the .tc-cols grid, never a grid child) + no-mint-no-radios never mounts + mint beats a present .team_general_content on game.php (B1 priority pin) + #417 active tactic row selection (mark on row / mark on inner element / no-mark first-row fallback / empty list no-op / multiple marks first-match): OK');
+// --- (5f) Issue #419: empty list + stale toggle → the !activeRow early return ---
+// getActiveTacticRow([]) returns undefined, so compactNativeTacticsBlock returns
+// early BEFORE the toggle lookup. A stale toggle (left over from a previous
+// compaction run, e.g. after the site re-rendered the list empty) is therefore
+// UNTOUCHED. The pre-#419 code had no such early return: it fell into the
+// `!foldable.length` branch and HIDE the stale toggle. This is the only
+// observable that distinguishes the new early return from the old path (case 5d
+// passes on both, so it cannot prove the guard).
+{
+  const { doc, list, card } = buildMintTacticsListDoc({ rows: 0, markIndices: [] });
+  const staleToggle = doc.createElement('button');
+  staleToggle.attrs['data-slf-tactics-toggle'] = '';
+  staleToggle.dataset.slfTacticsToggle = '1';
+  staleToggle.dataset.slfExpanded = '0';
+  staleToggle.style.display = '';
+  card.appendChild(staleToggle);
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc, COMPACTION_SANDBOX));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'empty list + stale toggle (case 5f)');
+
+  assert.ok(doc.getElementById('slf-tactics-dropdown'), '5f: dropdown mounted (addDropdown ran to completion)');
+  assert.equal(list._children.length, 0, '5f fixture sanity: empty list');
+  assert.equal(staleToggle.style.display, '', '5f (empty list): stale toggle UNTOUCHED — the !activeRow early return fires before the toggle lookup (pre-#419 code would have hidden it)');
+}
+
+// --- (6) Issue #419: syncSelectWithNativeActive mirrors the site's active tactic ---
+// syncSelectWithNativeActive() is a closure-local helper inside addDropdown,
+// called synchronously at init (after refreshSelect + updateSchemeLabel). It is
+// not exported, so these cases drive it through the REAL mount path and assert
+// the OBSERVABLE contract: after mount, the select's value reflects the site's
+// active tactic (resolved via the native cache) — or stays unchanged on any
+// miss (no marked button / no cache item / no matching option).
+//
+// Fixture: team4 mint design (buildMintTacticsListDoc) + an optional marked
+// [data-tc-load].tc-pill--cur button appended to the body. The button is
+// OUTSIDE the tactic list so it never counts as a compaction row. The shim's
+// getAttribute (added above) backs marked.getAttribute('data-tc-load').
+//
+// The select's options come from PresetStorage.getAllLabels() (one option per
+// preset: value = preset key, textContent = label). refreshSelect() seeds
+// select.value with the FIRST option's value; the sync overwrites it only on a
+// full match (marked button + cache item + matching option text).
+
+function buildSyncFixture({ markedId = null, rows = 5 } = {}) {
+  const { doc, mint, card, list } = buildMintTacticsListDoc({ rows, markIndices: [] });
+  let btn = null;
+  if (markedId !== null) {
+    btn = doc.createElement('button');
+    btn.classList.add('tc-pill', 'tc-pill--cur');
+    btn.attrs['data-tc-load'] = markedId;
+    doc.body.appendChild(btn);
+  }
+  return { doc, mint, card, list, btn };
+}
+
+function getSelect(doc, label) {
+  const container = doc.getElementById('slf-tactics-dropdown');
+  assert.ok(container, `${label}: dropdown mounted`);
+  const select = container.querySelector('select');
+  assert.ok(select, `${label}: select present in the mounted container`);
+  return select;
+}
+
+// (6a) Marked button + matching cache item + matching option → select.value =
+// the option's value (the preset key).
+{
+  const { doc, btn } = buildSyncFixture({ markedId: '5174' });
+  assert.ok(btn, '6a fixture sanity: marked [data-tc-load="5174"].tc-pill--cur button present');
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc, {
+    PresetStorage: {
+      getAllLabels: () => ({ my_preset: 'Мой пресет', henta_abuse: 'Henta abuse' }),
+      getAllPresets: () => ({ my_preset: { def_line: '3', style: '4' }, henta_abuse: { def_line: '3', style: '4' } }),
+      loadCustom: () => ({}),
+      readScopedNativeCache: () => ({ items: [{ id: '5174', name: 'Henta abuse' }] })
+    }
+  }));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'sync: marked + cache + option (case 6a)');
+
+  const select = getSelect(doc, '6a');
+  assert.equal(select.value, 'henta_abuse', '6a: select.value mirrors the site active tactic (the matching option value)');
+}
+
+// (6b) No marked button on the page → select.value unchanged (initial value).
+{
+  const { doc, btn } = buildSyncFixture({ markedId: null });
+  assert.equal(btn, null, '6b fixture sanity: no marked button');
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'sync: no marked button (case 6b)');
+
+  const select = getSelect(doc, '6b');
+  assert.equal(select.value, 'my_preset', '6b: no marked button → select.value unchanged (refreshSelect first-option seed)');
+}
+
+// (6c) Marked button but NO matching cache item → select.value unchanged.
+{
+  const { doc, btn } = buildSyncFixture({ markedId: '9999' });
+  assert.ok(btn, '6c fixture sanity: marked [data-tc-load="9999"] button present (id absent from the cache)');
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc, {
+    PresetStorage: {
+      getAllLabels: () => ({ my_preset: 'Мой пресет' }),
+      getAllPresets: () => ({ my_preset: { def_line: '3', style: '4' } }),
+      loadCustom: () => ({}),
+      readScopedNativeCache: () => ({ items: [{ id: '5174', name: 'Henta abuse' }] })
+    }
+  }));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'sync: no cache item (case 6c)');
+
+  const select = getSelect(doc, '6c');
+  assert.equal(select.value, 'my_preset', '6c: no matching cache item → select.value unchanged');
+}
+
+// (6d) Cache item present but NO matching option → select.value unchanged.
+{
+  const { doc, btn } = buildSyncFixture({ markedId: '5174' });
+  assert.ok(btn, '6d fixture sanity: marked [data-tc-load="5174"] button present (cache name matches no option)');
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc, {
+    PresetStorage: {
+      getAllLabels: () => ({ my_preset: 'Мой пресет' }),
+      getAllPresets: () => ({ my_preset: { def_line: '3', style: '4' } }),
+      loadCustom: () => ({}),
+      readScopedNativeCache: () => ({ items: [{ id: '5174', name: 'Henta abuse' }] })
+    }
+  }));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, 'sync: no matching option (case 6d)');
+
+  const select = getSelect(doc, '6d');
+  assert.equal(select.value, 'my_preset', '6d: no matching option (cache name "Henta abuse" matches no option text) → select.value unchanged');
+}
+
+// (6e) compactNativeTacticsBlock never hides ALL rows: 3 rows, none marked →
+// collapsed shows the FIRST row only. The #419 change folds <4-row lists to the
+// active row (pre-#419 code never folded <4-row lists — it showed all rows and
+// created no toggle). With no mark, the active row falls back to rows[0], so
+// exactly row 0 stays visible and a toggle IS created.
+{
+  const { doc, list } = buildMintTacticsListDoc({ rows: 3, markIndices: [] });
+  const UI = loadUiLayer(makeSandbox(TEAM4_LOCATION, doc, COMPACTION_SANDBOX));
+  await withTimeout(UI.addDropdown(), MOUNT_TIMEOUT_MS, '3 rows no mark (case 6e)');
+
+  assert.ok(doc.getElementById('slf-tactics-dropdown'), '6e: dropdown mounted (addDropdown ran to completion)');
+  assert.equal(list._children.length, 3, '6e fixture sanity: 3 tactic rows');
+  assert.equal(
+    list._children.some(row => row.classList.contains('tc-pill--cur') || row.querySelector('.tc-pill--cur')),
+    false, '6e fixture sanity: no row is marked'
+  );
+  assertRowDisplays(list, 0, '6e (3 rows, no mark → first row only, never all hidden)');
+  assertToggleCreated(list.parentNode, '6e (3 rows, no mark → first row only)');
+}
+
+console.log('team4 tactic dropdown mount: old design header mount (insertBefore/appendChild + class + style), new design form-first-child fallback, no-form wrap fallback, fm2026 mint card-anchored mount, mint no-card first-child fallback, game.php smoke, game.php mint-view mounts (direct child of .tc.mint before the .tc-cols grid, never a grid child) + no-mint-no-radios never mounts + mint beats a present .team_general_content on game.php (B1 priority pin) + #417 active tactic row selection (mark on row / mark on inner element / no-mark first-row fallback / empty list no-op / multiple marks first-match) + #419 active tactic sync (empty-list stale-toggle early return / native→select sync on full match + no-change on each miss / <4-row list folds to first row, never all hidden): OK');
