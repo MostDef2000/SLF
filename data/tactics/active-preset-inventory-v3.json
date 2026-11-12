@@ -117,7 +117,7 @@
       "riskClass": "low",
       "primarySituation": "default_start",
       "allowedSituations": [
-        "pressure_escape"
+        "default_start"
       ],
       "fallbackEligible": false
     },
@@ -143,6 +143,7 @@
       "riskClass": "medium",
       "primarySituation": "pressure_counter",
       "allowedSituations": [
+        "pressure_counter",
         "pressure_escape"
       ],
       "fallbackEligible": false
@@ -169,7 +170,7 @@
       "riskClass": "low",
       "primarySituation": "pressure_escape",
       "allowedSituations": [
-        "default_start"
+        "pressure_escape"
       ],
       "fallbackEligible": false
     },
@@ -194,7 +195,9 @@
       "role": "possession_control",
       "riskClass": "low",
       "primarySituation": "possession_control",
-      "allowedSituations": [],
+      "allowedSituations": [
+        "possession_control"
+      ],
       "fallbackEligible": false
     },
     "Guardiola_PressCooldown_v11": {
@@ -303,6 +306,7 @@
       "riskClass": "high",
       "primarySituation": "width_attack",
       "allowedSituations": [
+        "width_attack",
         "positional_siege"
       ],
       "fallbackEligible": false
@@ -355,6 +359,7 @@
       "riskClass": "low",
       "primarySituation": "protect_lead",
       "allowedSituations": [
+        "protect_lead",
         "emergency_lock",
         "default_start"
       ],
@@ -408,6 +413,7 @@
       "riskClass": "low",
       "primarySituation": "protect_lead_with_outlet",
       "allowedSituations": [
+        "protect_lead_with_outlet",
         "protect_lead",
         "default_start"
       ],
@@ -435,6 +441,7 @@
       "riskClass": "medium_high",
       "primarySituation": "lead_press_hold",
       "allowedSituations": [
+        "lead_press_hold",
         "protect_lead"
       ],
       "fallbackEligible": false
@@ -617,7 +624,7 @@
       "role": "default_start",
       "primarySituation": "default_start",
       "allowedSituations": [
-        "pressure_escape"
+        "default_start"
       ],
       "entryConditions": [
         "balanced_opposition",
@@ -665,6 +672,7 @@
       "role": "pressure_counter",
       "primarySituation": "pressure_counter",
       "allowedSituations": [
+        "pressure_counter",
         "pressure_escape"
       ],
       "entryConditions": [
@@ -716,7 +724,7 @@
       "role": "pressure_escape",
       "primarySituation": "pressure_escape",
       "allowedSituations": [
-        "default_start"
+        "pressure_escape"
       ],
       "entryConditions": [
         "pressure_without_counter_exit",
@@ -763,7 +771,9 @@
       "presetId": "Arteta_SafePossession_v11",
       "role": "possession_control",
       "primarySituation": "possession_control",
-      "allowedSituations": [],
+      "allowedSituations": [
+        "possession_control"
+      ],
       "entryConditions": [
         "manual_only",
         "underperforming_in_three_user_matches"
@@ -962,6 +972,7 @@
       "role": "width_attack",
       "primarySituation": "width_attack",
       "allowedSituations": [
+        "width_attack",
         "positional_siege"
       ],
       "entryConditions": [
@@ -1066,6 +1077,7 @@
       "role": "protect_lead",
       "primarySituation": "protect_lead",
       "allowedSituations": [
+        "protect_lead",
         "emergency_lock",
         "default_start"
       ],
@@ -1165,6 +1177,7 @@
       "role": "protect_lead_with_outlet",
       "primarySituation": "protect_lead_with_outlet",
       "allowedSituations": [
+        "protect_lead_with_outlet",
         "protect_lead",
         "default_start"
       ],
@@ -1215,6 +1228,7 @@
       "role": "lead_press_hold",
       "primarySituation": "lead_press_hold",
       "allowedSituations": [
+        "lead_press_hold",
         "protect_lead"
       ],
       "entryConditions": [

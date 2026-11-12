@@ -65,7 +65,7 @@ assert.equal(R.labels[FLICK], 'Hansi Flick — Lead Press Hold');
 assert.equal(R.meta[FLICK].group, 'defensive');
 assert.equal(R.meta[FLICK].role, 'lead_press_hold');
 assert.equal(R.roleContracts[FLICK].primarySituation, 'lead_press_hold');
-assert.deepEqual(JSON.parse(JSON.stringify(R.roleContracts[FLICK].allowedSituations)), ['protect_lead']);
+assert.deepEqual(JSON.parse(JSON.stringify(R.roleContracts[FLICK].allowedSituations)), ['lead_press_hold', 'protect_lead']);
 assert.equal(R.presetSchemeState[FLICK], 'lead_press_hold_4231');
 assert.equal(R.schemeStates['lead_press_hold_4231'], 'Fixed 4-2-3-1 RW/RM — Hansi Flick — Lead Press Hold');
 assert.equal(R.displayMeta[FLICK].trainer, 'Flick');
