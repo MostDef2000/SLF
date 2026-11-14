@@ -1,22 +1,27 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.367",
+  "scriptVersion": "4.4.368",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_367_published",
+  "status": "release_4_4_368_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "279cd34371673e40e59a609184d67bff2486b7e45d999512596357b4009af01a",
     "bundleFileCount": 94,
-    "approvedBaseCommit": "70f643b5cdae92dbcb888f66c6b875ebb677f797",
-    "approvedCommit": "8d7fe2aebf3cd1d972457be73896e17c66332419",
+    "approvedBaseCommit": "8d7fe2aebf3cd1d972457be73896e17c66332419",
+    "approvedCommit": "d3ea0d6ad24fbac608ccc713bb1e2dbd801e0386",
     "approvedFiles": [
-      ".gitignore"
+      "CHANGELOG.md",
+      "data/version.json",
+      "releases/latest.meta.js",
+      "releases/latest.user.js",
+      "src/modules/team-management/team4-championship-table-swap.js",
+      "src/modules/team-management/team4-form-saved-choice-notice.js"
     ],
     "sourceBranch": "",
     "releaseNotesProvided": false,
