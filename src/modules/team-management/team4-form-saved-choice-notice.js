@@ -399,6 +399,10 @@ SLFTeam4FormSavedChoiceNotice.start();
 
     async function start() {
         if (!isTeam4MainPage() || !matchMedia('(min-width: 1280px)').matches || document.getElementById(PANEL_ID)) return;
+        // #385 (team4-championship-table-swap) уже переделал страницу под новую вёрстку:
+        // championship карточка под составом, сервисные карточки в правой колонке,
+        // legacy-панель удалена. Не пересоздаём её повторно.
+        if (document.documentElement.dataset.slfTeam4ChampionshipSwap === '1') return;
         const context = getChampionshipContext();
         if (!context) return;
         const panel = ensurePanel(context);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.366
+// @version      4.4.367
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.366',
-        scriptVersion: '4.4.366',
+        version: '4.4.367',
+        scriptVersion: '4.4.367',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.366',
+        scriptVersion: '4.4.367',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -1745,9 +1745,17 @@ const DomUtils = {
 
         readPageUserId() {
             // foot_login_id is the site's page-global login id — present on
-            // team4.php?action=tactic AND match pages (verified in saved page
-            // dumps). Same unsafeWindow fallback pattern as
-            // native-template-api.js resolvePageWindow.
+            // team4.php?action=tactic AND match pages. The site declares it as
+            // a top-level `let foot_login_id = ...;` (team4.php line 2027): a
+            // lexical global, so NO window/unsafeWindow property exists for
+            // the declaration form. Supported resolution paths: (1) the
+            // property reads below — a bare top-level assignment creates a
+            // window property they catch — and (2) the declaration-only
+            // document.scripts scan, which resolves lexical `let`/`const`/
+            // `var` declarations in inline scripts, the form the live site
+            // uses. In-realm eval is not a supported path: the repo's
+            // security governance (tools/test-security-boundaries.mjs) bans
+            // dynamic execution sinks in src/**.
             try {
                 if (typeof unsafeWindow !== 'undefined' && unsafeWindow && unsafeWindow.foot_login_id != null) {
                     return String(unsafeWindow.foot_login_id);
@@ -1756,6 +1764,20 @@ const DomUtils = {
             if (typeof window !== 'undefined' && window && window.foot_login_id != null) {
                 return String(window.foot_login_id);
             }
+            // CSP-independent last resort: scan inline <script> text for the
+            // declaration (no live binding needed). Declaration forms only
+            // (`let`/`const`/`var`): a bare top-level assignment creates a
+            // window property that the property-read path above already
+            // catches; non-declaration matches like `obj.foot_login_id = N`
+            // must never be resolved — account isolation.
+            try {
+                if (typeof document !== 'undefined' && document && document.scripts) {
+                    for (const s of document.scripts) {
+                        const match = /(?:^|[^A-Za-z0-9_$])(?:let|const|var)\s+foot_login_id\s*=\s*(\d+)/.exec(s.textContent);
+                        if (match) return match[1];
+                    }
+                }
+            } catch (_) { /* no DOM access */ }
             return null;
         },
 
@@ -2966,6 +2988,30 @@ const DomUtils = {
 
         UI.addParserLog(`Пресет выбран: ${presetLabel}`);
         return true;
+    }
+
+    // Issue #415: when the selected preset exists as a native site tactic,
+    // click that native row's load button so the site applies the tactic
+    // through its own code path. The vector apply via applyPresetAsync has
+    // already run at the call sites — this sync is additive, and any miss
+    // (no cache, no matching item, no button) silently keeps the vector result.
+    function syncWithNativeTactic(presetName) {
+        try {
+            const cached = PresetStorage.readScopedNativeCache();
+            if (!cached || !Array.isArray(cached.items) || !cached.items.length) return false;
+
+            const nativeItem = cached.items.find(item => item.name === presetName);
+            if (!nativeItem) return false;
+
+            const btn = document.querySelector('[data-tc-load="' + nativeItem.id + '"]');
+            if (!btn) return false;
+
+            nativeClick(btn);
+            return true;
+        } catch (error) {
+            debugWarn('[SLF] Нативная синхронизация тактики не удалась:', presetName, error);
+            return false;
+        }
     }
 // <<< src/modules/tactics-presets/tactic-control-engine.js
 
@@ -8790,6 +8836,12 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
                 strengthAdvantage: engine.round(strengthAdvantage),
                 strengthDisadvantage: engine.round(strengthDisadvantage),
                 gameMode,
+                // Situation telemetry (additive, telemetry-only): the direction
+                // policy overwrites both after classification. Defaults keep the
+                // persisted decisionContext.signals contract total (null / []) when
+                // the policy is not installed — the record is still written.
+                classifiedSituation:null,
+                situationTrace:[],
                 completeness: engine.round([
                     myPower > 0, oppPower > 0, minute > 0, scoreState !== 'unknown',
                     Number.isFinite(myXg), Number.isFinite(oppXg),
@@ -9715,7 +9767,7 @@ TacticalKnowledgePack.init();
     const HIGH_PRESS_ROLE_NOTE='Для высокого прессинга назначьте 1–3 ПИ; при паре CD роль ПИ у CD не работает (C324, C379)';
     Object.entries(PRESETS).forEach(([name,preset])=>{if(Number(preset.press_intense)>=3&&META[name])META[name]=Object.assign({},META[name],{use:`${META[name].use}. ${HIGH_PRESS_ROLE_NOTE}`});});
     const TRAITS={"Emery_BalancedBase_v11":{"requires":[],"avoids":["late_emergency_chase","transition_crisis"],"attackLanes":["center","left","right"],"build":"fixed_lineup_patient_progression","tempo":"medium","press":"low","risk":"low"},"Mourinho_CleanCounter_v11":{"requires":["confirmed_counter_exit"],"avoids":["counter_exit_blocked","press_fatigue","high_bad_actions"],"attackLanes":["left","right","center"],"build":"confirmed_counter_outlet","tempo":"medium_high","press":"low","risk":"medium"},"Guardiola_PressEscape_v11":{"requires":["pressure_without_counter_exit"],"avoids":["urgent_chase"],"attackLanes":["center"],"build":"press_resistant_control","tempo":"low","press":"low","risk":"low"},"Arteta_SafePossession_v11":{"requires":["manual_selection_only"],"avoids":["late_emergency_chase"],"attackLanes":["center","left","right"],"build":"structural_control","tempo":"medium","press":"medium","risk":"medium"},"Guardiola_PressCooldown_v11":{"requires":["press_fatigue"],"avoids":["late_emergency_chase"],"attackLanes":["center","right"],"build":"cooldown_outlet","tempo":"low","press":"very_low","risk":"low"},"Guardiola_ControlledPush_v11":{"requires":["need_goal_or_attack_need"],"avoids":["very_high_bad_actions"],"attackLanes":["center","left","right"],"build":"controlled_push","tempo":"high","press":"medium","risk":"medium_high"},"Guardiola_PositionalSiege_v11":{"requires":["attacking_momentum","transition_control"],"avoids":["transition_threat","press_fatigue"],"attackLanes":["center","left","right"],"build":"fixed_back_four_positional_siege","tempo":"high","press":"high","risk":"very_high"},"Conte_WideChannels_v11":{"requires":["wide_quality","center_closed"],"avoids":["own_crosses_bad","opponent_crosses_dangerous"],"attackLanes":["left","right"],"build":"fixed_lineup_wide_channels","tempo":"medium_high","press":"medium","risk":"high"},"Klopp_LateGegenpress_v11":{"requires":["late_need_goal","fitness"],"avoids":["press_fatigue","high_bad_actions","transition_threat"],"attackLanes":["center","left","right"],"build":"gegenpress_424","tempo":"very_high","press":"very_high","risk":"very_high"},"Simeone_CompactLead_v11":{"requires":["protect_lead"],"avoids":["urgent_chase"],"attackLanes":["left","right"],"build":"compact442","tempo":"low","press":"low","risk":"low"},"Simeone_EmergencyBlock_v11":{"requires":["mandatory_reassessment_next_window"],"avoids":["permanent_losing_state"],"attackLanes":[],"build":"temporary_emergency_lock","tempo":"very_low","press":"very_low","risk":"very_low"},"Allegri_LeadOutlet_v11":{"requires":["protect_lead","safe_first_pass"],"avoids":["urgent_chase"],"attackLanes":["left","right","center"],"build":"safe_lead_outlet","tempo":"low","press":"very_low","risk":"low"},"Flick_LeadPressHold_v12":{"requires":["lead_one_goal","opponent_press_vector_high"],"avoids":["transition_threat","high_bad_actions"],"attackLanes":["center","left","right"],"build":"lead_press_hold_4231","tempo":"high","press":"high","risk":"medium_high"}};
-    const ROLE_CONTRACTS={"Emery_BalancedBase_v11":{"presetId":"Emery_BalancedBase_v11","role":"default_start","primarySituation":"default_start","allowedSituations":["pressure_escape"],"entryConditions":["balanced_opposition","same_fixed_lineup"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Mourinho_CleanCounter_v11":{"presetId":"Mourinho_CleanCounter_v11","role":"pressure_counter","primarySituation":"pressure_counter","allowedSituations":["pressure_escape"],"entryConditions":["confirmed_counter_exit","только подтверждённый чистый контрвыход"],"exitConditions":[],"hardVetoes":["подтверждённый чистый выход","нет блокировки первого паса"],"riskClass":"medium","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PressEscape_v11":{"presetId":"Guardiola_PressEscape_v11","role":"pressure_escape","primarySituation":"pressure_escape","allowedSituations":["default_start"],"entryConditions":["pressure_without_counter_exit","давление без открытого контрвыхода"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Arteta_SafePossession_v11":{"presetId":"Arteta_SafePossession_v11","role":"possession_control","primarySituation":"possession_control","allowedSituations":[],"entryConditions":["manual_only","underperforming_in_three_user_matches"],"exitConditions":[],"hardVetoes":["manual_only_diagnostic"],"riskClass":"low","fallbackEligible":false,"manualOnly":true,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PressCooldown_v11":{"presetId":"Guardiola_PressCooldown_v11","role":"press_cooldown","primarySituation":"press_cooldown","allowedSituations":["pressure_escape","default_start"],"entryConditions":["press_fatigue","усталость/рост брака"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_ControlledPush_v11":{"presetId":"Guardiola_ControlledPush_v11","role":"controlled_chase","primarySituation":"controlled_chase","allowedSituations":["positional_siege","default_start"],"entryConditions":["need_goal_or_attack_need","нужен гол без экстренного all-in"],"exitConditions":[],"hardVetoes":[],"riskClass":"medium_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PositionalSiege_v11":{"presetId":"Guardiola_PositionalSiege_v11","role":"positional_siege","primarySituation":"positional_siege","allowedSituations":["controlled_chase","late_high_pressure"],"entryConditions":["attacking_momentum","transition_control","моментум при контроле переходов"],"exitConditions":[],"hardVetoes":["запрещено при угрозе переходов и усталости"],"riskClass":"very_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Conte_WideChannels_v11":{"presetId":"Conte_WideChannels_v11","role":"width_attack","primarySituation":"width_attack","allowedSituations":["positional_siege"],"entryConditions":["wide_quality","center_closed","закрытый центр, качественные фланги"],"exitConditions":[],"hardVetoes":[],"riskClass":"high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Klopp_LateGegenpress_v11":{"presetId":"Klopp_LateGegenpress_v11","role":"late_high_pressure","primarySituation":"late_high_pressure","allowedSituations":["positional_siege"],"entryConditions":["late_need_goal","fitness","позднее отставание и хорошая физика"],"exitConditions":[],"hardVetoes":["только поздняя погоня","физика должна быть достаточна"],"riskClass":"very_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Simeone_CompactLead_v11":{"presetId":"Simeone_CompactLead_v11","role":"protect_lead","primarySituation":"protect_lead","allowedSituations":["emergency_lock","default_start"],"entryConditions":["protect_lead","небольшое преимущество без осады"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Simeone_EmergencyBlock_v11":{"presetId":"Simeone_EmergencyBlock_v11","role":"emergency_lock","primarySituation":"emergency_lock","allowedSituations":["protect_lead"],"entryConditions":["mandatory_reassessment_next_window","экстренная осада при отсутствии выхода"],"exitConditions":[],"hardVetoes":["только временная экстренная оборона"],"riskClass":"very_low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Allegri_LeadOutlet_v11":{"presetId":"Allegri_LeadOutlet_v11","role":"protect_lead_with_outlet","primarySituation":"protect_lead_with_outlet","allowedSituations":["protect_lead","default_start"],"entryConditions":["protect_lead","safe_first_pass","преимущество и доступен первый пас"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Flick_LeadPressHold_v12":{"presetId":"Flick_LeadPressHold_v12","role":"lead_press_hold","primarySituation":"lead_press_hold","allowedSituations":["protect_lead"],"entryConditions":["lead_one_goal","opponent_press_vector_high","преимущество в один гол против прессинга выше плана"],"exitConditions":[],"hardVetoes":["вне окна 60–85 минут при преимуществе","вектор прессинга соперника ниже +20%"],"riskClass":"medium_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"}};
+    const ROLE_CONTRACTS={"Emery_BalancedBase_v11":{"presetId":"Emery_BalancedBase_v11","role":"default_start","primarySituation":"default_start","allowedSituations":["default_start"],"entryConditions":["balanced_opposition","same_fixed_lineup"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Mourinho_CleanCounter_v11":{"presetId":"Mourinho_CleanCounter_v11","role":"pressure_counter","primarySituation":"pressure_counter","allowedSituations":["pressure_counter","pressure_escape"],"entryConditions":["confirmed_counter_exit","только подтверждённый чистый контрвыход"],"exitConditions":[],"hardVetoes":["подтверждённый чистый выход","нет блокировки первого паса"],"riskClass":"medium","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PressEscape_v11":{"presetId":"Guardiola_PressEscape_v11","role":"pressure_escape","primarySituation":"pressure_escape","allowedSituations":["pressure_escape"],"entryConditions":["pressure_without_counter_exit","давление без открытого контрвыхода"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Arteta_SafePossession_v11":{"presetId":"Arteta_SafePossession_v11","role":"possession_control","primarySituation":"possession_control","allowedSituations":["possession_control"],"entryConditions":["manual_only","underperforming_in_three_user_matches"],"exitConditions":[],"hardVetoes":["manual_only_diagnostic"],"riskClass":"low","fallbackEligible":false,"manualOnly":true,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PressCooldown_v11":{"presetId":"Guardiola_PressCooldown_v11","role":"press_cooldown","primarySituation":"press_cooldown","allowedSituations":["press_cooldown","pressure_escape","default_start"],"entryConditions":["press_fatigue","усталость/рост брака"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_ControlledPush_v11":{"presetId":"Guardiola_ControlledPush_v11","role":"controlled_chase","primarySituation":"controlled_chase","allowedSituations":["controlled_chase","positional_siege","default_start"],"entryConditions":["need_goal_or_attack_need","нужен гол без экстренного all-in"],"exitConditions":[],"hardVetoes":[],"riskClass":"medium_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PositionalSiege_v11":{"presetId":"Guardiola_PositionalSiege_v11","role":"positional_siege","primarySituation":"positional_siege","allowedSituations":["positional_siege","controlled_chase","late_high_pressure"],"entryConditions":["attacking_momentum","transition_control","моментум при контроле переходов"],"exitConditions":[],"hardVetoes":["запрещено при угрозе переходов и усталости"],"riskClass":"very_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Conte_WideChannels_v11":{"presetId":"Conte_WideChannels_v11","role":"width_attack","primarySituation":"width_attack","allowedSituations":["width_attack","positional_siege"],"entryConditions":["wide_quality","center_closed","закрытый центр, качественные фланги"],"exitConditions":[],"hardVetoes":[],"riskClass":"high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Klopp_LateGegenpress_v11":{"presetId":"Klopp_LateGegenpress_v11","role":"late_high_pressure","primarySituation":"late_high_pressure","allowedSituations":["late_high_pressure","positional_siege"],"entryConditions":["late_need_goal","fitness","позднее отставание и хорошая физика"],"exitConditions":[],"hardVetoes":["только поздняя погоня","физика должна быть достаточна"],"riskClass":"very_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Simeone_CompactLead_v11":{"presetId":"Simeone_CompactLead_v11","role":"protect_lead","primarySituation":"protect_lead","allowedSituations":["protect_lead","emergency_lock","default_start"],"entryConditions":["protect_lead","небольшое преимущество без осады"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Simeone_EmergencyBlock_v11":{"presetId":"Simeone_EmergencyBlock_v11","role":"emergency_lock","primarySituation":"emergency_lock","allowedSituations":["emergency_lock","protect_lead"],"entryConditions":["mandatory_reassessment_next_window","экстренная осада при отсутствии выхода"],"exitConditions":[],"hardVetoes":["только временная экстренная оборона"],"riskClass":"very_low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Allegri_LeadOutlet_v11":{"presetId":"Allegri_LeadOutlet_v11","role":"protect_lead_with_outlet","primarySituation":"protect_lead_with_outlet","allowedSituations":["protect_lead_with_outlet","protect_lead","default_start"],"entryConditions":["protect_lead","safe_first_pass","преимущество и доступен первый пас"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Flick_LeadPressHold_v12":{"presetId":"Flick_LeadPressHold_v12","role":"lead_press_hold","primarySituation":"lead_press_hold","allowedSituations":["lead_press_hold","protect_lead"],"entryConditions":["lead_one_goal","opponent_press_vector_high","преимущество в один гол против прессинга выше плана"],"exitConditions":[],"hardVetoes":["вне окна 60–85 минут при преимуществе","вектор прессинга соперника ниже +20%"],"riskClass":"medium_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"}};
     const SCHEME_STATES={"midblock_control_4231":"Fixed 4-2-3-1 RW/RM — Unai Emery — Balanced Base","midblock_counter_4411":"Fixed 4-2-3-1 RW/RM — José Mourinho — Clean Counter","box_control":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Press Escape","arteta_control":"Fixed 4-2-3-1 RW/RM — Mikel Arteta — Safe Possession","press_cooldown":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Press Cooldown","controlled_push":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Controlled Push","positional_325":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Positional Siege","wingback_width":"Fixed 4-2-3-1 RW/RM — Antonio Conte — Wide Channels","gegenpress_424":"Fixed 4-2-3-1 RW/RM — Jürgen Klopp — Late Gegenpress","compact_442":"Fixed 4-2-3-1 RW/RM — Diego Simeone — Compact Lead","low_block_541":"Fixed 4-2-3-1 RW/RM — Diego Simeone — Emergency Block","lead_outlet_4141":"Fixed 4-2-3-1 RW/RM — Massimiliano Allegri — Lead Outlet","lead_press_hold_4231":"Fixed 4-2-3-1 RW/RM — Hansi Flick — Lead Press Hold"};
     const PRESET_SCHEME_STATE={"Emery_BalancedBase_v11":"midblock_control_4231","Mourinho_CleanCounter_v11":"midblock_counter_4411","Guardiola_PressEscape_v11":"box_control","Arteta_SafePossession_v11":"arteta_control","Guardiola_PressCooldown_v11":"press_cooldown","Guardiola_ControlledPush_v11":"controlled_push","Guardiola_PositionalSiege_v11":"positional_325","Conte_WideChannels_v11":"wingback_width","Klopp_LateGegenpress_v11":"gegenpress_424","Simeone_CompactLead_v11":"compact_442","Simeone_EmergencyBlock_v11":"low_block_541","Allegri_LeadOutlet_v11":"lead_outlet_4141","Flick_LeadPressHold_v12":"lead_press_hold_4231"};
     const LADDERS={"defensive":["Emery_BalancedBase_v11","Allegri_LeadOutlet_v11","Flick_LeadPressHold_v12","Simeone_CompactLead_v11","Simeone_EmergencyBlock_v11","Guardiola_PressCooldown_v11"],"balance":["Emery_BalancedBase_v11","Guardiola_PressEscape_v11","Mourinho_CleanCounter_v11","Conte_WideChannels_v11"],"attack":["Guardiola_ControlledPush_v11","Guardiola_PositionalSiege_v11","Klopp_LateGegenpress_v11"]};
@@ -9905,32 +9957,71 @@ TacticalKnowledgePack.init();
         });
     }
 
-    function classify(context = {}) {
-        const c = normalizedContext(context);
-        if (c.emergencyLockRequired || (c.scoreState === 'winning' && c.minute >= 84 && c.underPressure && c.pressureRisk >= 55)) return 'emergency_lock';
-        if (c.pressFatigueRisk && !(c.scoreState === 'losing' && c.minute >= 70)) return 'press_cooldown';
+    // Situation classification with a read-only blocker trace (telemetry only).
+    // The precedence chain below is the single source of truth: classify()
+    // delegates to it and returns the same string as before — conditions,
+    // order and outcomes are byte-identical; only the trace is new.
+    // Trace entries describe situations whose win-condition was evaluated and
+    // failed (reasons reuse the veto wording where one exists); the winning
+    // situation itself is reported as classifiedSituation, never as a failure.
+    function classifyTraced(c = {}) {
+        const trace = [];
+        const blocked = (situation, reason) => { trace.push({ situation, ok:false, reason }); };
+        const win = situation => ({ situation, trace:trace.filter(entry => entry.situation !== situation) });
+        if (c.emergencyLockRequired || (c.scoreState === 'winning' && c.minute >= 84 && c.underPressure && c.pressureRisk >= 55)) return win('emergency_lock');
+        blocked('emergency_lock', 'аварийный lock не подтверждён');
+        if (c.pressFatigueRisk && !(c.scoreState === 'losing' && c.minute >= 70)) return win('press_cooldown');
+        blocked('press_cooldown', 'риск усталости прессинга не подтверждён');
         // v12 (#361): ведём счёт против соперника, прессингующего выше плана
         // (вектор прессинга соперника >= +20%) — активное прессующее удержание
         // вместо пассивного блока, окно 60–85 минут.
-        if (c.scoreState === 'winning' && c.minute >= 60 && c.minute <= 85 && c.opponentPressVector >= 20) return 'lead_press_hold';
+        if (c.scoreState === 'winning' && c.minute >= 60 && c.minute <= 85 && c.opponentPressVector >= 20) return win('lead_press_hold');
+        blocked('lead_press_hold', 'прессующее удержание только при преимуществе в окне 60–85 минут против вектора прессинга соперника ≥ +20%');
         if (c.scoreState === 'winning' && c.minute >= 65) {
-            return c.counterExitAvailable && !c.counterExitBlocked && !c.highBadActions
-                ? 'protect_lead_with_outlet' : 'protect_lead';
+            if (c.counterExitAvailable && !c.counterExitBlocked && !c.highBadActions) return win('protect_lead_with_outlet');
+            blocked('protect_lead_with_outlet', 'Удержание с выходом только при преимуществе и доступном первом пасе');
+            return win('protect_lead');
         }
+        blocked('protect_lead_with_outlet', 'удержание только при преимуществе после 65-й минуты');
+        blocked('protect_lead', 'удержание только при преимуществе после 65-й минуты');
         // Never choose counter from pressure alone: the clean first pass
         // must be explicitly observable, and pressure/fatigue vetoes apply.
         if (c.underPressure) {
             if (c.counterExitAvailable && !c.counterExitBlocked && !c.highBadActions && !c.pressFatigueRisk)
-                return 'pressure_counter';
-            return 'pressure_escape';
+                return win('pressure_counter');
+            blocked('pressure_counter', 'Контратака только с подтверждённым чистым выходом');
+            return win('pressure_escape');
         }
-        if (c.centerClosed && c.wideQuality && !c.ownCrossesBad && !c.opponentCrossesDangerous) return 'width_attack';
-        if (c.scoreState === 'losing' && c.minute >= 72 && c.attackNeed >= 65 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat) return 'late_high_pressure';
-        if ((c.attackingMomentum || c.attackNeed >= 58) && c.minute >= 55 && !c.transitionThreat && !c.highBadActions && !c.pressFatigueRisk) return 'positional_siege';
-        if ((c.scoreState === 'losing' && c.minute >= 45) || c.attackNeed >= 38) return 'controlled_chase';
+        blocked('pressure_counter', 'давление не подтверждено');
+        blocked('pressure_escape', 'давление не подтверждено');
+        if (c.centerClosed && c.wideQuality && !c.ownCrossesBad && !c.opponentCrossesDangerous) return win('width_attack');
+        blocked('width_attack', 'центр не закрыт либо фланговое преимущество не подтверждено');
+        if (c.scoreState === 'losing' && c.minute >= 72 && c.attackNeed >= 65 && c.lowBadActions && !c.pressFatigueRisk && !c.transitionThreat) return win('late_high_pressure');
+        blocked('late_high_pressure', 'поздняя погоня не подтверждена (счёт/минута/брак/усталость)');
+        if ((c.attackingMomentum || c.attackNeed >= 58) && c.minute >= 55 && !c.transitionThreat && !c.highBadActions && !c.pressFatigueRisk) return win('positional_siege');
+        blocked('positional_siege', 'позиционное зажатие не подтверждено (момент/минута/угроза переходов)');
+        if ((c.scoreState === 'losing' && c.minute >= 45) || c.attackNeed >= 38) return win('controlled_chase');
+        blocked('controlled_chase', 'погоня не подтверждена (счёт/минута/потребность в голе)');
         const strengthGap = Number(c.strengthGap ?? c.myStrengthGap ?? 0);
-        if (c.transitionThreat || (Number.isFinite(strengthGap) && strengthGap <= -8) || has(c, 'opponent_stronger')) return 'pressure_escape';
-        return 'default_start';
+        if (c.transitionThreat || (Number.isFinite(strengthGap) && strengthGap <= -8) || has(c, 'opponent_stronger')) return win('pressure_escape');
+        blocked('pressure_escape', 'угроза переходов или силовое отставание не подтверждены');
+        return win('default_start');
+    }
+
+    function classify(context = {}) {
+        return classifyTraced(normalizedContext(context)).situation;
+    }
+
+    // Telemetry-only: classification result + blocker trace for the decision
+    // record. Any failure here yields an empty trace — it never breaks the
+    // decision itself (the decision path above is untouched).
+    function situationTelemetry(c) {
+        try {
+            const traced = classifyTraced(c);
+            return { classifiedSituation:traced.situation, situationTrace:traced.trace };
+        } catch (_) {
+            return { classifiedSituation:null, situationTrace:[] };
+        }
     }
 
     function currentRisk() {
@@ -10013,10 +10104,11 @@ TacticalKnowledgePack.init();
     function rank(context = {}) {
         const c = normalizedContext(context);
         const situation = classify(c);
+        const telemetry = situationTelemetry(c);
         const all = ACTIVE.map(name => scoreCandidate(name, c, situation));
         const eligible = all.filter(item => !item.vetoed && item.parts.rulePrior > 0)
             .sort((a, b) => b.score - a.score || a.preset.localeCompare(b.preset));
-        return { context:c, situation, all, eligible };
+        return { context:c, situation, classifiedSituation:telemetry.classifiedSituation, situationTrace:telemetry.situationTrace, all, eligible };
     }
 
     function choose(context = {}) {
@@ -10026,6 +10118,8 @@ TacticalKnowledgePack.init();
             return {
                 name:null,
                 situation:ranked.situation,
+                classifiedSituation:ranked.classifiedSituation,
+                situationTrace:ranked.situationTrace,
                 reason:'Нет безопасной рекомендации — оставить текущую тактику',
                 selected:null,
                 runnerUp:ranked.eligible[0]||null,
@@ -10042,6 +10136,8 @@ TacticalKnowledgePack.init();
         return {
             name:selected.preset,
             situation:ranked.situation,
+            classifiedSituation:ranked.classifiedSituation,
+            situationTrace:ranked.situationTrace,
             reason:`${ranked.situation}: ${registry.meta?.[selected.preset]?.use || 'tactical suite v11'}`,
             selected,
             runnerUp,
@@ -10089,6 +10185,18 @@ TacticalKnowledgePack.init();
         const selected = choose(mergedContext);
         result.schema = SCHEMA;
         result.situationKey = selected.situation;
+        // Situation telemetry (additive fields only — recommendations, scores
+        // and vetoes are untouched). moment.context is the payload the
+        // telemetry layer persists verbatim as decisionContext.signals, so the
+        // classification trace is surfaced there for match exports.
+        result.classifiedSituation = selected.classifiedSituation ?? null;
+        result.situationTrace = Array.isArray(selected.situationTrace) ? selected.situationTrace : [];
+        try {
+            if (result.moment && typeof result.moment === 'object' && result.moment.context) {
+                result.moment.context.classifiedSituation = result.classifiedSituation;
+                result.moment.context.situationTrace = result.situationTrace;
+            }
+        } catch (_) { /* telemetry never breaks the decision */ }
         result.libraryVersion = SUITE;
         result.riskAppetite = currentRisk();
         result.margin = selected.margin;
@@ -12144,12 +12252,107 @@ if (!isTacticPage) return;
                 schemeLabel.textContent = scheme ? `Схема: ${scheme}` : '';
             }
 
+            // Issue #419: mirror the site's active tactic into the plugin
+            // dropdown. The site marks the loaded tactic with .tc-pill--cur
+            // (on the [data-tc-load] button itself or on a row containing
+            // it); resolve its name via the native cache and select the
+            // matching option. Any miss (no marked button, no cache item,
+            // no matching option) keeps the current select value.
+            function syncSelectWithNativeActive() {
+                try {
+                    const marked = document.querySelector('[data-tc-load].tc-pill--cur')
+                        || document.querySelector('.tc-pill--cur [data-tc-load]');
+                    if (!marked) return;
+
+                    const nativeId = marked.getAttribute('data-tc-load');
+                    if (!nativeId) return;
+
+                    const cached = PresetStorage.readScopedNativeCache();
+                    const item = cached && Array.isArray(cached.items)
+                        ? cached.items.find(entry => entry.id === nativeId)
+                        : null;
+                    if (!item || !item.name) return;
+
+                    const option = Array.from(select.options).find(opt => opt.textContent === item.name);
+                    if (!option) return;
+
+                    // Guard against sync loops: mutate only on a real change
+                    // (programmatic value assignment never fires 'change',
+                    // but redundant label updates are skipped too).
+                    if (select.value !== option.value) {
+                        select.value = option.value;
+                        updateSchemeLabel();
+                    }
+                } catch (_) { /* native → select sync is best-effort */ }
+            }
+
+            // Issue #423: after a programmatic native click the site may
+            // leave .tc-pill--cur on the previously active row (or update
+            // it late), so the folded block would keep showing the old
+            // tactic. Give the site's click handler a moment to settle,
+            // then re-check the marker; if it still points nowhere, mark
+            // the selected preset's native row ourselves (best-effort) so
+            // the folded block and the select mirror the selection.
+            function markNativeTacticActive(nativeId) {
+                try {
+                    if (!nativeId) return false;
+
+                    const btn = document.querySelector('[data-tc-load="' + nativeId + '"]');
+                    if (!btn) return false;
+
+                    const nativeCard = document.querySelector('.mint-card.tc-tactics');
+                    const nativeList = document.querySelector('[data-tc-list]')
+                        || (nativeCard ? nativeCard.querySelector('[data-tc-list]') : null);
+                    const listRoot = nativeList || nativeCard;
+
+                    // The site marks the row or the button itself; clear
+                    // every current marker so exactly one tactic stays
+                    // active.
+                    const scope = listRoot || btn.closest('.mint-card.tc-tactics') || document;
+                    scope.querySelectorAll('.tc-pill--cur').forEach(el => el.classList.remove('tc-pill--cur'));
+
+                    // compactNativeTacticsBlock() folds by direct children
+                    // of the list root, so mark that row (or the button
+                    // when it is the row itself).
+                    const row = listRoot
+                        ? (Array.from(listRoot.children).find(child => child === btn || child.contains(btn)) || btn)
+                        : btn;
+                    row.classList.add('tc-pill--cur');
+                    return true;
+                } catch (_) {
+                    return false;
+                }
+            }
+
+            async function settleNativeActiveMarker(presetName) {
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    const marked = document.querySelector('[data-tc-load].tc-pill--cur')
+                        || document.querySelector('.tc-pill--cur [data-tc-load]');
+
+                    if (!marked) {
+                        const cached = PresetStorage.readScopedNativeCache();
+                        const item = cached && Array.isArray(cached.items)
+                            ? cached.items.find(entry => entry.name === presetName)
+                            : null;
+                        if (item && item.id) markNativeTacticActive(item.id);
+                    }
+
+                    compactNativeTacticsBlock();
+                    syncSelectWithNativeActive();
+                } catch (_) { /* native marker settle is best-effort */ }
+            }
+
             refreshSelect();
             updateSchemeLabel();
+            syncSelectWithNativeActive();
 
             select.addEventListener('change', async () => {
                 updateSchemeLabel();
                 await applyPresetAsync(select.value);
+                await syncWithNativeTactic(select.value);
+                await settleNativeActiveMarker(select.value);
             });
 
             const applyBtn = document.createElement('button');
@@ -12159,6 +12362,8 @@ if (!isTacticPage) return;
             applyBtn.addEventListener('click', async () => {
                 applyBtn.disabled = true;
                 await applyPresetAsync(select.value);
+                await syncWithNativeTactic(select.value);
+                await settleNativeActiveMarker(select.value);
                 applyBtn.disabled = false;
             });
 
@@ -12355,6 +12560,139 @@ if (!isTacticPage) return;
 
             row.append(select, applyBtn, saveBtn, deleteBtn, exportBtn, importBtn, migrateBtn);
             container.append(title, row, schemeLabel);
+
+            function getActiveTacticRow(rows) {
+                if (!rows || rows.length === 0) return undefined;
+
+                // The site's «сейчас» marker wins: .tc-pill--cur sits on the
+                // row itself or on a button inside it.
+                const marked = rows.find(row =>
+                    row.classList.contains('tc-pill--cur') ||
+                    row.querySelector('.tc-pill--cur')
+                );
+                if (marked) return marked;
+
+                // Issue #421: rows[0] may be a header/control element rather
+                // than a tactic row (4.4.370 regression: that fallback folded
+                // every real tactic). Prefer the first row that actually
+                // carries a tactic button before the last-resort fallback.
+                const tacticLike = rows.find(row =>
+                    row.getAttribute('data-tc-load') !== null ||
+                    row.querySelector('[data-tc-load]')
+                );
+                if (tacticLike) return tacticLike;
+
+                return rows[0];
+            }
+
+            // Issue #415: fold the native «Мои тактики» card — the site
+            // renders one row per saved tactic, which pushes the plugin
+            // panel far down the page. Issue #419: when collapsed, keep
+            // ONLY the active tactic's row visible (never hide all rows)
+            // and fold the rest behind a «показать ещё» toggle. Issue
+            // #421: the fallback prefers a real tactic row ([data-tc-load])
+            // over rows[0] — on 4.4.370 rows[0] can be a header/control
+            // element, which folded every actual tactic. Best-effort:
+            // no native card → no-op.
+            const compactNativeTacticsBlock = () => {
+                try {
+                    const nativeCard = document.querySelector('.mint-card.tc-tactics');
+                    const nativeList = document.querySelector('[data-tc-list]')
+                        || (nativeCard ? nativeCard.querySelector('[data-tc-list]') : null);
+                    const listRoot = nativeList || nativeCard;
+
+                    if (!listRoot) return;
+
+                    const rows = Array.from(listRoot.children);
+
+                    // Issue #419: exactly one row stays visible when
+                    // collapsed — the ACTIVE tactic's row (site marks it
+                    // with .tc-pill--cur on the row or on a button inside
+                    // it), falling back to the first row. Empty list →
+                    // nothing to fold, never hide anything.
+                    const activeRow = getActiveTacticRow(rows);
+
+                    if (!activeRow) return;
+
+                    const toggle = listRoot.parentElement
+                        ? listRoot.parentElement.querySelector('[data-slf-tactics-toggle]')
+                        : null;
+
+                    const expanded = toggle?.dataset.slfExpanded === '1';
+
+                    rows.forEach(row => {
+                        row.style.display = (expanded || row === activeRow) ? '' : 'none';
+                    });
+
+                    // Single-row list: nothing to fold — hide a stale toggle.
+                    if (rows.length <= 1) {
+                        if (toggle) toggle.style.display = 'none';
+                        return;
+                    }
+
+                    if (toggle) {
+                        toggle.style.display = '';
+                        toggle.textContent = expanded ? 'скрыть' : 'показать ещё';
+                        return;
+                    }
+
+                    const toggleBtn = document.createElement('button');
+                    toggleBtn.type = 'button';
+                    toggleBtn.dataset.slfTacticsToggle = '1';
+                    toggleBtn.dataset.slfExpanded = '0';
+                    toggleBtn.textContent = 'показать ещё';
+                    toggleBtn.style.cssText =
+                        'margin:4px 0 0;padding:2px 8px;font-size:12px;cursor:pointer;background:#333;color:#fff;border:1px solid #555;border-radius:3px;';
+                    toggleBtn.addEventListener('click', () => {
+                        toggleBtn.dataset.slfExpanded = toggleBtn.dataset.slfExpanded === '1' ? '0' : '1';
+                        compactNativeTacticsBlock();
+                    });
+                    listRoot.insertAdjacentElement('afterend', toggleBtn);
+                } catch (_) { /* native block compaction is best-effort */ }
+            };
+
+            const installNativeTacticsCompaction = () => {
+                if (typeof MutationObserver === 'undefined') return;
+                if (!document.body) return;
+
+                // The site renders the tactics list asynchronously and may
+                // re-render it on its own actions: observe mutations and
+                // re-fold. Start body-wide until the card shows up (scan
+                // capped at 15s below), then re-scope to the card and
+                // disconnect after 10 card mutations — enough to re-fold
+                // re-renders from user actions (save/delete/move) without
+                // perpetual observation.
+                let scanningBody = !document.querySelector('.mint-card.tc-tactics');
+                let cardMutations = 0;
+                const observer = new MutationObserver(() => {
+                    if (scanningBody) {
+                        const card = document.querySelector('.mint-card.tc-tactics');
+                        if (!card) return;
+                        scanningBody = false;
+                        observer.disconnect();
+                        observer.observe(card, { childList: true, subtree: true });
+                    } else {
+                        cardMutations += 1;
+                    }
+                    compactNativeTacticsBlock();
+                    syncSelectWithNativeActive();
+                    if (cardMutations >= 10) observer.disconnect();
+                });
+
+                observer.observe(
+                    scanningBody ? document.body : document.querySelector('.mint-card.tc-tactics'),
+                    { childList: true, subtree: true }
+                );
+                compactNativeTacticsBlock();
+
+                if (scanningBody) {
+                    setTimeout(() => {
+                        if (scanningBody) observer.disconnect();
+                    }, 15000);
+                }
+            };
+
+            installNativeTacticsCompaction();
 
             // fm2026 match tactic view (issue #370 follow-up): on radio-less
             // game.php pages the resolved target is the DIV.tc.mint.tc--match
@@ -13227,6 +13565,100 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
             + `<div style="margin-top:5px;">${rowsHtml}</div></details>`;
     }
 
+    // Match-time preset hints (presentation-only): role grouping + the existing
+    // META «use» text + a risk color derived from roleContracts.riskClass,
+    // appended to the «Подробнее» rows of the merged recommendation block.
+    // Read-only over window.SLFActivePresetRegistry; a preset without a
+    // contract renders without hints — this never throws and never touches
+    // recommendation logic or scoring.
+    const FINAL_HINT_RISK_COLORS = { green: '#75ff75', amber: '#ffd76a', red: '#ff7a7a' };
+    const FINAL_HINT_RISK_TONES = {
+        very_low: 'green', low: 'green',
+        medium: 'amber', medium_high: 'amber',
+        high: 'red', very_high: 'red'
+    };
+
+    function finalHintRegistry() {
+        if (typeof window === 'undefined') return null;
+        const registry = window.SLFActivePresetRegistry;
+        return registry && registry.roleContracts && typeof registry.roleContracts === 'object' ? registry : null;
+    }
+
+    function finalHintTruncate(text, limit) {
+        const clean = String(text || '').replace(/\s+/g, ' ').trim();
+        return clean.length <= limit ? clean : `${clean.slice(0, limit - 1).trimEnd()}…`;
+    }
+
+    function finalHintWhyText(registry, presetId) {
+        const use = String(registry.meta?.[presetId]?.use || '').trim();
+        if (use) {
+            const firstSentence = use.split('. ')[0] || use;
+            return finalHintTruncate(firstSentence.length <= 140 ? firstSentence : use, 140);
+        }
+        const conditions = registry.roleContracts[presetId]?.entryConditions;
+        const russian = (Array.isArray(conditions) ? conditions : []).map(String)
+            .find(text => /[А-Яа-яЁё]/.test(text));
+        return russian ? finalHintTruncate(russian, 140) : '';
+    }
+
+    function finalHintPresetTitle(presetId) {
+        const title = typeof RecommendationEngine !== 'undefined' && RecommendationEngine.getPresetTitle
+            ? RecommendationEngine.getPresetTitle(presetId) : null;
+        return title || presetId;
+    }
+
+    function finalTacticHintsHtml(snapshot, rec) {
+        try {
+            const registry = finalHintRegistry();
+            if (!registry) return '';
+
+            const ids = [];
+            const push = value => {
+                const id = String(value || '').trim();
+                if (id && !ids.includes(id)) ids.push(id);
+            };
+            if (rec && rec.base !== 'current_tactic') push(rec.presetId);
+            const candidates = Array.isArray(snapshot?.ruleDecision?.candidates) ? snapshot.ruleDecision.candidates : [];
+            for (const item of candidates) {
+                if (item && !item.vetoed) push(item.preset);
+            }
+            const hinted = ids.filter(id => Boolean(registry.roleContracts[id]));
+            if (!hinted.length) return '';
+
+            const groups = new Map();
+            for (const id of hinted) {
+                const role = String(registry.roleContracts[id].role || '').trim() || id;
+                if (!groups.has(role)) groups.set(role, []);
+                groups.get(role).push(id);
+            }
+
+            const rows = [];
+            for (const [role, presetIds] of groups) {
+                const items = presetIds.map(id => {
+                    const contract = registry.roleContracts[id];
+                    const tone = FINAL_HINT_RISK_TONES[String(contract.riskClass || '').trim()] || '';
+                    const color = tone ? FINAL_HINT_RISK_COLORS[tone] : '';
+                    const riskDot = color
+                        ? ` <span style="color:${color};" title="${etalonEscape(`риск: ${contract.riskClass}`)}">●</span>`
+                        : '';
+                    const manualMarker = contract.manualOnly
+                        ? ' · <span style="color:#8fd3ff;">ручной выбор</span>' : '';
+                    const why = finalHintWhyText(registry, id);
+                    return `<div style="margin:2px 0 2px 12px;line-height:1.35;">`
+                        + `${etalonEscape(finalHintPresetTitle(id))}${riskDot}${manualMarker}`
+                        + `${why ? ` — ${etalonEscape(why)}` : ''}</div>`;
+                });
+                rows.push(`<div style="margin-top:4px;"><span style="opacity:.7;">${etalonEscape(role)}</span>${items.join('')}</div>`);
+            }
+            return rows.length
+                ? `<div style="margin-top:5px;line-height:1.35;font-size:11px;opacity:.9;">`
+                    + `<b>Пресеты по ролям:</b>${rows.join('')}</div>`
+                : '';
+        } catch (_) {
+            return ''; // hints are presentation-only — never break the block
+        }
+    }
+
     function buildFinalTacticBlockHtml(snapshot, extras = {}) {
         try {
             const rec = snapshot?.ruleDecision?.finalTactic;
@@ -13264,7 +13696,8 @@ html[data-slf-design="fm2026"] #fm-dbg-res{display:none!important}
                 + `${referenceLine ? `<div style="opacity:.9;">${etalonEscape(referenceLine)}</div>` : ''}`
                 + `${insufficientText ? `<div>Эталон: недостаточно данных${insufficientText ? ` (${etalonEscape(insufficientText)})` : ''}</div>` : ''}`
                 + `${notes.length ? `<div style="opacity:.9;">Совет: ${etalonEscape(notes.join('; '))}</div>` : ''}`
-                + `${extras.decisionHtml || ''}${extras.candidateHtml || ''}`;
+                + `${extras.decisionHtml || ''}${extras.candidateHtml || ''}`
+                + finalTacticHintsHtml(snapshot, rec);
 
             return `<div style="line-height:1.4;margin-top:5px;border-top:1px solid #333;padding-top:5px;">`
                 + `${title}${etalonEscape(buildFinalTacticTitle(rec))}`
@@ -26753,19 +27186,45 @@ const SLFTeam4ChampionshipTableSwap = (() => {
     function resolveTeamId() {
         const fromUrl = (location.search.match(/[?&]id=(\d+)/) || [])[1];
         if (fromUrl) return fromUrl;
-        // team4.php shows the active club — fall back to the club card link.
+        // Новая вёрстка (fm2026): fmc-шапка с data-team на активной вкладке клуба.
+        const fmcTab = document.querySelector('.fmc-tab__name[data-team], .fmc-club [data-team]');
+        if (fmcTab) return fmcTab.getAttribute('data-team');
+        // Старая вёрстка: .fm-card--club ссылка на roster.php?id=.
         const link = document.querySelector('.fm-card--club a[href*="/roster.php?id="]');
         const href = link?.getAttribute('href') || link?.href || '';
-        return (href.match(/[?&]id=(\d+)/) || [])[1] || '';
+        const m = href.match(/[?&]id=(\d+)/);
+        if (m) return m[1];
+        // user-custom__team-<id> класс на #globalcontent.
+        const gc = document.querySelector('#globalcontent');
+        const gcId = gc?.className.match(/user-custom__team-(\d+)/);
+        if (gcId) return gcId[1];
+        // Любая ссылка на roster.php?id= на странице.
+        const anyLink = document.querySelector('a[href*="/roster.php?id="]');
+        if (anyLink) {
+            try {
+                const url = new URL(anyLink.getAttribute('href') || '', location.origin);
+                const id = url.searchParams.get('id');
+                if (id) return id;
+            } catch (_) {}
+        }
+        return '';
     }
 
     function resolveClubName() {
+        // Новая вёрстка (fm2026): fmc-club блок с названием клуба.
+        const fmcClub = document.querySelector('.fmc-club');
+        if (fmcClub) {
+            const name = norm(fmcClub.querySelector('.fmc-club__name a, .fmc-club__name')?.textContent || '');
+            if (name) return name;
+        }
+        // Старая вёрстка: .fm-card--club.
         const card = document.querySelector('.fm-card--club');
         return norm(card?.querySelector('.team-name')?.textContent || card?.querySelector('a')?.textContent || '');
     }
 
-    function findMovedCards(dash) {
-        return [...dash.querySelectorAll('.pcard:not(.team-lineup):not(.slf-champ)')].filter(card => {
+    function findMovedCards(root) {
+        root = root || document.body;
+        return [...root.querySelectorAll('.pcard:not(.team-lineup):not(.slf-champ)')].filter(card => {
             const head = card.querySelector('.pcard__head2');
             if (!head) return false;
             const title = norm(head.textContent);
@@ -26843,7 +27302,9 @@ const SLFTeam4ChampionshipTableSwap = (() => {
 
         const moved = document.createElement('div');
         moved.className = MOVED_CONTAINER_CLASS;
-        findMovedCards(dash).forEach(candidate => moved.appendChild(candidate));
+        // Ищем карточки во всём team-body (не только в dash): на новой вёрстке часть карточек
+        // (заявки на аренду) может жить в team-content, а не в team-dash.
+        findMovedCards(dash.closest('.team-body') || document.body).forEach(candidate => moved.appendChild(candidate));
         if (moved.children.length) teamContent.appendChild(moved);
     }
 
@@ -26865,7 +27326,10 @@ const SLFTeam4ChampionshipTableSwap = (() => {
             if (settled) return;
             const dash = document.querySelector('.team-body > .team-dash') || document.querySelector('.team-dash');
             const lineup = dash?.querySelector('.pcard.team-lineup');
-            if (dash && lineup && findMovedCards(dash).length === MOVE_CARD_TITLES.length) {
+            const teamContent = document.querySelector('.team-content');
+            const movedCards = findMovedCards(dash?.closest('.team-body') || document.body);
+            // Готово: есть dash, lineup, teamContent, и хотя бы одна карточка для перемещения.
+            if (dash && lineup && teamContent && movedCards.length > 0) {
                 settled = true;
                 stop();
                 onReady(dash, lineup);
@@ -27344,6 +27808,10 @@ SLFTeam4FormSavedChoiceNotice.start();
 
     async function start() {
         if (!isTeam4MainPage() || !matchMedia('(min-width: 1280px)').matches || document.getElementById(PANEL_ID)) return;
+        // #385 (team4-championship-table-swap) уже переделал страницу под новую вёрстку:
+        // championship карточка под составом, сервисные карточки в правой колонке,
+        // legacy-панель удалена. Не пересоздаём её повторно.
+        if (document.documentElement.dataset.slfTeam4ChampionshipSwap === '1') return;
         const context = getChampionshipContext();
         if (!context) return;
         const panel = ensurePanel(context);
@@ -28073,15 +28541,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.366',
-        scriptVersion: '4.4.366',
+        version: '4.4.367',
+        scriptVersion: '4.4.367',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.366',
+        scriptVersion: '4.4.367',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
