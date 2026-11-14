@@ -1,28 +1,24 @@
 {
   "schema": "slf_version_manifest_v3_latest_only_build_from_src",
-  "scriptVersion": "4.4.369",
+  "scriptVersion": "4.4.378",
   "releaseChannel": "github-tampermonkey",
   "latestOnly": true,
   "archiveCreated": false,
   "latestMetaJs": "releases/latest.meta.js",
   "latestUserJs": "releases/latest.user.js",
-  "status": "release_4_4_369_published",
+  "status": "release_4_4_378_published",
   "build": {
     "source": "src/**",
     "assembly": "manifest-only",
     "bundleOrder": "src/app/bundle-order.json",
     "bundleManifestSha256": "279cd34371673e40e59a609184d67bff2486b7e45d999512596357b4009af01a",
     "bundleFileCount": 94,
-    "approvedBaseCommit": "d3ea0d6ad24fbac608ccc713bb1e2dbd801e0386",
-    "approvedCommit": "4db6737a996287c1964a87009fd5f3295e9d418f",
+    "approvedBaseCommit": "3f0a214d1290e9a05818121b372a3cca8ae33454",
+    "approvedCommit": "25103f58b7f1f1abac9b3a4ba30fb8f2e1b23d16",
     "approvedFiles": [
-      "CHANGELOG.md",
-      "data/version.json",
-      "releases/latest.meta.js",
-      "releases/latest.user.js",
       "src/modules/team-management/team4-championship-table-swap.js"
     ],
-    "sourceBranch": "",
+    "sourceBranch": "main",
     "releaseNotesProvided": false,
     "releaseNotesModule": "Automatic latest-only build"
   }

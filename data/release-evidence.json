@@ -1,60 +1,42 @@
 {
   "schema": "slf_release_evidence_v1",
-  "scriptVersion": "4.4.366",
+  "scriptVersion": "4.4.378",
   "releaseChannel": "github-tampermonkey",
-  "validationRevision": "ccdee1e62f21f0f6795e635b748b65b726516310",
-  "approvedBaseCommit": "ef8ad9e673e316dd783530bb1228d9a2edbdc713",
-  "approvedCommit": "ccdee1e62f21f0f6795e635b748b65b726516310",
+  "validationRevision": "25103f58b7f1f1abac9b3a4ba30fb8f2e1b23d16",
+  "approvedBaseCommit": "3f0a214d1290e9a05818121b372a3cca8ae33454",
+  "approvedCommit": "25103f58b7f1f1abac9b3a4ba30fb8f2e1b23d16",
   "approvedFiles": [
-    "data/audit/runtime-reachability-review-v1.json",
-    "data/quality/reliability-budget-v1.json",
-    "specs/409-presets-native-templates/plan.md",
-    "specs/409-presets-native-templates/spec.md",
-    "specs/409-presets-native-templates/tasks.md",
-    "src/app/bundle-order.json",
-    "src/app/ui-layer.js",
-    "src/modules/tactics-presets/native-template-api.js",
-    "src/modules/tactics-presets/preset-migration.js",
-    "src/modules/tactics-presets/preset-storage.js",
-    "tests/browser/test_exact_userscript.py",
-    "tests/browser/test_team4_tactic_header_selector.py",
-    "tests/test-native-template-api.mjs",
-    "tests/test-native-template-mapping.mjs",
-    "tests/test-preset-migration.mjs",
-    "tests/test-preset-native-storage.mjs",
-    "tests/test-preset-storage-sync-status.mjs",
-    "vps/exporter-rag/slf_rag_build.py",
-    "vps/exporter-rag/test_slf_rag_build.py"
+    "src/modules/team-management/team4-championship-table-swap.js"
   ],
   "sourceBranch": "main",
-  "bundleManifestSha256": "161966aa6155140bfda1d319419722225fad1a877b2eb2c18dcfbc7a0cae4d42",
+  "bundleManifestSha256": "279cd34371673e40e59a609184d67bff2486b7e45d999512596357b4009af01a",
   "bundleFileCount": 94,
   "deterministicRebuildVerified": true,
   "releaseFiles": [
     {
       "path": "releases/latest.user.js",
-      "sha256": "65ef162c5e40b7c27f4f18d7100a0979b0f7eff802a1bab5c4365e5912f84e3b",
-      "bytes": 1511396
+      "sha256": "0fcdf37d77d5bf3535eb3cb6c896d64b665ccb413dc550d30a37cdfaba604088",
+      "bytes": 1538630
     },
     {
       "path": "releases/latest.meta.js",
-      "sha256": "bbfe2868833c0fd6e12700a58a72586ff9e7ee5585043538695a0863a9b2e8a4",
+      "sha256": "f7e7dae38bd7dd0a6831c383e681fbb465d889bd25eb6adfd13936e267e393b5",
       "bytes": 1389
     },
     {
       "path": "data/version.json",
-      "sha256": "e41c29087e7305d1b46174ffd297922f0e7cb9ea7d4327a63e19aa00ef005b7e",
-      "bytes": 1779
+      "sha256": "cdd29fc0b756e0ba5a879ec54e8236b4edeb658bbee32b68d59d72a4ecea0268",
+      "bytes": 922
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "b8ace35924d86417868f8fc0b8382d98d087f7f19090c8032e202eaa7bfa1300",
-      "bytes": 177366
+      "sha256": "b269df1596082f7b0d361b7875c828267e2592b1d907df1d7b70dd221bf944de",
+      "bytes": 184164
     },
     {
       "path": "src/app/bundle-order.json",
-      "sha256": "161966aa6155140bfda1d319419722225fad1a877b2eb2c18dcfbc7a0cae4d42",
-      "bytes": 78862
+      "sha256": "279cd34371673e40e59a609184d67bff2486b7e45d999512596357b4009af01a",
+      "bytes": 78896
     }
   ],
   "buildFiles": [
@@ -112,8 +94,8 @@
     },
     {
       "path": "src/modules/tactics-presets/preset-storage.js",
-      "sha256": "2f3bc2189c5a53640c008c7dd5024a476089bd3701696ce596380a9bbe561075",
-      "bytes": 36344
+      "sha256": "1b9a316775409f75af9e18fefad5d0b653f0aeaeb50b4e0b818a2127920ec5c1",
+      "bytes": 37828
     },
     {
       "path": "src/modules/tactics-presets/preset-migration.js",
@@ -122,8 +104,8 @@
     },
     {
       "path": "src/modules/tactics-presets/tactic-control-engine.js",
-      "sha256": "43dac3be8b4d17a61c8fdefce4cfc3f6a2d2a175fb047b691dfd75c95e4858a6",
-      "bytes": 10901
+      "sha256": "e33d9282d53570ee36923ae18b5481d63e5a509a39bad3af133d2fc1fe466c9f",
+      "bytes": 12019
     },
     {
       "path": "src/modules/tactics-presets/tactic-control-bridge.js",
@@ -237,8 +219,8 @@
     },
     {
       "path": "src/modules/strategy-data-recommendations/cah-runtime-context.js",
-      "sha256": "76967bb3a259fe1d5c25bd0adef6c73eab4f37e03dd032b063b2bcf8656fccc7",
-      "bytes": 33804
+      "sha256": "813a5b1d6c6c83498836b5ddf0dfa1d5030b861aab8f8f7bfbcfe77a3088fe56",
+      "bytes": 34209
     },
     {
       "path": "src/modules/strategy-data-recommendations/cah-decision-core.js",
@@ -257,13 +239,13 @@
     },
     {
       "path": "src/modules/tactics-presets/active-preset-registry.js",
-      "sha256": "9ec8615bbb4f090c4d4bd10cb0422e3c58f74fa42093eddc2e2981fe47c34230",
-      "bytes": 39107
+      "sha256": "a0800080605a5ba40b93e04029903cc33240cff4b037ed36eb7a648c5da3b92e",
+      "bytes": 39314
     },
     {
       "path": "src/modules/tactics-presets/tactic-preset-direction-policy.js",
-      "sha256": "66485987f8a2919415888eca91b87537f8670654927398b7274e157f852d2eef",
-      "bytes": 29845
+      "sha256": "641d9025dbed52af154f2ecd55e833d3f91d40c7c97ca282604db4af06930a7b",
+      "bytes": 34420
     },
     {
       "path": "src/modules/strategy-data-recommendations/signal-noise-filter-layer.js",
@@ -307,8 +289,8 @@
     },
     {
       "path": "src/app/ui-layer.js",
-      "sha256": "ba0e77eeeb29c79c718782639a6a33bfe9faea4b319ab8c51b44f85c039bad43",
-      "bytes": 43035
+      "sha256": "4d028388f78d393379e1b13a9503b06ec6cc56f9005137a8492dc8f967ecad19",
+      "bytes": 54635
     },
     {
       "path": "src/app/version-badge.js",
@@ -317,8 +299,8 @@
     },
     {
       "path": "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
-      "sha256": "a0ffbdbbd5cd3e2b9ee76e25311228fe58dda42adaf0ffcb2b6c40f17bd55d2a",
-      "bytes": 42665
+      "sha256": "ae0dc804a8d7d39896c2e66472d5dd939638fff81a09f9c3bc077e53b400e5f5",
+      "bytes": 47412
     },
     {
       "path": "src/modules/manual-match-telemetry/manual-state-integrity.js",
@@ -517,13 +499,13 @@
     },
     {
       "path": "src/modules/team-management/team4-championship-table-swap.js",
-      "sha256": "116df8ca481dc35c92f1bc0581f05bee402519cebb84ecc69ea456501132e8ed",
-      "bytes": 11684
+      "sha256": "123f4d0df5f199add5bcf5d98eb866116a6e24e39d8a36f6312db0fdf78a40f8",
+      "bytes": 14338
     },
     {
       "path": "src/modules/team-management/team4-form-saved-choice-notice.js",
-      "sha256": "4c353a94029ee449efd401c0038e2ba950e3226dd4785938ad8f71cfead16453",
-      "bytes": 24438
+      "sha256": "ddc2bfbf45fdb885c21559a502561deb9a74fc68e0a5c43449dc4749700f79ba",
+      "bytes": 24882
     },
     {
       "path": "src/modules/team-management/team4-leadership-upgrade-indicator.js",

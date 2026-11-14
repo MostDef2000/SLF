@@ -1,22 +1,221 @@
 # Changelog
 
-## 4.4.369
+## 4.4.378
 
 ### Automatic latest-only build
 - Built deterministic latest-only artifacts from the approved source commit.
 
 Changed files:
-- CHANGELOG.md
-- data/version.json
-- releases/latest.meta.js
-- releases/latest.user.js
+- src/modules/team-management/team4-championship-table-swap.js
+
+Approved base commit:
+- 3f0a214d1290e9a05818121b372a3cca8ae33454
+
+Approved commit:
+- 25103f58b7f1f1abac9b3a4ba30fb8f2e1b23d16
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.377
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
 - src/modules/team-management/team4-championship-table-swap.js
 
 Approved base commit:
 - d3ea0d6ad24fbac608ccc713bb1e2dbd801e0386
 
 Approved commit:
-- 4db6737a996287c1964a87009fd5f3295e9d418f
+- 3f0a214d1290e9a05818121b372a3cca8ae33454
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.376
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .gitignore
+- src/modules/team-management/team4-championship-table-swap.js
+- src/modules/team-management/team4-form-saved-choice-notice.js
+
+Approved base commit:
+- e4adca3de1e4ac699b26ef579c4dd2200e8e2c20
+
+Approved commit:
+- d3ea0d6ad24fbac608ccc713bb1e2dbd801e0386
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.375
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/strategy-data-recommendations/cah-runtime-context.js
+- src/modules/tactics-presets/tactic-preset-direction-policy.js
+- tests/test-situation-telemetry.mjs
+
+Approved base commit:
+- e4d341437993911102f780c726c1028180fa8313
+
+Approved commit:
+- e4adca3de1e4ac699b26ef579c4dd2200e8e2c20
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.374
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/tactics/active-preset-inventory-v3.json
+- src/modules/tactics-presets/active-preset-registry.js
+
+Approved base commit:
+- 10c266da604a978ce6f858f1bf1b16270db3c4e4
+
+Approved commit:
+- e4d341437993911102f780c726c1028180fa8313
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.373
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/tactics/active-preset-inventory-v3.json
+- specs/361-lead-press-hold-v12/spec.md
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- src/modules/tactics-presets/active-preset-registry.js
+- tests/test-preset-hints-rendering.mjs
+- tests/test-tactic-suite-v12-lead-press-hold.mjs
+
+Approved base commit:
+- d5ab615fa7780a6a937eb1d311c5b3f5528bf1a5
+
+Approved commit:
+- 10c266da604a978ce6f858f1bf1b16270db3c4e4
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.372
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- aedd6453a3376abbdaa510a23d8452c2c8d2d727
+
+Approved commit:
+- d5ab615fa7780a6a937eb1d311c5b3f5528bf1a5
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.371
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- ace73edc582a980171146d248235a0c6ec251538
+
+Approved commit:
+- aedd6453a3376abbdaa510a23d8452c2c8d2d727
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.370
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- 992af0165742d57471332e522ba6423c0d5838f8
+
+Approved commit:
+- ace73edc582a980171146d248235a0c6ec251538
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.369
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- 93273c4671b3cd37db18b3fdfb2c0a575528f941
+
+Approved commit:
+- 992af0165742d57471332e522ba6423c0d5838f8
 
 Compatibility / storage:
 - Cache/schema/storage keys changed: NO
@@ -31,18 +230,16 @@ Safety notes:
 - Built deterministic latest-only artifacts from the approved source commit.
 
 Changed files:
-- CHANGELOG.md
-- data/version.json
-- releases/latest.meta.js
-- releases/latest.user.js
-- src/modules/team-management/team4-championship-table-swap.js
-- src/modules/team-management/team4-form-saved-choice-notice.js
+- src/app/bundle-order.json
+- src/app/ui-layer.js
+- src/modules/tactics-presets/tactic-control-engine.js
+- tests/test-preset-native-storage.mjs
 
 Approved base commit:
-- 8d7fe2aebf3cd1d972457be73896e17c66332419
+- b9411f7aea690e5d8196fa99143fe37db8e794cc
 
 Approved commit:
-- d3ea0d6ad24fbac608ccc713bb1e2dbd801e0386
+- 93273c4671b3cd37db18b3fdfb2c0a575528f941
 
 Compatibility / storage:
 - Cache/schema/storage keys changed: NO
@@ -57,13 +254,14 @@ Safety notes:
 - Built deterministic latest-only artifacts from the approved source commit.
 
 Changed files:
-- .gitignore
+- src/modules/tactics-presets/preset-storage.js
+- tests/test-preset-native-storage.mjs
 
 Approved base commit:
-- 70f643b5cdae92dbcb888f66c6b875ebb677f797
+- ccdee1e62f21f0f6795e635b748b65b726516310
 
 Approved commit:
-- 8d7fe2aebf3cd1d972457be73896e17c66332419
+- b9411f7aea690e5d8196fa99143fe37db8e794cc
 
 Compatibility / storage:
 - Cache/schema/storage keys changed: NO
