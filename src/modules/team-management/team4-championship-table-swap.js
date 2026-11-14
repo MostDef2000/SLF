@@ -60,19 +60,45 @@ const SLFTeam4ChampionshipTableSwap = (() => {
     function resolveTeamId() {
         const fromUrl = (location.search.match(/[?&]id=(\d+)/) || [])[1];
         if (fromUrl) return fromUrl;
-        // team4.php shows the active club — fall back to the club card link.
+        // Новая вёрстка (fm2026): fmc-шапка с data-team на активной вкладке клуба.
+        const fmcTab = document.querySelector('.fmc-tab__name[data-team], .fmc-club [data-team]');
+        if (fmcTab) return fmcTab.getAttribute('data-team');
+        // Старая вёрстка: .fm-card--club ссылка на roster.php?id=.
         const link = document.querySelector('.fm-card--club a[href*="/roster.php?id="]');
         const href = link?.getAttribute('href') || link?.href || '';
-        return (href.match(/[?&]id=(\d+)/) || [])[1] || '';
+        const m = href.match(/[?&]id=(\d+)/);
+        if (m) return m[1];
+        // user-custom__team-<id> класс на #globalcontent.
+        const gc = document.querySelector('#globalcontent');
+        const gcId = gc?.className.match(/user-custom__team-(\d+)/);
+        if (gcId) return gcId[1];
+        // Любая ссылка на roster.php?id= на странице.
+        const anyLink = document.querySelector('a[href*="/roster.php?id="]');
+        if (anyLink) {
+            try {
+                const url = new URL(anyLink.getAttribute('href') || '', location.origin);
+                const id = url.searchParams.get('id');
+                if (id) return id;
+            } catch (_) {}
+        }
+        return '';
     }
 
     function resolveClubName() {
+        // Новая вёрстка (fm2026): fmc-club блок с названием клуба.
+        const fmcClub = document.querySelector('.fmc-club');
+        if (fmcClub) {
+            const name = norm(fmcClub.querySelector('.fmc-club__name a, .fmc-club__name')?.textContent || '');
+            if (name) return name;
+        }
+        // Старая вёрстка: .fm-card--club.
         const card = document.querySelector('.fm-card--club');
         return norm(card?.querySelector('.team-name')?.textContent || card?.querySelector('a')?.textContent || '');
     }
 
-    function findMovedCards(dash) {
-        return [...dash.querySelectorAll('.pcard:not(.team-lineup):not(.slf-champ)')].filter(card => {
+    function findMovedCards(root) {
+        root = root || document.body;
+        return [...root.querySelectorAll('.pcard:not(.team-lineup):not(.slf-champ)')].filter(card => {
             const head = card.querySelector('.pcard__head2');
             if (!head) return false;
             const title = norm(head.textContent);
@@ -150,7 +176,9 @@ const SLFTeam4ChampionshipTableSwap = (() => {
 
         const moved = document.createElement('div');
         moved.className = MOVED_CONTAINER_CLASS;
-        findMovedCards(dash).forEach(candidate => moved.appendChild(candidate));
+        // Ищем карточки во всём team-body (не только в dash): на новой вёрстке часть карточек
+        // (заявки на аренду) может жить в team-content, а не в team-dash.
+        findMovedCards(dash.closest('.team-body') || document.body).forEach(candidate => moved.appendChild(candidate));
         if (moved.children.length) teamContent.appendChild(moved);
     }
 
@@ -172,7 +200,10 @@ const SLFTeam4ChampionshipTableSwap = (() => {
             if (settled) return;
             const dash = document.querySelector('.team-body > .team-dash') || document.querySelector('.team-dash');
             const lineup = dash?.querySelector('.pcard.team-lineup');
-            if (dash && lineup && findMovedCards(dash).length === MOVE_CARD_TITLES.length) {
+            const teamContent = document.querySelector('.team-content');
+            const movedCards = findMovedCards(dash?.closest('.team-body') || document.body);
+            // Готово: есть dash, lineup, teamContent, и хотя бы одна карточка для перемещения.
+            if (dash && lineup && teamContent && movedCards.length > 0) {
                 settled = true;
                 stop();
                 onReady(dash, lineup);

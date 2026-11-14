@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.4.367
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .gitignore
+
+Approved base commit:
+- 70f643b5cdae92dbcb888f66c6b875ebb677f797
+
+Approved commit:
+- 8d7fe2aebf3cd1d972457be73896e17c66332419
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.366
 
 ### Automatic latest-only build
