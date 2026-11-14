@@ -61,7 +61,7 @@ const SLFTeam4ChampionshipTableSwap = (() => {
         const fromUrl = (location.search.match(/[?&]id=(\d+)/) || [])[1];
         if (fromUrl) return fromUrl;
         // Новая вёрстка (fm2026): fmc-шапка с data-team на активной вкладке клуба.
-        const fmcTab = document.querySelector('.fmc-tab__name[data-team], .fmc-club [data-team]');
+        const fmcTab = document.querySelector('.fmc-tabs-host [data-team]');
         if (fmcTab) return fmcTab.getAttribute('data-team');
         // Старая вёрстка: .fm-card--club ссылка на roster.php?id=.
         const link = document.querySelector('.fm-card--club a[href*="/roster.php?id="]');

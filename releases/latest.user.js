@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.367
+// @version      4.4.368
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.367',
-        scriptVersion: '4.4.367',
+        version: '4.4.368',
+        scriptVersion: '4.4.368',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.367',
+        scriptVersion: '4.4.368',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -27187,7 +27187,7 @@ const SLFTeam4ChampionshipTableSwap = (() => {
         const fromUrl = (location.search.match(/[?&]id=(\d+)/) || [])[1];
         if (fromUrl) return fromUrl;
         // Новая вёрстка (fm2026): fmc-шапка с data-team на активной вкладке клуба.
-        const fmcTab = document.querySelector('.fmc-tab__name[data-team], .fmc-club [data-team]');
+        const fmcTab = document.querySelector('.fmc-tabs-host [data-team]');
         if (fmcTab) return fmcTab.getAttribute('data-team');
         // Старая вёрстка: .fm-card--club ссылка на roster.php?id=.
         const link = document.querySelector('.fm-card--club a[href*="/roster.php?id="]');
@@ -28541,15 +28541,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.367',
-        scriptVersion: '4.4.367',
+        version: '4.4.368',
+        scriptVersion: '4.4.368',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.367',
+        scriptVersion: '4.4.368',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
