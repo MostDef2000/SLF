@@ -60,18 +60,27 @@ const SLFTeam4ChampionshipTableSwap = (() => {
     function resolveTeamId() {
         const fromUrl = (location.search.match(/[?&]id=(\d+)/) || [])[1];
         if (fromUrl) return fromUrl;
-        // Новая вёрстка (fm2026): fmc-шапка с data-team на активной вкладке клуба.
-        const fmcTab = document.querySelector('.fmc-tabs-host [data-team]');
-        if (fmcTab) return fmcTab.getAttribute('data-team');
+        // Новая вёрстка (fm2026): ссылка на текущий клуб в шапке — самый надёжный источник.
+        const navClub = document.querySelector('.fmc-navclub[href*="/roster.php?id="]');
+        if (navClub) {
+            const navId = (navClub.getAttribute('href') || '').match(/[?&]id=(\d+)/);
+            if (navId) return navId[1];
+        }
+        // Активная вкладка клуба в рельсе (класс .b у выбранной команды).
+        const activeTab = document.querySelector('.fmc-tabs-host .b[data-team]');
+        if (activeTab) return activeTab.getAttribute('data-team');
         // Старая вёрстка: .fm-card--club ссылка на roster.php?id=.
         const link = document.querySelector('.fm-card--club a[href*="/roster.php?id="]');
         const href = link?.getAttribute('href') || link?.href || '';
         const m = href.match(/[?&]id=(\d+)/);
         if (m) return m[1];
-        // user-custom__team-<id> класс на #globalcontent.
+        // user-custom__team-<id> класс на #globalcontent: берём ПОСЛЕДНЕЕ совпадение
+        // (в разметке бывает user-custom__team-0 user-custom__team-18280 — 0 не клуб).
         const gc = document.querySelector('#globalcontent');
-        const gcId = gc?.className.match(/user-custom__team-(\d+)/);
-        if (gcId) return gcId[1];
+        const gcIds = [...String(gc?.className || '').matchAll(/user-custom__team-(\d+)/g)]
+            .map(match => match[1])
+            .filter(id => id !== '0');
+        if (gcIds.length) return gcIds[gcIds.length - 1];
         // Любая ссылка на roster.php?id= на странице.
         const anyLink = document.querySelector('a[href*="/roster.php?id="]');
         if (anyLink) {
