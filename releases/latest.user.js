@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.369
+// @version      4.4.370
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.369',
-        scriptVersion: '4.4.369',
+        version: '4.4.370',
+        scriptVersion: '4.4.370',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.369',
+        scriptVersion: '4.4.370',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -8766,7 +8766,7 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
 
             let gameMode = 'active_control';
             if (scoreState === 'winning' && minute >= 82 && (pressureRisk >= 60 || ownRedCard || myPowerDropPct >= 4.5)) gameMode = 'emergency_lock';
-            else if ((strengthGap < -40 || underPressure) && scoreState !== 'losing') gameMode = 'compact_counter_control';
+            else if ((strengthGap < -40 || (underPressure && pressureRisk >= 55)) && scoreState !== 'losing') gameMode = 'compact_counter_control';
             else if (strengthGap >= 35 && minute <= 65 && pressingOpportunity >= 62 && scoreState !== 'winning') gameMode = 'front_foot_squeeze';
             else if (scoreState === 'losing' && attackNeed >= 65) gameMode = 'controlled_chase';
 
@@ -8942,7 +8942,7 @@ if (typeof CurrentActionHintEngine !== 'undefined' && CurrentActionHintEngine) {
             if (name === 'Arteta_Control433_bal3' && s.gameMode === 'active_control') add('mode', 12, 'нейтральный structural baseline');
             if (name === 'Pep_BoxControl_bal2' && s.highBadActions) add('mode', 18, 'высокий брак требует reset');
             if (name === 'Pep_PressCooldown_bal2' && s.pressFatigueRisk) add('mode', 24, 'падение силы/эффективности прессинга требует cooldown');
-            if (name === 'Compact_Counter_def3' && s.gameMode === 'compact_counter_control') add('mode', 18, 'слабее или под давлением — компактность и выход');
+            if (name === 'Compact_Counter_def3' && s.gameMode === 'compact_counter_control') add('mode', 14, 'слабее или под давлением — компактность и выход');
             if (name === 'Pep_ControlledPush_att3' && s.gameMode === 'controlled_chase') add('mode', 14, 'контролируемое усиление атаки');
             if (name === 'Pep_TwoThreeFive_att3' && (s.gameMode === 'front_foot_squeeze' || s.attackingMomentum)) add('mode', 18, 'позиционное зажатие слабого/отступающего соперника');
             if (name === 'Simeone_Compact442_def4' && s.gameMode === 'emergency_lock') add('mode', 16, 'позднее компактное удержание');
@@ -28550,15 +28550,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.369',
-        scriptVersion: '4.4.369',
+        version: '4.4.370',
+        scriptVersion: '4.4.370',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.369',
+        scriptVersion: '4.4.370',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
