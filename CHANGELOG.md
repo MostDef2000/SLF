@@ -1,5 +1,30 @@
 # Changelog
 
+## 4.4.370
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/team-management/team4-championship-table-swap.js
+
+Approved base commit:
+- 3f0a214d1290e9a05818121b372a3cca8ae33454
+
+Approved commit:
+- 25103f58b7f1f1abac9b3a4ba30fb8f2e1b23d16
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.369
 
 ### Automatic latest-only build

@@ -301,6 +301,41 @@ const Cah = cahSandbox.window.SLFCurrentActionHintEngine;
     );
 }
 
+// --- F8: compact_counter_control trigger needs real deficit or heavy pressure ---
+{
+    // Stronger team (gap +100) under mild pressure (pressureRisk < 55) must NOT
+    // collapse into compact_counter_control. The pre-fix `underPressure`-only
+    // branch fired here; telemetry showed those phases underperforming on both
+    // attack and defense (5/12 low-pressure fires, 2 with a stronger team).
+    const mild = Cah.MatchDecisionSignals.build(Cah, {}, {
+        minute: 30, scoreState: 'draw', myPower: 2000, oppPower: 1900,
+        myXg: 0.1, oppXg: 0.6, myXT: 0, oppXT: 0,
+        myShots: 0, oppShots: 0, myPressVector: 0, oppPressVector: 0
+    }, null);
+    assert.ok(mild.pressureRisk < 55, 'F8: fixture keeps pressureRisk below the 55 gate');
+    assert.notEqual(mild.gameMode, 'compact_counter_control',
+        'F8: stronger team + mild pressure must not go compact_counter_control');
+
+    // Genuine strength deficit (gap < -40) still selects compact_counter_control.
+    const weaker = Cah.MatchDecisionSignals.build(Cah, {}, {
+        minute: 30, scoreState: 'draw', myPower: 1800, oppPower: 1900,
+        myXg: 0.1, oppXg: 0.1, myXT: 0, oppXT: 0,
+        myShots: 0, oppShots: 0
+    }, null);
+    assert.equal(weaker.gameMode, 'compact_counter_control',
+        'F8: real strength deficit still selects compact_counter_control');
+
+    // Heavy pressure (pressureRisk >= 55) still selects compact_counter_control.
+    const heavy = Cah.MatchDecisionSignals.build(Cah, {}, {
+        minute: 30, scoreState: 'draw', myPower: 2000, oppPower: 1900,
+        myXg: 0.1, oppXg: 2.0, myXT: 0, oppXT: 0.5,
+        myShots: 0, oppShots: 0
+    }, null);
+    assert.ok(heavy.pressureRisk >= 55, 'F8: fixture pushes pressureRisk above the 55 gate');
+    assert.equal(heavy.gameMode, 'compact_counter_control',
+        'F8: heavy pressure still selects compact_counter_control');
+}
+
 // --- F7: high-press ПИ-role note (C324, C379) ----------------------------------
 const policySandbox = {
     console, Date, Math, JSON, Number, String, Object, Array, Set, Map, Promise,
