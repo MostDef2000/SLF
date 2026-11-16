@@ -297,15 +297,31 @@ def prepare_training_champ_fixture(page: Page):
 def assert_match(page: Page):
     page.wait_for_selector(".content-ui__wrapper > #slf-match-parser-panel")
     page.wait_for_selector("#slf-tactics-dropdown.slf-ui.slf-panel")
-    page.wait_for_selector("#slf-manual-recommendation-btn")
+    # Ф2a (#441): the manual hint button is never rendered; the LLM button is
+    # the single primary entry and mounts on its own.
+    page.wait_for_selector("#slf-llm-second-opinion-btn")
+    assert page.locator("#slf-manual-recommendation-btn").count() == 0
+    assert page.locator("#slf-llm-second-opinion-btn").count() == 1
     assert page.locator("#slf-match-parser-panel").get_attribute("data-slf-mount") == "fm2026-content"
     assert page.locator("#slf-tactics-dropdown").get_attribute("data-slf-mount") == "fm2026-tactic-root"
     assert_inside_content(page, ["#slf-match-parser-panel", "#slf-tactics-dropdown"])
     style = page.locator("#slf-match-parser-panel").evaluate("el => ({font:getComputedStyle(el).fontFamily,radius:getComputedStyle(el).borderRadius})")
     assert "Roboto" in style["font"] and float(style["radius"].replace("px", "")) >= 10, style
-    page.locator("#slf-manual-recommendation-btn").click()
-    page.wait_for_function("() => document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')")
+    # Ф2a (#441): the manual hint button is gone. The LLM button is the primary
+    # entry; clicking it runs the fresh pipeline and renders the answer
+    # container. The "Подсказка обновлена вручную" status is unreachable now, so
+    # assert the LLM flow's actual output: the answer container renders.
+    page.locator("#slf-llm-second-opinion-btn").click()
+    page.wait_for_function("() => !!document.getElementById('slf-llm-second-opinion-answer')")
+    # Ф2a (#441): the snapshot telemetry is sent on bootstrap (not by a button
+    # click). The owned match fixture fires exactly one match_snapshots_v2
+    # append on bootstrap, so by the time this runs it is already present.
+    # Verify it fired (not zero) — the LLM click adds no further append.
     page.wait_for_function("() => window.__slfRequests.some(row => row.url.includes('/api/match_snapshots_v2?mode=append'))")
+    snapshot_rows = page.evaluate(
+        "window.__slfRequests.filter(row => row.url.includes('/api/match_snapshots_v2?mode=append'))"
+    )
+    assert len(snapshot_rows) == 1, snapshot_rows
 
 
 def wait_transfer_market(page: Page):
