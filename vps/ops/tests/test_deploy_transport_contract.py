@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 LAUNCHER = ROOT / "deploy" / "vps" / "slf-deploy-launcher"
 WORKFLOW = ROOT / ".github" / "workflows" / "deploy-vps.yml"
+DEPLOY_CODE = ROOT / "vps" / "ops" / "deploy-code.sh"
 
 # Byte-exact unified contract strings (lifesim/deploy/deploy-engine:326,332;
 # content/deploy/deploy-wrapper:335 prints the same fixed substrings).
@@ -316,6 +317,48 @@ class DeployWorkflowContractTest(unittest.TestCase):
             "probe_rc=$?",
             self.workflow,
             "status probe must capture the launcher exit code instead of failing on sibling drift",
+        )
+
+
+class DeployReadinessContractTest(unittest.TestCase):
+    """Pins both sides of the issue #444 readiness contract: the on-box deploy
+    engine prints a byte-exact API_READINESS_OK marker that the deploy workflow
+    greps (so the two cannot silently drift in either direction), and the
+    runner-side public-path probe keeps the narrow known-edge 403 exemption
+    instead of a blanket downgrade."""
+
+    def setUp(self):
+        self.assertTrue(
+            DEPLOY_CODE.is_file(),
+            "deploy engine missing: vps/ops/deploy-code.sh",
+        )
+        self.assertTrue(
+            WORKFLOW.is_file(),
+            "deploy workflow missing: .github/workflows/deploy-vps.yml",
+        )
+        self.code = strip_comments(DEPLOY_CODE.read_text(encoding="utf-8"))
+        self.workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    def test_deploy_code_emits_byte_exact_readiness_marker(self):
+        self.assertIn(
+            "API_READINESS_OK http=401 attempts=",
+            self.code,
+            "vps/ops/deploy-code.sh must print the byte-exact readiness marker "
+            "that .github/workflows/deploy-vps.yml greps for",
+        )
+
+    def test_workflow_pins_marker_and_known_edge_tolerance(self):
+        self.assertIn(
+            "API_READINESS_OK http=401 attempts=",
+            self.workflow,
+            "deploy workflow must grep the byte-exact on-box readiness marker "
+            "(engine<->workflow marker agreement in both directions)",
+        )
+        self.assertIn(
+            '"${CODE}" = "403"',
+            self.workflow,
+            "runner probe must keep the narrow known-edge 403 exemption "
+            "instead of a blanket downgrade",
         )
 
 

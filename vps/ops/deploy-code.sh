@@ -110,6 +110,7 @@ case "$COMPONENT" in
       echo "API readiness verification failed after 30 attempts; last HTTP status: ${HTTP_STATUS:-connection_failed}" >&2
       exit 1
     }
+    printf '%s\n' "API_READINESS_OK http=401 attempts=${ATTEMPT}"
     printf '%s\n' "$RESOLVED_COMMIT" > "$API_DIR/DEPLOYED_GIT_COMMIT"
     ;;
 
