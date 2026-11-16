@@ -147,6 +147,30 @@ function makeSnapshot() {
     assert.equal(bigPayload.presetCatalog.length, 40, 'catalog capped at 40 entries');
 }
 
+// --- 1b. hint object conversion (Ф2a #441) -----------------------------------
+{
+    const { LLM } = loadModule();
+    const snapshot = makeSnapshot();
+    snapshot.developerHints = [
+        'plain string hint',
+        { text: 'object hint text' },
+        { text: 'x'.repeat(400) },   // object hint over cap -> sliced to 300
+        { text: '' },                 // empty text -> filtered out
+        { other: 'no text key' },     // no .text -> '' -> filtered out
+        null                          // null hint -> '' -> filtered out
+    ];
+    const payload = LLM.buildPayload({ snapshot, ruleDecision: makeRuleDecision(), registry: makeRegistry() });
+    assert.deepEqual(
+        payload.developerHints,
+        ['plain string hint', 'object hint text', 'x'.repeat(300)],
+        'object hints contribute .text; empty/missing filtered; per-hint cap applied'
+    );
+    assert.ok(
+        !payload.developerHints.some(h => h.includes('[object Object]')),
+        'no [object Object] leak from object hints'
+    );
+}
+
 // --- 2. fail-closed guards ---------------------------------------------------
 {
     const { LLM } = loadModule();
@@ -175,15 +199,45 @@ function makeSnapshot() {
     assert.ok(!html.includes('<img'), 'raw img tag must not survive');
     assert.ok(html.includes('&lt;img'), 'reason escaped');
     assert.ok(html.includes('только совет'), 'advisory-only disclaimer present');
-    assert.ok(!/apply|Применить/.test(html), 'no apply controls in answer html');
+
+    // Ф2a (#441): apply button present exactly when available && preset.
+    // This answer is available with a non-empty preset -> button rendered.
+    assert.ok(html.includes('id="slf-llm-apply-btn"'), 'apply button rendered for available answer with preset');
+    assert.ok(html.includes('data-slf-llm-apply-preset="x"'), 'apply button carries the preset id');
+    assert.ok(html.includes('data-slf-llm-apply-advice-id=""'), 'apply button carries advice id (empty when absent)');
+    assert.ok(html.includes('Применить пресет'), 'apply button label present');
+
+    // Hostile preset/adviceId must be escaped so the attribute cannot break out.
+    const hostile = LLM.renderAnswer({
+        available: true,
+        preset: 'a"b<c>&d',
+        adviceId: 'id"onmouseover="alert(1)<script>',
+        presetLabel: 'L',
+        confidence: 'low',
+        reason: 'r',
+        model: 'm',
+        latencyMs: 100
+    });
+    assert.ok(hostile.includes('data-slf-llm-apply-preset="a&quot;b&lt;c&gt;&amp;d"'), 'preset attribute value escaped');
+    assert.ok(hostile.includes('data-slf-llm-apply-advice-id="id&quot;onmouseover=&quot;alert(1)&lt;script&gt;"'), 'adviceId attribute value escaped');
+    assert.ok(!hostile.includes('a"b<c>&d'), 'raw hostile preset must not survive unescaped');
+    assert.ok(!hostile.includes('onmouseover="alert(1)'), 'raw adviceId breakout must not survive');
+
+    // No apply button when available but preset is empty or missing.
+    const emptyPreset = LLM.renderAnswer({ available: true, preset: '', presetLabel: 'L', confidence: 'low', reason: 'r', model: 'm', latencyMs: 100 });
+    assert.ok(!emptyPreset.includes('slf-llm-apply-btn'), 'no apply button when preset is empty');
+    const missingPreset = LLM.renderAnswer({ available: true, presetLabel: 'L', confidence: 'low', reason: 'r', model: 'm', latencyMs: 100 });
+    assert.ok(!missingPreset.includes('slf-llm-apply-btn'), 'no apply button when preset is missing');
 
     const unavailable = LLM.renderAnswer({ available: false, error: '<b>boom</b>' });
     assert.ok(unavailable.includes('LLM недоступен'), 'unavailable message rendered');
     assert.ok(unavailable.includes('&lt;b&gt;boom&lt;/b&gt;'), 'error text escaped');
     assert.ok(!unavailable.includes('<b>boom'), 'raw error markup must not survive');
+    assert.ok(!unavailable.includes('slf-llm-apply-btn'), 'no apply button when unavailable');
 
     const broken = LLM.renderAnswer(null);
     assert.ok(broken.includes('LLM недоступен'), 'null answer renders unavailable');
+    assert.ok(!broken.includes('slf-llm-apply-btn'), 'no apply button for null answer');
 }
 
 // --- 4. mountAnswer ----------------------------------------------------------

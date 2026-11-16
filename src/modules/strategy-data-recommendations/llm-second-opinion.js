@@ -58,7 +58,12 @@ const LLMSecondOpinion = {
         }
 
         const hints = (Array.isArray(snapshot && snapshot.developerHints) ? snapshot.developerHints : [])
-            .map(hint => String(hint || '').trim().slice(0, this.MAX_HINT_CHARS))
+            .map(hint => {
+                // Hints may be plain strings or {text} objects; never
+                // stringify the object itself ('[object Object]').
+                const text = (hint && typeof hint === 'object') ? hint.text : hint;
+                return String(text || '').trim().slice(0, this.MAX_HINT_CHARS);
+            })
             .filter(Boolean)
             .slice(0, this.MAX_HINTS);
 
@@ -103,10 +108,22 @@ const LLMSecondOpinion = {
         const confidence = this.escapeHtml(answer.confidence || '');
         const reason = this.escapeHtml(answer.reason || '');
         const meta = this.escapeHtml(`${answer.model || ''} · ${(Number(answer.latencyMs) / 1000).toFixed(1)}s`);
+        // Ф2a (#441): one-click apply. The button only carries data; the
+        // click handler lives in the ui-extension (event delegation) and
+        // applies strictly on explicit click — never auto.
+        const presetId = typeof answer.preset === 'string' ? answer.preset : '';
+        const adviceId = typeof answer.adviceId === 'string' ? answer.adviceId : '';
+        const applyHtml = presetId
+            ? `<div style="margin-top:6px;"><button id="slf-llm-apply-btn" type="button"` +
+              ` data-slf-llm-apply-preset="${this.escapeHtml(presetId)}"` +
+              ` data-slf-llm-apply-advice-id="${this.escapeHtml(adviceId)}"` +
+              ` style="padding:4px 10px;background:#2a4a2a;color:#cfc;border:1px solid #4a7;border-radius:3px;cursor:pointer;font-size:12px;">Применить пресет</button>` +
+              `<span style="opacity:.55;margin-left:6px;">применение только по клику</span></div>`
+            : '';
         return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#141a14;border:1px solid #3a5a3a;border-radius:5px;color:#cde;padding:7px 9px;font-size:12px;line-height:1.45;">` +
             `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>${label}</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
             `${reason}<br>` +
-            `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span></div>`;
+            `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span>${applyHtml}</div>`;
     },
 
     // Mount the answer inside the recommendation panel; a fresh hint render

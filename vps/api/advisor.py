@@ -21,16 +21,19 @@ Every consultation (success or failure) appends one record to the
 advisor_log_v1 collection — the seed dataset for the feedback loop (Ф3).
 """
 
+import datetime
 import http.client
 import json
 import os
 import socket
 import ssl
 import struct
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = "particle-ai/particle-1:free"
@@ -48,6 +51,10 @@ MAX_REASON_CHARS = 400
 MAX_CONTEXT_BYTES = 64 * 1024
 LOG_COLLECTION = "advisor_log_v1"
 LOG_MAX_RECORDS = 5000
+
+# Serializes every read-modify-write cycle on the advisor log (append_log and
+# the apply-event update) within one server process.
+_LOG_LOCK = threading.Lock()
 
 CONFIDENCE_LEVELS = ("low", "medium", "high")
 
@@ -453,25 +460,66 @@ def validate_answer(obj, catalog_ids):
 def append_log(data_dir, record):
     """Append one consultation record; cap the file; never raise."""
     try:
-        path = os.path.join(data_dir, f"{LOG_COLLECTION}.json")
-        existing = []
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as handle:
-                    existing = json.load(handle)
-            except (json.JSONDecodeError, OSError):
-                existing = []
-        if not isinstance(existing, list):
+        with _LOG_LOCK:
+            path = os.path.join(data_dir, f"{LOG_COLLECTION}.json")
             existing = []
-        existing.append(record)
-        if len(existing) > LOG_MAX_RECORDS:
-            existing = existing[-LOG_MAX_RECORDS:]
-        tmp_path = path + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as handle:
-            json.dump(existing, handle, ensure_ascii=False)
-        os.replace(tmp_path, path)
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as handle:
+                        existing = json.load(handle)
+                except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+                    existing = []
+            if not isinstance(existing, list):
+                existing = []
+            existing.append(record)
+            if len(existing) > LOG_MAX_RECORDS:
+                existing = existing[-LOG_MAX_RECORDS:]
+            tmp_path = path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as handle:
+                json.dump(existing, handle, ensure_ascii=False)
+            os.replace(tmp_path, path)
     except OSError:
         pass
+
+
+def update_log_record_apply(data_dir, record_id, ok):
+    """Record an apply event on the advice record with the given id.
+
+    Read-modify-write under the same lock as append_log. Returns one of
+    "updated", "not_found", "error" — the caller maps these to honest HTTP
+    statuses (200 / 404 / 500). A corrupt or unreadable log is "error":
+    the update refuses to blind-write over data it cannot fully read.
+    """
+    try:
+        with _LOG_LOCK:
+            path = os.path.join(data_dir, f"{LOG_COLLECTION}.json")
+            existing = []
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as handle:
+                        existing = json.load(handle)
+                except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+                    return "error"
+            if not isinstance(existing, list):
+                return "error"
+            record = None
+            for item in existing:
+                if isinstance(item, dict) and item.get("id") == record_id:
+                    record = item
+                    break
+            if record is None:
+                return "not_found"
+            record["apply"] = {
+                "ok": bool(ok),
+                "at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+            }
+            tmp_path = path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as handle:
+                json.dump(existing, handle, ensure_ascii=False)
+            os.replace(tmp_path, path)
+            return "updated"
+    except OSError:
+        return "error"
 
 
 def handle_advisor_request(data, data_dir):
@@ -521,7 +569,9 @@ def handle_advisor_request(data, data_dir):
             attempt_feedback = str(exc)
             last_error = AdvisorError("invalid_answer", str(exc), status=200)
             continue
+        advice_id = uuid.uuid4().hex
         record = {
+            "id": advice_id,
             "ts": int(time.time() * 1000),
             "gameId": context["gameId"],
             "minute": context["minute"],
@@ -536,6 +586,7 @@ def handle_advisor_request(data, data_dir):
         append_log(data_dir, record)
         return {
             "available": True,
+            "adviceId": advice_id,
             "preset": preset,
             "presetLabel": catalog_labels.get(preset, preset),
             "confidence": confidence,

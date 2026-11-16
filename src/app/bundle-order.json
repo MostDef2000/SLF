@@ -1644,7 +1644,8 @@
           {
             "file": "src/modules/tactics-presets/tactic-control-engine.js",
             "symbols": [
-              "getCurrentTactic"
+              "getCurrentTactic",
+              "applyPresetAsync"
             ],
             "phase": "runtime"
           },
