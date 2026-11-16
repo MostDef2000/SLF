@@ -934,6 +934,15 @@
         }
         snapshot.recommendationSource = 'llm_second_opinion';
         snapshot.generatorVersion = GENERATOR_VERSION;
+        // Ф2c recovery (#441): the retired manual hint was the only lab
+        // checkpoint on the live path; without it the lab activation never
+        // records lastSeenMinute and the exit loses exposure (toMinute /
+        // durationMinutes null). Record presence from the LLM entry, under the
+        // same guard as the manual path — BEFORE the advisor request, so a
+        // failed LLM call still records that the user was present.
+        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.checkpoint && snapshot.matchOwnership !== 'foreign') {
+            await STATE.tacticalLabRuntime.checkpoint('llm_second_opinion', snapshot);
+        }
         // Same pipeline the manual hint runs; make() stamps ruleDecision.
         buildManualRecommendationHtml(snapshot);
         if (!snapshot.ruleDecision) {

@@ -107,7 +107,15 @@ const LLMSecondOpinion = {
         const label = this.escapeHtml(answer.presetLabel || answer.preset || '');
         const confidence = this.escapeHtml(answer.confidence || '');
         const reason = this.escapeHtml(answer.reason || '');
-        const meta = this.escapeHtml(`${answer.model || ''} · ${(Number(answer.latencyMs) / 1000).toFixed(1)}s`);
+        // Show which model served the answer AND (when the server reports it)
+        // the upstream provider. The provider is optional — an older server or
+        // an upstream payload without it must keep the legacy
+        // `<model> · <latency>` line, never a dangling separator.
+        const provider = typeof answer.provider === 'string' ? answer.provider.trim() : '';
+        const metaParts = [answer.model || ''];
+        if (provider) metaParts.push(provider);
+        metaParts.push(`${(Number(answer.latencyMs) / 1000).toFixed(1)}s`);
+        const meta = this.escapeHtml(metaParts.join(' · '));
         // Ф2a (#441): one-click apply. The button only carries data; the
         // click handler lives in the ui-extension (event delegation) and
         // applies strictly on explicit click — never auto.

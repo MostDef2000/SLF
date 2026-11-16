@@ -332,4 +332,167 @@ function loadApi(context) {
     assert.equal(calls[0].timeoutMs, 35000);
 }
 
+// --- 7. answer meta line: model (+ provider) + latency -----------------------
+// Owner request: the meta line must show which provider served the answer when
+// the server reports it, and keep the legacy `<model> · <latency>` rendering
+// exactly as-is when it does not (older server / upstream payload without it).
+{
+    const { LLM } = loadModule();
+    const base = {
+        available: true,
+        preset: 'x',
+        presetLabel: 'L',
+        confidence: 'high',
+        reason: 'r',
+        model: 'test-model',
+        latencyMs: 2300
+    };
+
+    // Provider present -> model · provider · latency.
+    const withProvider = LLM.renderAnswer({ ...base, provider: 'Particle' });
+    assert.ok(
+        withProvider.includes('test-model · Particle · 2.3s · только совет'),
+        `provider rendered in the meta line: ${withProvider}`
+    );
+
+    // Provider absent in every "absent" shape -> the EXACT legacy line, no
+    // dangling separator, no placeholder text.
+    for (const missing of [undefined, null, '', '   ', 42, {}]) {
+        const html = LLM.renderAnswer({ ...base, provider: missing });
+        assert.ok(
+            html.includes('test-model · 2.3s · только совет'),
+            `legacy meta line kept for provider=${JSON.stringify(missing)}: ${html}`
+        );
+        assert.ok(!html.includes('undefined'), `no undefined in the meta line for provider=${JSON.stringify(missing)}`);
+        assert.ok(!html.includes('·  ·'), `no dangling separator for provider=${JSON.stringify(missing)}`);
+    }
+
+    // The provider is escaped with the same escapeHtml helper as the model.
+    const hostile = LLM.renderAnswer({ ...base, provider: '<b>Hack</b>&"x' });
+    assert.ok(
+        hostile.includes('test-model · &lt;b&gt;Hack&lt;/b&gt;&amp;&quot;x · 2.3s'),
+        `provider escaped: ${hostile}`
+    );
+    assert.ok(!hostile.includes('<b>Hack</b>'), 'raw provider markup must not survive');
+}
+
+// --- 8. Ф2c (#441): lab exposure checkpoint from the LLM fresh path ----------
+// The manual hint button — the only live lab checkpoint — was retired by Ф2a.
+// Requesting a fresh LLM opinion must record the same checkpoint with its own
+// source label under the manual path's guard, BEFORE the advisor request, so a
+// failed LLM call still records that the user was present in the match.
+function makeUiContext({ foreign = false } = {}) {
+    const checkpoints = [];
+    const advisorCalls = [];
+    const order = [];
+    const created = [];
+    const panel = { id: 'slf-match-parser-panel', children: [], insertBefore(node) { this.children.push(node); } };
+    const status = { id: 'slf-parser-status', textContent: '' };
+    const elements = new Map([
+        ['slf-match-parser-panel', panel],
+        ['slf-parser-status', status]
+    ]);
+    // The FRESH snapshot built by the LLM entry; the same object is mutated by
+    // normalizeForeignSnapshot and handed to the checkpoint.
+    const snapshot = foreign
+        ? { gameId: 'g-foreign', minute: 20, bucket: '16-30', score: { home: 1, away: 0 }, teams: [1, 2] }
+        : { gameId: 'g-123', minute: 20, bucket: '16-30', score: { home: 1, away: 0 }, myTeam: 1, teams: [1, 2] };
+
+    const context = {
+        console, Object, Array, Map, Set, Symbol, Date, Error, JSON, Math, String, Number, Promise, Boolean, RegExp,
+        setTimeout() { return 1; },
+        clearTimeout() {},
+        location: { pathname: '/game.php', href: 'https://sublime.example/game.php' },
+        localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+        document: {
+            __slfFinalTacticApplyDelegation: false,
+            __slfLlmApplyDelegation: false,
+            getElementById(id) { return elements.get(id) || null; },
+            createElement(tag) {
+                const node = { tagName: String(tag).toUpperCase(), id: '', dataset: {}, style: {}, children: [] };
+                created.push(node);
+                return node;
+            },
+            addEventListener() {}
+        },
+        UI: { addMatchParserPanel() { return null; }, addParserLog() {}, updateParserStatus() {} },
+        STATE: {
+            tacticalLabRuntime: {
+                checkpoint: async (source, snap) => {
+                    order.push('checkpoint');
+                    checkpoints.push({ source, snapshot: snap });
+                },
+                mountUI: async () => {}
+            }
+        },
+        SnapshotEngine: { build: () => snapshot },
+        // make() stamps snapshot.ruleDecision exactly like the real ladder (the
+        // fresh path feeds that decision into the advisor payload).
+        RecommendationEngine: {
+            __compactCoachModePatchedV4: true,
+            __generator561RuleScorerApplied: true,
+            hasEnoughLiveData: () => ({ ok: true }),
+            make: snap => {
+                snap.ruleDecision = {
+                    action: { preset: 'Emery_BalancedBase_v11', decision: 'active_control' },
+                    confidence: { level: 'medium' },
+                    moment: { context: { minute: snap.minute, gameMode: 'active_control' } },
+                    candidates: [{ preset: 'Emery_BalancedBase_v11', score: 1.5, vetoed: false }]
+                };
+                return '<div>recommendation</div>';
+            }
+        },
+        Api: {
+            postJson: async (collection, payload) => {
+                order.push('advisor');
+                advisorCalls.push({ collection, payload });
+                return { available: true, model: 'test-model', provider: 'Particle', latencyMs: 2300 };
+            }
+        }
+    };
+    context.window = context;
+    context.globalThis = context;
+    context.SLFActivePresetRegistry = makeRegistry();
+    vm.createContext(context);
+    vm.runInContext(
+        read('src/modules/strategy-data-recommendations/llm-second-opinion.js') + '\n;globalThis.__LLM = LLMSecondOpinion;',
+        context,
+        { filename: 'llm-second-opinion.js' }
+    );
+    vm.runInContext(
+        read('src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js'),
+        context,
+        { filename: 'strategy-data-task-a-ui-extension.js' }
+    );
+    const llmButton = created.find(node => node.id === 'slf-llm-second-opinion-btn');
+    return { context, snapshot, checkpoints, advisorCalls, order, llmButton };
+}
+
+{
+    // Owned match: checkpoint('llm_second_opinion', freshSnapshot) exactly once,
+    // before the advisor request.
+    const { snapshot, checkpoints, advisorCalls, order, llmButton } = makeUiContext();
+    assert.ok(llmButton, 'LLM entry mounted by the ui-extension');
+    await llmButton.onclick();
+
+    assert.equal(checkpoints.length, 1, `exactly one lab checkpoint from the LLM fresh path: ${checkpoints.length}`);
+    assert.equal(checkpoints[0].source, 'llm_second_opinion', `checkpoint source label: ${checkpoints[0].source}`);
+    assert.equal(checkpoints[0].snapshot, snapshot, 'checkpoint receives the FRESH snapshot object');
+    assert.equal(checkpoints[0].snapshot.minute, 20, 'checkpoint snapshot carries the fresh minute');
+    assert.deepEqual(order, ['checkpoint', 'advisor'], `checkpoint runs before the advisor request: ${order}`);
+    assert.equal(advisorCalls.length, 1, 'advisor request still sent');
+    assert.equal(advisorCalls[0].collection, 'advisor');
+}
+
+{
+    // Foreign match: the checkpoint is guarded out exactly like the manual path
+    // (foreign snapshots are read-only analysis); the advisor request proceeds.
+    const foreignRun = makeUiContext({ foreign: true });
+    assert.equal(foreignRun.snapshot.matchOwnership, 'foreign', 'fixture normalized to a foreign snapshot');
+    await foreignRun.llmButton.onclick();
+    assert.equal(foreignRun.checkpoints.length, 0, 'no lab checkpoint for a foreign match');
+    assert.deepEqual(foreignRun.order, ['advisor'], `foreign path goes straight to the advisor: ${foreignRun.order}`);
+    assert.equal(foreignRun.advisorCalls.length, 1);
+}
+
 console.log('test-llm-second-opinion: all assertions passed');
