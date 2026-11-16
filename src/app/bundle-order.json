@@ -52,6 +52,7 @@
     "src/modules/strategy-data-recommendations/final-tactic-merge-layer.js",
     "src/app/ui-layer.js",
     "src/app/version-badge.js",
+    "src/modules/strategy-data-recommendations/llm-second-opinion.js",
     "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
     "src/modules/manual-match-telemetry/manual-state-integrity.js",
     "src/modules/manual-match-telemetry/manual-match-runtime.js",
@@ -102,7 +103,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 94,
+    "expectedModuleCount": 95,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -1586,6 +1587,28 @@
         ]
       },
       {
+        "file": "src/modules/strategy-data-recommendations/llm-second-opinion.js",
+        "declares": [
+          "LLMSecondOpinion"
+        ],
+        "public": [
+          "LLMSecondOpinion"
+        ],
+        "requires": [
+          {
+            "file": "src/core/api.js",
+            "symbols": [
+              "Api"
+            ],
+            "phase": "runtime"
+          }
+        ],
+        "hostCapabilities": [
+          "document",
+          "window"
+        ]
+      },
+      {
         "file": "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
         "declares": [],
         "public": [],
@@ -1629,6 +1652,20 @@
             "file": "src/app/ui-layer.js",
             "symbols": [
               "UI"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/core/api.js",
+            "symbols": [
+              "Api"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/strategy-data-recommendations/llm-second-opinion.js",
+            "symbols": [
+              "LLMSecondOpinion"
             ],
             "phase": "runtime"
           }

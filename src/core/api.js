@@ -43,13 +43,13 @@
             return error;
         }
     
-        function requestApi({ method, collection, data, label, parseJson }) {
+        function requestApi({ method, collection, data, label, parseJson, timeoutMs }) {
             const context = {
                 method,
                 collection: String(collection || ''),
                 operation: String(label || `${method} ${collection || ''}`)
             };
-    
+
             return new Promise((resolve, reject) => {
                 const request = {
                     method,
@@ -57,7 +57,7 @@
                     headers: {
                         "Authorization": buildApiAuthorizationHeader()
                     },
-                    timeout: API_REQUEST_TIMEOUT_MS,
+                    timeout: Number(timeoutMs) > 0 ? Number(timeoutMs) : API_REQUEST_TIMEOUT_MS,
                     onload: response => {
                         const metadata = safeApiResponseMetadata(response);
     
@@ -104,6 +104,19 @@
                     label: label || collection,
                     parseJson: false
                 });
+            },
+
+            postJson(collection, data, label, timeoutMs) {
+                // JSON-response POST for endpoints that answer with a body
+                // (e.g. /api/advisor); optional timeoutMs for slow endpoints.
+                return requestApi({
+                    method: 'POST',
+                    collection,
+                    data,
+                    label: label || collection,
+                    parseJson: true,
+                    timeoutMs
+                }).then(result => result.data);
             },
     
             post(collection, data, label) {

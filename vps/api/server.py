@@ -8,6 +8,13 @@ import re
 import threading
 from contextlib import contextmanager
 
+try:
+    import advisor
+except ImportError:  # direct-script contexts without the package layout
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import advisor
+
 app = Flask(__name__)
 
 # QR-003: explicit CORS allowlist. The userscript transport uses
@@ -296,6 +303,18 @@ def handle_payload_too_large(error):
 def handle_collection_corruption(error):
     app.logger.error("collection corruption detected: %s", error)
     return jsonify({"error": "Collection data is corrupt", "kind": "collection_corrupt"}), 500
+
+
+@app.route("/api/advisor", methods=["POST"])
+def api_advisor():
+    """LLM second opinion (specs/434-llm-tactical-advisor). Advisory only."""
+    if not check_token():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify({"error": "No JSON"}), 400
+    response, status = advisor.handle_advisor_request(data, DATA_DIR)
+    return jsonify(response), status
 
 
 @app.route("/api/forum_faq", methods=["GET"])
