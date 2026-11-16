@@ -131,6 +131,103 @@ def save_collection(collection, data):
                 pass
 
 
+# Ф2c (#441): finished-result evaluation hooks.  The results collection is
+# snapshot-heavy (13.5 MB and growing), so the server keeps a process-local
+# cache of ONE winning finished result per exact gameId — never the parsed
+# row list.  One Gunicorn worker with four threads: the cache is process-local
+# and the append hook below refreshes it in-process.
+RESULTS_COLLECTION = "match_results_v2"
+# One atomic slot: "state" always holds exactly one (signature, index) tuple,
+# so a concurrent reader can never pair a new signature with an old index.
+# Published as a single assignment; readers take one local snapshot.
+_RESULTS_INDEX_CACHE = {"state": (None, {})}
+
+
+def results_file_signature():
+    """Stat signature of the persisted results collection, or None.
+
+    Inode and ctime are part of the signature on purpose: a same-size rewrite
+    inside one filesystem timestamp tick (e.g. `cp -p`, rsync -t) must still
+    invalidate the cached winners.
+    """
+    try:
+        stat = os.stat(get_file_path(RESULTS_COLLECTION))
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_ino, stat.st_size)
+
+
+def build_results_index(rows):
+    """Group rows by exact non-blank string gameId; one winner per group."""
+    groups = {}
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            game_id = row.get("gameId")
+            if not isinstance(game_id, str) or not game_id.strip():
+                continue
+            groups.setdefault(game_id, []).append(row)
+    index = {}
+    for game_id, group in groups.items():
+        winner = advisor.select_match_result(group, game_id)
+        if winner is not None:
+            index[game_id] = winner
+    return index
+
+
+def read_results_index():
+    """{exact gameId: winning finished result} via the stat-guarded cache.
+
+    An unchanged signature returns the cached dict without a file read or
+    parse.  On change the collection is parsed under its RLock and only the
+    winners dict is retained; the parsed row list stays transient.  The cache
+    is published as one (signature, index) tuple after the index is fully
+    built, so a concurrent reader never sees a new signature over an old
+    index.  Any failure returns an empty dict — evaluation never fails a
+    request.
+    """
+    signature = results_file_signature()
+    cached_signature, cached_index = _RESULTS_INDEX_CACHE["state"]
+    if signature is None:
+        _RESULTS_INDEX_CACHE["state"] = (None, {})
+        return {}
+    if cached_signature == signature:
+        return cached_index
+    try:
+        with collection_lock(RESULTS_COLLECTION):
+            rows = load_collection(RESULTS_COLLECTION, default=[])
+        index = build_results_index(rows)
+    except CollectionCorruptError:
+        # Cache the empty index under this signature: repeated consultations
+        # stay cheap and the next rewrite (new signature) rebuilds normally.
+        app.logger.warning("match results index unavailable: collection corrupt")
+        _RESULTS_INDEX_CACHE["state"] = (signature, {})
+        return {}
+    except OSError as error:
+        app.logger.warning("match results index unavailable: %s", error)
+        return {}
+    _RESULTS_INDEX_CACHE["state"] = (signature, index)
+    return index
+
+
+def refresh_results_evaluations(rows):
+    """Refresh the winners cache from already-loaded rows and materialize.
+
+    Called from the append path while the collection RLock is held, so no
+    second file read is needed.  materialize_evaluations takes the advisor log
+    lock inside (collection lock -> log lock; never the reverse).  Evaluation
+    repair is best-effort: it must not change the append outcome.
+    """
+    try:
+        signature = results_file_signature()
+        index = build_results_index(rows)
+        _RESULTS_INDEX_CACHE["state"] = (signature, index)
+        advisor.materialize_evaluations(DATA_DIR, index)
+    except Exception as error:  # evaluation repair never fails an append
+        app.logger.warning("advisor evaluation refresh failed: %s", error)
+
+
 def read_knowledge_pack():
     """Read the daily tactical knowledge-pack artifact (specs/441, Ф2b).
 
@@ -332,6 +429,14 @@ def api_advisor():
     if data is None:
         return jsonify({"error": "No JSON"}), 400
     response, status = advisor.handle_advisor_request(data, DATA_DIR, read_knowledge_pack)
+    # Ф2c (#441): race repair — a finished result may land while the provider
+    # is thinking (the advice record is appended after the provider call).
+    # read_results_index is stat-guarded, so an unchanged results file costs
+    # one os.stat; evaluation repair never fails the advice response.
+    try:
+        advisor.materialize_evaluations(DATA_DIR, read_results_index())
+    except Exception as error:
+        app.logger.warning("advisor post-consultation evaluation failed: %s", error)
     return jsonify(response), status
 
 
@@ -437,6 +542,11 @@ def api_post(collection):
             accepted, skipped_duplicates, missing_unique_key = filter_append_duplicates(collection, existing, incoming)
             existing.extend(accepted)
             save_collection(collection, existing)
+            # Ф2c (#441): primary evaluation trigger — a finished result lands
+            # here.  Runs even for duplicate-only appends to repair an earlier
+            # evaluation write failure; never changes this response.
+            if collection == RESULTS_COLLECTION:
+                refresh_results_evaluations(existing)
             return jsonify({
                 "status": "appended", "collection": collection, "received": received,
                 "added": len(accepted), "skippedDuplicates": skipped_duplicates,

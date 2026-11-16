@@ -1552,5 +1552,109 @@ class AdvisorApplyTestCase(unittest.TestCase):
         self.assertEqual(path.read_text(encoding="utf-8"), "{invalid json\n")
 
 
+class AdvisorCompletionHookTestCase(unittest.TestCase):
+    """Ф2c (#441): the advice route repairs evaluations on completion.
+
+    The advice record is appended AFTER the provider call, so a finished
+    result persisted while the provider was thinking has no advice record to
+    join yet. The route must re-run materialization after the call.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        os.environ["SLF_API_TOKEN"] = "test-token"
+        os.environ["SLF_DATA_DIR"] = cls.temp_dir.name
+        os.environ["SLF_FORUM_FAQ_DIR"] = os.path.join(cls.temp_dir.name, "forum")
+        os.environ["OPENROUTER_API_KEY"] = "test-key"
+        cls.server = _load_server()
+        cls.advisor = cls.server.advisor
+        cls.client = cls.server.app.test_client()
+        cls.auth = {"Authorization": "Bearer test-token"}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
+
+    def setUp(self):
+        for path in pathlib.Path(self.temp_dir.name).glob("*.json"):
+            path.unlink()
+        cache = getattr(self.server, "_RESULTS_INDEX_CACHE", None)
+        if isinstance(cache, dict):
+            cache["state"] = (None, {})
+
+    def results_path(self):
+        return pathlib.Path(self.temp_dir.name) / "match_results_v2.json"
+
+    def read_log(self):
+        path = pathlib.Path(self.temp_dir.name) / "advisor_log_v1.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def finished_result(self, game_id="g-123"):
+        return {
+            "resultKey": "rk-1",
+            "gameId": game_id,
+            "status": "finished",
+            "score": {"home": 2, "away": 1},
+            "teams": ["t-home", "t-away"],
+            "myTeam": "t-home",
+            "parsedAt": 2000,
+        }
+
+    def body(self):
+        return {
+            "gameId": "g-123",
+            "minute": 30,
+            "bucket": "16-30",
+            "score": {"home": 0, "away": 0},
+            "ruleDecision": {"preset": "Emery_BalancedBase_v11"},
+            "presetCatalog": [
+                {"id": "Emery_BalancedBase_v11", "label": "Emery Balanced Base"},
+            ],
+        }
+
+    def answer(self):
+        return json.dumps({
+            "preset": "Emery_BalancedBase_v11",
+            "confidence": "medium",
+            "reason": "Счёт 0:0, держим баланс.",
+        }, ensure_ascii=False)
+
+    def test_result_persisted_during_the_provider_call_is_evaluated(self):
+        def persist_during_call(*args, **kwargs):
+            # The client appends the finished result while the provider thinks.
+            self.results_path().write_text(
+                json.dumps([self.finished_result()], ensure_ascii=False),
+                encoding="utf-8",
+            )
+            return (self.answer(), 900)
+
+        with mock.patch.object(self.advisor, "call_openrouter", side_effect=persist_during_call):
+            response = self.client.post("/api/advisor", json=self.body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["available"])
+        log = self.read_log()
+        self.assertEqual(len(log), 1)
+        self.assertEqual(log[0]["id"], payload["adviceId"])
+        self.assertEqual(log[0]["evaluation"]["finalScore"], {"home": 2, "away": 1})
+        self.assertEqual(log[0]["evaluation"]["scoreDelta"], {"home": 2, "away": 1})
+
+    def test_result_persisted_before_the_advice_request_is_evaluated(self):
+        self.results_path().write_text(
+            json.dumps([self.finished_result()], ensure_ascii=False), encoding="utf-8")
+        with mock.patch.object(self.advisor, "call_openrouter", return_value=(self.answer(), 700)):
+            response = self.client.post("/api/advisor", json=self.body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.read_log()[0]["evaluation"]["finalScore"], {"home": 2, "away": 1})
+
+    def test_consultation_without_results_stays_unevaluated_and_unchanged(self):
+        with mock.patch.object(self.advisor, "call_openrouter", return_value=(self.answer(), 700)):
+            response = self.client.post("/api/advisor", json=self.body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["available"])
+        self.assertNotIn("evaluation", self.read_log()[0])
+
+
 if __name__ == "__main__":
     unittest.main()
