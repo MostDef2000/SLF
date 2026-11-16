@@ -21,6 +21,7 @@ Every consultation (success or failure) appends one record to the
 advisor_log_v1 collection — the seed dataset for the feedback loop (Ф3).
 """
 
+import copy
 import datetime
 import http.client
 import json
@@ -51,6 +52,20 @@ MAX_REASON_CHARS = 400
 MAX_CONTEXT_BYTES = 64 * 1024
 LOG_COLLECTION = "advisor_log_v1"
 LOG_MAX_RECORDS = 5000
+
+# Ф2b (#441): bounded server-side prompt enrichment. Knowledge comes from the
+# tactical knowledge pack file (daily exporter artifact), not the retired
+# `tactics` collection. The whole block never exceeds the char budget; entries
+# are added whole or not at all.
+ENRICHMENT_BUDGET_CHARS = 6000
+ENRICHMENT_HISTORY_SAME_GAME = 8
+ENRICHMENT_HISTORY_PAD = 4
+ENRICHMENT_KNOWLEDGE_ENTRY_CHARS = 400
+ENRICHMENT_TRUNCATION_MARKER = "(усечено по бюджету)"
+KNOWLEDGE_LABEL = (
+    "Гипотезы из тактической базы "
+    "(сеяные гипотезы, не проверенные законы движка)"
+)
 
 # Serializes every read-modify-write cycle on the advisor log (append_log and
 # the apply-event update) within one server process.
@@ -208,7 +223,220 @@ def validate_context(data):
     return context
 
 
-def build_messages(context):
+def _record_ts(record):
+    """Sort key for log records: integer ms timestamp, 0 when absent."""
+    ts = record.get("ts") if isinstance(record, dict) else None
+    if isinstance(ts, (int, float)) and not isinstance(ts, bool):
+        return ts
+    return 0
+
+
+def _read_log_snapshot(data_dir):
+    """Deep-copy the advisor log under _LOG_LOCK; read-only, never raises.
+
+    The lock is released before the caller does any rendering or I/O-free
+    work, and it is never held across the OpenRouter call.
+    """
+    try:
+        with _LOG_LOCK:
+            path = os.path.join(data_dir, f"{LOG_COLLECTION}.json")
+            if not os.path.exists(path):
+                return []
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
+                    loaded = json.load(handle)
+            except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+                return []
+            return copy.deepcopy(loaded) if isinstance(loaded, list) else []
+    except OSError:
+        return []
+
+
+def _select_history(records, game_id):
+    """Most recent same-game advice first, padded with recent other-game rows."""
+    if not records:
+        return []
+    ordered = sorted(
+        (record for record in records if isinstance(record, dict)),
+        key=_record_ts,
+        reverse=True,
+    )
+    if game_id:
+        same_game = [r for r in ordered if r.get("gameId") == game_id][:ENRICHMENT_HISTORY_SAME_GAME]
+        others = [r for r in ordered if r.get("gameId") != game_id]
+    else:
+        same_game = []
+        others = ordered
+    if len(same_game) < ENRICHMENT_HISTORY_SAME_GAME:
+        pad = min(ENRICHMENT_HISTORY_PAD, ENRICHMENT_HISTORY_SAME_GAME - len(same_game))
+        same_game = same_game + others[:pad]
+    return same_game
+
+
+def _render_history_record(record):
+    """One compact Russian history line per logged consultation."""
+    minute = record.get("minute")
+    prefix = ""
+    if isinstance(minute, int) and not isinstance(minute, bool):
+        prefix = f"мин {minute}: "
+
+    if record.get("outcome") == "error":
+        error_kind = record.get("errorKind")
+        detail = f" ({error_kind})" if isinstance(error_kind, str) and error_kind else ""
+        return f"- {prefix}консультация с ошибкой{detail}"
+
+    rules_preset = record.get("rulesPreset")
+    llm_preset = record.get("llmPreset")
+    if isinstance(rules_preset, str) and rules_preset and isinstance(llm_preset, str) and llm_preset:
+        summary = f"правила {rules_preset} → LLM {llm_preset}"
+    elif isinstance(llm_preset, str) and llm_preset:
+        summary = f"LLM пресет {llm_preset}"
+    elif isinstance(rules_preset, str) and rules_preset:
+        summary = f"правила {rules_preset}"
+    else:
+        summary = "совет без пресета"
+
+    facts = []
+    confidence = record.get("confidence")
+    if isinstance(confidence, str) and confidence:
+        facts.append(f"уверенность {confidence}")
+    apply_fact = record.get("apply")
+    if isinstance(apply_fact, dict) and "ok" in apply_fact:
+        facts.append("применён успешно" if bool(apply_fact.get("ok")) else "применение не удалось")
+    else:
+        facts.append("применение не отмечено")
+    return f"- {prefix}{summary} ({'; '.join(facts)})"
+
+
+def _knowledge_entries(data):
+    """Extract the knowledge-pack rule list; preserve the generator's order."""
+    if isinstance(data, dict):
+        rules = data.get("rules")
+        return rules if isinstance(rules, list) else []
+    if isinstance(data, list):
+        return data
+    return []
+
+
+def _render_knowledge_entry(entry):
+    """Render one knowledge-pack rule; defensive, capped per entry."""
+    if isinstance(entry, dict):
+        pieces = []
+        ident = entry.get("id")
+        if isinstance(ident, str) and ident.strip():
+            pieces.append(f"[{ident.strip()}]")
+        when = entry.get("when")
+        if isinstance(when, dict):
+            conditions = [
+                f"{key}={str(value)}"
+                for key, value in when.items()
+                if isinstance(value, (str, int, float, bool))
+            ]
+            if conditions:
+                pieces.append("когда " + ", ".join(conditions))
+        recommendation = entry.get("recommendation")
+        if isinstance(recommendation, dict):
+            preset = recommendation.get("preset")
+            reason = recommendation.get("reason")
+            if isinstance(preset, str) and preset.strip():
+                summary = f"→ пресет {preset.strip()}"
+                if isinstance(reason, str) and reason.strip():
+                    summary += ": " + " ".join(reason.split())
+                pieces.append(summary)
+            elif isinstance(reason, str) and reason.strip():
+                pieces.append("→ " + " ".join(reason.split()))
+        confidence = entry.get("confidence")
+        if isinstance(confidence, str) and confidence.strip():
+            pieces.append(f"(уверенность {confidence.strip()})")
+        text = " ".join(pieces) if pieces else json.dumps(entry, ensure_ascii=False)
+    elif isinstance(entry, str):
+        text = entry
+    else:
+        text = json.dumps(entry, ensure_ascii=False)
+    line = "- " + " ".join(str(text).split())
+    if len(line) > ENRICHMENT_KNOWLEDGE_ENTRY_CHARS:
+        line = line[:ENRICHMENT_KNOWLEDGE_ENTRY_CHARS - 1] + "…"
+    return line
+
+
+def _assemble_enrichment(sections, budget):
+    """Add whole entries under the budget; mark honestly if anything was cut."""
+
+    def assemble(limit):
+        parts = []
+        used = 0
+        dropped = False
+        for header, lines in sections:
+            header_line = header + "\n"
+            if used + len(header_line) > limit:
+                dropped = True
+                break
+            parts.append(header_line)
+            used += len(header_line)
+            for line in lines:
+                line_text = line + "\n"
+                if used + len(line_text) > limit:
+                    dropped = True
+                    break
+                parts.append(line_text)
+                used += len(line_text)
+            if dropped:
+                break
+        return "".join(parts), dropped
+
+    text, dropped = assemble(budget)
+    if not dropped:
+        return text
+    # Re-run with room reserved for the marker so the result stays within
+    # the budget without ever cutting an entry mid-line.
+    reserved = len(ENRICHMENT_TRUNCATION_MARKER) + 1
+    text, _ = assemble(max(0, budget - reserved))
+    return text + ENRICHMENT_TRUNCATION_MARKER + "\n"
+
+
+def build_enrichment(data_dir, context, read_knowledge=None):
+    """Build the bounded server-side enrichment block for the advisor prompt.
+
+    Two optional sections: recent advisor-log history (records of this game
+    first, then the latest other-game records) and seed-hypothesis rules from
+    the tactical knowledge pack file (the daily exporter artifact), not the
+    retired `tactics` collection. The log is read-only and snapshotted under
+    _LOG_LOCK; the lock is released before returning. Any failure — missing
+    or corrupt log, missing knowledge pack, a raising reader — degrades to an
+    absent section: enrichment must never fail a consultation.
+    """
+    sections = []
+
+    try:
+        records = _read_log_snapshot(data_dir)
+        history_lines = [
+            _render_history_record(record)
+            for record in _select_history(records, context.get("gameId"))
+        ]
+    except Exception:  # defensive: enrichment is additive, never fatal
+        history_lines = []
+    if history_lines:
+        sections.append(("История советов (сервер):", history_lines))
+
+    if read_knowledge is not None:
+        try:
+            knowledge = read_knowledge()
+        except Exception:  # defensive: a broken reader is an empty section
+            knowledge = None
+        try:
+            knowledge_lines = [
+                _render_knowledge_entry(entry)
+                for entry in _knowledge_entries(knowledge)
+            ]
+        except Exception:  # defensive: malformed entries are dropped
+            knowledge_lines = []
+        if knowledge_lines:
+            sections.append((KNOWLEDGE_LABEL + ":", knowledge_lines))
+
+    return _assemble_enrichment(sections, ENRICHMENT_BUDGET_CHARS)
+
+
+def build_messages(context, enrichment=""):
     catalog_lines = "\n".join(
         f"- {entry['id']} | {entry['label']}"
         + (f" | идея: {entry['idea']}" if entry["idea"] else "")
@@ -230,8 +458,10 @@ def build_messages(context):
         + ", уверенность " + str(decision["confidence"])
         + "; кандидаты: " + candidates_text + "\n"
         "Каталог пресетов:\n" + catalog_lines + "\n"
-        "Дай JSON-ответ."
     )
+    if enrichment:
+        user_payload += "\nИстория советов и знания (сервер):\n" + enrichment + "\n"
+    user_payload += "Дай JSON-ответ."
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_payload},
@@ -522,7 +752,7 @@ def update_log_record_apply(data_dir, record_id, ok):
         return "error"
 
 
-def handle_advisor_request(data, data_dir):
+def handle_advisor_request(data, data_dir, read_knowledge=None):
     """Flask-view body: returns a (response, status) tuple."""
     api_key, model = get_config()
     if not api_key:
@@ -535,7 +765,10 @@ def handle_advisor_request(data, data_dir):
 
     catalog_ids = {entry["id"] for entry in context["presetCatalog"]}
     catalog_labels = {entry["id"]: entry["label"] for entry in context["presetCatalog"]}
-    messages = build_messages(context)
+    # Ф2b (#441): build the enrichment once per consultation, before the
+    # provider call; the log lock is released inside build_enrichment.
+    enrichment = build_enrichment(data_dir, context, read_knowledge)
+    messages = build_messages(context, enrichment)
 
     def corrective_message(feedback):
         # Built by concatenation on purpose: str.format would treat the JSON
