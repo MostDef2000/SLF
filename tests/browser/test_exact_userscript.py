@@ -76,6 +76,19 @@ def fixture_server():
 
 
 def browser_init_script(api_mode: str) -> str:
+    # Ф2a (#441): the advisor stub returns an AVAILABLE answer carrying a preset
+    # + adviceId, so the LLM button renders #slf-llm-apply-btn with its data
+    # attributes. The preset is a real registry id so the apply path is honest.
+    advisor_answer = json.dumps({
+        "available": True,
+        "adviceId": "e2e-advice-123",
+        "preset": "Emery_BalancedBase_v11",
+        "presetLabel": "Emery Balanced Base",
+        "confidence": "high",
+        "reason": "Тестовый совет",
+        "model": "test-model",
+        "latencyMs": 1234,
+    }, ensure_ascii=False)
     return f"""
 (() => {{
   'use strict';
@@ -136,6 +149,7 @@ def browser_init_script(api_mode: str) -> str:
 
       let responseText = '{{}}';
       if (entry.method === 'GET' && !entry.url.includes('/api/tactics')) responseText = '[]';
+      if (entry.url.includes('/api/advisor') && !entry.url.includes('/api/advisor_apply')) responseText = {json.dumps(advisor_answer)};
       if (typeof request.onload === 'function') {{
         request.onload({{
           status: 200,
@@ -413,42 +427,37 @@ def assert_fm2026_priority_release(page: Page):
 
 
 def assert_fm2026_compact_recommendation(page: Page):
-    page.locator("#slf-manual-recommendation-btn").click()
+    # Ф2a (#441) — REPLACED contract. The original case asserted the compact
+    # recommendation block (#slf-parser-recommendation [data-slf-rec-section=
+    # "combined"]) rendered by the manual-hint click. That block is no longer
+    # produced by any UI entry: the manual hint button is retired, and the LLM
+    # path renders the answer container instead (it never writes the combined
+    # rec block). The closest still-true contract assertion: the LLM button —
+    # the new primary entry — runs the fresh pipeline and renders the answer
+    # container, which for an available advisor answer carrying a preset carries
+    # the one-click apply button with its data attributes.
+    page.locator("#slf-llm-second-opinion-btn").click()
     page.wait_for_function(
-        "() => document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
+        "() => !!document.getElementById('slf-llm-second-opinion-answer')"
     )
     page.wait_for_timeout(400)
     structure = page.evaluate("""() => {
-      const block = document.querySelector('#slf-parser-recommendation [data-slf-rec-section="combined"]');
-      if (!block) return {block: false};
-      const details = Array.from(block.querySelectorAll('details.slf-final-tactic-more'));
-      const one = details.length === 1 ? details[0] : null;
-      const button = block.querySelector('#slf-final-tactic-apply-btn');
+      const el = document.getElementById('slf-llm-second-opinion-answer');
+      const apply = document.getElementById('slf-llm-apply-btn');
       return {
-        block: true,
-        // innerText renders only visible text: a CLOSED <details> contributes
-        // nothing here, so visibleText is exactly the always-visible part.
-        visibleText: block.innerText,
-        detailsText: one ? one.textContent : null,
-        detailsCount: details.length,
-        summary: one ? (one.querySelector('summary')?.textContent || '').trim() : null,
-        hasOpenAttr: one ? one.hasAttribute('open') : null,
-        buttonOutsideDetails: !!button && !!one && !one.contains(button),
+        answer: !!el,
+        answerText: el ? el.textContent : null,
+        applyBtn: !!apply,
+        applyPreset: apply ? apply.dataset.slfLlmApplyPreset : null,
+        applyAdvice: apply ? apply.dataset.slfLlmApplyAdviceId : null,
       };
     }""")
-    assert structure["block"], "recommendation block missing"
-    assert structure["detailsCount"] == 1, f'compact block must render exactly one details element: {structure["detailsCount"]}'
-    assert structure["summary"] == "Подробнее", structure["summary"]
-    assert structure["hasOpenAttr"] is False, "details must be collapsed by default (no open attribute)"
-    visible = structure["visibleText"]
-    assert "Δ:" in visible, f"always-visible part must contain the Δ line: {visible!r}"
-    assert "Применить" in visible and structure["buttonOutsideDetails"], (
-        f"always-visible part must contain the apply button outside details: {visible!r}"
-    )
-    for label in ("Вектор:", "Решение:", "Кандидаты:", "Сигналы:"):
-        assert label not in visible, f"{label} must not appear outside the details element"
-    for label in ("Вектор:", "Решение:", "Кандидаты:"):
-        assert label in structure["detailsText"], f"{label} must live inside the details element"
+    assert structure["answer"], "LLM answer container missing"
+    # The stub returns an available answer with a preset -> the apply button
+    # renders with its data attributes (apply fires only on an explicit click).
+    assert structure["applyBtn"], f"apply button missing for available answer: {structure}"
+    assert structure["applyPreset"] == "Emery_BalancedBase_v11", structure
+    assert structure["applyAdvice"] == "e2e-advice-123", structure
 
 
 def assert_pitch_background_static():
@@ -467,13 +476,16 @@ def assert_pitch_background_static():
 
 def assert_owned_live(page: Page):
     page.wait_for_selector("#slf-match-parser-panel")
-    page.wait_for_selector("#slf-manual-recommendation-btn")
+    # Ф2a (#441): the manual hint button is never rendered; the LLM button is the
+    # single primary entry and mounts on its own.
+    page.wait_for_selector("#slf-llm-second-opinion-btn")
     page.wait_for_selector("#slf-tactics-dropdown")
     page.wait_for_selector("#slf-parser-recommendation #slf-tactical-lab-panel")
     page.wait_for_timeout(100)
 
     assert page.locator("#slf-match-parser-panel").count() == 1
-    assert page.locator("#slf-manual-recommendation-btn").count() == 1
+    assert page.locator("#slf-manual-recommendation-btn").count() == 0
+    assert page.locator("#slf-llm-second-opinion-btn").count() == 1
     assert page.locator("#slf-tactics-dropdown").count() == 1
     assert page.locator("#slf-live-lineup-preset-panel").count() == 0
     assert page.locator("#slf-live-lineup-preset-select").count() == 0
@@ -571,9 +583,13 @@ def assert_owned_live(page: Page):
     )
     assert stored_custom_keys == ["Henta abuse"], stored_custom_keys
 
-    page.locator("#slf-manual-recommendation-btn").click()
+    # Ф2a (#441): the manual hint button is gone. The LLM button is the primary
+    # entry; clicking it runs the fresh pipeline and renders the answer. The
+    # snapshot telemetry is sent on bootstrap (not by a button), so assert on
+    # the bootstrap snapshot.
+    page.locator("#slf-llm-second-opinion-btn").click()
     page.wait_for_function(
-        "() => document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
+        "() => !!document.getElementById('slf-llm-second-opinion-answer')"
     )
     page.wait_for_function(
         "() => window.__slfRequests.some(item => item.url.includes('/api/match_snapshots_v2?mode=append'))"
@@ -596,6 +612,13 @@ def assert_owned_live(page: Page):
     assert record["tacticalLab"]["assignment"]["experimentId"] == experiment_id
     assert record["tacticalLab"]["populationVersion"] == "slf_tactical_lab_561_p04"
 
+    # Ф2a (#441): the available advisor answer renders the one-click apply
+    # button carrying the preset + adviceId (apply fires only on an explicit
+    # click — never auto).
+    assert page.locator("#slf-llm-apply-btn").count() == 1
+    assert page.locator("#slf-llm-apply-btn").get_attribute("data-slf-llm-apply-preset") == "Emery_BalancedBase_v11"
+    assert page.locator("#slf-llm-apply-btn").get_attribute("data-slf-llm-apply-advice-id") == "e2e-advice-123"
+
     page.evaluate("""
       const card = document.querySelector('.control_lineup[data-player="p-lw"]');
       const target = document.getElementById('control_am1');
@@ -617,10 +640,8 @@ def assert_owned_live(page: Page):
     assert save_payload["sub1"] == "p-sub1", save_payload
 
     add_tactical_lab_control_fixture_values(page)
-    page.locator("#slf-manual-recommendation-btn").click()
-    page.wait_for_function(
-        "() => document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
-    )
+    # Ф2a (#441): the lab mounts on bootstrap and its apply button becomes ready
+    # once the tactical radio lanes resolve — no manual-hint click required.
     page.wait_for_selector("#slf-parser-recommendation #slf-tactical-lab-panel")
     page.wait_for_function(
         "() => document.getElementById('slf-tactical-lab-apply') && !document.getElementById('slf-tactical-lab-apply').disabled"
@@ -688,10 +709,7 @@ def assert_owned_live(page: Page):
     )
     assert "Следующая проверка" in page.locator("#slf-tactical-lab-detail").text_content()
 
-    page.locator("#slf-manual-recommendation-btn").click()
-    page.wait_for_function(
-        "() => !document.getElementById('slf-manual-recommendation-btn')?.disabled && document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
-    )
+    # Ф2a (#441): the lab stays mounted/active without a manual-hint refresh.
     page.wait_for_selector("#slf-parser-recommendation > #slf-tactical-lab-panel")
     assert page.locator("#slf-tactical-lab-panel").get_attribute("data-experiment-id") == experiment_id
     assert "ACTIVE" in page.locator("#slf-tactical-lab-status").text_content()
@@ -728,7 +746,10 @@ def assert_owned_live(page: Page):
     """)
     page.wait_for_timeout(300)
     assert page.locator("#slf-match-parser-panel").count() == 1
-    assert page.locator("#slf-manual-recommendation-btn").count() == 1
+    # Ф2a (#441): after DOM churn the manual hint button stays absent and the
+    # LLM button stays the single primary entry.
+    assert page.locator("#slf-manual-recommendation-btn").count() == 0
+    assert page.locator("#slf-llm-second-opinion-btn").count() == 1
     assert page.locator("#slf-tactics-dropdown").count() == 1
     assert page.locator("#slf-live-lineup-preset-panel").count() == 0
     assert page.locator("#slf-live-lineup-preset-select").count() == 0
@@ -741,11 +762,12 @@ def assert_lab_exposure_finished_parse(page: Page):
     # exit. The owned fixture resolves snapshot minute 20 (mock API); the finished
     # page has no live minute, so the exit must fall back to the last checkpoint
     # minute instead of writing 0/0/0.
+    # Ф2a (#441): the manual hint button is gone. The lab mounts on bootstrap and
+    # its apply button becomes ready once the tactical radio lanes resolve — no
+    # manual-hint click required. Without a manual checkpoint after activation,
+    # lastSeenMinute stays unset and the finished-parse exit records toMinute /
+    # durationMinutes as null (no exposure tracked) rather than a fabricated 0.
     add_tactical_lab_control_fixture_values(page)
-    page.locator("#slf-manual-recommendation-btn").click()
-    page.wait_for_function(
-        "() => document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
-    )
     page.wait_for_function(
         "() => document.getElementById('slf-tactical-lab-apply') && !document.getElementById('slf-tactical-lab-apply').disabled"
     )
@@ -757,15 +779,8 @@ def assert_lab_exposure_finished_parse(page: Page):
         "JSON.parse(localStorage.getItem('slf_manual_match_state_v2:e2e-owned') || '{}').tacticalLab"
     )
     assert lab_state["activation"]["startedAtMinute"] == 20, lab_state["activation"]
-
-    page.locator("#slf-manual-recommendation-btn").click()
-    page.wait_for_function(
-        "() => !document.getElementById('slf-manual-recommendation-btn')?.disabled && document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
-    )
-    lab_state = page.evaluate(
-        "JSON.parse(localStorage.getItem('slf_manual_match_state_v2:e2e-owned') || '{}').tacticalLab"
-    )
-    assert lab_state["activation"]["lastSeenMinute"] == 20, lab_state["activation"]
+    # No manual checkpoint after activation -> lastSeenMinute is not set.
+    assert lab_state["activation"].get("lastSeenMinute") is None, lab_state["activation"]
 
     base_url = page.evaluate("location.origin")
     page.goto(f"{base_url}/game.php?id=e2e-owned&fixture=finished", wait_until="domcontentloaded")
@@ -782,14 +797,20 @@ def assert_lab_exposure_finished_parse(page: Page):
     completed = lab_state["completed"]
     assert completed["exitReason"] == "tactic_changed_checkpoint", completed
     assert completed["fromMinute"] == 20, completed
-    assert completed["toMinute"] == 20, completed
-    assert completed["durationMinutes"] == 0, completed
+    # No checkpoint after activation (manual hint button retired in Ф2a) -> the
+    # exit records null exposure, not a fabricated 0/0/0.
+    assert completed["toMinute"] is None, completed
+    assert completed["durationMinutes"] is None, completed
 
 
 def assert_offline_bootstrap(page: Page):
     page.wait_for_selector("#slf-match-parser-panel")
-    page.wait_for_selector("#slf-manual-recommendation-btn")
+    # Ф2a (#441): the manual hint button is never rendered; the LLM button is
+    # the single primary entry and mounts on its own.
+    page.wait_for_selector("#slf-llm-second-opinion-btn")
     page.wait_for_selector("#slf-tactics-dropdown")
+    assert page.locator("#slf-manual-recommendation-btn").count() == 0
+    assert page.locator("#slf-llm-second-opinion-btn").count() == 1
     rows = request_rows(page)
     # Issue #409 wave 1 retired the bootstrap VPS tactics sync — the canonical
     # store is now native site templates; the ONLY remaining /api/tactics read
@@ -803,14 +824,21 @@ def assert_offline_bootstrap(page: Page):
 
 def assert_foreign_live(page: Page):
     page.wait_for_selector("#slf-match-parser-panel")
-    page.wait_for_selector("#slf-manual-recommendation-btn")
+    # Ф2a (#441): manual hint button gone; LLM button is the primary entry.
+    page.wait_for_selector("#slf-llm-second-opinion-btn")
     page.wait_for_selector("#slf-foreign-match-target")
+    assert page.locator("#slf-manual-recommendation-btn").count() == 0
+    assert page.locator("#slf-llm-second-opinion-btn").count() == 1
     assert page.locator("#slf-tactics-dropdown").count() == 0
     assert page.locator("#slf-tactical-lab-panel").count() == 0
 
-    page.locator("#slf-manual-recommendation-btn").click()
+    # The LLM button runs the fresh pipeline; on a foreign match it must still
+    # NOT post snapshot telemetry (the contract under test). The "Подсказка
+    # обновлена вручную" status is unreachable now, so assert the LLM flow's
+    # actual output: the answer container renders.
+    page.locator("#slf-llm-second-opinion-btn").click()
     page.wait_for_function(
-        "() => document.getElementById('slf-parser-status')?.textContent.includes('Подсказка обновлена вручную')"
+        "() => !!document.getElementById('slf-llm-second-opinion-answer')"
     )
     page.wait_for_timeout(150)
     rows = request_rows(page)
@@ -893,7 +921,10 @@ def assert_finished_g3_pending(page: Page):
 
 def assert_incomplete_match(page: Page):
     page.wait_for_selector("#slf-match-parser-panel")
-    page.wait_for_selector("#slf-manual-recommendation-btn")
+    # Ф2a (#441): manual hint button gone; LLM button is the primary entry.
+    page.wait_for_selector("#slf-llm-second-opinion-btn")
+    assert page.locator("#slf-manual-recommendation-btn").count() == 0
+    assert page.locator("#slf-llm-second-opinion-btn").count() == 1
     assert page.locator("#slf-tactics-dropdown").count() == 0
 
 
@@ -914,7 +945,10 @@ def assert_tactic_page(page: Page):
 def assert_transfer_page(page: Page):
     page.wait_for_timeout(300)
     assert page.locator("#slf-match-parser-panel").count() == 0
+    # Ф2a (#441): neither the (retired) manual hint button nor the LLM button
+    # mounts off /game.php.
     assert page.locator("#slf-manual-recommendation-btn").count() == 0
+    assert page.locator("#slf-llm-second-opinion-btn").count() == 0
 
 
 # ── issue #377: hybrid priority markup pins the page to the checkbox family ──
