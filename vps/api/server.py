@@ -317,6 +317,35 @@ def api_advisor():
     return jsonify(response), status
 
 
+@app.route("/api/advisor_apply", methods=["POST"])
+def api_advisor_apply():
+    """Apply-event reporting for advisor advice (specs/441, Ф2a).
+
+    Body: {"adviceId": str, "ok": bool}. Updates the advisor log record
+    found by id with {"apply": {"ok": bool, "at": iso8601}}. Honest codes:
+    unknown id -> 404, malformed body -> 400, persistence failure -> 500.
+    """
+    if not check_token():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "No JSON"}), 400
+    advice_id = data.get("adviceId")
+    ok = data.get("ok")
+    if not isinstance(advice_id, str) or not advice_id.strip() or not isinstance(ok, bool):
+        return jsonify({"error": "Invalid payload"}), 400
+    # Cap the id length before the lock-protected log scan: real ids are
+    # uuid4().hex (32 chars); anything longer is malformed, not "unknown".
+    if len(advice_id) > 128:
+        return jsonify({"error": "Invalid payload"}), 400
+    result = advisor.update_log_record_apply(DATA_DIR, advice_id.strip(), ok)
+    if result == "updated":
+        return jsonify({"ok": True}), 200
+    if result == "not_found":
+        return jsonify({"error": "Unknown adviceId"}), 404
+    return jsonify({"error": "Failed to persist apply event"}), 500
+
+
 @app.route("/api/forum_faq", methods=["GET"])
 def api_forum_faq():
     if not check_token():

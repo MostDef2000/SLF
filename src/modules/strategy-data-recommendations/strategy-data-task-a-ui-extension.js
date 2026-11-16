@@ -850,46 +850,31 @@
     function mountManualButton() {
         if (!location.pathname.includes('/game.php')) return;
         const panel = document.getElementById('slf-match-parser-panel');
-        if (!panel || document.getElementById('slf-manual-recommendation-btn')) return;
+        if (!panel || document.getElementById('slf-llm-second-opinion-btn')) return;
 
-        const btn = document.createElement('button');
-        btn.id = 'slf-manual-recommendation-btn';
-        btn.type = 'button';
-        btn.textContent = '↻ Подсказка';
-        btn.title = 'Собрать текущий snapshot и показать rule-based подсказку по текущему состоянию';
-        btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
-        btn.onclick = async () => {
-            btn.disabled = true;
-            try {
-                await renderManualRecommendation();
-            } catch (error) {
-                console.error('[SLF] Manual recommendation refresh failed', error);
-                UI.addParserLog('Подсказка: ошибка, см. console');
-            } finally {
-                btn.disabled = false;
-            }
-        };
-
-        const status = document.getElementById('slf-parser-status');
-        panel.insertBefore(btn, status || null);
-
+        // Ф2a (#441): the manual hint button is hidden from the UI; the rule
+        // ladder stays internal as the LLM's structured input. The LLM button
+        // is the single primary entry and mounts on its own — its presence no
+        // longer depends on the manual button being rendered.
         const llmBtn = document.createElement('button');
         llmBtn.id = 'slf-llm-second-opinion-btn';
         llmBtn.type = 'button';
         llmBtn.textContent = '🤖 LLM';
-        llmBtn.title = 'Второе мнение от LLM по текущей подсказке. Только совет — тактика не применяется.';
-        llmBtn.style.cssText = 'padding:5px 8px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;cursor:pointer;margin-left:5px;';
+        llmBtn.title = 'Второе мнение от LLM по текущему состоянию матча. Только совет — тактика применяется только по явному клику.';
+        llmBtn.style.cssText = 'padding:5px 8px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;cursor:pointer;';
         llmBtn.onclick = async () => {
             llmBtn.disabled = true;
             try {
-                await requestLlmSecondOpinion();
+                await requestLlmSecondOpinionFresh();
             } catch (error) {
                 console.error('[SLF] LLM second opinion failed', error);
             } finally {
                 llmBtn.disabled = false;
             }
         };
-        panel.insertBefore(llmBtn, btn.nextSibling);
+
+        const status = document.getElementById('slf-parser-status');
+        panel.insertBefore(llmBtn, status || null);
     }
 
     function llmSecondOpinionErrorText(error) {
@@ -902,9 +887,11 @@
         return `Ошибка советника${status ? ` (HTTP ${status})` : ''}`;
     }
 
-    async function requestLlmSecondOpinion() {
+    async function requestLlmSecondOpinion(freshSnapshot) {
         if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined') return;
-        const snapshot = (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot) || null;
+        const snapshot = freshSnapshot
+            || (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot)
+            || null;
         const ruleDecision = (snapshot && snapshot.ruleDecision)
             || (typeof STATE !== 'undefined' ? STATE.lastRuleDecision : null)
             || null;
@@ -913,7 +900,7 @@
         if (!payload) {
             LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
                 available: false,
-                error: 'Нет сохранённой подсказки — сначала нажмите «↻ Подсказка»'
+                error: 'Недостаточно данных: правило не дало решения или каталог пресетов пуст'
             }));
             return;
         }
@@ -928,6 +915,100 @@
                 error: llmSecondOpinionErrorText(error)
             }));
         }
+    }
+
+    // Ф2a (#441): self-sufficient entry — the LLM button no longer depends on
+    // a manual hint click. Builds a fresh snapshot, runs the SAME rule ladder
+    // the manual hint runs (RecommendationEngine.make stamps
+    // snapshot.ruleDecision) and feeds it straight into the advisor flow.
+    async function requestLlmSecondOpinionFresh() {
+        if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined'
+            || typeof SnapshotEngine === 'undefined') return;
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) {
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+                available: false,
+                error: 'Snapshot матча недоступен'
+            }));
+            return;
+        }
+        snapshot.recommendationSource = 'llm_second_opinion';
+        snapshot.generatorVersion = GENERATOR_VERSION;
+        // Same pipeline the manual hint runs; make() stamps ruleDecision.
+        buildManualRecommendationHtml(snapshot);
+        if (!snapshot.ruleDecision) {
+            // Honest muted message: no fake answer, no retry storm. The click
+            // wrapper re-enables the button.
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+                available: false,
+                error: 'Правила не дали решения на текущих данных матча'
+            }));
+            return;
+        }
+        await requestLlmSecondOpinion(snapshot);
+    }
+
+    // Ф2a (#441): one-click apply of the suggested preset. Runs ONLY on an
+    // explicit click (event delegation below) — no timers, no auto-apply,
+    // no auto-retry. Success = UI readback confirmed by applyPresetAsync;
+    // no game-server acknowledgement is claimed anywhere.
+    async function applyLlmSuggestedPreset(btn) {
+        const presetId = (btn && btn.dataset && btn.dataset.slfLlmApplyPreset) || '';
+        if (!presetId || typeof applyPresetAsync !== 'function') return;
+        if (btn.dataset.slfApplyInFlight === '1') return;
+        btn.dataset.slfApplyInFlight = '1';
+        btn.disabled = true;
+        btn.textContent = 'Применяю…';
+        let applied = false;
+        try {
+            // applyPresetAsync returns false on the early "preset not found"
+            // path without writing lastTacticApplyFailure — clear stale
+            // diagnostics from an unrelated earlier failure so the failure
+            // branch below reports honestly.
+            if (typeof STATE !== 'undefined') STATE.lastTacticApplyFailure = null;
+            applied = (await applyPresetAsync(presetId)) === true;
+        } catch (error) {
+            console.error('[SLF] LLM suggested preset apply failed', error);
+            applied = false;
+        }
+        btn.dataset.slfApplyInFlight = '';
+        const adviceId = (btn.dataset && btn.dataset.slfLlmApplyAdviceId) || '';
+        if (applied) {
+            btn.disabled = true;
+            btn.textContent = 'Применено ✓ (подтверждено в интерфейсе)';
+            UI.addParserLog('Пресет из совета LLM применён (readback подтверждён)');
+            if (adviceId) void reportLlmApplyEvent(adviceId, true);
+            return;
+        }
+        // Honest failure: surface the bridge diagnostics, keep the button
+        // enabled for a manual retry, never report success.
+        btn.disabled = false;
+        btn.textContent = 'Применить';
+        const failure = (typeof STATE !== 'undefined' && STATE.lastTacticApplyFailure) || null;
+        const reason = failure && failure.reason ? String(failure.reason) : 'не диагностирована';
+        UI.addParserLog(`Не удалось применить пресет (${reason}) — можно повторить`);
+        UI.updateParserStatus('Применение пресета не подтверждено');
+        if (adviceId) void reportLlmApplyEvent(adviceId, false);
+    }
+
+    async function reportLlmApplyEvent(adviceId, ok) {
+        if (typeof Api === 'undefined' || !adviceId) return;
+        try {
+            await Api.postJson('advisor_apply', { adviceId: String(adviceId), ok: ok === true }, 'llm-advisor-apply', 10000);
+        } catch (error) {
+            console.error('[SLF] LLM apply event report failed', error);
+            UI.addParserLog('Событие применения не доставлено на сервер');
+        }
+    }
+
+    function bindLlmApplyDelegation() {
+        if (typeof document === 'undefined' || document.__slfLlmApplyDelegation) return;
+        document.__slfLlmApplyDelegation = true;
+        document.addEventListener('click', event => {
+            const btn = event?.target?.closest ? event.target.closest('#slf-llm-apply-btn') : null;
+            if (!btn) return;
+            void applyLlmSuggestedPreset(btn);
+        });
     }
 
     function mountForeignSelector() {
@@ -957,6 +1038,7 @@
         mountManualButton();
         mountForeignSelector();
         bindFinalTacticApplyDelegation();
+        bindLlmApplyDelegation();
     }
 
     const originalAddMatchParserPanel = UI.addMatchParserPanel;

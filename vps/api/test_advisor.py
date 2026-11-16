@@ -6,6 +6,7 @@ AdvisorProxyTestCase covers the SLF_ADVISOR_PROXY SOCKS5 relay path against
 a scripted loopback socket server — still no external network.
 """
 
+import datetime
 import importlib.util
 import json
 import os
@@ -113,12 +114,31 @@ class AdvisorTestCase(unittest.TestCase):
         self.assertEqual(payload["presetLabel"], "Pep Box Control")
         self.assertEqual(payload["confidence"], "high")
         self.assertEqual(payload["latencyMs"], 1234)
+        # Ф2a (#441): a successful answer carries a non-empty adviceId.
+        self.assertIn("adviceId", payload)
+        self.assertIsInstance(payload["adviceId"], str)
+        self.assertTrue(payload["adviceId"])
         log = self.read_log()
         self.assertEqual(len(log), 1)
         self.assertEqual(log[0]["outcome"], "ok")
         self.assertEqual(log[0]["llmPreset"], "Pep_BoxControl_bal2")
         self.assertEqual(log[0]["rulesPreset"], "Emery_BalancedBase_v11")
         self.assertEqual(log[0]["model"], self.advisor.DEFAULT_MODEL)
+        # Ф2a (#441): the persisted record carries the same value under "id".
+        self.assertEqual(log[0]["id"], payload["adviceId"])
+
+    def test_error_record_has_no_id(self):
+        # Ф2a (#441): only successful answers mint an advice id; error-path
+        # records must not carry one (nothing to apply against).
+        with mock.patch.object(self.advisor, "call_openrouter", return_value=("извините, не могу", 500)), \
+                mock.patch.object(self.advisor.time, "sleep"):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        self.assertFalse(response.get_json()["available"])
+        log = self.read_log()
+        self.assertEqual(len(log), 1)
+        self.assertEqual(log[0]["outcome"], "error")
+        self.assertNotIn("id", log[0], "error-path record must not carry an advice id")
 
     def test_rate_limited_then_success(self):
         answer = json.dumps({"preset": "Emery_BalancedBase_v11", "confidence": "low", "reason": "Держим базу."})
@@ -486,6 +506,98 @@ class AdvisorProxyE2ETestCase(unittest.TestCase):
         self.assertEqual(len(log), 1)
         self.assertEqual(log[0]["outcome"], "error")
         self.assertEqual(log[0]["errorKind"], "misconfigured")
+
+
+class AdvisorApplyTestCase(unittest.TestCase):
+    """Ф2a (#441): POST /api/advisor_apply — apply-event reporting.
+
+    Token-gated like the advisor route. Updates the advisor_log_v1 record
+    found by id with {"apply": {"ok": bool, "at": iso8601}}. Honest codes:
+    unknown id -> 404, malformed body -> 400, persistence failure -> 500.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        os.environ["SLF_API_TOKEN"] = "test-token"
+        os.environ["SLF_DATA_DIR"] = cls.temp_dir.name
+        os.environ["SLF_FORUM_FAQ_DIR"] = os.path.join(cls.temp_dir.name, "forum")
+        os.environ["OPENROUTER_API_KEY"] = "test-key"
+        cls.server = _load_server()
+        cls.advisor = cls.server.advisor
+        cls.client = cls.server.app.test_client()
+        cls.auth = {"Authorization": "Bearer test-token"}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
+
+    def setUp(self):
+        for path in pathlib.Path(self.temp_dir.name).glob("*.json"):
+            path.unlink()
+
+    def read_log(self):
+        path = pathlib.Path(self.temp_dir.name) / "advisor_log_v1.json"
+        if not path.exists():
+            return []
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def seed_log(self, records):
+        path = pathlib.Path(self.temp_dir.name) / "advisor_log_v1.json"
+        path.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
+
+    def test_apply_updates_record(self):
+        self.seed_log([{"id": "abc123", "outcome": "ok"}])
+        response = self.client.post(
+            "/api/advisor_apply", json={"adviceId": "abc123", "ok": True}, headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["ok"])
+        log = self.read_log()
+        self.assertEqual(len(log), 1)
+        self.assertEqual(log[0]["apply"]["ok"], True)
+        self.assertIn("at", log[0]["apply"])
+        # apply.at must be a valid ISO-8601 timestamp.
+        datetime.datetime.fromisoformat(log[0]["apply"]["at"])
+
+    def test_apply_unknown_id_is_404(self):
+        self.seed_log([{"id": "abc123", "outcome": "ok"}])
+        response = self.client.post(
+            "/api/advisor_apply", json={"adviceId": "nope", "ok": True}, headers=self.auth)
+        self.assertEqual(response.status_code, 404)
+
+    def test_apply_malformed_bodies_are_400(self):
+        self.seed_log([{"id": "abc123", "outcome": "ok"}])
+        # missing ok
+        r = self.client.post("/api/advisor_apply", json={"adviceId": "abc123"}, headers=self.auth)
+        self.assertEqual(r.status_code, 400)
+        # missing adviceId
+        r = self.client.post("/api/advisor_apply", json={"ok": True}, headers=self.auth)
+        self.assertEqual(r.status_code, 400)
+        # adviceId not a string
+        r = self.client.post("/api/advisor_apply", json={"adviceId": 123, "ok": True}, headers=self.auth)
+        self.assertEqual(r.status_code, 400)
+        # ok not a bool (ok:1 must be rejected)
+        r = self.client.post("/api/advisor_apply", json={"adviceId": "abc123", "ok": 1}, headers=self.auth)
+        self.assertEqual(r.status_code, 400)
+        # non-dict body
+        r = self.client.post("/api/advisor_apply", json=["abc123"], headers=self.auth)
+        self.assertEqual(r.status_code, 400)
+
+    def test_apply_unauthorized_is_401(self):
+        self.seed_log([{"id": "abc123", "outcome": "ok"}])
+        response = self.client.post("/api/advisor_apply", json={"adviceId": "abc123", "ok": True})
+        self.assertEqual(response.status_code, 401)
+
+    def test_apply_corrupt_log_is_500(self):
+        # Pre-seed a CORRUPT advisor_log_v1.json (invalid JSON). The update
+        # must refuse to blind-write and the endpoint must return 500.
+        path = pathlib.Path(self.temp_dir.name) / "advisor_log_v1.json"
+        path.write_text("{invalid json\n", encoding="utf-8")
+        response = self.client.post(
+            "/api/advisor_apply", json={"adviceId": "abc123", "ok": True}, headers=self.auth)
+        self.assertEqual(response.status_code, 500)
+        # The corrupt file must be preserved (no blind write).
+        self.assertEqual(path.read_text(encoding="utf-8"), "{invalid json\n")
 
 
 if __name__ == "__main__":
