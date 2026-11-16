@@ -74,6 +74,33 @@ class ApiServiceContractTest(unittest.TestCase):
         self.assertIn("sleep 1", self.deploy_script)
         self.assertIn("API readiness verification failed after 30 attempts", self.deploy_script)
 
+    def test_api_deploy_ships_every_runtime_module(self):
+        # Regression (2026-11-16 incident): server.py imports advisor, but
+        # deploy-code.sh staged only server.py, so gunicorn workers died on
+        # ImportError and the API went down until a manual rollback. Every
+        # non-test module under vps/api must be staged by the deploy script.
+        runtime_modules = sorted(
+            path.name
+            for path in (ROOT / "vps" / "api").glob("*.py")
+            if not path.name.startswith("test_")
+        )
+        self.assertTrue(runtime_modules, "expected at least one runtime module")
+        for name in runtime_modules:
+            self.assertIn(
+                f'"$RESOLVED_COMMIT:vps/api/{name}"',
+                self.deploy_script,
+                f"deploy-code.sh does not stage vps/api/{name}",
+            )
+            self.assertIn(
+                f'install -m 0644 "$STAGE_DIR/{name}" "$API_DIR/{name}"',
+                self.deploy_script,
+                f"deploy-code.sh does not install vps/api/{name}",
+            )
+
+    def test_api_rollback_restores_advisor_module_symmetrically(self):
+        self.assertIn('install -m 0644 "$BACKUP_DIR/advisor.py" "$API_DIR/advisor.py"', self.rollback_script)
+        self.assertIn('rm -f "$API_DIR/advisor.py"', self.rollback_script)
+
     def test_exporter_deploy_packages_tactical_lab_before_daily_export(self):
         compile_lab = self.deploy_script.index('"$STAGE_DIR/slf_tactical_lab_v1.py"')
         install_lab = self.deploy_script.index('install -m 0644 "$STAGE_DIR/slf_tactical_lab_v1.py"')

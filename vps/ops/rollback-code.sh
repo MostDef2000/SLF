@@ -36,6 +36,12 @@ case "$component" in
     [ -f "$BACKUP_DIR/slf-server.service" ] || { echo 'service unit is missing from backup.' >&2; exit 1; }
 
     install -m 0644 "$BACKUP_DIR/server.py" "$API_DIR/server.py"
+    if [ -f "$BACKUP_DIR/advisor.py" ]; then
+      install -m 0644 "$BACKUP_DIR/advisor.py" "$API_DIR/advisor.py"
+    else
+      # Pre-advisor backup: the restored server.py does not import it.
+      rm -f "$API_DIR/advisor.py"
+    fi
     if [ -f "$BACKUP_DIR/requirements.txt" ]; then
       install -m 0644 "$BACKUP_DIR/requirements.txt" "$API_DIR/requirements.txt"
       "$API_DIR/venv/bin/pip" install -r "$API_DIR/requirements.txt"

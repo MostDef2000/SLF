@@ -64,13 +64,15 @@ case "$COMPONENT" in
     [ -f "$API_DIR/slf_api.env" ] || { echo 'Missing slf_api.env; refusing deployment.' >&2; exit 1; }
 
     git -C "$REPO_DIR" show "$RESOLVED_COMMIT:vps/api/server.py" > "$STAGE_DIR/server.py"
+    git -C "$REPO_DIR" show "$RESOLVED_COMMIT:vps/api/advisor.py" > "$STAGE_DIR/advisor.py"
     git -C "$REPO_DIR" show "$RESOLVED_COMMIT:vps/api/requirements.txt" > "$STAGE_DIR/requirements.txt"
     git -C "$REPO_DIR" show "$RESOLVED_COMMIT:vps/ops/slf-server.service" > "$STAGE_DIR/slf-server.service"
-    "$VENV_PY" -m py_compile "$STAGE_DIR/server.py"
+    "$VENV_PY" -m py_compile "$STAGE_DIR/server.py" "$STAGE_DIR/advisor.py"
     systemd-analyze verify "$STAGE_DIR/slf-server.service"
 
     create_backup_dir
     [ -f "$API_DIR/server.py" ] && cp -a "$API_DIR/server.py" "$BACKUP_DIR/server.py"
+    [ -f "$API_DIR/advisor.py" ] && cp -a "$API_DIR/advisor.py" "$BACKUP_DIR/advisor.py"
     [ -f "$API_DIR/requirements.txt" ] && cp -a "$API_DIR/requirements.txt" "$BACKUP_DIR/requirements.txt"
     [ -f "$UNIT_PATH" ] && cp -a "$UNIT_PATH" "$BACKUP_DIR/slf-server.service"
     write_manifest
@@ -78,6 +80,7 @@ case "$COMPONENT" in
 
     "$VENV_PIP" install -r "$STAGE_DIR/requirements.txt"
     install -m 0644 "$STAGE_DIR/server.py" "$API_DIR/server.py"
+    install -m 0644 "$STAGE_DIR/advisor.py" "$API_DIR/advisor.py"
     install -m 0644 "$STAGE_DIR/requirements.txt" "$API_DIR/requirements.txt"
     install -m 0644 "$STAGE_DIR/slf-server.service" "$UNIT_PATH"
     systemctl daemon-reload
