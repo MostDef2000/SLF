@@ -359,6 +359,21 @@ jobs:
             echo "Trusted CI run: ${{ needs.gate.outputs.run_url }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Verify on-box API readiness marker (api target)
+        if: ${{ needs.gate.outputs.target == 'api' }}
+        run: |
+          set -euo pipefail
+          # Authoritative on-box service-health gate (issue #444): the on-box
+          # localhost 401 assertion printed by vps/ops/deploy-code.sh proves
+          # the API answered 401 on http://127.0.0.1:5000/api/analysis after
+          # restart. The public-path probe below remains blocking for every
+          # non-edge failure; it tolerates only the known Cloudflare 403
+          # toward GitHub runner IPs.
+          if ! grep -Eq "API_READINESS_OK http=401 attempts=" "${RUNNER_TEMP}/deploy-transcript.log"; then
+            echo "::error::on-box API_READINESS_OK marker missing from host transcript (authoritative service-health gate)"
+            exit 1
+          fi
+
       - name: Health probe (api target, unauthenticated)
         if: ${{ needs.gate.outputs.target == 'api' }}
         run: |
@@ -367,15 +382,24 @@ jobs:
           # is strictly unauthenticated and asserts HTTP 401, the same
           # contract as vps/ops/verify_api_deployment.py. Public endpoint
           # from src/core/config.js (SERVER_URL).
+          # The on-box marker step above is the authoritative SERVICE-health
+          # gate. This public-path probe remains BLOCKING for real failures
+          # (5xx/404/unreachable) and tolerates ONLY the known edge 403 that
+          # Cloudflare returns toward GitHub runner IPs (since ~2026-11-16,
+          # issue #444) — that 403 is inconclusive about service health.
           for attempt in 1 2 3 4 5; do
             CODE="$(curl -s -o /dev/null --max-time 15 --write-out '%{http_code}' https://slf-api.mostdef.ru/api/analysis || true)"
             echo "attempt ${attempt}: HTTP ${CODE:-000}"
             if [ "${CODE}" = "401" ]; then
               exit 0
             fi
+            if [ "${CODE}" = "403" ]; then
+              echo "::warning::edge answered 403 to the runner vantage (known Cloudflare behavior toward GitHub runner IPs since ~2026-11-16, issue #444); service health is asserted on-box by the API_READINESS_OK marker"
+              exit 0
+            fi
             sleep 5
           done
-          echo "::error::unauthenticated /api/analysis did not return 401 after deploy"
+          echo "::error::unauthenticated /api/analysis did not return 401 (and no known edge 403) after deploy"
           exit 1
 
       - name: Transport status probe (slf-status-v1)
