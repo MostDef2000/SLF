@@ -38,6 +38,10 @@ if not API_TOKEN:
 
 DATA_DIR = os.environ.get("SLF_DATA_DIR", "data")
 FORUM_FAQ_DIR = os.environ.get("SLF_FORUM_FAQ_DIR", "forum_faq")
+KNOWLEDGE_PACK_PATH = os.environ.get(
+    "SLF_KNOWLEDGE_PACK_PATH",
+    "/var/www/html/slf_ai/tactics/knowledge-pack.latest.json",
+)
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(FORUM_FAQ_DIR, exist_ok=True)
 
@@ -125,6 +129,20 @@ def save_collection(collection, data):
                 os.unlink(temp_path)
             except OSError:
                 pass
+
+
+def read_knowledge_pack():
+    """Read the daily tactical knowledge-pack artifact (specs/441, Ф2b).
+
+    Generated on the VPS by the exporter (run_daily_export.sh) and served
+    publicly; read-only, and None on any failure so enrichment degrades to
+    history-only. Not a DATA_DIR collection — no collection lock.
+    """
+    try:
+        with open(KNOWLEDGE_PACK_PATH, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError, ValueError):
+        return None
 
 
 def list_collections():
@@ -313,7 +331,7 @@ def api_advisor():
     data = request.get_json(silent=True)
     if data is None:
         return jsonify({"error": "No JSON"}), 400
-    response, status = advisor.handle_advisor_request(data, DATA_DIR)
+    response, status = advisor.handle_advisor_request(data, DATA_DIR, read_knowledge_pack)
     return jsonify(response), status
 
 
