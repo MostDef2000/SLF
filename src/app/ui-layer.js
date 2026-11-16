@@ -87,17 +87,18 @@
                             return col.count;
                         };
                         const prefix = status.status === 'ok' ? 'API OK v2' : 'API WARN';
-                        // #441: append the configured LLM model/service when the
-                        // server reports it. Older servers omit the block, so the
-                        // line stays unchanged then. addParserLog() assigns
-                        // textContent, so the model string is never parsed as HTML.
-                        const advisor = status.advisor;
-                        const llmSuffix = advisor && advisor.model
-                            ? ` | llm:${advisor.model}@${advisor.service || 'OpenRouter'}`
-                            : '';
                         this.addParserLog(
-                            `${prefix} | games:${status.games} snapshots:${fmt('snapshots')} results:${fmt('results')} events:${fmt('events')} effects:${fmt('effects')} players:${fmt('players')} transfers:${fmt('transfers')} tactics:${fmt('tactics')}${llmSuffix}`
+                            `${prefix} | games:${status.games} snapshots:${fmt('snapshots')} results:${fmt('results')} events:${fmt('events')} effects:${fmt('effects')} players:${fmt('players')} transfers:${fmt('transfers')} tactics:${fmt('tactics')}`
                         );
+                        // #441: the configured LLM model/service goes on its own
+                        // short line so the API status line keeps fitting the log.
+                        // Older servers omit the advisor block -> no second line.
+                        // addParserLog() assigns textContent, so the model string
+                        // is never parsed as HTML.
+                        const advisor = status.advisor;
+                        if (advisor && advisor.model) {
+                            this.addParserLog(`LLM: ${advisor.model} @ ${advisor.service || 'OpenRouter'}`);
+                        }
 
                         debugLog('[SLF API v2 canonical]', status);
                     })
