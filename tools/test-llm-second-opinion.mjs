@@ -19,10 +19,13 @@ function makeElement(id = '') {
     return {
         id, children: [], firstElementChild: null, removed: false, parentElement: null,
         // Minimal innerHTML "parser": extracts the first id="..." so mountAnswer's
-        // holder.firstElementChild behaves like a real element.
+        // holder.firstElementChild behaves like a real element. The raw markup is
+        // kept on `html` so tests can assert on rendered text.
         set innerHTML(html) {
+            this.html = String(html);
             const match = String(html).match(/id="([^"]+)"/);
             const child = makeElement(match ? match[1] : '');
+            child.html = String(html);
             this.children.push(child);
             this.firstElementChild = child;
         },
@@ -255,7 +258,7 @@ function makeSnapshot() {
 }
 
 // --- 5. Api.postJson timeout pass-through ------------------------------------
-function makeApiContext({ advisorResponse, advisorStatus } = {}) {
+function makeApiContext({ advisorResponse, advisorStatus, advisorRawText } = {}) {
     const requests = [];
     const context = {
         console,
@@ -270,7 +273,10 @@ function makeApiContext({ advisorResponse, advisorStatus } = {}) {
         GM_xmlhttpRequest(request) {
             requests.push(request);
             if (advisorStatus != null) {
-                request.onload({ status: advisorStatus, responseText: JSON.stringify(advisorResponse) });
+                request.onload({
+                    status: advisorStatus,
+                    responseText: advisorRawText != null ? advisorRawText : JSON.stringify(advisorResponse)
+                });
             }
         }
     };
@@ -381,16 +387,20 @@ function loadApi(context) {
 // Requesting a fresh LLM opinion must record the same checkpoint with its own
 // source label under the manual path's guard, BEFORE the advisor request, so a
 // failed LLM call still records that the user was present in the match.
-function makeUiContext({ foreign = false } = {}) {
+function makeUiContext({ foreign = false, advisorRejection = null } = {}) {
     const checkpoints = [];
     const advisorCalls = [];
     const order = [];
     const created = [];
     const panel = { id: 'slf-match-parser-panel', children: [], insertBefore(node) { this.children.push(node); } };
     const status = { id: 'slf-parser-status', textContent: '' };
+    // mountAnswer (llm-second-opinion.js) mounts here; `html` keeps the markup
+    // so the rendered advisor error text is assertable.
+    const answerPanel = makeElement('slf-parser-recommendation');
     const elements = new Map([
         ['slf-match-parser-panel', panel],
-        ['slf-parser-status', status]
+        ['slf-parser-status', status],
+        ['slf-parser-recommendation', answerPanel]
     ]);
     // The FRESH snapshot built by the LLM entry; the same object is mutated by
     // normalizeForeignSnapshot and handed to the checkpoint.
@@ -409,7 +419,10 @@ function makeUiContext({ foreign = false } = {}) {
             __slfLlmApplyDelegation: false,
             getElementById(id) { return elements.get(id) || null; },
             createElement(tag) {
-                const node = { tagName: String(tag).toUpperCase(), id: '', dataset: {}, style: {}, children: [] };
+                const node = makeElement('');
+                node.tagName = String(tag).toUpperCase();
+                node.dataset = {};
+                node.style = {};
                 created.push(node);
                 return node;
             },
@@ -446,6 +459,7 @@ function makeUiContext({ foreign = false } = {}) {
             postJson: async (collection, payload) => {
                 order.push('advisor');
                 advisorCalls.push({ collection, payload });
+                if (advisorRejection) throw advisorRejection;
                 return { available: true, model: 'test-model', provider: 'Particle', latencyMs: 2300 };
             }
         }
@@ -465,7 +479,7 @@ function makeUiContext({ foreign = false } = {}) {
         { filename: 'strategy-data-task-a-ui-extension.js' }
     );
     const llmButton = created.find(node => node.id === 'slf-llm-second-opinion-btn');
-    return { context, snapshot, checkpoints, advisorCalls, order, llmButton };
+    return { context, snapshot, checkpoints, advisorCalls, order, llmButton, answerPanel };
 }
 
 {
@@ -493,6 +507,120 @@ function makeUiContext({ foreign = false } = {}) {
     assert.equal(foreignRun.checkpoints.length, 0, 'no lab checkpoint for a foreign match');
     assert.deepEqual(foreignRun.order, ['advisor'], `foreign path goes straight to the advisor: ${foreignRun.order}`);
     assert.equal(foreignRun.advisorCalls.length, 1);
+}
+
+// --- 9. Honest advisor error text (#454) -------------------------------------
+// The server already classifies its own failures (advisor.py errorKind); a
+// 502/503 body must not collapse every cause into the generic status guess.
+// The rendered answer is inspected via the mountAnswer sink from makeUiContext.
+function mountedErrorText(run) {
+    const node = run.answerPanel.children[run.answerPanel.children.length - 1];
+    return node ? String(node.html || '') : '';
+}
+
+function makeAdvisorError(fields) {
+    return Object.assign(
+        new Error(`SLF API http error during llm-advisor${fields.status ? ` (HTTP ${fields.status})` : ''}`),
+        { name: 'SLFApiError', kind: 'http' },
+        fields
+    );
+}
+
+{
+    // empty_answer (match 35115343): the honest cause, not "невалидный ответ".
+    const run = makeUiContext({
+        advisorRejection: makeAdvisorError({ status: 502, errorKind: 'empty_answer' })
+    });
+    await run.llmButton.onclick();
+    const text = mountedErrorText(run);
+    assert.ok(text.includes('пустой ответ'), `empty_answer rendered honestly: ${text}`);
+    assert.ok(!text.includes('невалидный ответ'), `empty_answer must not render as invalid answer: ${text}`);
+}
+
+{
+    // Unknown server kind -> the server's own error text wins over the guess.
+    const run = makeUiContext({
+        advisorRejection: makeAdvisorError({
+            status: 502,
+            errorKind: 'something_new',
+            serverError: 'провайдер отклонил модель'
+        })
+    });
+    await run.llmButton.onclick();
+    const text = mountedErrorText(run);
+    assert.ok(text.includes('провайдер отклонил модель'), `server error text used: ${text}`);
+}
+
+{
+    // No body fields (older server / non-JSON body): legacy status fallback.
+    const run = makeUiContext({
+        advisorRejection: makeAdvisorError({ status: 502 })
+    });
+    await run.llmButton.onclick();
+    const text = mountedErrorText(run);
+    assert.ok(text.includes('LLM вернул невалидный ответ'), `legacy 502 fallback kept: ${text}`);
+}
+
+{
+    // createApiError carries errorKind/serverError from a stubbed non-2xx JSON
+    // body, redacts the API token, and leaves the fields absent for non-JSON.
+    const withBody = makeApiContext({
+        advisorResponse: { available: false, errorKind: 'empty_answer', error: 'model returned no content' },
+        advisorStatus: 502
+    });
+    const Api = loadApi(withBody.context);
+    await assert.rejects(
+        () => Api.postJson('advisor', {}, 'llm-advisor', 35000),
+        error => error.kind === 'http'
+            && error.status === 502
+            && error.errorKind === 'empty_answer'
+            && error.serverError === 'model returned no content'
+    );
+
+    const redacted = makeApiContext({
+        advisorResponse: { available: false, error: 'bad test-token here' },
+        advisorStatus: 502
+    });
+    const RedactedApi = loadApi(redacted.context);
+    await assert.rejects(
+        () => RedactedApi.postJson('advisor', {}, 'llm-advisor', 35000),
+        error => error.serverError === 'bad [redacted] here'
+    );
+
+    const raw = makeApiContext({ advisorRawText: '<html>bad gateway</html>', advisorStatus: 502 });
+    const RawApi = loadApi(raw.context);
+    await assert.rejects(
+        () => RawApi.postJson('advisor', {}, 'llm-advisor', 35000),
+        error => error.kind === 'http' && error.errorKind === undefined && error.serverError === undefined
+    );
+}
+
+{
+    // Full chain (#454): a stubbed non-2xx JSON body from GM_xmlhttpRequest
+    // becomes a real Api.postJson rejection carrying errorKind/serverError,
+    // and that EXACT error object (not a hand-built one) drives the UI error
+    // text through the mounted answer. No seam is stubbed between the halves.
+    const apiRun = makeApiContext({
+        advisorResponse: { available: false, errorKind: 'empty_answer', error: 'model returned no content' },
+        advisorStatus: 502
+    });
+    const Api = loadApi(apiRun.context);
+    let capturedError;
+    try {
+        await Api.postJson('advisor', {}, 'llm-advisor', 35000);
+    } catch (error) {
+        capturedError = error;
+    }
+    assert.ok(capturedError, 'Api.postJson rejected the non-2xx response');
+    assert.equal(capturedError.kind, 'http', 'rejection is an http error');
+    assert.equal(capturedError.errorKind, 'empty_answer', 'rejection carries the server error kind');
+    assert.equal(capturedError.serverError, 'model returned no content', 'rejection carries the server error text');
+
+    const run = makeUiContext({ advisorRejection: capturedError });
+    await run.llmButton.onclick();
+    const text = mountedErrorText(run);
+    assert.ok(text.includes('пустой ответ'), `chained empty_answer rendered honestly: ${text}`);
+    assert.ok(!text.includes('невалидный ответ'), `chained empty_answer must not render as invalid answer: ${text}`);
 }
 
 console.log('test-llm-second-opinion: all assertions passed');
