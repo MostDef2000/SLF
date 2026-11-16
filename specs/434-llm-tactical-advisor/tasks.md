@@ -22,7 +22,7 @@ Issue: #434. Branch: `feat/434-llm-advisor` (base `5ae9203`).
 - [x] PR linked to this spec; green CI (7 checks); exact-green-head merge. (#435 merged at 627189b, run 484 green; +1 CI fix #436.)
 - [x] Automatic release published; artifact verified (new button + module present, version bumped). (4.4.380 on release branch: LLMSecondOpinion x10, /api/advisor x2.)
 - [x] `deploy-vps.yml` dispatched (target `api`) on merged main SHA; unauthenticated probe 401 as before. (First dispatch 627189b failed fail-closed: deploy-code.sh did not stage advisor.py, API down ~4 min, restored by re-deploying 63543f7; fix in #436; re-deploy 54baa55 — on-box deploy + marker green, external probes 401. Workflow's own runner-side health probe gets 403 from the edge — separate edge issue, flagged.)
-- [ ] Lane-B handoff: one command for the owner to set `OPENROUTER_API_KEY` in the service env + restart; live probe after.
+- [x] Lane-B handoff: one command for the owner to set `OPENROUTER_API_KEY` in the service env + restart; live probe after. (Done 2026-11-16: key appended via owner-run piped ssh command — value never in chat/git; `slf-server` restarted; live probe through the full path edge→gunicorn→SOCKS relay→OpenRouter: unauthenticated 401, authenticated 200 `available:true`, `model` = `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` via `SLF_ADVISOR_MODEL`, latency 5.1 s, valid Russian reason referencing a catalog preset. Env-edit incident: first append glued onto the `SLF_API_TOKEN` line (file had no trailing newline) — restored from pre-edit backup, re-appended with newline guard.)
 
 ## Acceptance traceability
 
@@ -34,6 +34,9 @@ Issue: #434. Branch: `feat/434-llm-advisor` (base `5ae9203`).
 | Advisory-only | T2 | `test-llm-second-opinion.mjs` renderer never emits apply controls |
 | Telemetry | T1 | `test_advisor.py::test_log_written_on_success`, `::test_log_written_on_error` |
 | Payload budget | T1/T2 | validation caps + node payload test |
+| Acceptance 4 (live answer after key) | T1/T3 | live probe 2026-11-16: 200 `available:true`, validated answer, 5.1 s |
+| Egress via SOCKS relay (#434 root cause) | T1 | `SLF_ADVISOR_PROXY` path verified live: key pre-flight 200 + advisor 200 through relay |
+| Model env-configurable (spec What) | T1 | `SLF_ADVISOR_MODEL` override observed in live response `model` field |
 
 ## Definition of Done
 
