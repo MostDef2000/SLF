@@ -226,6 +226,15 @@
       "properties": {
         "status": { "enum": ["ok", "degraded"] },
         "games": { "type": "integer", "minimum": 0 },
+        "advisor": {
+          "type": "object",
+          "required": ["model", "service"],
+          "properties": {
+            "model": { "type": ["string", "null"] },
+            "service": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
         "collections": { "type": "object" },
         "serverTime": { "type": "integer", "minimum": 0 }
       },

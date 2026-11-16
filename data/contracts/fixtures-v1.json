@@ -151,6 +151,18 @@
       "data": {
         "status": "ok",
         "games": 3,
+        "advisor": { "model": "particle-ai/particle-1:free", "service": "OpenRouter" },
+        "collections": {},
+        "serverTime": 1770000000
+      }
+    },
+    {
+      "name": "analysis API response with null advisor model",
+      "contract": "analysisResponse",
+      "data": {
+        "status": "degraded",
+        "games": 0,
+        "advisor": { "model": null, "service": "OpenRouter" },
         "collections": {},
         "serverTime": 1770000000
       }

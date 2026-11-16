@@ -92,6 +92,30 @@ async function main() {
         console.log('[api-status-analysis-test] happy path passed');
     }
 
+    // Test 1b (#441): the canonical status carries the advisor block through
+    // from the /api/analysis payload so the UI «API» line can show the model.
+    {
+        const { context } = makeContext({
+            analysisResponse: baseAnalysis({
+                advisor: { model: 'particle-ai/particle-1:free', service: 'OpenRouter' }
+            })
+        });
+        const fetchStatus = loadApi(context);
+        const status = await fetchStatus();
+        assert.deepEqual(status.advisor, { model: 'particle-ai/particle-1:free', service: 'OpenRouter' });
+        console.log('[api-status-analysis-test] advisor passthrough passed');
+    }
+
+    // Test 1c (#441): an older server omits advisor — status.advisor must be
+    // undefined (not fabricated), so the UI keeps the pre-existing line.
+    {
+        const { context } = makeContext({ analysisResponse: baseAnalysis() });
+        const fetchStatus = loadApi(context);
+        const status = await fetchStatus();
+        assert.equal(status.advisor, undefined);
+        console.log('[api-status-analysis-test] advisor absent stays undefined passed');
+    }
+
     // Test 2: corrupt collection surfaces as degraded, count still reported (not masked to 0).
     {
         const analysis = baseAnalysis({ status: 'degraded' });

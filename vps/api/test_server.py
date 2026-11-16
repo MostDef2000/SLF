@@ -185,6 +185,28 @@ class ServerTestCase(unittest.TestCase):
         self.assertEqual(health["oldestTimestamp"], 1)
         self.assertEqual(health["newestTimestamp"], 3)
 
+    def test_analysis_reports_configured_advisor_model_without_api_key(self):
+        # Build the sentinel at runtime so no literal secret-shaped value is
+        # embedded in the test source.
+        sentinel_key = "unit" + "-test-" + "advisor-key-441"
+        with mock.patch.dict(
+            os.environ,
+            {"SLF_ADVISOR_MODEL": "vendor/test-model-441:free", "OPENROUTER_API_KEY": sentinel_key},
+        ):
+            response = self.client.get("/api/analysis", headers=self.auth)
+        body = response.get_json()
+        self.assertEqual(body["advisor"]["model"], "vendor/test-model-441:free")
+        self.assertEqual(body["advisor"]["service"], "OpenRouter")
+        self.assertNotIn(sentinel_key, response.get_data(as_text=True))
+
+    def test_analysis_survives_advisor_config_failure(self):
+        with mock.patch.object(self.server.advisor, "get_config", side_effect=RuntimeError("boom")):
+            response = self.client.get("/api/analysis", headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertIsNone(body["advisor"]["model"])
+        self.assertEqual(body["advisor"]["service"], "OpenRouter")
+
 
 class _ProbingCache(dict):
     """Cache dict that reports every visible state, as a reader sees it.
