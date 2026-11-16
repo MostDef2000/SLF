@@ -599,7 +599,21 @@ def api_analysis():
                     all_game_ids.add(str(item["gameId"]))
         elif isinstance(data, dict) and data.get("gameId"):
             all_game_ids.add(str(data["gameId"]))
-    return jsonify({"status": overall_status, "games": len(all_game_ids), "collections": stats, "serverTime": int(time.time())})
+    # #441: surface the configured advisor model on demand. Additive and
+    # failure-isolated: a config read problem must never fail this endpoint,
+    # and the API key half of get_config() is discarded (never serialized).
+    advisor_model = None
+    try:
+        _, advisor_model = advisor.get_config()
+    except Exception:
+        advisor_model = None
+    return jsonify({
+        "status": overall_status,
+        "games": len(all_game_ids),
+        "collections": stats,
+        "serverTime": int(time.time()),
+        "advisor": {"model": advisor_model, "service": "OpenRouter"},
+    })
 
 
 if __name__ == "__main__":

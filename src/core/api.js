@@ -236,6 +236,7 @@
                     schema: 'slf_canonical_api_status_v2',
                     status: (data && data.status) ? data.status : (degraded ? 'degraded' : 'ok'),
                     games: (data && Number.isFinite(data.games)) ? data.games : 0,
+                    advisor: data && data.advisor,
                     collections
                 };
             })
