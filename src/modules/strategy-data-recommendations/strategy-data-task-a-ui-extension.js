@@ -877,8 +877,29 @@
         panel.insertBefore(llmBtn, status || null);
     }
 
+    // Server-side advisor failure kinds (vps/api/advisor.py messages_by_kind).
+    // The API layer carries the body's errorKind on the error object; the UI
+    // must surface the real cause instead of guessing from the HTTP status.
+    const LLM_ADVISOR_ERROR_KIND_TEXT = {
+        rate_limited: 'LLM перегружен (лимит провайдера), попробуйте позже',
+        network: 'LLM-провайдер недоступен (сеть), попробуйте позже',
+        upstream_error: 'LLM-провайдер временно ошибается, попробуйте позже',
+        upstream_rejected: 'запрос отклонён LLM-провайдером',
+        invalid_answer: 'LLM вернул невалидный ответ, попробуйте ещё раз',
+        empty_answer: 'модель вернула пустой ответ, попробуйте ещё раз',
+        misconfigured: 'advisor сконфигурирован неверно (SLF_ADVISOR_PROXY), обратитесь к администратору'
+    };
+
     function llmSecondOpinionErrorText(error) {
         const status = error && error.status;
+        const serverKind = error && error.errorKind;
+        if (typeof serverKind === 'string'
+            && Object.prototype.hasOwnProperty.call(LLM_ADVISOR_ERROR_KIND_TEXT, serverKind)) {
+            return LLM_ADVISOR_ERROR_KIND_TEXT[serverKind];
+        }
+        if (error && typeof error.serverError === 'string' && error.serverError.trim()) {
+            return error.serverError;
+        }
         if (error && error.kind === 'timeout') return 'Таймаут запроса к LLM (35 с)';
         if (error && error.kind === 'network') return 'Сервер недоступен';
         if (status === 503) return 'LLM-советник не настроен на сервере или перегружен';

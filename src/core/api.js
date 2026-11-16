@@ -39,7 +39,23 @@
             error.status = metadata.status;
             error.statusText = metadata.statusText;
             error.response = metadata;
-    
+
+            // Carry the server's own failure classification from a non-2xx JSON
+            // body so the UI can report the honest cause (e.g. empty_answer)
+            // instead of a generic status guess. Non-JSON or fieldless bodies
+            // leave the fields absent; the raw body is never logged or echoed.
+            if (kind === 'http') {
+                try {
+                    const body = JSON.parse(response && response.responseText);
+                    if (body && typeof body === 'object') {
+                        if (typeof body.errorKind === 'string') error.errorKind = body.errorKind;
+                        if (typeof body.error === 'string') error.serverError = redactApiText(body.error);
+                    }
+                } catch (_) {
+                    // non-JSON error body: keep the status-based fallbacks
+                }
+            }
+
             return error;
         }
     
