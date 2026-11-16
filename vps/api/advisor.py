@@ -13,15 +13,23 @@ Fail-closed contract:
   honest HTTP 502 — a hallucinated preset never reaches the client.
 - The advisor never returns apply instructions and never mutates tactical
   state; it is rendered as advice next to the rules hint.
+- Egress is direct by default. Setting SLF_ADVISOR_PROXY=socks5h://host:port
+  (or socks5://host:port) routes the OpenRouter call through a SOCKS5 relay
+  instead; a malformed value fails loudly, it never falls back to direct.
 
 Every consultation (success or failure) appends one record to the
 advisor_log_v1 collection — the seed dataset for the feedback loop (Ф3).
 """
 
+import http.client
 import json
 import os
+import socket
+import ssl
+import struct
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -223,6 +231,126 @@ def build_messages(context):
     ]
 
 
+PROXY_ENV_VAR = "SLF_ADVISOR_PROXY"
+
+
+def _recv_exact(sock, count):
+    """Receive exactly count bytes; a single recv() may return short reads."""
+    chunks = []
+    while count > 0:
+        chunk = sock.recv(count)
+        if not chunk:
+            raise OSError("SOCKS5 proxy closed the connection mid-handshake")
+        chunks.append(chunk)
+        count -= len(chunk)
+    return b"".join(chunks)
+
+
+def _socks5_connect(proxy_host, proxy_port, remote_host, remote_port, timeout):
+    """TCP-connect to remote_host:remote_port through a SOCKS5 proxy (RFC 1928).
+
+    Stdlib-only CONNECT, no authentication (method 0x00), remote DNS: the
+    hostname is sent to the proxy as ATYP=0x03 (socks5h semantics) because
+    the relay resolves names on its own side. Closes the socket on any
+    handshake failure.
+    """
+    sock = socket.create_connection((proxy_host, proxy_port), timeout=timeout)
+    try:
+        # Greeting: one client method, "no authentication".
+        sock.sendall(struct.pack("!BBB", 0x05, 0x01, 0x00))
+        reply = _recv_exact(sock, 2)
+        if reply[0] != 0x05 or reply[1] != 0x00:
+            raise OSError(
+                "SOCKS5 proxy refused the handshake "
+                f"(ver=0x{reply[0]:02x} method=0x{reply[1]:02x})")
+        # CONNECT with the hostname as ATYP=0x03: DNS stays on the relay side.
+        host_bytes = remote_host.encode("idna")
+        if not 0 < len(host_bytes) <= 255:
+            raise OSError(f"proxy target hostname has invalid length: {remote_host!r}")
+        request = (struct.pack("!BBBBB", 0x05, 0x01, 0x00, 0x03, len(host_bytes))
+                   + host_bytes + struct.pack("!H", remote_port))
+        sock.sendall(request)
+        reply = _recv_exact(sock, 4)
+        if reply[0] != 0x05:
+            raise OSError(f"SOCKS5 proxy sent invalid reply version 0x{reply[0]:02x}")
+        if reply[1] != 0x00:
+            raise OSError(f"SOCKS5 CONNECT failed with code 0x{reply[1]:02x}")
+        atyp = reply[3]
+        if atyp == 0x01:
+            _recv_exact(sock, 6)  # bound IPv4 + port
+        elif atyp == 0x03:
+            bound_len = _recv_exact(sock, 1)[0]
+            _recv_exact(sock, bound_len + 2)  # bound name + port
+        elif atyp == 0x04:
+            _recv_exact(sock, 18)  # bound IPv6 + port
+        else:
+            raise OSError(f"SOCKS5 proxy sent unknown address type 0x{atyp:02x}")
+        return sock
+    except BaseException:
+        try:
+            sock.close()
+        except OSError:
+            pass
+        raise
+
+
+class _SocksHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPSConnection whose TCP socket is a SOCKS5 tunnel to self.host."""
+
+    def __init__(self, *args, proxy_host, proxy_port, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._proxy_host = proxy_host
+        self._proxy_port = proxy_port
+
+    def connect(self):
+        self.sock = _socks5_connect(
+            self._proxy_host, self._proxy_port, self.host, self.port, self.timeout)
+        self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
+
+
+class _SocksHTTPSHandler(urllib.request.HTTPSHandler):
+    """HTTPS handler routing every connection through the SOCKS5 relay."""
+
+    def __init__(self, proxy_host, proxy_port, context=None):
+        super().__init__(context=context)
+        self._proxy_host = proxy_host
+        self._proxy_port = proxy_port
+
+    def https_open(self, req):
+        return self.do_open(_SocksHTTPSConnection, req, context=self._context,
+                            proxy_host=self._proxy_host, proxy_port=self._proxy_port)
+
+
+def _proxy_config():
+    """Parse SLF_ADVISOR_PROXY; None means direct egress.
+
+    Accepted: socks5h://host:port or socks5://host:port — both send the
+    target hostname to the relay (ATYP=0x03), because the relay resolves
+    DNS on its own side. Anything else raises: a misconfigured proxy must
+    be loud, never a silent fallback to direct.
+    """
+    raw = os.environ.get(PROXY_ENV_VAR, "").strip()
+    if not raw:
+        return None
+    parts = urllib.parse.urlsplit(raw)
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    if parts.scheme not in ("socks5", "socks5h") or not parts.hostname or port is None:
+        raise AdvisorError(
+            "misconfigured",
+            f"invalid {PROXY_ENV_VAR} {raw!r}: expected socks5h://host:port or socks5://host:port")
+    return parts.hostname, port
+
+
+def _build_socks_opener(proxy_host, proxy_port):
+    handler = _SocksHTTPSHandler(proxy_host, proxy_port, context=ssl.create_default_context())
+    # ProxyHandler({}) neutralizes http(s)_proxy environment variables: the
+    # SOCKS relay is the only egress path for this opener.
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), handler)
+
+
 def call_openrouter(messages, api_key, model, timeout_s=REQUEST_TIMEOUT_S):
     body = json.dumps({
         "model": model,
@@ -240,8 +368,12 @@ def call_openrouter(messages, api_key, model, timeout_s=REQUEST_TIMEOUT_S):
         method="POST",
     )
     started = time.monotonic()
+    proxy = _proxy_config()
     try:
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:
+        open_request = urllib.request.urlopen
+        if proxy is not None:
+            open_request = _build_socks_opener(*proxy).open
+        with open_request(request, timeout=timeout_s) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         retry_after = None
@@ -433,6 +565,7 @@ def handle_advisor_request(data, data_dir):
         "upstream_error": "LLM-провайдер временно ошибается, попробуйте позже",
         "upstream_rejected": "запрос отклонён LLM-провайдером",
         "invalid_answer": "LLM вернул невалидный ответ, попробуйте ещё раз",
+        "misconfigured": "advisor сконфигурирован неверно (SLF_ADVISOR_PROXY), обратитесь к администратору",
     }
     return jsonify_available_false(kind, messages_by_kind.get(kind, "LLM недоступен")), 503 if kind in ("rate_limited", "network", "upstream_error") else 502
 

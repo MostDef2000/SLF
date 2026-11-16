@@ -188,6 +188,7 @@ jobs:
         run: |
           python -m unittest vps/api/test_server.py -v
           python -m unittest vps/api/test_server_contract.py -v
+          python -m unittest vps/api/test_advisor.py -v
           python -m unittest vps/ops/test_service_contract.py -v
           python -m unittest vps/ops/test_backfill_finished_scores.py -v
           python -m unittest vps/ops/test_quarantine_duplicate_results.py -v
