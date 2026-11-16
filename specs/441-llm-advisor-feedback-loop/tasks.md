@@ -31,7 +31,17 @@ Issue: #441. Branch: `feat/441-llm-first-button` (Ф2a).
 
 ## Ф2c — automatic feedback loop
 
-- [ ] (not started)
+- [x] Explore: outcome data mapped (finished-result shape, positional score, `resultKey` non-uniqueness, gameId join, best-effort delivery) with file:line evidence; advisor side + legacy audit mapped.
+- [x] Architecture review (cross-family): eager materialization with two triggers; exact identity; positional-only deltas; corrupt-log preservation; bounded work orders.
+- [x] `vps/api/advisor.py`: exact `evaluationGameId` + `scoreAtAdvice` persisted; `select_match_result` (single winner policy); `compute_evaluation` (positional deltas, `baselineScore`, honest statuses, orientation from RAW team positions); `materialize_evaluations` (O(1) per record via prebuilt index built outside `_LOG_LOCK`, idempotent, atomic); corrupt log quarantined to a unique `.corrupt-<ms>-<uuid>` backup instead of silent reset; provider field from the OpenRouter payload.
+- [x] `vps/api/server.py`: two triggers — result-append hook (uses the in-memory array, zero extra I/O, repairs earlier misses) + advice-completion hook (closes the provider-in-flight race); small `{gameId → winner}` index cached by `(mtime_ns, ctime_ns, ino, size)` and published as ONE atomic tuple; raw 13.5 MB results list never retained; evaluation failure never fails a successful append.
+- [x] Rendering: 400-char history cap; claim + qualification inseparable; cross-game rows labelled `[опыт другого матча]`; history grouping by EXACT id (no 40-char-prefix leakage); no evaluation → no invented facts.
+- [x] Client (PR #449, release 4.4.382): provider shown next to the model in the answer meta line (graceful when absent); lab exposure checkpoint restored from the LLM fresh path (`lastSeenMinute`/`toMinute`/`durationMinutes`); dead `#slf-manual-recommendation-btn` CSS selector removed.
+- [x] PR → green CI → merge → deploy (`vps/api`) → live probes.
+
+**Ф2c evidence (2026-11-16):** client PR #449 → `f5a030b` (CI 7/7, release workflow run 43855398859 published 4.4.382); server PR #450 (commits `b342147` WO-1 + `4eaab0b` WO-2) → squash-merged `1fd6de936165e4494365f0866d9a98e9a2a1c037`, CI 7/7. Gates observed by orchestrator: `test_advisor` 81/81, `test_server` 23/23, `test_server_contract` 9/9, `py_compile` OK; RED-on-base re-verified twice in detached worktrees (WO-1: 38 failing new/changed tests at `8ad9992`; WO-2: 11 failing new tests at `b342147`). Two cross-family adversarial reviews (Claude Haiku): WO-1 — 1 MAJOR (cross-game leakage via the truncated id) + 2 MINOR fixed; WO-2 — 1 MAJOR (torn cache publication) + 2 MINOR + 2 nits fixed, incl. a deterministic barrier-based interleaving test. Lane-A deploy run 43859747796 green (gate ✓, deploy ✓); live probes `/api/analysis` 401, `/api/advisor` 401, `/api/advisor_apply` 401.
+
+**Ф2c decisions (recorded):** score is POSITIONAL (scoreboard order vs statistics-DOM order are independent) → only positional deltas with an explicit «не оценка эффекта пресета» qualification; no own-team goals, no causal/preset-reward claims. Join key = the EXACT raw gameId (the 40-char truncated id is display-only). `outcome` stays consultation status; the new field is `evaluation`. Non-string client gameIds never join (conservative, no false joins). Results that never arrive → no fabricated evaluation. Residual (pre-existing, out of scope): a corrupt `match_results_v2.json` can make the generic append path return 500 (no `CollectionCorruptError` handler there); the advisor-side index handles corruption gracefully.
 
 ## Acceptance traceability
 
@@ -41,7 +51,7 @@ Issue: #441. Branch: `feat/441-llm-first-button` (Ф2a).
 | Apply-by-click | Ф2a | node test: click→apply, no auto path |
 | Apply telemetry | Ф2a | pytest: apply event keyed by `adviceId` |
 | Enrichment budget | Ф2b | pytest: `ENRICHMENT_BUDGET_CHARS` whole-block cap + entry-cap length pin (PR #447) |
-| Feedback correctness | Ф2c | pytest: per-game linking |
+| Feedback correctness | Ф2c | pytest: exact-id join, no cross-game leakage, positional deltas (PR #450) |
 
 ## Definition of Done
 
