@@ -19,9 +19,9 @@ Issue: #434. Branch: `feat/434-llm-advisor` (base `5ae9203`).
 ## T3 — Delivery
 
 - [x] Build latest-only userscript; `node --check`; run new + adjacent tests locally.
-- [ ] PR linked to this spec; green CI (7 checks); exact-green-head merge.
-- [ ] Automatic release published; artifact verified (new button + module present, version bumped).
-- [ ] `deploy-vps.yml` dispatched (target `api`) on merged main SHA; unauthenticated probe 401 as before.
+- [x] PR linked to this spec; green CI (7 checks); exact-green-head merge. (#435 merged at 627189b, run 484 green; +1 CI fix #436.)
+- [x] Automatic release published; artifact verified (new button + module present, version bumped). (4.4.380 on release branch: LLMSecondOpinion x10, /api/advisor x2.)
+- [x] `deploy-vps.yml` dispatched (target `api`) on merged main SHA; unauthenticated probe 401 as before. (First dispatch 627189b failed fail-closed: deploy-code.sh did not stage advisor.py, API down ~4 min, restored by re-deploying 63543f7; fix in #436; re-deploy 54baa55 — on-box deploy + marker green, external probes 401. Workflow's own runner-side health probe gets 403 from the edge — separate edge issue, flagged.)
 - [ ] Lane-B handoff: one command for the owner to set `OPENROUTER_API_KEY` in the service env + restart; live probe after.
 
 ## Acceptance traceability
