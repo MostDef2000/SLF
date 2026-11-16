@@ -797,6 +797,7 @@
         if (RecommendationEngine.isPlaceholderHtml && RecommendationEngine.isPlaceholderHtml(html)) return;
 
         STATE.lastRecommendationHtml = html;
+        STATE.lastRecommendationSnapshot = snapshot;
         STATE.lastRuleDecision = snapshot?.ruleDecision || STATE.lastRuleDecision || null;
         STATE.lastRecommendationMeta = {
             schema: 'slf_manual_hint_render_v2',
@@ -871,6 +872,62 @@
 
         const status = document.getElementById('slf-parser-status');
         panel.insertBefore(btn, status || null);
+
+        const llmBtn = document.createElement('button');
+        llmBtn.id = 'slf-llm-second-opinion-btn';
+        llmBtn.type = 'button';
+        llmBtn.textContent = '🤖 LLM';
+        llmBtn.title = 'Второе мнение от LLM по текущей подсказке. Только совет — тактика не применяется.';
+        llmBtn.style.cssText = 'padding:5px 8px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;cursor:pointer;margin-left:5px;';
+        llmBtn.onclick = async () => {
+            llmBtn.disabled = true;
+            try {
+                await requestLlmSecondOpinion();
+            } catch (error) {
+                console.error('[SLF] LLM second opinion failed', error);
+            } finally {
+                llmBtn.disabled = false;
+            }
+        };
+        panel.insertBefore(llmBtn, btn.nextSibling);
+    }
+
+    function llmSecondOpinionErrorText(error) {
+        const status = error && error.status;
+        if (error && error.kind === 'timeout') return 'Таймаут запроса к LLM (35 с)';
+        if (error && error.kind === 'network') return 'Сервер недоступен';
+        if (status === 503) return 'LLM-советник не настроен на сервере или перегружен';
+        if (status === 502) return 'LLM вернул невалидный ответ';
+        if (status === 400) return 'Некорректный запрос к советнику';
+        return `Ошибка советника${status ? ` (HTTP ${status})` : ''}`;
+    }
+
+    async function requestLlmSecondOpinion() {
+        if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined') return;
+        const snapshot = (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot) || null;
+        const ruleDecision = (snapshot && snapshot.ruleDecision)
+            || (typeof STATE !== 'undefined' ? STATE.lastRuleDecision : null)
+            || null;
+        const registry = (typeof window !== 'undefined' && window.SLFActivePresetRegistry) || null;
+        const payload = LLMSecondOpinion.buildPayload({ snapshot, ruleDecision, registry });
+        if (!payload) {
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+                available: false,
+                error: 'Нет сохранённой подсказки — сначала нажмите «↻ Подсказка»'
+            }));
+            return;
+        }
+        LLMSecondOpinion.mountAnswer('<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#181818;border:1px dashed #555;border-radius:5px;color:#999;padding:7px 9px;font-size:12px;">🤖 Думает…</div>');
+        try {
+            const answer = await LLMSecondOpinion.requestSecondOpinion(payload);
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer(answer));
+        } catch (error) {
+            console.error('[SLF] LLM second opinion request failed', error);
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+                available: false,
+                error: llmSecondOpinionErrorText(error)
+            }));
+        }
     }
 
     function mountForeignSelector() {

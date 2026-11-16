@@ -1,5 +1,57 @@
 # Changelog
 
+## 4.4.372
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/cah-runtime-context.js
+- tests/test-tactics-2026-semantics.mjs
+
+Approved base commit:
+- 25103f58b7f1f1abac9b3a4ba30fb8f2e1b23d16
+
+Approved commit:
+- 5ae920320cd98c29a21c31d7d62e8e906c702851
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.371
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/cah-runtime-context.js
+- tests/test-tactics-2026-semantics.mjs
+
+Approved base commit:
+- 25103f58b7f1f1abac9b3a4ba30fb8f2e1b23d16
+
+Approved commit:
+- 5ae920320cd98c29a21c31d7d62e8e906c702851
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.370
 
 ### Automatic latest-only build
