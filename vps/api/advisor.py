@@ -25,6 +25,8 @@ import copy
 import datetime
 import http.client
 import json
+import logging
+import math
 import os
 import socket
 import ssl
@@ -61,6 +63,10 @@ ENRICHMENT_BUDGET_CHARS = 6000
 ENRICHMENT_HISTORY_SAME_GAME = 8
 ENRICHMENT_HISTORY_PAD = 4
 ENRICHMENT_KNOWLEDGE_ENTRY_CHARS = 400
+# Ф2c (#441): per-line cap for history rows — the knowledge cap above applies
+# to knowledge entries only. A history row carries the preset summary, the
+# apply status and (when materialized) the positional result evaluation.
+ENRICHMENT_HISTORY_ENTRY_CHARS = 400
 ENRICHMENT_TRUNCATION_MARKER = "(усечено по бюджету)"
 KNOWLEDGE_LABEL = (
     "Гипотезы из тактической базы "
@@ -70,6 +76,8 @@ KNOWLEDGE_LABEL = (
 # Serializes every read-modify-write cycle on the advisor log (append_log and
 # the apply-event update) within one server process.
 _LOG_LOCK = threading.Lock()
+
+logger = logging.getLogger(__name__)
 
 CONFIDENCE_LEVELS = ("low", "medium", "high")
 
@@ -201,9 +209,21 @@ def validate_context(data):
             cleaned_score[side] = value
         score = cleaned_score or None
 
+    # Ф2c (#441): the truncated `gameId` above is a prompt/history key. The
+    # finished-match join needs the client's raw identifier byte-for-byte
+    # (result records store it unbounded), so keep it separately. It rides
+    # along in the 64KiB context accounting but never enters the prompt's
+    # `situation` JSON (that is built from an explicit key list).
+    raw_game_id = data.get("gameId")
+    if isinstance(raw_game_id, str) and raw_game_id.strip():
+        evaluation_game_id = raw_game_id
+    else:
+        evaluation_game_id = None
+
     context = {
         "schema": "slf_llm_advisor_request_v1",
         "gameId": _clean_str(str(data.get("gameId") or ""), 40) or None,
+        "evaluationGameId": evaluation_game_id,
         "minute": minute,
         "bucket": _clean_str(data.get("bucket"), 20) or None,
         "score": score,
@@ -252,8 +272,17 @@ def _read_log_snapshot(data_dir):
         return []
 
 
-def _select_history(records, game_id):
-    """Most recent same-game advice first, padded with recent other-game rows."""
+def _select_history(records, exact_game_id):
+    """Most recent same-game advice first, padded with recent other-game rows.
+
+    "Same game" means an exact byte-equal `evaluationGameId`: the truncated
+    prompt `gameId` is a display key and would merge distinct matches sharing
+    a 40-char prefix. Every other row — a different exact id, a legacy record
+    with no exact id, or any row when the request carries none — is padding
+    and is flagged cross_game, so it renders with a provenance label.
+
+    Returns (record, cross_game) pairs.
+    """
     if not records:
         return []
     ordered = sorted(
@@ -261,51 +290,129 @@ def _select_history(records, game_id):
         key=_record_ts,
         reverse=True,
     )
-    if game_id:
-        same_game = [r for r in ordered if r.get("gameId") == game_id][:ENRICHMENT_HISTORY_SAME_GAME]
-        others = [r for r in ordered if r.get("gameId") != game_id]
-    else:
-        same_game = []
-        others = ordered
+    exact = exact_game_id if isinstance(exact_game_id, str) and exact_game_id else None
+    same_game = []
+    others = []
+    for record in ordered:
+        if exact is not None and record.get("evaluationGameId") == exact:
+            if len(same_game) < ENRICHMENT_HISTORY_SAME_GAME:
+                same_game.append((record, False))
+        else:
+            others.append((record, True))
     if len(same_game) < ENRICHMENT_HISTORY_SAME_GAME:
         pad = min(ENRICHMENT_HISTORY_PAD, ENRICHMENT_HISTORY_SAME_GAME - len(same_game))
         same_game = same_game + others[:pad]
     return same_game
 
 
-def _render_history_record(record):
+def _history_summary(rules_text, llm_text):
+    if rules_text and llm_text:
+        return f"правила {rules_text} → LLM {llm_text}"
+    if llm_text:
+        return f"LLM пресет {llm_text}"
+    if rules_text:
+        return f"правила {rules_text}"
+    return "совет без пресета"
+
+
+def _int_pair(value):
+    """{"home": int, "away": int} -> (home, away); bool/other -> None."""
+    if not isinstance(value, dict):
+        return None
+    home = value.get("home")
+    away = value.get("away")
+    if type(home) is not int or type(away) is not int:
+        return None
+    return home, away
+
+
+def _shorten_ident(text, limit=24):
+    if not isinstance(text, str) or len(text) <= limit:
+        return text
+    return text[:limit - 1] + "…"
+
+
+def _evaluation_fact_units(evaluation):
+    """Positional score facts from a materialized evaluation, never a claim.
+
+    The score is positional (home:away as the scoreboard reported it); the
+    server cannot verify which side the user coaches, so only the positional
+    arithmetic is stated, always together with its qualification. The score
+    claim and its qualification form one unit: dropping one drops both.
+    """
+    if not isinstance(evaluation, dict):
+        return []
+    final = _int_pair(evaluation.get("finalScore"))
+    if final is None:
+        return []
+    units = []
+    delta = _int_pair(evaluation.get("scoreDelta"))
+    if delta is not None:
+        # The stored baseline is authoritative; the arithmetic fallback keeps
+        # records written before baselineScore was added renderable.
+        baseline = _int_pair(evaluation.get("baselineScore"))
+        if baseline is None:
+            baseline = (final[0] - delta[0], final[1] - delta[1])
+        score_unit = [f"счёт {baseline[0]}:{baseline[1]} → {final[0]}:{final[1]}"]
+        score_unit.append(f"Δ позиций {delta[0]:+d}:{delta[1]:+d}")
+        if evaluation.get("deltaStatus") == "score_regressed":
+            score_unit.append("счёт пересмотрен")
+        score_unit.append("не оценка эффекта пресета")
+        units.append(score_unit)
+    else:
+        units.append([f"итог {final[0]}:{final[1]}", "Δ неизвестна: нет исходного счёта"])
+    if evaluation.get("orientation") not in ("home", "away"):
+        units.append(["своя сторона неизвестна"])
+    return units
+
+
+def _render_history_record(record, cross_game=False):
     """One compact Russian history line per logged consultation."""
     minute = record.get("minute")
     prefix = ""
     if isinstance(minute, int) and not isinstance(minute, bool):
         prefix = f"мин {minute}: "
+    label = "[опыт другого матча] " if cross_game else ""
 
     if record.get("outcome") == "error":
         error_kind = record.get("errorKind")
         detail = f" ({error_kind})" if isinstance(error_kind, str) and error_kind else ""
-        return f"- {prefix}консультация с ошибкой{detail}"
+        return f"- {label}{prefix}консультация с ошибкой{detail}"
 
     rules_preset = record.get("rulesPreset")
     llm_preset = record.get("llmPreset")
-    if isinstance(rules_preset, str) and rules_preset and isinstance(llm_preset, str) and llm_preset:
-        summary = f"правила {rules_preset} → LLM {llm_preset}"
-    elif isinstance(llm_preset, str) and llm_preset:
-        summary = f"LLM пресет {llm_preset}"
-    elif isinstance(rules_preset, str) and rules_preset:
-        summary = f"правила {rules_preset}"
-    else:
-        summary = "совет без пресета"
+    rules_text = rules_preset if isinstance(rules_preset, str) and rules_preset else None
+    llm_text = llm_preset if isinstance(llm_preset, str) and llm_preset else None
 
-    facts = []
+    units = []
     confidence = record.get("confidence")
     if isinstance(confidence, str) and confidence:
-        facts.append(f"уверенность {confidence}")
+        units.append([f"уверенность {confidence}"])
     apply_fact = record.get("apply")
     if isinstance(apply_fact, dict) and "ok" in apply_fact:
-        facts.append("применён успешно" if bool(apply_fact.get("ok")) else "применение не удалось")
+        units.append(["применён успешно" if bool(apply_fact.get("ok")) else "применение не удалось"])
     else:
-        facts.append("применение не отмечено")
-    return f"- {prefix}{summary} ({'; '.join(facts)})"
+        units.append(["применение не отмечено"])
+    units.extend(_evaluation_fact_units(record.get("evaluation")))
+
+    def build(rules_ident, llm_ident, fact_units):
+        facts = [fact for unit in fact_units for fact in unit]
+        summary = _history_summary(rules_ident, llm_ident)
+        return f"- {label}{prefix}{summary} ({'; '.join(facts)})"
+
+    line = build(rules_text, llm_text, units)
+    if len(line) <= ENRICHMENT_HISTORY_ENTRY_CHARS:
+        return line
+    # Over budget: shorten the display identifiers first, drop whole optional
+    # facts second (a claim and its qualification are one unit, so trimming
+    # never leaves an unqualified claim behind).
+    short_rules, short_llm = _shorten_ident(rules_text), _shorten_ident(llm_text)
+    while len(units) > 1 and len(build(short_rules, short_llm, units)) > ENRICHMENT_HISTORY_ENTRY_CHARS:
+        units = units[:-1]
+    line = build(short_rules, short_llm, units)
+    if len(line) > ENRICHMENT_HISTORY_ENTRY_CHARS:
+        line = line[:ENRICHMENT_HISTORY_ENTRY_CHARS - 1] + "…"
+    return line
 
 
 def _knowledge_entries(data):
@@ -410,8 +517,9 @@ def build_enrichment(data_dir, context, read_knowledge=None):
     try:
         records = _read_log_snapshot(data_dir)
         history_lines = [
-            _render_history_record(record)
-            for record in _select_history(records, context.get("gameId"))
+            _render_history_record(record, cross_game)
+            for record, cross_game in _select_history(
+                records, context.get("evaluationGameId"))
         ]
     except Exception:  # defensive: enrichment is additive, never fatal
         history_lines = []
@@ -635,7 +743,13 @@ def call_openrouter(messages, api_key, model, timeout_s=REQUEST_TIMEOUT_S):
             content = message.get("content")
     if not isinstance(content, str) or not content.strip():
         raise AdvisorError("empty_answer", "model returned no content", status=200)
-    return content, latency_ms
+    # Ф2c (#441): OpenRouter reports which upstream served the request; the
+    # client shows it next to the model name. Absent/blank -> None, never a
+    # guessed value.
+    provider = payload.get("provider") if isinstance(payload, dict) else None
+    if not isinstance(provider, str) or not provider:
+        provider = None
+    return content, latency_ms, provider
 
 
 def extract_json_object(text):
@@ -687,8 +801,31 @@ def validate_answer(obj, catalog_ids):
     return preset, confidence, reason.strip()[:MAX_REASON_CHARS]
 
 
+def _quarantine_corrupt_log(path):
+    """Rename an unusable log aside; False when the rename itself failed.
+
+    The `.corrupt-<UTC-ms>-<uuid4hex>` suffix keeps the backup out of
+    collection discovery (which globs `*.json`). Rename, never overwrite:
+    the original bytes stay recoverable.
+    """
+    backup = f"{path}.corrupt-{int(time.time() * 1000)}-{uuid.uuid4().hex}"
+    try:
+        os.replace(path, backup)
+    except OSError:
+        logger.warning("advisor log is corrupt and could not be preserved; append aborted")
+        return False
+    logger.warning("advisor log was corrupt; preserved as %s", os.path.basename(backup))
+    return True
+
+
 def append_log(data_dir, record):
-    """Append one consultation record; cap the file; never raise."""
+    """Append one consultation record; cap the file; never raise.
+
+    A corrupt log (invalid JSON, invalid UTF-8, or valid JSON that is not an
+    array) is renamed aside before a fresh array starts, so a decode failure
+    never destroys collected history. A plain read error is not corruption:
+    the append aborts without touching the file.
+    """
     try:
         with _LOG_LOCK:
             path = os.path.join(data_dir, f"{LOG_COLLECTION}.json")
@@ -697,17 +834,28 @@ def append_log(data_dir, record):
                 try:
                     with open(path, "r", encoding="utf-8") as handle:
                         existing = json.load(handle)
-                except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    if not _quarantine_corrupt_log(path):
+                        return
                     existing = []
+                except OSError:
+                    return
             if not isinstance(existing, list):
+                if not _quarantine_corrupt_log(path):
+                    return
                 existing = []
             existing.append(record)
             if len(existing) > LOG_MAX_RECORDS:
                 existing = existing[-LOG_MAX_RECORDS:]
             tmp_path = path + ".tmp"
-            with open(tmp_path, "w", encoding="utf-8") as handle:
-                json.dump(existing, handle, ensure_ascii=False)
-            os.replace(tmp_path, path)
+            try:
+                with open(tmp_path, "w", encoding="utf-8") as handle:
+                    json.dump(existing, handle, ensure_ascii=False)
+                os.replace(tmp_path, path)
+            except OSError:
+                # Best-effort append: a failed write keeps any backup taken
+                # above intact and is never fatal to the consultation.
+                logger.warning("advisor log append failed; record dropped")
     except OSError:
         pass
 
@@ -752,6 +900,231 @@ def update_log_record_apply(data_dir, record_id, ok):
         return "error"
 
 
+def _valid_finished_score(score):
+    """Finished-score predicate; duplicated from server.py on purpose.
+
+    server.py imports this module, so importing back would be a cycle. Ints
+    only, bool excluded, 0..99 per side.
+    """
+    if not isinstance(score, dict):
+        return False
+    home = score.get("home")
+    away = score.get("away")
+    if type(home) is not int or type(away) is not int:
+        return False
+    return 0 <= home <= 99 and 0 <= away <= 99
+
+
+def _numeric_ts(value):
+    """Finite numeric timestamp; bool is not a timestamp."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and math.isfinite(value):
+        return value
+    return None
+
+
+def _scalar_id(value):
+    """Team identifier: str or int, never bool; anything else -> None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (str, int)):
+        return value
+    return None
+
+
+def select_match_result(results, exact_game_id):
+    """Winning finished result for the exact gameId, or None.
+
+    Candidates: status "finished", a valid finished score, and a non-blank
+    string gameId byte-equal to exact_game_id. The winner is the latest
+    resolvable parsedAt; a resolvable timestamp supersedes an unresolved one,
+    equal timestamps keep the first candidate in file order. This is the only
+    place the policy lives — the server-side index builder reuses it.
+    """
+    if not isinstance(results, list) or not isinstance(exact_game_id, str) or not exact_game_id:
+        return None
+    winner = None
+    winner_ts = None
+    for row in results:
+        if not isinstance(row, dict) or row.get("status") != "finished":
+            continue
+        if not _valid_finished_score(row.get("score")):
+            continue
+        game_id = row.get("gameId")
+        if not isinstance(game_id, str) or not game_id.strip() or game_id != exact_game_id:
+            continue
+        parsed_at = _numeric_ts(row.get("parsedAt"))
+        if winner is None:
+            winner, winner_ts = row, parsed_at
+        elif parsed_at is not None and (winner_ts is None or parsed_at > winner_ts):
+            winner, winner_ts = row, parsed_at
+    return winner
+
+
+def compute_evaluation(baseline, result):
+    """Positional evaluation of a finished result against the advice score.
+
+    The score is positional (the scoreboard's home:away order); the server
+    cannot verify which side the user coaches, so only positional deltas are
+    reported — never own-team goals, never a causal claim about the preset.
+    """
+    final = _int_pair(result.get("score")) if isinstance(result, dict) else None
+    if final is None:
+        raise ValueError("result carries no valid finished score")
+    baseline_pair = _int_pair(baseline)
+
+    delta = None
+    if baseline_pair is None:
+        delta_status = "missing_baseline"
+    else:
+        delta = {"home": final[0] - baseline_pair[0], "away": final[1] - baseline_pair[1]}
+        if delta["home"] < 0 or delta["away"] < 0:
+            delta_status = "score_regressed"
+        else:
+            delta_status = "available"
+
+    teams = []
+    teams_raw = result.get("teams")
+    if isinstance(teams_raw, list):
+        teams = [ident for ident in (_scalar_id(entry) for entry in teams_raw) if ident is not None]
+    my_team = _scalar_id(result.get("myTeam"))
+    orientation = "unknown"
+    # Orientation reads raw positions: filtering an invalid entry would shift
+    # the list and turn a wrong side into a confident claim.
+    if (
+        isinstance(teams_raw, list)
+        and len(teams_raw) >= 2
+        and all(_scalar_id(entry) is not None for entry in teams_raw)
+        and my_team is not None
+    ):
+        if my_team == teams_raw[0]:
+            orientation = "home"
+        elif my_team == teams_raw[1]:
+            orientation = "away"
+
+    parsed_at = _numeric_ts(result.get("parsedAt"))
+    result_key = result.get("resultKey")
+    return {
+        "version": 1,
+        "finalScore": {"home": final[0], "away": final[1]},
+        "baselineScore": (
+            {"home": baseline_pair[0], "away": baseline_pair[1]}
+            if baseline_pair is not None else None
+        ),
+        "scoreDelta": delta,
+        "deltaStatus": delta_status,
+        "orientation": orientation,
+        "orientationBasis": (
+            "result_teams_order_assumption" if orientation != "unknown" else "unknown"
+        ),
+        "resultTeams": teams,
+        "resultMyTeam": my_team,
+        "resultKey": result_key if isinstance(result_key, str) else "",
+        "resultParsedAt": int(parsed_at) if parsed_at is not None else None,
+        "evaluatedAt": int(time.time() * 1000),
+    }
+
+
+def _same_evaluation(left, right):
+    """Same evaluation apart from its evaluatedAt stamp."""
+    if not isinstance(left, dict):
+        return False
+    keys = set(right) - {"evaluatedAt"}
+    if set(left) - {"evaluatedAt"} != keys:
+        return False
+    return all(left.get(key) == right.get(key) for key in keys)
+
+
+def _result_index(results_or_index):
+    """{exact gameId: winning result} built once per materialization run.
+
+    Accepts either the raw results list (rows grouped by exact non-blank
+    string gameId, one select_match_result call per group) or a prebuilt index
+    dict. The winner policy stays in select_match_result either way, so the
+    advice loop is a single dict lookup per record.
+    """
+    if isinstance(results_or_index, dict):
+        return results_or_index
+    if not isinstance(results_or_index, list):
+        return {}
+    groups = {}
+    for row in results_or_index:
+        if not isinstance(row, dict):
+            continue
+        game_id = row.get("gameId")
+        if not isinstance(game_id, str) or not game_id.strip():
+            continue
+        groups.setdefault(game_id, []).append(row)
+    index = {}
+    for game_id, group in groups.items():
+        winner = select_match_result(group, game_id)
+        if winner is not None:
+            index[game_id] = winner
+    return index
+
+
+def materialize_evaluations(data_dir, results_or_index):
+    """Attach finished-match evaluations to advice records; return how many.
+
+    `results_or_index` is either the raw match_results_v2 list or a prebuilt
+    {exact gameId: winner result} dict; either way one index is built/looked
+    up, so the run costs O(advice + results), not O(advice × results).
+
+    Runs under _LOG_LOCK and touches only the advisor log file — never a
+    collection. Idempotent: an unchanged evaluation keeps its evaluatedAt and
+    the file is not rewritten. Records without a matching result are left
+    untouched (an evaluation is never fabricated) and consultation-error
+    records are skipped. No records are ever added.
+    """
+    index = _result_index(results_or_index)
+    updated = 0
+    try:
+        with _LOG_LOCK:
+            path = os.path.join(data_dir, f"{LOG_COLLECTION}.json")
+            if not os.path.exists(path):
+                return 0
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
+                    existing = json.load(handle)
+            except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+                return 0
+            if not isinstance(existing, list):
+                return 0
+            for record in existing:
+                if not isinstance(record, dict) or record.get("outcome") == "error":
+                    continue
+                game_id = record.get("evaluationGameId")
+                if not isinstance(game_id, str) or not game_id:
+                    continue
+                winner = index.get(game_id)
+                if winner is None:
+                    continue
+                try:
+                    evaluation = compute_evaluation(record.get("scoreAtAdvice"), winner)
+                except ValueError:
+                    continue
+                if _same_evaluation(record.get("evaluation"), evaluation):
+                    continue
+                record["evaluation"] = evaluation
+                updated += 1
+            if not updated:
+                return 0
+            tmp_path = path + ".tmp"
+            try:
+                with open(tmp_path, "w", encoding="utf-8") as handle:
+                    json.dump(existing, handle, ensure_ascii=False)
+                os.replace(tmp_path, path)
+            except OSError:
+                logger.warning("advisor log evaluation write failed; changes dropped")
+                return 0
+            return updated
+    except OSError:
+        return 0
+
+
 def handle_advisor_request(data, data_dir, read_knowledge=None):
     """Flask-view body: returns a (response, status) tuple."""
     api_key, model = get_config()
@@ -788,13 +1161,19 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
         if attempt_feedback:
             attempt_messages = messages + [{"role": "user", "content": corrective_message(attempt_feedback)}]
         try:
-            content, latency_ms = call_openrouter(attempt_messages, api_key, model)
+            call_result = call_openrouter(attempt_messages, api_key, model)
         except AdvisorError as exc:
             last_error = exc
             if attempt + 1 < MAX_ATTEMPTS and exc.kind in ("rate_limited", "upstream_error", "network"):
                 time.sleep(min(exc.retry_after or 2.0, RETRY_AFTER_CAP_S))
                 continue
             break
+        # call_openrouter returns (content, latency_ms, provider); the
+        # tolerant unpack keeps a two-value stub valid.
+        content, latency_ms = call_result[0], call_result[1]
+        provider = call_result[2] if len(call_result) > 2 else None
+        if not isinstance(provider, str) or not provider:
+            provider = None
         try:
             answer = extract_json_object(content)
             preset, confidence, reason = validate_answer(answer, catalog_ids)
@@ -807,6 +1186,8 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
             "id": advice_id,
             "ts": int(time.time() * 1000),
             "gameId": context["gameId"],
+            "evaluationGameId": context["evaluationGameId"],
+            "scoreAtAdvice": context["score"],
             "minute": context["minute"],
             "rulesPreset": context["ruleDecision"]["preset"],
             "llmPreset": preset,
@@ -825,6 +1206,7 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
             "confidence": confidence,
             "reason": reason,
             "model": model,
+            "provider": provider,
             "latencyMs": latency_ms,
         }, 200
 
@@ -833,6 +1215,8 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
     record = {
         "ts": int(time.time() * 1000),
         "gameId": context["gameId"],
+        "evaluationGameId": context["evaluationGameId"],
+        "scoreAtAdvice": context["score"],
         "minute": context["minute"],
         "rulesPreset": context["ruleDecision"]["preset"],
         "llmPreset": None,

@@ -33,6 +33,10 @@ class FinishedScoreContractTestCase(unittest.TestCase):
         with open(os.path.join(self.temp_dir.name, f"{name}.json"), "r", encoding="utf-8") as file_handle:
             return json.load(file_handle)
 
+    def write_collection(self, name, value):
+        with open(os.path.join(self.temp_dir.name, f"{name}.json"), "w", encoding="utf-8") as file_handle:
+            json.dump(value, file_handle)
+
     def collection_path(self, name):
         return os.path.join(self.temp_dir.name, f"{name}.json")
 
@@ -160,6 +164,32 @@ class FinishedScoreContractTestCase(unittest.TestCase):
         self.assertEqual(body["added"], 1)
         stored = self.client.get("/api/match_snapshots_v2", headers=self.auth).get_json()
         self.assertEqual(len(stored), 1)
+
+    def test_finished_result_without_valid_score_leaves_evaluation_untouched(self):
+        # Ф2c (#441): the 422 gate runs before persistence, so it must not
+        # reach the append evaluation hook either; a valid finished result
+        # still gets evaluated (positive control).
+        self.write_collection("advisor_log_v1", [{
+            "id": "a",
+            "ts": 1,
+            "outcome": "ok",
+            "gameId": "game-finished",
+            "evaluationGameId": "game-finished",
+            "scoreAtAdvice": {"home": 0, "away": 0},
+        }])
+        record = self.finished_result("match_result|game-finished|finished_match|?:?|1-2", None)
+        response = self.post_append("match_results_v2", record)
+        self.assertEqual(response.status_code, 422)
+        self.assertFalse(os.path.exists(self.collection_path("match_results_v2")))
+        self.assertNotIn("evaluation", self.read_collection("advisor_log_v1")[0])
+
+        valid = self.finished_result(
+            "match_result|game-finished|finished_match|2:1|1-2", {"home": 2, "away": 1})
+        self.assertEqual(self.post_append("match_results_v2", valid).status_code, 200)
+        self.assertEqual(
+            self.read_collection("advisor_log_v1")[0]["evaluation"]["finalScore"],
+            {"home": 2, "away": 1},
+        )
 
     def test_duplicate_finished_result_key_is_skipped(self):
         record = self.finished_result("match_result|game-h|finished_match|2:1|1-2", {"home": 2, "away": 1}, "game-h")

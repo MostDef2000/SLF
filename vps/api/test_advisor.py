@@ -6,6 +6,7 @@ AdvisorProxyTestCase covers the SLF_ADVISOR_PROXY SOCKS5 relay path against
 a scripted loopback socket server — still no external network.
 """
 
+import builtins
 import datetime
 import importlib.util
 import json
@@ -189,6 +190,48 @@ class AdvisorTestCase(unittest.TestCase):
         self.assertEqual(response.get_json()["errorKind"], "rate_limited")
         self.assertEqual(self.read_log()[0]["outcome"], "error")
 
+    def test_log_record_carries_exact_game_id_and_score_at_advice(self):
+        # Ф2c (#441): the log keeps the client's raw gameId (unbounded) for the
+        # finished-match join while the prompt key stays truncated at 40.
+        answer = json.dumps({
+            "preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"})
+        body = self.valid_body()
+        body["gameId"] = "g-123-" + "z" * 60
+        with mock.patch.object(self.advisor, "call_openrouter", return_value=(answer, 10)):
+            response = self.client.post("/api/advisor", json=body, headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        record = self.read_log()[0]
+        self.assertEqual(record["evaluationGameId"], body["gameId"])
+        self.assertEqual(len(record["gameId"]), 40)
+        self.assertEqual(record["scoreAtAdvice"], {"home": 0, "away": 0})
+
+    def test_success_response_carries_provider(self):
+        # Ф2c (#441): additive `provider` key; the rest of the response and
+        # the log record are unchanged.
+        answer = json.dumps({
+            "preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"})
+        with mock.patch.object(self.advisor, "call_openrouter",
+                               return_value=(answer, 77, "Together")):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["provider"], "Together")
+        self.assertEqual(payload["latencyMs"], 77)
+        self.assertEqual(payload["preset"], "Pep_BoxControl_bal2")
+        self.assertTrue(payload["adviceId"])
+        self.assertNotIn("provider", self.read_log()[0])
+
+    def test_success_response_without_upstream_provider(self):
+        answer = json.dumps({
+            "preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"})
+        with mock.patch.object(self.advisor, "call_openrouter",
+                               return_value=(answer, 77, None)):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("provider", payload)
+        self.assertIsNone(payload["provider"])
+
     def test_context_budget_enforced(self):
         # Defense-in-depth backstop: with every per-field cap maxed the body
         # still fits the 64KiB budget, so shrink the budget to exercise the
@@ -352,16 +395,17 @@ class AdvisorEnrichmentTestCase(unittest.TestCase):
 
     def test_history_includes_same_game_apply_facts(self):
         self.seed_log([
-            {"ts": 3500, "gameId": "g-123", "minute": 70, "rulesPreset": "A",
+            {"ts": 3500, "gameId": "g-123", "evaluationGameId": "g-123",
+             "minute": 70, "rulesPreset": "A",
              "llmPreset": None, "confidence": None, "outcome": "error",
              "errorKind": "invalid_answer"},
-            {"ts": 3000, "gameId": "g-123", "minute": 67,
+            {"ts": 3000, "gameId": "g-123", "evaluationGameId": "g-123", "minute": 67,
              "rulesPreset": "Emery_BalancedBase_v11", "llmPreset": "Pep_BoxControl_bal2",
              "confidence": "high", "outcome": "ok", "apply": {"ok": True}},
-            {"ts": 2000, "gameId": "g-123", "minute": 55,
+            {"ts": 2000, "gameId": "g-123", "evaluationGameId": "g-123", "minute": 55,
              "rulesPreset": "A", "llmPreset": "B", "confidence": "medium",
              "outcome": "ok", "apply": {"ok": False}},
-            {"ts": 1000, "gameId": "g-123", "minute": 40,
+            {"ts": 1000, "gameId": "g-123", "evaluationGameId": "g-123", "minute": 40,
              "rulesPreset": "A", "llmPreset": "C", "confidence": "low",
              "outcome": "ok"},
         ])
@@ -373,13 +417,15 @@ class AdvisorEnrichmentTestCase(unittest.TestCase):
         self.assertIn("применение не удалось", content)
         self.assertIn("применение не отмечено", content)
         self.assertIn("консультация с ошибкой (invalid_answer)", content)
+        self.assertNotIn("опыт другого матча", content)
 
     def test_history_prefers_same_game_before_newer_other_game(self):
         self.seed_log([
-            {"ts": 9999, "gameId": "other-game", "minute": 10,
+            {"ts": 9999, "gameId": "other-game", "evaluationGameId": "other-game",
+             "minute": 10,
              "rulesPreset": "OG", "llmPreset": "OtherLatest",
              "confidence": "high", "outcome": "ok"},
-            {"ts": 1000, "gameId": "g-123", "minute": 20,
+            {"ts": 1000, "gameId": "g-123", "evaluationGameId": "g-123", "minute": 20,
              "rulesPreset": "SG", "llmPreset": "SameGameOlder",
              "confidence": "high", "outcome": "ok"},
         ])
@@ -397,7 +443,7 @@ class AdvisorEnrichmentTestCase(unittest.TestCase):
 
     def test_budget_caps_block_and_truncates_at_entry_boundary(self):
         self.seed_log([
-            {"ts": i, "gameId": "g-123", "minute": i % 90,
+            {"ts": i, "gameId": "g-123", "evaluationGameId": "g-123", "minute": i % 90,
              "rulesPreset": "R" * 80, "llmPreset": "L" * 80,
              "confidence": "high", "outcome": "ok"}
             for i in range(12)
@@ -416,13 +462,14 @@ class AdvisorEnrichmentTestCase(unittest.TestCase):
             ],
         }
         enrichment = self.advisor.build_enrichment(
-            self.data_dir(), {"gameId": "g-123"}, lambda: pack)
+            self.data_dir(), {"gameId": "g-123", "evaluationGameId": "g-123"},
+            lambda: pack)
         self.assertLessEqual(len(enrichment), self.advisor.ENRICHMENT_BUDGET_CHARS)
         self.assertIn(self.advisor.ENRICHMENT_TRUNCATION_MARKER, enrichment)
 
         expected_lines = set()
-        for record in self.advisor._select_history(self.read_log(), "g-123"):
-            expected_lines.add(self.advisor._render_history_record(record))
+        for record, cross_game in self.advisor._select_history(self.read_log(), "g-123"):
+            expected_lines.add(self.advisor._render_history_record(record, cross_game))
         for entry in pack["rules"]:
             expected_lines.add(self.advisor._render_knowledge_entry(entry))
         body = enrichment.replace(
@@ -475,11 +522,11 @@ class AdvisorEnrichmentTestCase(unittest.TestCase):
 
     def test_read_knowledge_none_keeps_history_only(self):
         self.seed_log([
-            {"ts": 1, "gameId": "g-123", "minute": 5, "rulesPreset": "A",
-             "llmPreset": "B", "confidence": "high", "outcome": "ok"},
+            {"ts": 1, "gameId": "g-123", "evaluationGameId": "g-123", "minute": 5,
+             "rulesPreset": "A", "llmPreset": "B", "confidence": "high", "outcome": "ok"},
         ])
         enrichment = self.advisor.build_enrichment(
-            self.data_dir(), {"gameId": "g-123"}, None)
+            self.data_dir(), {"gameId": "g-123", "evaluationGameId": "g-123"}, None)
         self.assertIn("История советов (сервер):", enrichment)
         self.assertIn("мин 5:", enrichment)
         self.assertNotIn("Гипотезы из тактической базы", enrichment)
@@ -522,6 +569,601 @@ class AdvisorEnrichmentTestCase(unittest.TestCase):
             self.advisor.ENRICHMENT_KNOWLEDGE_ENTRY_CHARS,
             "knowledge entry line exceeds the per-entry char cap")
         self.assertIn("…", knowledge_lines[0])
+
+    # -- Ф2c (#441): evaluation facts in the history rows --------------------
+
+    @staticmethod
+    def history_lines(content):
+        """Rendered history rows only (the prompt also has catalog lines)."""
+        return [
+            line for line in content.splitlines()
+            if line.startswith("- мин ") or line.startswith("- [опыт другого матча]")
+        ]
+
+    def evaluation_record(self, **overrides):
+        record = {
+            "ts": 3000,
+            "gameId": "g-123",
+            "evaluationGameId": "g-123",
+            "scoreAtAdvice": {"home": 0, "away": 0},
+            "minute": 67,
+            "rulesPreset": "Emery_BalancedBase_v11",
+            "llmPreset": "Pep_BoxControl_bal2",
+            "confidence": "high",
+            "outcome": "ok",
+            "apply": {"ok": True},
+            "evaluation": {
+                "version": 1,
+                "finalScore": {"home": 2, "away": 1},
+                "baselineScore": {"home": 0, "away": 0},
+                "scoreDelta": {"home": 2, "away": 1},
+                "deltaStatus": "available",
+                "orientation": "home",
+                "orientationBasis": "result_teams_order_assumption",
+                "resultTeams": ["t-home", "t-away"],
+                "resultMyTeam": "t-home",
+                "resultKey": "rk-1",
+                "resultParsedAt": 2000,
+                "evaluatedAt": 1234,
+            },
+        }
+        record.update(overrides)
+        return record
+
+    def test_history_renders_evaluation_facts_literally(self):
+        self.seed_log([self.evaluation_record()])
+        content = self.user_content(self.capture_messages())
+        self.assertIn(
+            "- мин 67: правила Emery_BalancedBase_v11 → LLM Pep_BoxControl_bal2 "
+            "(уверенность high; применён успешно; счёт 0:0 → 2:1; "
+            "Δ позиций +2:+1; не оценка эффекта пресета)",
+            content,
+        )
+        self.assertNotIn("опыт другого матча", content)
+
+    def test_history_derives_baseline_for_pre_amendment_evaluations(self):
+        # Records written before baselineScore existed still render: the
+        # baseline is derived from final − delta.
+        record = self.evaluation_record()
+        del record["evaluation"]["baselineScore"]
+        self.seed_log([record])
+        content = self.user_content(self.capture_messages())
+        self.assertIn("счёт 0:0 → 2:1; Δ позиций +2:+1; не оценка эффекта пресета", content)
+
+    def test_history_renders_missing_baseline_qualification(self):
+        record = self.evaluation_record(scoreAtAdvice=None)
+        record["evaluation"]["scoreDelta"] = None
+        record["evaluation"]["deltaStatus"] = "missing_baseline"
+        self.seed_log([record])
+        content = self.user_content(self.capture_messages())
+        self.assertIn("итог 2:1; Δ неизвестна: нет исходного счёта", content)
+
+    def test_history_renders_regressed_score_and_unknown_side(self):
+        record = self.evaluation_record(scoreAtAdvice={"home": 2, "away": 0})
+        evaluation = record["evaluation"]
+        evaluation["finalScore"] = {"home": 1, "away": 1}
+        evaluation["baselineScore"] = {"home": 2, "away": 0}
+        evaluation["scoreDelta"] = {"home": -1, "away": 1}
+        evaluation["deltaStatus"] = "score_regressed"
+        evaluation["orientation"] = "unknown"
+        evaluation["orientationBasis"] = "unknown"
+        self.seed_log([record])
+        content = self.user_content(self.capture_messages())
+        self.assertIn(
+            "счёт 2:0 → 1:1; Δ позиций -1:+1; счёт пересмотрен; "
+            "не оценка эффекта пресета; своя сторона неизвестна",
+            content)
+
+    def test_history_labels_cross_game_rows_only(self):
+        self.seed_log([
+            self.evaluation_record(ts=2000),
+            self.evaluation_record(ts=1000, gameId="other-game",
+                                   evaluationGameId="other-game"),
+        ])
+        content = self.user_content(self.capture_messages())
+        lines = self.history_lines(content)
+        self.assertTrue(
+            any(line.startswith("- [опыт другого матча] мин 67:") for line in lines),
+            f"padded other-game row lacks the provenance label: {lines!r}")
+        self.assertTrue(
+            any(line.startswith("- мин 67:") for line in lines),
+            "same-game row must stay unlabelled")
+        self.assertEqual(
+            sum(1 for line in lines if "опыт другого матча" in line), 1)
+
+    def test_prefix_sharing_game_ids_are_not_same_game(self):
+        # The prompt `gameId` is truncated at 40 chars; grouping by it would
+        # merge two distinct matches. The exact id decides.
+        prefix = "g" * 40
+        exact = prefix + "-alpha"
+        body = self.valid_body()
+        body["gameId"] = exact
+        self.seed_log([
+            self.evaluation_record(ts=2000, gameId=exact, evaluationGameId=exact),
+            self.evaluation_record(ts=1000, gameId=prefix + "-beta",
+                                   evaluationGameId=prefix + "-beta"),
+        ])
+        content = self.user_content(self.capture_messages(body))
+        lines = self.history_lines(content)
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(
+            any(line.startswith("- мин 67:") for line in lines),
+            f"the exact-id row must stay same-game: {lines!r}")
+        labelled = [line for line in lines if "опыт другого матча" in line]
+        self.assertEqual(len(labelled), 1, f"prefix-sharing row must be labelled: {lines!r}")
+
+    def test_without_exact_game_id_every_row_is_cross_game(self):
+        body = self.valid_body()
+        body.pop("gameId")
+        self.seed_log([
+            self.evaluation_record(ts=2000),
+            self.evaluation_record(ts=1000, gameId="other",
+                                   evaluationGameId="other"),
+        ])
+        content = self.user_content(self.capture_messages(body))
+        lines = self.history_lines(content)
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(
+            all("[опыт другого матча]" in line for line in lines),
+            f"every row without an exact id must be labelled: {lines!r}")
+
+    def test_legacy_record_without_exact_id_is_never_same_game(self):
+        self.seed_log([{
+            "ts": 1000, "gameId": "g-123", "minute": 20,
+            "rulesPreset": "A", "llmPreset": "B", "confidence": "high",
+            "outcome": "ok", "apply": {"ok": True},
+        }])
+        content = self.user_content(self.capture_messages())
+        line = self.history_lines(content)[0]
+        self.assertTrue(
+            line.startswith("- [опыт другого матча] мин 20:"),
+            f"a record without evaluationGameId is not this match: {line!r}")
+
+    def test_history_without_evaluation_invents_no_facts(self):
+        self.seed_log([{
+            "ts": 1000, "gameId": "g-123", "evaluationGameId": "g-123", "minute": 20,
+            "rulesPreset": "A", "llmPreset": "B", "confidence": "high",
+            "outcome": "ok", "apply": {"ok": True},
+        }])
+        content = self.user_content(self.capture_messages())
+        line = next(line for line in content.splitlines() if line.startswith("- мин 20:"))
+        self.assertEqual(
+            line, "- мин 20: правила A → LLM B (уверенность high; применён успешно)")
+        self.assertNotIn("счёт", line)
+        self.assertNotIn("Δ", line)
+
+    def test_history_line_stays_within_the_entry_budget(self):
+        record = self.evaluation_record(rulesPreset="R" * 300, llmPreset="L" * 300)
+        line = self.advisor._render_history_record(record)
+        self.assertLessEqual(len(line), self.advisor.ENRICHMENT_HISTORY_ENTRY_CHARS)
+        # Identifiers are shortened first; the score claim keeps its
+        # qualification.
+        self.assertIn("…", line)
+        self.assertIn("не оценка эффекта пресета", line)
+        self.assertIn("счёт 0:0 → 2:1", line)
+
+    def test_exact_game_id_never_enters_the_prompt(self):
+        body = self.valid_body()
+        body["gameId"] = "g-123-" + "x" * 60
+        content = self.user_content(self.capture_messages(body))
+        self.assertNotIn("evaluationGameId", content)
+        self.assertNotIn(body["gameId"], content)
+
+
+class AdvisorEvaluationTestCase(unittest.TestCase):
+    """Ф2c (#441): finished-match evaluation of the advice log (server side).
+
+    Winner selection, positional arithmetic and locked materialization. No
+    network, no collection access: temporary dirs hold the log file.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        os.environ["SLF_API_TOKEN"] = "test-token"
+        os.environ["SLF_DATA_DIR"] = cls.temp_dir.name
+        os.environ["SLF_FORUM_FAQ_DIR"] = os.path.join(cls.temp_dir.name, "forum")
+        os.environ["OPENROUTER_API_KEY"] = "test-key"
+        cls.server = _load_server()
+        cls.advisor = cls.server.advisor
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
+
+    def setUp(self):
+        for path in pathlib.Path(self.temp_dir.name).iterdir():
+            if path.is_file():
+                path.unlink()
+
+    def data_dir(self):
+        return self.temp_dir.name
+
+    def log_path(self):
+        return pathlib.Path(self.temp_dir.name) / "advisor_log_v1.json"
+
+    def seed_log(self, records):
+        self.log_path().write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
+
+    def read_log(self):
+        return json.loads(self.log_path().read_text(encoding="utf-8"))
+
+    def result(self, **overrides):
+        row = {
+            "gameId": "g-123",
+            "status": "finished",
+            "score": {"home": 2, "away": 0},
+            "teams": ["t-home", "t-away"],
+            "teamNames": ["Home", "Away"],
+            "myTeam": "t-home",
+            "resultKey": "rk-1",
+            "parsedAt": 2000,
+        }
+        row.update(overrides)
+        return row
+
+    # -- exact identity captured by validate_context -------------------------
+
+    def test_validate_context_keeps_the_exact_game_id(self):
+        body = {
+            "gameId": "g-123-" + "y" * 60,
+            "ruleDecision": {"preset": "P1"},
+            "presetCatalog": [{"id": "P1"}],
+        }
+        context = self.advisor.validate_context(body)
+        self.assertEqual(context["evaluationGameId"], body["gameId"])
+        self.assertEqual(len(context["gameId"]), 40, "prompt gameId stays truncated")
+
+    def test_validate_context_blank_or_non_string_id_is_none(self):
+        for value in ("   ", 12345, None, {"id": "x"}):
+            body = {"gameId": value, "ruleDecision": {"preset": "P1"},
+                    "presetCatalog": [{"id": "P1"}]}
+            self.assertIsNone(self.advisor.validate_context(body)["evaluationGameId"],
+                              f"gameId {value!r} must not become an evaluation id")
+
+    # -- winner selection ----------------------------------------------------
+
+    def test_winner_is_latest_parsed_at(self):
+        older = self.result(parsedAt=1000, score={"home": 1, "away": 0}, resultKey="older")
+        newer = self.result(parsedAt=2000, score={"home": 3, "away": 1}, resultKey="newer")
+        self.assertIs(
+            self.advisor.select_match_result([older, newer], "g-123"), newer)
+        self.assertIs(
+            self.advisor.select_match_result([newer, older], "g-123"), newer)
+
+    def test_equal_timestamps_keep_the_first_candidate(self):
+        first = self.result(parsedAt=2000, score={"home": 1, "away": 0})
+        second = self.result(parsedAt=2000, score={"home": 4, "away": 4})
+        self.assertIs(
+            self.advisor.select_match_result([first, second], "g-123"), first)
+
+    def test_resolvable_timestamp_supersedes_unresolved(self):
+        unresolved = self.result(parsedAt=None)
+        resolved = self.result(parsedAt=10)
+        self.assertIs(
+            self.advisor.select_match_result([unresolved, resolved], "g-123"), resolved)
+        self.assertIs(
+            self.advisor.select_match_result([resolved, unresolved], "g-123"), resolved)
+        # Only unresolved candidates: the first stays the winner.
+        lone = self.result(parsedAt=None)
+        self.assertIs(
+            self.advisor.select_match_result([lone, self.result(parsedAt=None)], "g-123"),
+            lone)
+
+    def test_invalid_or_unfinished_results_never_win(self):
+        candidates = [
+            self.result(status="live"),
+            self.result(score={"home": None, "away": 1}),
+            self.result(score={"home": True, "away": 1}),
+            self.result(score={"home": 100, "away": 1}),
+            self.result(score="2:0"),
+        ]
+        self.assertIsNone(self.advisor.select_match_result(candidates, "g-123"))
+
+    def test_non_string_or_absent_ids_never_join(self):
+        self.assertIsNone(
+            self.advisor.select_match_result([self.result(gameId=123)], "123"))
+        absent = self.result()
+        absent.pop("gameId")
+        self.assertIsNone(self.advisor.select_match_result([absent], "g-123"))
+        self.assertIsNone(self.advisor.select_match_result([], "g-123"))
+        self.assertIsNone(self.advisor.select_match_result([self.result()], None))
+
+    def test_ids_sharing_the_truncated_prefix_stay_isolated(self):
+        prefix = "g" * 40
+        exact = prefix + "-alpha"
+        other = self.result(gameId=prefix + "-beta")
+        self.assertIsNone(self.advisor.select_match_result([other], exact))
+        self.assertIs(
+            self.advisor.select_match_result([other], prefix + "-beta"), other)
+
+    # -- arithmetic ----------------------------------------------------------
+
+    def test_compute_evaluation_complete_baseline(self):
+        with mock.patch.object(self.advisor.time, "time", return_value=1.5):
+            evaluation = self.advisor.compute_evaluation(
+                {"home": 1, "away": 0}, self.result(score={"home": 3, "away": 1}))
+        self.assertEqual(evaluation, {
+            "version": 1,
+            "finalScore": {"home": 3, "away": 1},
+            "baselineScore": {"home": 1, "away": 0},
+            "scoreDelta": {"home": 2, "away": 1},
+            "deltaStatus": "available",
+            "orientation": "home",
+            "orientationBasis": "result_teams_order_assumption",
+            "resultTeams": ["t-home", "t-away"],
+            "resultMyTeam": "t-home",
+            "resultKey": "rk-1",
+            "resultParsedAt": 2000,
+            "evaluatedAt": 1500,
+        })
+
+    def test_compute_evaluation_missing_baseline(self):
+        for baseline in (None, {"home": 1}, {"away": 0}, {"home": None, "away": 0}):
+            evaluation = self.advisor.compute_evaluation(baseline, self.result())
+            self.assertEqual(evaluation["deltaStatus"], "missing_baseline")
+            self.assertIsNone(evaluation["scoreDelta"])
+            self.assertIsNone(evaluation["baselineScore"])
+            self.assertEqual(evaluation["finalScore"], {"home": 2, "away": 0})
+
+    def test_compute_evaluation_score_regressed_keeps_signed_values(self):
+        evaluation = self.advisor.compute_evaluation(
+            {"home": 0, "away": 2}, self.result(score={"home": 1, "away": 1}))
+        self.assertEqual(evaluation["deltaStatus"], "score_regressed")
+        self.assertEqual(evaluation["scoreDelta"], {"home": 1, "away": -1})
+
+    def test_compute_evaluation_orientation_variants(self):
+        away = self.advisor.compute_evaluation(
+            None, self.result(myTeam="t-away"))
+        self.assertEqual(away["orientation"], "away")
+        self.assertEqual(away["orientationBasis"], "result_teams_order_assumption")
+        unknown = self.advisor.compute_evaluation(
+            None, self.result(myTeam="t-other"))
+        self.assertEqual(unknown["orientation"], "unknown")
+        self.assertEqual(unknown["orientationBasis"], "unknown")
+        missing = self.advisor.compute_evaluation(None, self.result(myTeam=None))
+        self.assertEqual(missing["orientation"], "unknown")
+        self.assertIsNone(missing["resultMyTeam"])
+
+    def test_compute_evaluation_orientation_needs_unfiltered_teams(self):
+        # An invalid entry must not shift positions into a confident claim.
+        shifted = self.advisor.compute_evaluation(
+            None, self.result(teams=[None, "t-home", "t-away"], myTeam="t-home"))
+        self.assertEqual(shifted["orientation"], "unknown")
+        self.assertEqual(shifted["orientationBasis"], "unknown")
+        self.assertEqual(shifted["resultTeams"], ["t-home", "t-away"])
+
+    # -- materialization -----------------------------------------------------
+
+    def test_materialize_attaches_evaluation_to_the_matching_record(self):
+        self.seed_log([
+            {"id": "a", "outcome": "ok", "gameId": "g-123",
+             "evaluationGameId": "g-123", "scoreAtAdvice": {"home": 0, "away": 0}},
+            {"id": "b", "outcome": "ok", "gameId": "g-999",
+             "evaluationGameId": "g-999", "scoreAtAdvice": {"home": 1, "away": 1}},
+            {"id": "c", "outcome": "ok", "gameId": "g-123", "evaluationGameId": None},
+        ])
+        updated = self.advisor.materialize_evaluations(
+            self.data_dir(), [self.result(score={"home": 2, "away": 1})])
+        self.assertEqual(updated, 1)
+        log = {record.get("id"): record for record in self.read_log()}
+        self.assertEqual(
+            log["a"]["evaluation"]["finalScore"], {"home": 2, "away": 1})
+        self.assertEqual(
+            log["a"]["evaluation"]["scoreDelta"], {"home": 2, "away": 1})
+        self.assertNotIn("evaluation", log["b"], "other game must stay untouched")
+        self.assertNotIn("evaluation", log["c"], "null id must stay untouched")
+
+    def test_materialize_skips_consultation_error_records(self):
+        self.seed_log([
+            {"id": "err", "outcome": "error", "gameId": "g-123",
+             "evaluationGameId": "g-123", "scoreAtAdvice": {"home": 0, "away": 0}},
+        ])
+        self.assertEqual(
+            self.advisor.materialize_evaluations(self.data_dir(), [self.result()]), 0)
+        self.assertNotIn("evaluation", self.read_log()[0])
+
+    def test_materialize_dict_index_matches_the_list_path(self):
+        # A prebuilt {gameId: winner} index must produce exactly the same
+        # evaluations as the raw list, and a list still applies the winner
+        # policy (the newer parsedAt wins).
+        records = [{
+            "id": "a", "outcome": "ok", "gameId": "g-123",
+            "evaluationGameId": "g-123", "scoreAtAdvice": {"home": 0, "away": 0},
+        }]
+        older = self.result(parsedAt=1000, score={"home": 1, "away": 0})
+        newer = self.result(parsedAt=2000, score={"home": 2, "away": 0})
+
+        self.seed_log(records)
+        with mock.patch.object(self.advisor.time, "time", return_value=5.0):
+            self.assertEqual(
+                self.advisor.materialize_evaluations(self.data_dir(), [older, newer]), 1)
+        from_list = self.read_log()[0]["evaluation"]
+        self.assertEqual(from_list["finalScore"], {"home": 2, "away": 0},
+                         "the list path must pick the latest parsedAt")
+        self.assertEqual(from_list["resultParsedAt"], 2000)
+
+        self.seed_log(records)
+        with mock.patch.object(self.advisor.time, "time", return_value=5.0):
+            self.assertEqual(
+                self.advisor.materialize_evaluations(
+                    self.data_dir(), {"g-123": newer}), 1)
+        self.assertEqual(self.read_log()[0]["evaluation"], from_list)
+
+    def test_materialize_is_idempotent(self):
+        self.seed_log([
+            {"id": "a", "outcome": "ok", "gameId": "g-123",
+             "evaluationGameId": "g-123", "scoreAtAdvice": {"home": 0, "away": 0}},
+        ])
+        self.assertEqual(
+            self.advisor.materialize_evaluations(self.data_dir(), [self.result()]), 1)
+        first = self.read_log()[0]["evaluation"]
+        self.assertEqual(
+            self.advisor.materialize_evaluations(self.data_dir(), [self.result()]), 0)
+        second = self.read_log()[0]["evaluation"]
+        self.assertEqual(first, second)
+        self.assertEqual(second["evaluatedAt"], first["evaluatedAt"])
+
+    def test_materialize_never_adds_records(self):
+        self.seed_log([
+            {"id": "a", "outcome": "ok", "gameId": "g-123",
+             "evaluationGameId": "g-123", "scoreAtAdvice": {"home": 0, "away": 0}},
+        ])
+        self.advisor.materialize_evaluations(self.data_dir(), [self.result()])
+        self.assertEqual(len(self.read_log()), 1)
+
+
+class AdvisorCorruptLogTestCase(unittest.TestCase):
+    """Ф2c (#441): a corrupt advisor log is renamed aside, never overwritten."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        os.environ["SLF_API_TOKEN"] = "test-token"
+        os.environ["SLF_DATA_DIR"] = cls.temp_dir.name
+        os.environ["SLF_FORUM_FAQ_DIR"] = os.path.join(cls.temp_dir.name, "forum")
+        os.environ["OPENROUTER_API_KEY"] = "test-key"
+        cls.server = _load_server()
+        cls.advisor = cls.server.advisor
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
+
+    def setUp(self):
+        for path in pathlib.Path(self.temp_dir.name).iterdir():
+            if path.is_file():
+                path.unlink()
+
+    def data_dir(self):
+        return self.temp_dir.name
+
+    def log_path(self):
+        return pathlib.Path(self.temp_dir.name) / "advisor_log_v1.json"
+
+    def backups(self):
+        return sorted(pathlib.Path(self.temp_dir.name).glob("advisor_log_v1.json.corrupt-*"))
+
+    def read_log(self):
+        return json.loads(self.log_path().read_text(encoding="utf-8"))
+
+    def test_corrupt_json_is_preserved_and_a_fresh_log_starts(self):
+        self.log_path().write_text("{not json\n", encoding="utf-8")
+        self.advisor.append_log(self.data_dir(), {"id": "new"})
+        backups = self.backups()
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_text(encoding="utf-8"), "{not json\n")
+        self.assertEqual(self.read_log(), [{"id": "new"}])
+        # The suffix keeps the backup out of collection discovery (*.json).
+        self.assertEqual(
+            sorted(path.name for path in pathlib.Path(self.temp_dir.name).glob("*.json")),
+            ["advisor_log_v1.json"])
+
+    def test_backup_names_are_unique(self):
+        self.log_path().write_text("{not json\n", encoding="utf-8")
+        self.advisor.append_log(self.data_dir(), {"id": "one"})
+        self.log_path().write_text("[[[", encoding="utf-8")
+        self.advisor.append_log(self.data_dir(), {"id": "two"})
+        names = [path.name for path in self.backups()]
+        self.assertEqual(len(names), 2, names)
+        self.assertEqual(len(set(names)), 2, "backup names must be unique")
+
+    def test_invalid_utf8_is_preserved(self):
+        raw = b"\xff\xfe\x00 not utf-8"
+        self.log_path().write_bytes(raw)
+        self.advisor.append_log(self.data_dir(), {"id": "new"})
+        backups = self.backups()
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_bytes(), raw)
+        self.assertEqual(self.read_log(), [{"id": "new"}])
+
+    def test_non_array_json_is_preserved(self):
+        self.log_path().write_text('{"records": 1}', encoding="utf-8")
+        self.advisor.append_log(self.data_dir(), {"id": "new"})
+        backups = self.backups()
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_text(encoding="utf-8"), '{"records": 1}')
+        self.assertEqual(self.read_log(), [{"id": "new"}])
+
+    def test_unreadable_log_aborts_without_rename(self):
+        source = '[{"id": "keep"}]'
+        self.log_path().write_text(source, encoding="utf-8")
+        target = os.fspath(self.log_path())
+        real_open = builtins.open
+
+        def deny_target(file, *args, **kwargs):
+            if isinstance(file, (str, bytes, os.PathLike)) and os.fspath(file) == target:
+                raise PermissionError(13, "denied", target)
+            return real_open(file, *args, **kwargs)
+
+        with mock.patch("builtins.open", side_effect=deny_target):
+            self.advisor.append_log(self.data_dir(), {"id": "new"})
+        self.assertEqual(self.log_path().read_text(encoding="utf-8"), source)
+        self.assertEqual(self.backups(), [], "a read error is not corruption")
+
+    def test_rename_failure_aborts_without_touching_the_source(self):
+        source = "{not json\n"
+        self.log_path().write_text(source, encoding="utf-8")
+        with mock.patch.object(self.advisor.os, "replace", side_effect=OSError("boom")):
+            self.advisor.append_log(self.data_dir(), {"id": "new"})
+        self.assertEqual(self.log_path().read_text(encoding="utf-8"), source)
+        self.assertEqual(self.backups(), [])
+
+
+class _FakeHttpResponse:
+    """Minimal urlopen() stand-in carrying a canned JSON body."""
+
+    def __init__(self, payload):
+        self._body = json.dumps(payload).encode("utf-8")
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+
+class AdvisorProviderTestCase(unittest.TestCase):
+    """Ф2c (#441): the upstream serving provider from the OpenRouter payload.
+
+    Hermetic: urlopen is replaced by a canned response object; no network.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        advisor_path = pathlib.Path(__file__).with_name("advisor.py")
+        spec = importlib.util.spec_from_file_location("slf_advisor_provider_test", advisor_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.advisor = module
+
+    def _call(self, payload):
+        with mock.patch.object(self.advisor.urllib.request, "urlopen",
+                               return_value=_FakeHttpResponse(payload)), \
+                mock.patch.dict(os.environ, {self.advisor.PROXY_ENV_VAR: ""}):
+            return self.advisor.call_openrouter(
+                [{"role": "user", "content": "hi"}], "test-key", "test-model",
+                timeout_s=2.0)
+
+    def test_provider_is_returned_with_content_and_latency(self):
+        content, latency_ms, provider = self._call({
+            "choices": [{"message": {"content": "ответ"}}],
+            "provider": "Together",
+        })
+        self.assertEqual(content, "ответ")
+        self.assertIsInstance(latency_ms, int)
+        self.assertEqual(provider, "Together")
+
+    def test_absent_or_blank_provider_is_none(self):
+        for extra in ({}, {"provider": None}, {"provider": ""}, {"provider": 7}):
+            payload = {"choices": [{"message": {"content": "ответ"}}]}
+            payload.update(extra)
+            content, _, provider = self._call(payload)
+            self.assertEqual(content, "ответ")
+            self.assertIsNone(provider, f"provider {extra!r} must normalize to None")
 
 
 class _FakeSocks5Server:
@@ -908,6 +1550,110 @@ class AdvisorApplyTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         # The corrupt file must be preserved (no blind write).
         self.assertEqual(path.read_text(encoding="utf-8"), "{invalid json\n")
+
+
+class AdvisorCompletionHookTestCase(unittest.TestCase):
+    """Ф2c (#441): the advice route repairs evaluations on completion.
+
+    The advice record is appended AFTER the provider call, so a finished
+    result persisted while the provider was thinking has no advice record to
+    join yet. The route must re-run materialization after the call.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        os.environ["SLF_API_TOKEN"] = "test-token"
+        os.environ["SLF_DATA_DIR"] = cls.temp_dir.name
+        os.environ["SLF_FORUM_FAQ_DIR"] = os.path.join(cls.temp_dir.name, "forum")
+        os.environ["OPENROUTER_API_KEY"] = "test-key"
+        cls.server = _load_server()
+        cls.advisor = cls.server.advisor
+        cls.client = cls.server.app.test_client()
+        cls.auth = {"Authorization": "Bearer test-token"}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
+
+    def setUp(self):
+        for path in pathlib.Path(self.temp_dir.name).glob("*.json"):
+            path.unlink()
+        cache = getattr(self.server, "_RESULTS_INDEX_CACHE", None)
+        if isinstance(cache, dict):
+            cache["state"] = (None, {})
+
+    def results_path(self):
+        return pathlib.Path(self.temp_dir.name) / "match_results_v2.json"
+
+    def read_log(self):
+        path = pathlib.Path(self.temp_dir.name) / "advisor_log_v1.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def finished_result(self, game_id="g-123"):
+        return {
+            "resultKey": "rk-1",
+            "gameId": game_id,
+            "status": "finished",
+            "score": {"home": 2, "away": 1},
+            "teams": ["t-home", "t-away"],
+            "myTeam": "t-home",
+            "parsedAt": 2000,
+        }
+
+    def body(self):
+        return {
+            "gameId": "g-123",
+            "minute": 30,
+            "bucket": "16-30",
+            "score": {"home": 0, "away": 0},
+            "ruleDecision": {"preset": "Emery_BalancedBase_v11"},
+            "presetCatalog": [
+                {"id": "Emery_BalancedBase_v11", "label": "Emery Balanced Base"},
+            ],
+        }
+
+    def answer(self):
+        return json.dumps({
+            "preset": "Emery_BalancedBase_v11",
+            "confidence": "medium",
+            "reason": "Счёт 0:0, держим баланс.",
+        }, ensure_ascii=False)
+
+    def test_result_persisted_during_the_provider_call_is_evaluated(self):
+        def persist_during_call(*args, **kwargs):
+            # The client appends the finished result while the provider thinks.
+            self.results_path().write_text(
+                json.dumps([self.finished_result()], ensure_ascii=False),
+                encoding="utf-8",
+            )
+            return (self.answer(), 900)
+
+        with mock.patch.object(self.advisor, "call_openrouter", side_effect=persist_during_call):
+            response = self.client.post("/api/advisor", json=self.body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["available"])
+        log = self.read_log()
+        self.assertEqual(len(log), 1)
+        self.assertEqual(log[0]["id"], payload["adviceId"])
+        self.assertEqual(log[0]["evaluation"]["finalScore"], {"home": 2, "away": 1})
+        self.assertEqual(log[0]["evaluation"]["scoreDelta"], {"home": 2, "away": 1})
+
+    def test_result_persisted_before_the_advice_request_is_evaluated(self):
+        self.results_path().write_text(
+            json.dumps([self.finished_result()], ensure_ascii=False), encoding="utf-8")
+        with mock.patch.object(self.advisor, "call_openrouter", return_value=(self.answer(), 700)):
+            response = self.client.post("/api/advisor", json=self.body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.read_log()[0]["evaluation"]["finalScore"], {"home": 2, "away": 1})
+
+    def test_consultation_without_results_stays_unevaluated_and_unchanged(self):
+        with mock.patch.object(self.advisor, "call_openrouter", return_value=(self.answer(), 700)):
+            response = self.client.post("/api/advisor", json=self.body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["available"])
+        self.assertNotIn("evaluation", self.read_log()[0])
 
 
 if __name__ == "__main__":
