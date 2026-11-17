@@ -911,34 +911,40 @@
         return `Ошибка советника${status ? ` (HTTP ${status})` : ''}`;
     }
 
-    async function requestLlmSecondOpinion(freshSnapshot, dialog) {
+    async function requestLlmSecondOpinion(freshSnapshot, dialog, options = {}) {
         if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined') return null;
+        const settings = options && typeof options === 'object' ? options : {};
+        // #461: in partial mode a stale STATE.lastRuleDecision must never stand
+        // in for the current state — the request goes out with ruleDecision:null.
+        const partial = settings.partial === true;
         const snapshot = freshSnapshot
             || (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot)
             || null;
-        const ruleDecision = (snapshot && snapshot.ruleDecision)
-            || (typeof STATE !== 'undefined' ? STATE.lastRuleDecision : null)
-            || null;
+        const ruleDecision = partial
+            ? null
+            : ((snapshot && snapshot.ruleDecision)
+                || (typeof STATE !== 'undefined' ? STATE.lastRuleDecision : null)
+                || null);
         const registry = (typeof window !== 'undefined' && window.SLFActivePresetRegistry) || null;
         const payload = LLMSecondOpinion.buildPayload({ snapshot, ruleDecision, registry, dialog });
         if (!payload) {
             LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
                 available: false,
                 error: 'Недостаточно данных: правило не дало решения или каталог пресетов пуст'
-            }));
+            }, { partial }));
             return null;
         }
         LLMSecondOpinion.mountAnswer('<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#181818;border:1px dashed #555;border-radius:5px;color:#999;padding:7px 9px;font-size:12px;">🤖 Думает…</div>');
         try {
             const answer = await LLMSecondOpinion.requestSecondOpinion(payload);
-            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer(answer));
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer(answer, { partial }));
             return answer || null;
         } catch (error) {
             console.error('[SLF] LLM second opinion request failed', error);
             LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
                 available: false,
                 error: llmSecondOpinionErrorText(error)
-            }));
+            }, { partial }));
             return null;
         }
     }
@@ -1089,18 +1095,15 @@
         if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.checkpoint && snapshot.matchOwnership !== 'foreign') {
             await STATE.tacticalLabRuntime.checkpoint('llm_second_opinion', snapshot);
         }
-        // Same pipeline the manual hint runs; make() stamps ruleDecision.
+        // Same pipeline the manual hint runs; make() stamps ruleDecision when
+        // the data supports one.
         buildManualRecommendationHtml(snapshot);
-        if (!snapshot.ruleDecision) {
-            // Honest muted message: no fake answer, no retry storm. The click
-            // wrapper re-enables the button.
-            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
-                available: false,
-                error: 'Правила не дали решения на текущих данных матча'
-            }));
-            return null;
-        }
-        return requestLlmSecondOpinion(snapshot, dialog);
+        // #461: an early match (phase collect) may have no rules decision yet.
+        // The advisor still gets a marked partial payload instead of a refusal;
+        // its answer is shown with the honest preliminary marker and is never
+        // auto-applied.
+        const partial = !snapshot.ruleDecision;
+        return requestLlmSecondOpinion(snapshot, dialog, { partial });
     }
 
     // Ф2a (#441): one-click apply of the suggested preset. Runs ONLY on an

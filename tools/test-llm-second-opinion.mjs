@@ -181,10 +181,15 @@ function makeSnapshot() {
     const { LLM } = loadModule();
     assert.equal(LLM.buildPayload({}), null, 'no args -> null');
     assert.equal(LLM.buildPayload({ snapshot: makeSnapshot(), ruleDecision: makeRuleDecision() }), null, 'no registry -> null');
-    assert.equal(LLM.buildPayload({ snapshot: makeSnapshot(), registry: makeRegistry() }), null, 'no ruleDecision -> null');
+    // #461: a missing rules decision is no longer a refusal — it becomes a
+    // marked partial payload (block 11). "Nothing to advise with" still fails;
+    // partial mode additionally needs the snapshot's own situation.
+    assert.equal(LLM.buildPayload({ ruleDecision: null, registry: makeRegistry() }), null, 'partial mode without a snapshot -> null');
+    assert.equal(LLM.buildPayload({ snapshot: makeSnapshot(), ruleDecision: null }), null, 'partial mode still needs a registry -> null');
     const empty = makeRegistry();
     empty.active = [];
     assert.equal(LLM.buildPayload({ snapshot: makeSnapshot(), ruleDecision: makeRuleDecision(), registry: empty }), null, 'empty active list -> null');
+    assert.equal(LLM.buildPayload({ snapshot: makeSnapshot(), ruleDecision: null, registry: empty }), null, 'empty active list -> null in partial mode too');
 }
 
 // --- 3. escaping -------------------------------------------------------------
@@ -527,7 +532,7 @@ function loadApi(context) {
 // Requesting a fresh LLM opinion must record the same checkpoint with its own
 // source label under the manual path's guard, BEFORE the advisor request, so a
 // failed LLM call still records that the user was present in the match.
-function makeUiContext({ foreign = false, advisorRejection = null } = {}) {
+function makeUiContext({ foreign = false, advisorRejection = null, decideRule = true } = {}) {
     const checkpoints = [];
     const advisorCalls = [];
     const order = [];
@@ -586,18 +591,22 @@ function makeUiContext({ foreign = false, advisorRejection = null } = {}) {
         },
         SnapshotEngine: { build: () => snapshot },
         // make() stamps snapshot.ruleDecision exactly like the real ladder (the
-        // fresh path feeds that decision into the advisor payload).
+        // fresh path feeds that decision into the advisor payload). With
+        // decideRule:false it stamps nothing — the early-match (phase collect)
+        // shape, where the rules engine has no decision yet (#461).
         RecommendationEngine: {
             __compactCoachModePatchedV4: true,
             __generator561RuleScorerApplied: true,
             hasEnoughLiveData: () => ({ ok: true }),
             make: snap => {
-                snap.ruleDecision = {
-                    action: { preset: 'Emery_BalancedBase_v11', decision: 'active_control' },
-                    confidence: { level: 'medium' },
-                    moment: { context: { minute: snap.minute, gameMode: 'active_control' } },
-                    candidates: [{ preset: 'Emery_BalancedBase_v11', score: 1.5, vetoed: false }]
-                };
+                if (decideRule) {
+                    snap.ruleDecision = {
+                        action: { preset: 'Emery_BalancedBase_v11', decision: 'active_control' },
+                        confidence: { level: 'medium' },
+                        moment: { context: { minute: snap.minute, gameMode: 'active_control' } },
+                        candidates: [{ preset: 'Emery_BalancedBase_v11', score: 1.5, vetoed: false }]
+                    };
+                }
                 return '<div>recommendation</div>';
             }
         },
@@ -881,6 +890,142 @@ function lastNodeHtml(run, id) {
     const answerHtml = lastNodeHtml(run, 'slf-llm-second-opinion-answer');
     assert.ok(answerHtml.includes('только на странице матча'), `honest no-game message: ${answerHtml}`);
     assert.equal(run.chatInput.value, 'жми выше', 'input is kept on the no-game refusal');
+}
+
+// --- 11. #461: partial-data payload -----------------------------------------
+// Early match (phase collect): the rules engine has no decision yet. The
+// payload still goes out, explicitly marked partial, so the server may answer
+// with a caveated advice instead of the client refusing to ask.
+{
+    const { LLM } = loadModule();
+    for (const ruleDecision of [undefined, null]) {
+        const payload = LLM.buildPayload({
+            snapshot: makeSnapshot(),
+            ruleDecision,
+            registry: makeRegistry()
+        });
+        assert.ok(payload, `partial payload builds for ruleDecision=${ruleDecision}`);
+        assert.equal(payload.ruleDecision, null, 'rules decision sent as explicit null');
+        assert.equal(payload.dataCompleteness, 'partial', 'partial completeness marker sent');
+        assert.equal(
+            payload.dataNote,
+            'Правила не дали решения на текущих данных матча',
+            'short honest note explaining the missing decision'
+        );
+        // Available situation data is still sent as-is.
+        assert.equal(payload.gameId, 'g-123');
+        assert.equal(payload.minute, 30);
+        assert.equal(payload.bucket, '16-30');
+        assert.deepEqual(payload.score, { home: 0, away: 1 }, 'score still sent');
+        assert.equal(payload.presetCatalog.length, 2, 'catalog still sent');
+        assert.equal(payload.developerHints.length, 20, 'hints still sent');
+        assert.equal(JSON.stringify(payload.signals), '{}', 'no fabricated signals without a decision context');
+        assert.ok(!Object.prototype.hasOwnProperty.call(payload, 'dialog'), 'no dialog key when absent');
+    }
+
+    // Full data: not one byte of the legacy payload changes (the JSON.stringify
+    // equality in block 4b is the byte-level pin; this guards the key set/order
+    // and the absence of the partial keys).
+    const full = LLM.buildPayload({
+        snapshot: makeSnapshot(),
+        ruleDecision: makeRuleDecision(),
+        registry: makeRegistry()
+    });
+    assert.deepEqual(
+        Object.keys(full),
+        ['schema', 'gameId', 'minute', 'bucket', 'score', 'currentPreset',
+            'developerHints', 'ruleDecision', 'signals', 'presetCatalog'],
+        'full payload key set/order unchanged'
+    );
+    assert.ok(!Object.prototype.hasOwnProperty.call(full, 'dataCompleteness'),
+        'no dataCompleteness on a full payload');
+    assert.ok(!Object.prototype.hasOwnProperty.call(full, 'dataNote'),
+        'no dataNote on a full payload');
+    assert.equal(typeof full.ruleDecision, 'object', 'full payload keeps the rules decision object');
+}
+
+// --- 12. #461: renderAnswer partial marker -----------------------------------
+{
+    const { LLM } = loadModule();
+    const answer = {
+        available: true,
+        adviceId: 'adv-1',
+        preset: 'x',
+        presetLabel: 'L',
+        confidence: 'high',
+        reason: 'r',
+        model: 'm',
+        latencyMs: 1000
+    };
+    const partialHtml = LLM.renderAnswer(answer, { partial: true });
+    assert.ok(
+        partialHtml.includes('Предварительный совет на неполных данных (правила не дали решения)'),
+        `honest preliminary marker rendered: ${partialHtml}`
+    );
+    // Layout and the click-only apply control are untouched.
+    assert.ok(partialHtml.includes('id="slf-llm-apply-btn"'), 'apply button kept in partial mode');
+    assert.ok(partialHtml.includes('Применить пресет'), 'apply label unchanged');
+    assert.ok(partialHtml.includes('только совет, тактика не применена'), 'advisory-only disclaimer kept');
+    assert.ok(
+        partialHtml.indexOf('Предварительный совет') < partialHtml.indexOf('🤖 Второе мнение'),
+        'marker precedes the answer header'
+    );
+
+    // Absent/false flag: the pre-#461 answer, byte-for-byte.
+    const plain = LLM.renderAnswer(answer);
+    assert.ok(!plain.includes('Предварительный совет'), 'no marker without the partial flag');
+    assert.equal(LLM.renderAnswer(answer, {}), plain, 'default options change nothing');
+    assert.equal(LLM.renderAnswer(answer, { partial: false }), plain, 'explicit false changes nothing');
+
+    // An unavailable answer stays the honest error box: no marker, no fake
+    // advice, no apply button, even when the request was partial.
+    const errorHtml = LLM.renderAnswer({ available: false, error: 'LLM недоступен' }, { partial: true });
+    assert.ok(errorHtml.includes('LLM недоступен'), 'error text kept');
+    assert.ok(!errorHtml.includes('Предварительный совет'), 'no partial marker on the error box');
+    assert.ok(!errorHtml.includes('slf-llm-apply-btn'), 'no apply button on the error box');
+}
+
+// --- 13. #461: fresh path without a rules decision ---------------------------
+// The one-shot «🤖 LLM» button and the chat send both go through
+// requestLlmSecondOpinionFresh: neither may silently refuse an early match.
+{
+    const run = makeUiContext({ decideRule: false });
+    assert.equal(run.snapshot.ruleDecision, undefined, 'fixture: the ladder stamped no decision');
+    // A stale decision from a previous game must not be resurrected.
+    run.context.STATE.lastRuleDecision = makeRuleDecision();
+    await run.llmButton.onclick();
+
+    assert.equal(run.advisorCalls.length, 1, 'advisor is called without a rules decision');
+    const payload = run.advisorCalls[0].payload;
+    assert.equal(payload.ruleDecision, null, 'no stale rules decision is sent');
+    assert.equal(payload.dataCompleteness, 'partial', 'partial marker sent');
+    assert.equal(payload.dataNote, 'Правила не дали решения на текущих данных матча');
+    assert.equal(payload.minute, 20, 'minute still sent');
+    assert.deepEqual(payload.score, { home: 1, away: 0 }, 'score still sent');
+    assert.equal(payload.presetCatalog.length, 2, 'catalog still sent');
+
+    const html = lastNodeHtml(run, 'slf-llm-second-opinion-answer');
+    assert.ok(
+        html.includes('Предварительный совет на неполных данных (правила не дали решения)'),
+        `answer rendered with the preliminary marker: ${html}`
+    );
+    assert.ok(html.includes('держим баланс'), 'model reason rendered');
+    assert.ok(html.includes('slf-llm-apply-btn'), 'apply button kept (explicit click only)');
+    assert.ok(!html.includes('LLM недоступен'), 'the old "no decision" refusal is gone');
+}
+
+{
+    // Partial request that fails: honest error, no fake advice, no marker.
+    const run = makeUiContext({
+        decideRule: false,
+        advisorRejection: makeAdvisorError({ status: 502, errorKind: 'empty_answer' })
+    });
+    await run.llmButton.onclick();
+    assert.equal(run.advisorCalls.length, 1, 'the partial request was actually sent');
+    const html = lastNodeHtml(run, 'slf-llm-second-opinion-answer');
+    assert.ok(html.includes('пустой ответ'), `honest error text in partial mode: ${html}`);
+    assert.ok(!html.includes('Предварительный совет'), 'no preliminary marker on a failure');
+    assert.ok(!html.includes('slf-llm-apply-btn'), 'no apply button without an answer');
 }
 
 console.log('test-llm-second-opinion: all assertions passed');

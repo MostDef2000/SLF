@@ -15,6 +15,9 @@ const LLMSecondOpinion = {
     // Phase 1 (#459): optional per-match dialogue. Mirrors the server caps.
     MAX_DIALOG_TURNS: 20,
     MAX_DIALOG_TURN_CHARS: 500,
+    // #461: partial-data mode. On an early match the rules engine has no
+    // decision yet; the payload then says so honestly instead of refusing.
+    PARTIAL_DATA_NOTE: 'Правила не дали решения на текущих данных матча',
 
     // Compact whitelist of decision-context signals sent to the advisor.
     // Everything else in the moment context stays local (payload budget).
@@ -58,11 +61,19 @@ const LLMSecondOpinion = {
             .slice(0, this.MAX_DIALOG_TURNS);
     },
 
-    // Fail-closed: null unless a rules decision AND a preset catalog exist.
+    // Fail-closed on "nothing to advise with": no registry or an empty catalog
+    // still yields null (partial mode additionally needs the snapshot). #461: a
+    // missing rules decision (early match, phase collect) no longer refuses the
+    // request — it becomes an explicitly marked partial payload.
     buildPayload({ snapshot, ruleDecision, registry, dialog }) {
-        if (!ruleDecision || typeof ruleDecision !== 'object' || !registry || typeof registry !== 'object') return null;
+        if (!registry || typeof registry !== 'object') return null;
         const active = Array.isArray(registry.active) ? registry.active : [];
         if (!active.length) return null;
+        const partial = !ruleDecision || typeof ruleDecision !== 'object';
+        // #461: only partial mode requires the snapshot's own situation to be
+        // meaningful; full mode keeps the pre-existing contract untouched.
+        if (partial && (!snapshot || typeof snapshot !== 'object')) return null;
+        const decision = partial ? null : ruleDecision;
 
         const catalog = active.slice(0, this.MAX_CATALOG_ENTRIES).map(id => {
             const meta = (registry.meta && registry.meta[id]) || {};
@@ -75,7 +86,10 @@ const LLMSecondOpinion = {
             };
         }).filter(entry => entry.id);
 
-        const context = (ruleDecision.moment && ruleDecision.moment.context) || {};
+        // The decision's moment context is the only signal source; in partial
+        // mode there is none, and the situation (score/minute) still rides in
+        // the top-level fields below.
+        const context = partial ? {} : ((decision.moment && decision.moment.context) || {});
         const signals = {};
         for (const key of this.SIGNAL_KEYS) {
             if (context[key] !== undefined && context[key] !== null) signals[key] = context[key];
@@ -91,7 +105,7 @@ const LLMSecondOpinion = {
             .filter(Boolean)
             .slice(0, this.MAX_HINTS);
 
-        const candidates = (Array.isArray(ruleDecision.candidates) ? ruleDecision.candidates : [])
+        const candidates = (Array.isArray(decision && decision.candidates) ? decision.candidates : [])
             .filter(item => item && !item.vetoed && (item.preset || item.id))
             .slice(0, 5)
             .map(item => ({ id: item.preset || item.id, score: typeof item.score === 'number' ? item.score : null }));
@@ -103,20 +117,26 @@ const LLMSecondOpinion = {
             bucket: (snapshot && snapshot.bucket) || '',
             score: (snapshot && snapshot.score) || null,
             currentPreset: context.currentPreset
-                || (ruleDecision.telemetry && ruleDecision.telemetry.currentPreset)
+                || (decision && decision.telemetry && decision.telemetry.currentPreset)
                 || (snapshot && snapshot.presetName)
                 || null,
             developerHints: hints,
-            ruleDecision: {
-                preset: (ruleDecision.action && ruleDecision.action.preset) || null,
-                gameMode: context.gameMode || (ruleDecision.action && ruleDecision.action.decision) || null,
+            ruleDecision: partial ? null : {
+                preset: (decision.action && decision.action.preset) || null,
+                gameMode: context.gameMode || (decision.action && decision.action.decision) || null,
                 // confidence is {level, gap, ...} from the scorer; accept a bare string too.
-                confidence: (ruleDecision.confidence && ruleDecision.confidence.level) || ruleDecision.confidence || null,
+                confidence: (decision.confidence && decision.confidence.level) || decision.confidence || null,
                 topCandidates: candidates
             },
             signals,
             presetCatalog: catalog
         };
+        // #461: the partial marker is appended only in partial mode, so a
+        // full-data payload keeps the exact legacy shape/bytes.
+        if (partial) {
+            payload.dataCompleteness = 'partial';
+            payload.dataNote = this.PARTIAL_DATA_NOTE;
+        }
         // Phase 1 (#459): the dialogue key is appended only when turns survive
         // cleaning, so a no-dialog payload keeps the exact legacy shape/bytes.
         const dialogTurns = this.cleanDialog(dialog);
@@ -128,11 +148,17 @@ const LLMSecondOpinion = {
         return Api.postJson(this.ENDPOINT_COLLECTION, payload, 'llm-advisor', this.REQUEST_TIMEOUT_MS);
     },
 
-    renderAnswer(answer) {
+    renderAnswer(answer, options = {}) {
         if (!answer || answer.available !== true) {
             const message = this.escapeHtml((answer && answer.error) || 'LLM недоступен');
             return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#181818;border:1px dashed #555;border-radius:5px;color:#999;padding:7px 9px;font-size:12px;">🤖 LLM недоступен: ${message}</div>`;
         }
+        // #461: the advisor answered without a rules decision (early match).
+        // Mark the advice as preliminary; the answer itself is unchanged.
+        const partial = !!(options && options.partial === true);
+        const partialHtml = partial
+            ? '<div style="opacity:.75;margin-bottom:4px;color:#e8c87a;">Предварительный совет на неполных данных (правила не дали решения)</div>'
+            : '';
         const label = this.escapeHtml(answer.presetLabel || answer.preset || '');
         const confidence = this.escapeHtml(answer.confidence || '');
         const reason = this.escapeHtml(answer.reason || '');
@@ -158,6 +184,7 @@ const LLMSecondOpinion = {
               `<span style="opacity:.55;margin-left:6px;">применение только по клику</span></div>`
             : '';
         return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#141a14;border:1px solid #3a5a3a;border-radius:5px;color:#cde;padding:7px 9px;font-size:12px;line-height:1.45;">` +
+            partialHtml +
             `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>${label}</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
             `${reason}<br>` +
             `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span>${applyHtml}</div>`;
