@@ -56,6 +56,10 @@ MAX_CONTEXT_BYTES = 64 * 1024
 # context to the model. Bounded so the block stays small next to the prompt.
 MAX_DIALOG_TURNS = 20
 MAX_DIALOG_TURN_CHARS = 500
+# #461: partial-data mode. On an early match the rules engine has no decision
+# yet, so the client may send ruleDecision=null plus dataCompleteness="partial".
+# The optional dataNote says why the rules are silent; capped like a hint.
+MAX_DATA_NOTE_CHARS = 300
 LOG_COLLECTION = "advisor_log_v1"
 LOG_MAX_RECORDS = 5000
 
@@ -103,6 +107,15 @@ SYSTEM_PROMPT = (
     "ты согласен с правилым движком — скажи это коротко; если нет — "
     "объясни, чем оправдано расхождение.\n"
     "4. Учитывай подсказки тренеров (если даны) и поле риск у пресета."
+)
+
+# #461: the base prompt above assumes the rules engine already decided. In
+# partial mode that framing would contradict the user line, so the partial
+# prompt appends this override; full mode never sees it.
+PARTIAL_SYSTEM_ADDENDUM = (
+    "\n\nВНИМАНИЕ: в этом запросе правила НЕ дали решения (данных мало). "
+    "Следующая строка «Правила не дали решения...» — актуальна; считай себя "
+    "первым мнением и дай предварительный совет с оговоркой."
 )
 
 
@@ -161,21 +174,30 @@ def validate_context(data):
         })
 
     decision_raw = data.get("ruleDecision")
-    if not isinstance(decision_raw, dict):
-        raise AdvisorValidationError("ruleDecision must be an object")
     top_candidates = []
-    candidates_raw = decision_raw.get("topCandidates")
-    if candidates_raw is not None:
-        if not isinstance(candidates_raw, list) or len(candidates_raw) > 5:
-            raise AdvisorValidationError("topCandidates must be a list of at most 5 entries")
-        for item in candidates_raw:
-            if not isinstance(item, dict):
-                raise AdvisorValidationError("topCandidates entries must be objects")
-            cid = _clean_str(item.get("id"), 64)
-            score = item.get("score")
-            if not cid or not isinstance(score, (int, float)) or isinstance(score, bool):
-                raise AdvisorValidationError("topCandidates entries need id and numeric score")
-            top_candidates.append({"id": cid, "score": round(float(score), 2)})
+    if decision_raw is None:
+        # #461 partial-data mode: the rules engine has no decision yet (collect
+        # phase, minute < 10), so the client sends null rather than inventing
+        # one. Fail-closed: the explicit marker is required, a bare null stays
+        # a 400. The advisor then advises on the available signals alone.
+        if data.get("dataCompleteness") != "partial":
+            raise AdvisorValidationError(
+                "ruleDecision must be an object unless dataCompleteness is 'partial'")
+    elif not isinstance(decision_raw, dict):
+        raise AdvisorValidationError("ruleDecision must be an object")
+    else:
+        candidates_raw = decision_raw.get("topCandidates")
+        if candidates_raw is not None:
+            if not isinstance(candidates_raw, list) or len(candidates_raw) > 5:
+                raise AdvisorValidationError("topCandidates must be a list of at most 5 entries")
+            for item in candidates_raw:
+                if not isinstance(item, dict):
+                    raise AdvisorValidationError("topCandidates entries must be objects")
+                cid = _clean_str(item.get("id"), 64)
+                score = item.get("score")
+                if not cid or not isinstance(score, (int, float)) or isinstance(score, bool):
+                    raise AdvisorValidationError("topCandidates entries need id and numeric score")
+                top_candidates.append({"id": cid, "score": round(float(score), 2)})
 
     signals_raw = data.get("signals")
     signals = {}
@@ -272,12 +294,15 @@ def validate_context(data):
         "currentPreset": _clean_str(data.get("currentPreset"), 64) or None,
         "developerHints": hints,
         "dialog": dialog,
-        "ruleDecision": {
+        # #461: partial mode keeps ruleDecision=None all the way to the prompt.
+        "ruleDecision": None if decision_raw is None else {
             "preset": _clean_str(decision_raw.get("preset"), 64) or None,
             "gameMode": _clean_str(decision_raw.get("gameMode"), 40) or None,
             "confidence": _clean_str(decision_raw.get("confidence"), 20) or None,
             "topCandidates": top_candidates,
         },
+        "dataCompleteness": "partial" if decision_raw is None else "full",
+        "dataNote": _clean_str(data.get("dataNote"), MAX_DATA_NOTE_CHARS) or None,
         "signals": signals,
         "presetCatalog": catalog,
     }
@@ -701,20 +726,36 @@ def build_messages(context, enrichment=""):
         + (f" | риск: {entry['risk']}" if entry["risk"] else "")
         for entry in context["presetCatalog"]
     )
-    decision = context["ruleDecision"]
-    candidates_text = ", ".join(
-        f"{c['id']}={c['score']}" for c in decision["topCandidates"]
-    ) or "нет"
+    decision = context.get("ruleDecision")
+    if decision is None:
+        # #461 partial-data mode: there is no rules decision to report, so the
+        # prompt says so honestly instead of pretending one exists. The model
+        # still gets the situation, hints, catalog and history.
+        decision_text = (
+            "Правила не дали решения (данных мало). Проанализируй доступные "
+            "сигналы и дай предварительный совет с оговоркой."
+        )
+        data_note = context.get("dataNote")
+        if data_note:
+            decision_text += " Заметка: " + data_note
+        decision_text += "\n"
+    else:
+        candidates_text = ", ".join(
+            f"{c['id']}={c['score']}" for c in decision["topCandidates"]
+        ) or "нет"
+        decision_text = (
+            "Решение правилого движка: пресет " + str(decision["preset"])
+            + ", режим " + str(decision["gameMode"])
+            + ", уверенность " + str(decision["confidence"])
+            + "; кандидаты: " + candidates_text + "\n"
+        )
     hints_text = "; ".join(context["developerHints"]) or "нет"
     situation = {k: context[k] for k in ("gameId", "minute", "bucket", "score", "currentPreset", "signals")}
     user_payload = (
         "Ситуация (JSON): " + json.dumps(situation, ensure_ascii=False) + "\n"
         "Подсказки тренеров: " + hints_text + "\n"
-        "Решение правилого движка: пресет " + str(decision["preset"])
-        + ", режим " + str(decision["gameMode"])
-        + ", уверенность " + str(decision["confidence"])
-        + "; кандидаты: " + candidates_text + "\n"
-        "Каталог пресетов:\n" + catalog_lines + "\n"
+        + decision_text
+        + "Каталог пресетов:\n" + catalog_lines + "\n"
     )
     if enrichment:
         user_payload += "\nИстория советов и знания (сервер):\n" + enrichment + "\n"
@@ -728,8 +769,11 @@ def build_messages(context, enrichment=""):
             + dialog_lines + "\n"
         )
     user_payload += "Дай JSON-ответ."
+    # #461: only the partial prompt overrides the "rules already recommended"
+    # framing; the full-mode system message stays byte-identical to base.
+    system_content = SYSTEM_PROMPT + PARTIAL_SYSTEM_ADDENDUM if decision is None else SYSTEM_PROMPT
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_content},
         {"role": "user", "content": user_payload},
     ]
 
@@ -1367,7 +1411,9 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
             "evaluationGameId": context["evaluationGameId"],
             "scoreAtAdvice": context["score"],
             "minute": context["minute"],
-            "rulesPreset": context["ruleDecision"]["preset"],
+            # #461: partial mode has no rules preset — the record keeps the
+            # same key set and logs None instead of crashing.
+            "rulesPreset": (context["ruleDecision"] or {}).get("preset"),
             "llmPreset": preset,
             "confidence": confidence,
             "latencyMs": latency_ms,
@@ -1396,7 +1442,8 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
         "evaluationGameId": context["evaluationGameId"],
         "scoreAtAdvice": context["score"],
         "minute": context["minute"],
-        "rulesPreset": context["ruleDecision"]["preset"],
+        # #461: same null-safe read on the error path (partial mode).
+        "rulesPreset": (context["ruleDecision"] or {}).get("preset"),
         "llmPreset": None,
         "confidence": None,
         "latencyMs": latency_ms,

@@ -2160,5 +2160,300 @@ class AdvisorDialogTestCase(unittest.TestCase):
         self.assertNotIn("evaluation", self.read_log()[0])
 
 
+class AdvisorPartialDataTestCase(unittest.TestCase):
+    """#461: partial-data consultations (ruleDecision null).
+
+    On an early match (collect phase, minute < 10) the rules engine has no
+    decision yet. The client may send ruleDecision=null together with
+    dataCompleteness="partial"; a bare null stays a fail-closed 400. The prompt
+    then carries an honest caveat instead of a fabricated rules line. Hermetic:
+    provider mocked, temp data dir.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        os.environ["SLF_API_TOKEN"] = "test-token"
+        os.environ["SLF_DATA_DIR"] = cls.temp_dir.name
+        os.environ["SLF_FORUM_FAQ_DIR"] = os.path.join(cls.temp_dir.name, "forum")
+        os.environ["OPENROUTER_API_KEY"] = "test-key"
+        cls.server = _load_server()
+        cls.advisor = cls.server.advisor
+        cls.client = cls.server.app.test_client()
+        cls.auth = {"Authorization": "Bearer test-token"}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
+
+    def setUp(self):
+        for path in pathlib.Path(self.temp_dir.name).glob("*.json"):
+            path.unlink()
+
+    def full_body(self):
+        return {
+            "gameId": "g-123",
+            "minute": 30,
+            "bucket": "16-30",
+            "score": {"home": 0, "away": 0},
+            "currentPreset": "Emery_BalancedBase_v11",
+            "developerHints": ["[Клопп] Отключите атаку по центру"],
+            "ruleDecision": {
+                "preset": "Emery_BalancedBase_v11",
+                "gameMode": "active_control",
+                "confidence": "medium",
+                "topCandidates": [
+                    {"id": "Emery_BalancedBase_v11", "score": 35.7},
+                    {"id": "Pep_BoxControl_bal2", "score": 23.5}
+                ]
+            },
+            "signals": {"strengthGap": -12, "pressureRisk": 41.4, "underPressure": True},
+            "presetCatalog": [
+                {"id": "Emery_BalancedBase_v11", "label": "Emery Balanced Base", "idea": "баланс", "use": "база", "risk": "низкий"},
+                {"id": "Pep_BoxControl_bal2", "label": "Pep Box Control", "idea": "контроль", "use": "при контроле", "risk": "средний"}
+            ]
+        }
+
+    def partial_body(self):
+        body = self.full_body()
+        body["ruleDecision"] = None
+        body["dataCompleteness"] = "partial"
+        return body
+
+    def wire_context(self, body):
+        """Build the context exactly as the Flask view receives it."""
+        wire_body = json.loads(self.server.app.json.dumps(body))
+        return self.advisor.validate_context(wire_body)
+
+    def read_log(self):
+        path = pathlib.Path(self.temp_dir.name) / "advisor_log_v1.json"
+        if not path.exists():
+            return []
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def user_content(messages):
+        return next(m["content"] for m in messages if m.get("role") == "user")
+
+    def base_user_content(self, context):
+        """Base-SHA prompt, built independently as the byte-identity oracle.
+
+        Deliberately a local copy of the pre-#461 composition (no import of
+        module internals), so a drift in build_messages shows up as a diff.
+        """
+        catalog_lines = "\n".join(
+            f"- {entry['id']} | {entry['label']}"
+            + (f" | идея: {entry['idea']}" if entry["idea"] else "")
+            + (f" | когда: {entry['use']}" if entry["use"] else "")
+            + (f" | риск: {entry['risk']}" if entry["risk"] else "")
+            for entry in context["presetCatalog"]
+        )
+        decision = context["ruleDecision"]
+        candidates_text = ", ".join(
+            f"{c['id']}={c['score']}" for c in decision["topCandidates"]
+        ) or "нет"
+        hints_text = "; ".join(context["developerHints"]) or "нет"
+        situation = {
+            k: context[k]
+            for k in ("gameId", "minute", "bucket", "score", "currentPreset", "signals")
+        }
+        return (
+            "Ситуация (JSON): " + json.dumps(situation, ensure_ascii=False) + "\n"
+            "Подсказки тренеров: " + hints_text + "\n"
+            "Решение правилого движка: пресет " + str(decision["preset"])
+            + ", режим " + str(decision["gameMode"])
+            + ", уверенность " + str(decision["confidence"])
+            + "; кандидаты: " + candidates_text + "\n"
+            "Каталог пресетов:\n" + catalog_lines + "\n"
+            "Дай JSON-ответ."
+        )
+
+    def answer(self):
+        return json.dumps({
+            "preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"
+        }, ensure_ascii=False)
+
+    # -- validation ----------------------------------------------------------
+
+    def test_partial_context_is_accepted_with_none_decision(self):
+        context = self.wire_context(self.partial_body())
+        self.assertIsNone(context["ruleDecision"])
+        self.assertEqual(context["dataCompleteness"], "partial")
+        # A full decision still marks the context as complete.
+        full_context = self.wire_context(self.full_body())
+        self.assertEqual(full_context["dataCompleteness"], "full")
+        self.assertIsInstance(full_context["ruleDecision"], dict)
+
+    def test_null_decision_without_partial_marker_is_rejected_with_400(self):
+        cases = {}
+        body = self.full_body()
+        body["ruleDecision"] = None
+        cases["absent_marker"] = body
+        body = self.full_body()
+        body["ruleDecision"] = None
+        body["dataCompleteness"] = "full"
+        cases["wrong_marker"] = body
+        for name, body in cases.items():
+            with self.subTest(case=name):
+                with self.assertRaises(self.advisor.AdvisorValidationError):
+                    self.advisor.validate_context(body)
+                # Same fail-closed verdict over the real endpoint.
+                with mock.patch.object(
+                        self.advisor, "call_openrouter",
+                        side_effect=AssertionError("provider must not be called")):
+                    response = self.client.post(
+                        "/api/advisor", json=body, headers=self.auth)
+                self.assertEqual(response.status_code, 400)
+                payload = response.get_json()
+                self.assertFalse(payload["available"])
+                self.assertEqual(payload["errorKind"], "invalid_request")
+        self.assertEqual(self.read_log(), [])
+
+    def test_non_object_decision_is_still_rejected(self):
+        for value in ("P1", ["P1"], 42, True):
+            with self.subTest(value=value):
+                body = self.full_body()
+                body["ruleDecision"] = value
+                with self.assertRaises(self.advisor.AdvisorValidationError):
+                    self.advisor.validate_context(body)
+
+    def test_data_note_is_accepted_and_capped(self):
+        body = self.partial_body()
+        body["dataNote"] = "  " + "х" * 900 + "  "
+        context = self.wire_context(body)
+        self.assertEqual(len(context["dataNote"]),
+                         self.advisor.MAX_DATA_NOTE_CHARS)
+        self.assertEqual(context["dataNote"], "х" * 300)
+        # Absent note -> None, request still valid.
+        self.assertIsNone(self.wire_context(self.partial_body())["dataNote"])
+        # Non-string note is ignored, not fatal.
+        body = self.partial_body()
+        body["dataNote"] = 42
+        self.assertIsNone(self.wire_context(body)["dataNote"])
+
+    # -- prompt --------------------------------------------------------------
+
+    def test_full_decision_line_is_byte_identical_to_base(self):
+        context = self.wire_context(self.full_body())
+        messages = self.advisor.build_messages(context)
+        self.assertEqual(
+            messages,
+            [
+                {"role": "system", "content": self.advisor.SYSTEM_PROMPT},
+                {"role": "user", "content": self.base_user_content(context)},
+            ],
+        )
+        # Independent literal pin of the rules line itself: a silent reword of
+        # the full-mode prompt must fail here even if the oracle is updated.
+        self.assertIn(
+            "\nРешение правилого движка: пресет Emery_BalancedBase_v11, "
+            "режим active_control, уверенность medium; кандидаты: "
+            "Emery_BalancedBase_v11=35.7, Pep_BoxControl_bal2=23.5\n"
+            "Каталог пресетов:\n",
+            self.user_content(messages),
+        )
+
+    def test_partial_prompt_has_honest_caveat_and_note(self):
+        body = self.partial_body()
+        body["dataNote"] = "минута 6, идёт сбор данных"
+        user = self.user_content(
+            self.advisor.build_messages(self.wire_context(body)))
+        self.assertIn(
+            "Правила не дали решения (данных мало). Проанализируй доступные "
+            "сигналы и дай предварительный совет с оговоркой.",
+            user,
+        )
+        self.assertIn("Заметка: минута 6, идёт сбор данных", user)
+        # No fabricated rules line, and the rest of the payload is intact.
+        self.assertNotIn("Решение правилого движка", user)
+        self.assertNotIn("кандидаты:", user)
+        self.assertTrue(user.startswith("Ситуация (JSON): "))
+        self.assertIn("\nПодсказки тренеров: [Клопп] Отключите атаку по центру\n", user)
+        self.assertIn("\nКаталог пресетов:\n- Emery_BalancedBase_v11 | ", user)
+        self.assertTrue(user.endswith("\nДай JSON-ответ."))
+
+    def test_partial_prompt_without_note_does_not_crash(self):
+        context = self.wire_context(self.partial_body())
+        self.assertIsNone(context["dataNote"])
+        user = self.user_content(self.advisor.build_messages(context))
+        self.assertIn("Правила не дали решения", user)
+        self.assertNotIn("Заметка:", user)
+        self.assertTrue(user.endswith("\nДай JSON-ответ."))
+
+    def test_partial_system_message_overrides_the_already_decided_framing(self):
+        messages = self.advisor.build_messages(self.wire_context(self.partial_body()))
+        self.assertEqual(messages[0]["role"], "system")
+        system = messages[0]["content"]
+        self.assertIn(
+            "ВНИМАНИЕ: в этом запросе правила НЕ дали решения (данных мало).",
+            system,
+        )
+        self.assertIn("считай себя первым мнением", system)
+        self.assertIn("дай предварительный совет с оговоркой", system)
+        # The addendum names the user line it defers to, so the two messages
+        # cannot contradict each other unnoticed.
+        self.assertIn("«Правила не дали решения...» — актуальна", system)
+        self.assertNotEqual(system, self.advisor.SYSTEM_PROMPT,
+                            "partial system message must not be the untouched base prompt")
+
+    def test_full_mode_system_message_is_byte_identical_to_base(self):
+        messages = self.advisor.build_messages(self.wire_context(self.full_body()))
+        self.assertEqual(messages[0]["content"], self.advisor.SYSTEM_PROMPT)
+        self.assertNotIn("ВНИМАНИЕ:", messages[0]["content"])
+        # Independent literal oracle: the base system prompt is untouched.
+        self.assertTrue(messages[0]["content"].startswith(
+            "Ты — футбольный тренер-аналитик в онлайн-менеджере SLF. "
+            "Встроенный правилый движок уже дал рекомендацию"))
+        self.assertTrue(messages[0]["content"].endswith(
+            "4. Учитывай подсказки тренеров (если даны) и поле риск у пресета."))
+
+    def test_full_mode_ignores_data_note_in_the_prompt(self):
+        body = self.full_body()
+        body["dataNote"] = "не должно попасть в полный промпт"
+        context = self.wire_context(body)
+        user = self.user_content(self.advisor.build_messages(context))
+        self.assertEqual(user, self.base_user_content(context))
+        self.assertNotIn("не должно попасть в полный промпт", user)
+
+    # -- end to end ----------------------------------------------------------
+
+    def test_partial_request_returns_advice_and_logs_null_rules_preset(self):
+        with mock.patch.object(
+                self.advisor, "call_openrouter",
+                return_value=(self.answer(), 123)):
+            response = self.client.post(
+                "/api/advisor", json=self.partial_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["available"])
+        self.assertEqual(payload["preset"], "Pep_BoxControl_bal2")
+        log = self.read_log()
+        self.assertEqual(len(log), 1)
+        record = log[0]
+        self.assertEqual(record["outcome"], "ok")
+        self.assertIsNone(record["rulesPreset"])
+        self.assertEqual(record["llmPreset"], "Pep_BoxControl_bal2")
+        # Advice-record format is unchanged: same keys, rulesPreset is None.
+        self.assertEqual(
+            set(record),
+            {"id", "ts", "gameId", "evaluationGameId", "scoreAtAdvice",
+             "minute", "rulesPreset", "llmPreset", "confidence", "latencyMs",
+             "outcome", "errorKind", "model"},
+        )
+
+    def test_partial_error_path_logs_null_rules_preset(self):
+        with mock.patch.object(
+                self.advisor, "call_openrouter",
+                return_value=("извините, не могу", 500)), \
+                mock.patch.object(self.advisor.time, "sleep"):
+            response = self.client.post(
+                "/api/advisor", json=self.partial_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        log = self.read_log()
+        self.assertEqual(len(log), 1)
+        self.assertEqual(log[0]["outcome"], "error")
+        self.assertIsNone(log[0]["rulesPreset"])
+
+
 if __name__ == "__main__":
     unittest.main()
