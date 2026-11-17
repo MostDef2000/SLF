@@ -430,8 +430,13 @@ class AdvisorEnrichmentTestCase(unittest.TestCase):
              "confidence": "high", "outcome": "ok"},
         ])
         content = self.user_content(self.capture_messages())
+        tail_lines = self.history_lines(content)
+        same_game_at = next(
+            index for index, line in enumerate(tail_lines) if "SameGameOlder" in line)
+        other_game_at = next(
+            index for index, line in enumerate(tail_lines) if "OtherLatest" in line)
         self.assertLess(
-            content.index("SameGameOlder"), content.index("OtherLatest"),
+            same_game_at, other_game_at,
             "same-game history must be rendered before newer other-game rows")
 
     def test_empty_log_prompt_is_byte_identical_to_legacy(self):
@@ -467,7 +472,7 @@ class AdvisorEnrichmentTestCase(unittest.TestCase):
         self.assertLessEqual(len(enrichment), self.advisor.ENRICHMENT_BUDGET_CHARS)
         self.assertIn(self.advisor.ENRICHMENT_TRUNCATION_MARKER, enrichment)
 
-        expected_lines = set()
+        expected_lines = set(self.advisor._aggregate_history(self.read_log()))
         for record, cross_game in self.advisor._select_history(self.read_log(), "g-123"):
             expected_lines.add(self.advisor._render_history_record(record, cross_game))
         for entry in pack["rules"]:
@@ -493,6 +498,7 @@ class AdvisorEnrichmentTestCase(unittest.TestCase):
         # And the consultation still succeeds with no history section.
         content = self.user_content(self.capture_messages())
         self.assertNotIn("История советов (сервер):", content)
+        self.assertNotIn("по сохранённой истории", content)
 
     def test_missing_or_corrupt_knowledge_pack_degrades_to_empty_knowledge(self):
         # No pack file at all: the server reader returns None.
@@ -569,6 +575,142 @@ class AdvisorEnrichmentTestCase(unittest.TestCase):
             self.advisor.ENRICHMENT_KNOWLEDGE_ENTRY_CHARS,
             "knowledge entry line exceeds the per-entry char cap")
         self.assertIn("…", knowledge_lines[0])
+
+    # -- Ф2b follow-up (#458): whole-log aggregate ---------------------------
+
+    def aggregate_record(self, preset, apply_state, ts, game_id="g-123"):
+        record = {
+            "ts": ts,
+            "gameId": game_id,
+            "evaluationGameId": game_id,
+            "minute": 20,
+            "rulesPreset": "R-" + preset,
+            "llmPreset": preset,
+            "confidence": "high",
+            "outcome": "ok",
+        }
+        if apply_state == "ok":
+            record["apply"] = {"ok": True}
+        elif apply_state == "failed":
+            record["apply"] = {"ok": False}
+        return record
+
+    def test_aggregate_counts_cover_the_whole_log(self):
+        self.seed_log([
+            self.aggregate_record("AggAlpha", "ok", ts=6),
+            self.aggregate_record("AggAlpha", "failed", ts=5),
+            self.aggregate_record("AggBeta", "unrecorded", ts=4),
+            self.aggregate_record("AggAlpha", "ok", ts=3, game_id="g-other"),
+            self.aggregate_record("AggBeta", "ok", ts=2, game_id="g-other"),
+            self.aggregate_record("AggGamma", "failed", ts=1, game_id=None),
+        ])
+        lines = self.advisor._aggregate_history(self.read_log())
+        self.assertEqual(len(lines), 1)
+        line = lines[0]
+        self.assertIn("по сохранённой истории (до 5000 записей)", line)
+        self.assertIn("консультаций 6, матчей 2", line)
+        self.assertIn(
+            "AggAlpha ×3 (успешно 2, не удалось 1, не отмечено 0)", line)
+        self.assertIn(
+            "AggBeta ×2 (успешно 1, не удалось 0, не отмечено 1)", line)
+        self.assertIn(
+            "AggGamma ×1 (успешно 0, не удалось 1, не отмечено 0)", line)
+        # The aggregate reaches the prompt under the existing history header.
+        content = self.user_content(self.capture_messages())
+        self.assertIn("консультаций 6, матчей 2", content)
+
+    def test_aggregate_evaluation_facts_stay_qualified(self):
+        with_delta = self.evaluation_record(ts=3000)
+        missing_delta = self.evaluation_record(ts=2000, scoreAtAdvice=None)
+        missing_delta["evaluation"]["scoreDelta"] = None
+        missing_delta["evaluation"]["deltaStatus"] = "missing_baseline"
+        unknown_side = self.evaluation_record(ts=1000)
+        unknown_side["evaluation"]["orientation"] = "unknown"
+        self.seed_log([with_delta, missing_delta, unknown_side])
+        lines = self.advisor._aggregate_history(self.read_log())
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(
+            lines[1],
+            "- позиционная дельта по сохранённой истории "
+            "(не оценка эффекта пресета; до 5000 записей): "
+            "записей с Δ 2, без Δ 1; своя сторона неизвестна: 1",
+        )
+        self.assertLessEqual(
+            sum(len(line) + 1 for line in lines),
+            self.advisor.ENRICHMENT_AGGREGATE_CHARS)
+        # No causal wording anywhere in the aggregate block.
+        for line in lines:
+            if "эффект" in line:
+                self.assertIn("не оценка эффекта пресета", line)
+            for forbidden in ("средн", "эффектив", "влияет", "приводит к"):
+                self.assertNotIn(forbidden, line.lower())
+
+    def test_aggregate_is_prepended_before_the_tail_under_same_header(self):
+        self.seed_log([
+            self.aggregate_record("AggTail", "ok", ts=i)
+            for i in range(1, 13)
+        ])
+        content = self.user_content(self.capture_messages())
+        header_at = content.index("История советов (сервер):")
+        aggregate_at = content.index("- по сохранённой истории")
+        first_tail_at = content.index("- мин ")
+        self.assertLess(header_at, aggregate_at,
+                        "aggregate must stay under the history header")
+        self.assertLess(aggregate_at, first_tail_at,
+                        "aggregate must precede the recent 8+4 tail")
+        self.assertIn("консультаций 12", content)
+
+    def test_aggregate_caps_preset_lines_at_top_counts(self):
+        records = []
+        ts = 100000
+        for rank in range(8):
+            for _ in range(8 - rank):
+                records.append(self.aggregate_record(
+                    f"Preset{rank}", "ok", ts=ts))
+                ts -= 1
+        self.seed_log(records)
+        line = self.advisor._aggregate_history(self.read_log())[0]
+        self.assertLessEqual(len(line), self.advisor.ENRICHMENT_AGGREGATE_CHARS)
+        self.assertIn("Preset0 ×8", line)
+        self.assertIn("Preset4 ×4", line)
+        for dropped in ("Preset5", "Preset6", "Preset7"):
+            self.assertNotIn(dropped, line)
+
+    def test_aggregate_failure_keeps_the_tail_history(self):
+        self.seed_log([self.aggregate_record("AggAlpha", "ok", ts=1)])
+        with mock.patch.object(
+                self.advisor, "_aggregate_history",
+                side_effect=RuntimeError("aggregate failure")):
+            enrichment = self.advisor.build_enrichment(
+                self.data_dir(), {"gameId": "g-123"}, None)
+        # The additive aggregate is gone, the working 8+4 tail is not.
+        self.assertNotIn("по сохранённой истории", enrichment)
+        self.assertIn("История советов (сервер):", enrichment)
+        self.assertIn("мин 20: правила R-AggAlpha → LLM AggAlpha", enrichment)
+
+    def test_aggregate_char_cap_keeps_the_delta_line_intact(self):
+        records = []
+        for rank in range(5):
+            preset = f"PresetPinch{rank}"
+            for state in ("ok", "failed", "unrecorded"):
+                record = self.aggregate_record(preset, state, ts=1)
+                records.extend([record] * 4115)
+        records.append(self.evaluation_record(ts=999999))
+        lines = self.advisor._aggregate_history(records)
+        self.assertEqual(len(lines), 2)
+        self.assertLessEqual(
+            sum(len(line) + 1 for line in lines),
+            self.advisor.ENRICHMENT_AGGREGATE_CHARS)
+        # The preset loop dropped the lowest-count entries to make room ...
+        self.assertIn("PresetPinch0 ×12345", lines[0])
+        self.assertNotIn("PresetPinch4", lines[0])
+        # ... while the delta line survives byte-intact.
+        self.assertEqual(
+            lines[1],
+            "- позиционная дельта по сохранённой истории "
+            "(не оценка эффекта пресета; до 5000 записей): "
+            "записей с Δ 1, без Δ 0; своя сторона неизвестна: 0",
+        )
 
     # -- Ф2c (#441): evaluation facts in the history rows --------------------
 

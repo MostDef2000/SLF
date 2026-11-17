@@ -43,6 +43,12 @@ Issue: #441. Branch: `feat/441-llm-first-button` (Ф2a).
 
 **Ф2c decisions (recorded):** score is POSITIONAL (scoreboard order vs statistics-DOM order are independent) → only positional deltas with an explicit «не оценка эффекта пресета» qualification; no own-team goals, no causal/preset-reward claims. Join key = the EXACT raw gameId (the 40-char truncated id is display-only). `outcome` stays consultation status; the new field is `evaluation`. Non-string client gameIds never join (conservative, no false joins). Results that never arrive → no fabricated evaluation. Residual (pre-existing, out of scope): a corrupt `match_results_v2.json` can make the generic append path return 500 (no `CollectionCorruptError` handler there); the advisor-side index handles corruption gracefully.
 
+### Full-history aggregate extension (2026-11-17, #458)
+
+- `build_enrichment()` now prepends a compact aggregate over the retained `advisor_log_v1` (the last 5000 records, per `LOG_MAX_RECORDS`) under the existing «История советов (сервер):» header, before the unchanged 8+4 recent tail: total consultations, distinct exact `evaluationGameId`s, per-`llmPreset` recommendation counts split by apply outcome («применён успешно» / «применение не удалось» / «применение не отмечено»), and a positional-delta tally derived through `_evaluation_fact_units()`. The aggregate has its own guard: a failing aggregate is dropped while the recent tail history still renders.
+- Honesty constraints: every aggregate line is labelled «по сохранённой истории (до 5000 записей)» (the log is capped at 5000, never «вся история»); delta facts keep the «не оценка эффекта пресета» and «своя сторона неизвестна» qualifications; no average effect, impact or causal claim is produced. Top 5 presets by count; the aggregate (both lines) is capped at `ENRICHMENT_AGGREGATE_CHARS = 600`; `ENRICHMENT_BUDGET_CHARS = 6000` and the whole-entry truncation marker are unchanged.
+- Verification: `test_advisor` green (+6 aggregate tests incl. 5-digit-count char-cap and aggregate-failure tail retention; the existing budget and same-game-order assertions extended, none weakened); RED-on-base `26908b6` confirmed; no causal wording introduced.
+
 ## Acceptance traceability
 
 | spec NFR | task | evidence |

@@ -67,6 +67,12 @@ ENRICHMENT_KNOWLEDGE_ENTRY_CHARS = 400
 # to knowledge entries only. A history row carries the preset summary, the
 # apply status and (when materialized) the positional result evaluation.
 ENRICHMENT_HISTORY_ENTRY_CHARS = 400
+# Ф2b follow-up (#458): compact aggregate over the retained advisor log (up to
+# LOG_MAX_RECORDS consultations), prepended to the recent 8+4 tail so
+# accumulated experience reaches the prompt. Bounded so it stays small next
+# to the tail and never crowds out the knowledge section.
+ENRICHMENT_AGGREGATE_CHARS = 600
+ENRICHMENT_AGGREGATE_PRESETS = 5
 ENRICHMENT_TRUNCATION_MARKER = "(усечено по бюджету)"
 KNOWLEDGE_LABEL = (
     "Гипотезы из тактической базы "
@@ -415,6 +421,98 @@ def _render_history_record(record, cross_game=False):
     return line
 
 
+def _aggregate_history(records):
+    """Compact aggregate over the retained advisor log, never a causal claim.
+
+    The log keeps only the last LOG_MAX_RECORDS (5000) consultations, so this
+    block states «по сохранённой истории (до 5000 записей)» — accumulated
+    experience the recent 8+4 tail cannot carry, but never the claim that it
+    covers all history. It states only counts: consultations, distinct games
+    (exact `evaluationGameId`), per-`llmPreset` recommendations with their
+    apply outcomes, and a positional-delta tally. Delta facts reuse
+    _evaluation_fact_units(), so the «не оценка эффекта пресета» and «своя
+    сторона неизвестна» qualifications are preserved and no average/effect/
+    causal claim is ever made. The provenance label keeps the aggregate from
+    being mistaken for the current match.
+    """
+    rows = [record for record in records if isinstance(record, dict)]
+    if not rows:
+        return []
+
+    total = len(rows)
+    games = set()
+    presets = {}
+    evaluated = with_delta = missing_delta = unknown_side = 0
+    for record in rows:
+        game_id = record.get("evaluationGameId")
+        if isinstance(game_id, str) and game_id.strip():
+            games.add(game_id)
+        preset = record.get("llmPreset")
+        if isinstance(preset, str) and preset.strip():
+            stats = presets.setdefault(
+                preset.strip(), {"count": 0, "ok": 0, "failed": 0, "unrecorded": 0})
+            stats["count"] += 1
+            apply_fact = record.get("apply")
+            if isinstance(apply_fact, dict) and "ok" in apply_fact:
+                if bool(apply_fact.get("ok")):
+                    stats["ok"] += 1
+                else:
+                    stats["failed"] += 1
+            else:
+                stats["unrecorded"] += 1
+        units = _evaluation_fact_units(record.get("evaluation"))
+        if units:
+            evaluated += 1
+            facts = [fact for unit in units for fact in unit]
+            if any(fact.startswith("Δ позиций") for fact in facts):
+                with_delta += 1
+            elif any(fact.startswith("Δ неизвестна") for fact in facts):
+                missing_delta += 1
+            if "своя сторона неизвестна" in facts:
+                unknown_side += 1
+
+    header = (
+        f"- по сохранённой истории (до {LOG_MAX_RECORDS} записей): "
+        f"консультаций {total}"
+    )
+    if games:
+        header += f", матчей {len(games)}"
+
+    delta_line = ""
+    if evaluated:
+        delta_line = (
+            "- позиционная дельта по сохранённой истории "
+            f"(не оценка эффекта пресета; до {LOG_MAX_RECORDS} записей): "
+            f"записей с Δ {with_delta}, без Δ {missing_delta}; "
+            f"своя сторона неизвестна: {unknown_side}"
+        )
+
+    lines = [header + "."]
+    allowed = ENRICHMENT_AGGREGATE_CHARS - (len(delta_line) + 1 if delta_line else 0)
+    if presets:
+        ordered = sorted(presets.items(), key=lambda item: (-item[1]["count"], item[0]))
+        rendered = [
+            f"{_shorten_ident(preset)} ×{stats['count']} "
+            f"(успешно {stats['ok']}, не удалось {stats['failed']}, "
+            f"не отмечено {stats['unrecorded']})"
+            for preset, stats in ordered[:ENRICHMENT_AGGREGATE_PRESETS]
+        ]
+
+        def preset_line():
+            return header + "; пресеты по сохранённой истории: " + "; ".join(rendered) + "."
+
+        while len(preset_line()) > allowed and len(rendered) > 1:
+            rendered.pop()
+        line = preset_line()
+        if len(line) > allowed:
+            line = line[:max(0, allowed - 1)] + "…"
+        lines[0] = line
+
+    if delta_line:
+        lines.append(delta_line)
+    return lines
+
+
 def _knowledge_entries(data):
     """Extract the knowledge-pack rule list; preserve the generator's order."""
     if isinstance(data, dict):
@@ -504,25 +602,34 @@ def _assemble_enrichment(sections, budget):
 def build_enrichment(data_dir, context, read_knowledge=None):
     """Build the bounded server-side enrichment block for the advisor prompt.
 
-    Two optional sections: recent advisor-log history (records of this game
-    first, then the latest other-game records) and seed-hypothesis rules from
-    the tactical knowledge pack file (the daily exporter artifact), not the
-    retired `tactics` collection. The log is read-only and snapshotted under
-    _LOG_LOCK; the lock is released before returning. Any failure — missing
-    or corrupt log, missing knowledge pack, a raising reader — degrades to an
-    absent section: enrichment must never fail a consultation.
+    Two optional sections: advisor-log history (a compact aggregate over the
+    retained log first, then records of this game, then the latest other-game
+    records) and seed-hypothesis rules from the tactical knowledge pack file
+    (the daily exporter artifact), not the retired `tactics` collection. The
+    log is read-only and snapshotted under _LOG_LOCK; the lock is released
+    before returning. Any failure — missing or corrupt log, missing knowledge
+    pack, a raising reader — degrades to an absent section: enrichment must
+    never fail a consultation.
     """
     sections = []
 
+    records = []
     try:
         records = _read_log_snapshot(data_dir)
-        history_lines = [
+        tail_lines = [
             _render_history_record(record, cross_game)
             for record, cross_game in _select_history(
                 records, context.get("evaluationGameId"))
         ]
     except Exception:  # defensive: enrichment is additive, never fatal
-        history_lines = []
+        tail_lines = []
+    # The whole-log aggregate is additive: a bug there must never remove the
+    # working recent-tail history, so it gets its own guard.
+    try:
+        aggregate_lines = _aggregate_history(records)
+    except Exception:  # defensive: aggregate is optional, tail is not
+        aggregate_lines = []
+    history_lines = aggregate_lines + tail_lines
     if history_lines:
         sections.append(("История советов (сервер):", history_lines))
 
