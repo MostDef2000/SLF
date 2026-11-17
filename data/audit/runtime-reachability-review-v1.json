@@ -139,6 +139,15 @@
       ]
     },
     {
+      "file": "src/modules/strategy-data-recommendations/llm-second-opinion.js",
+      "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
+      "classification": "ACTIVE",
+      "evidence": [
+        "Directly invoked by strategy-data-task-a-ui-extension.js on /game.php (LLMSecondOpinion.buildPayload, requestSecondOpinion, renderAnswer, mountAnswer and, since the chat phase 1, renderChat/mountChat); registered in the bundle-order dependency audit and active in the production advisor flow, which applies presets only on explicit click.",
+        "The chat phase added cleanDialog/renderChat/mountChat to the same active object; no new module and no legacy API, storage, parser or telemetry path. The single legacy-marker word in the source is a comment on the pre-dialog payload keeping its legacy shape/bytes, not obsolete code."
+      ]
+    },
+    {
       "file": "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
       "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
       "classification": "MIXED_ACTIVE_LEGACY",

@@ -836,6 +836,9 @@
         // contains candidate scores, veto reasons, vectors and confidence.
         const html = buildManualRecommendationHtml(snapshot);
         if (el) el.innerHTML = html;
+        // The panel redraw wipes the chat node with the rest of the content;
+        // re-mount it from STATE so the dialogue survives the refresh.
+        mountLlmChatWindow();
         rememberManualRecommendation(html, snapshot);
         submitManualTelemetry(snapshot);
 
@@ -908,8 +911,8 @@
         return `Ошибка советника${status ? ` (HTTP ${status})` : ''}`;
     }
 
-    async function requestLlmSecondOpinion(freshSnapshot) {
-        if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined') return;
+    async function requestLlmSecondOpinion(freshSnapshot, dialog) {
+        if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined') return null;
         const snapshot = freshSnapshot
             || (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot)
             || null;
@@ -917,41 +920,163 @@
             || (typeof STATE !== 'undefined' ? STATE.lastRuleDecision : null)
             || null;
         const registry = (typeof window !== 'undefined' && window.SLFActivePresetRegistry) || null;
-        const payload = LLMSecondOpinion.buildPayload({ snapshot, ruleDecision, registry });
+        const payload = LLMSecondOpinion.buildPayload({ snapshot, ruleDecision, registry, dialog });
         if (!payload) {
             LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
                 available: false,
                 error: 'Недостаточно данных: правило не дало решения или каталог пресетов пуст'
             }));
-            return;
+            return null;
         }
         LLMSecondOpinion.mountAnswer('<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#181818;border:1px dashed #555;border-radius:5px;color:#999;padding:7px 9px;font-size:12px;">🤖 Думает…</div>');
         try {
             const answer = await LLMSecondOpinion.requestSecondOpinion(payload);
             LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer(answer));
+            return answer || null;
         } catch (error) {
             console.error('[SLF] LLM second opinion request failed', error);
             LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
                 available: false,
                 error: llmSecondOpinionErrorText(error)
             }));
+            return null;
         }
+    }
+
+    // Phase 1 (#459): per-match dialogue kept in STATE so it survives panel
+    // redraws. Mirrors the server caps (≤20 turns, ≤500 chars per turn).
+    let llmChatBusy = false;
+
+    function llmDialogTurnCap() {
+        return (typeof LLMSecondOpinion !== 'undefined' && LLMSecondOpinion.MAX_DIALOG_TURNS) || 20;
+    }
+
+    function llmDialogForGame(gameId) {
+        if (typeof STATE === 'undefined' || !STATE) return [];
+        // No gameId -> no dialogue: a shared placeholder key would mix
+        // different matches together and send dialogue with gameId:null.
+        const key = gameId ? String(gameId) : '';
+        if (!key) return [];
+        if (!STATE.llmDialogByGame || typeof STATE.llmDialogByGame !== 'object') {
+            STATE.llmDialogByGame = {};
+        }
+        const turns = Array.isArray(STATE.llmDialogByGame[key]) ? STATE.llmDialogByGame[key] : [];
+        STATE.llmDialogByGame[key] = turns;
+        return turns;
+    }
+
+    function rememberLlmDialogTurn(gameId, role, text, ts) {
+        if (!gameId) return []; // nothing is stored without a real gameId
+        const turns = llmDialogForGame(gameId);
+        const turnCap = llmDialogTurnCap();
+        const charCap = (typeof LLMSecondOpinion !== 'undefined' && LLMSecondOpinion.MAX_DIALOG_TURN_CHARS) || 500;
+        turns.push({
+            role: role === 'assistant' ? 'assistant' : 'user',
+            text: String(text || '').trim().slice(0, charCap),
+            ts: typeof ts === 'number' ? ts : Date.now()
+        });
+        while (turns.length > turnCap) turns.shift();
+        return turns.slice();
+    }
+
+    function currentLlmGameId() {
+        const last = (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot) || null;
+        if (last && last.gameId) return String(last.gameId);
+        try {
+            if (typeof SnapshotEngine !== 'undefined' && typeof SnapshotEngine.build === 'function') {
+                const snapshot = SnapshotEngine.build();
+                if (snapshot && snapshot.gameId) return String(snapshot.gameId);
+            }
+        } catch (_) {
+            // No snapshot: the chat renders empty and sending is refused.
+        }
+        return '';
+    }
+
+    function wireLlmChatControls() {
+        const send = document.getElementById('slf-llm-chat-send');
+        // Direct handler (the node is freshly mounted) — same delegation-free
+        // pattern as the LLM button; the promise is returned for testability.
+        if (send) send.onclick = () => sendLlmChatTurn();
+    }
+
+    function renderLlmChatWindow(gameId) {
+        if (typeof LLMSecondOpinion === 'undefined' || typeof LLMSecondOpinion.renderChat !== 'function') return;
+        const turns = llmDialogForGame(gameId || currentLlmGameId());
+        LLMSecondOpinion.mountChat(LLMSecondOpinion.renderChat({ turns, busy: llmChatBusy }));
+        wireLlmChatControls();
+    }
+
+    function mountLlmChatWindow() {
+        if (typeof document === 'undefined') return;
+        if (typeof location !== 'undefined' && !location.pathname.includes('/game.php')) return;
+        if (!document.getElementById('slf-parser-recommendation')) return;
+        renderLlmChatWindow();
+    }
+
+    // One chat turn = one advisor request carrying the WHOLE accumulated
+    // dialogue. The answer still renders through the unchanged renderAnswer
+    // (with the «Применить пресет» button) — nothing is applied automatically.
+    async function sendLlmChatTurn() {
+        if (llmChatBusy) return null;
+        if (typeof LLMSecondOpinion === 'undefined' || typeof SnapshotEngine === 'undefined') return null;
+        const input = document.getElementById('slf-llm-chat-input');
+        const text = input && typeof input.value === 'string' ? input.value.trim() : '';
+        if (!text) return null; // blank input is ignored
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) return null;
+        const gameId = snapshot.gameId ? String(snapshot.gameId) : '';
+        if (!gameId) {
+            // Without a match id the dialogue would be shared across matches
+            // and sent with gameId:null — refuse honestly, store nothing.
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+                available: false,
+                error: 'Диалог доступен только на странице матча'
+            }));
+            return null;
+        }
+        const dialog = rememberLlmDialogTurn(gameId, 'user', text, Date.now());
+        if (input) input.value = '';
+        llmChatBusy = true;
+        renderLlmChatWindow(gameId);
+        let answer = null;
+        try {
+            answer = await requestLlmSecondOpinionFresh({ snapshot, dialog });
+        } catch (error) {
+            console.error('[SLF] LLM chat request failed', error);
+        } finally {
+            llmChatBusy = false;
+        }
+        if (answer && answer.available === true) {
+            // Honest assistant turn: the model's own reason (or a compact
+            // preset/confidence summary). A failed request adds no fake turn.
+            const summary = typeof answer.reason === 'string' && answer.reason.trim()
+                ? answer.reason
+                : `${answer.presetLabel || answer.preset || 'совет'} (уверенность: ${answer.confidence || '?'})`;
+            rememberLlmDialogTurn(gameId, 'assistant', summary, Date.now());
+        }
+        renderLlmChatWindow(gameId);
+        return answer;
     }
 
     // Ф2a (#441): self-sufficient entry — the LLM button no longer depends on
     // a manual hint click. Builds a fresh snapshot, runs the SAME rule ladder
     // the manual hint runs (RecommendationEngine.make stamps
     // snapshot.ruleDecision) and feeds it straight into the advisor flow.
-    async function requestLlmSecondOpinionFresh() {
+    // Phase 1 (#459): accepts an optional prebuilt snapshot and dialogue so the
+    // chat reuses this exact path instead of duplicating snapshot logic.
+    async function requestLlmSecondOpinionFresh(options = {}) {
+        const settings = options && typeof options === 'object' ? options : {};
+        const dialog = Array.isArray(settings.dialog) ? settings.dialog : [];
         if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined'
-            || typeof SnapshotEngine === 'undefined') return;
-        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+            || typeof SnapshotEngine === 'undefined') return null;
+        const snapshot = settings.snapshot || normalizeForeignSnapshot(SnapshotEngine.build());
         if (!snapshot) {
             LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
                 available: false,
                 error: 'Snapshot матча недоступен'
             }));
-            return;
+            return null;
         }
         snapshot.recommendationSource = 'llm_second_opinion';
         snapshot.generatorVersion = GENERATOR_VERSION;
@@ -973,9 +1098,9 @@
                 available: false,
                 error: 'Правила не дали решения на текущих данных матча'
             }));
-            return;
+            return null;
         }
-        await requestLlmSecondOpinion(snapshot);
+        return requestLlmSecondOpinion(snapshot, dialog);
     }
 
     // Ф2a (#441): one-click apply of the suggested preset. Runs ONLY on an
@@ -1067,6 +1192,7 @@
         patchCompactCoachMode();
         mountManualButton();
         mountForeignSelector();
+        mountLlmChatWindow();
         bindFinalTacticApplyDelegation();
         bindLlmApplyDelegation();
     }
