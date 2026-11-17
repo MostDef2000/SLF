@@ -714,7 +714,7 @@
         async function closeActive(reason, snapshot = null, next = {}) {
             snapshot = snapshot || SnapshotEngine.build();
             const state = loadState(getGameId(snapshot));
-            if (!state?.activation || state.activation.status !== 'active') return null;
+            if (!state?.activation || (state.activation.status !== 'active' && state.activation.status !== 'indeterminate')) return null;
             const experiment = experimentFor(state);
             if (!experiment) return null;
             const activation = clone(state.activation);
@@ -753,13 +753,44 @@
 
         function isActive() {
             const state = loadState(String(MatchStateParser.getGameId() || ''));
-            return state?.activation?.status === 'active';
+            // An indeterminate activation is still in progress (never reusable
+            // and never completed): the shared apply path must be able to
+            // resolve it with a later confirmed production preset.
+            return state?.activation?.status === 'active' || state?.activation?.status === 'indeterminate';
+        }
+        // A failed production preset apply that may have left the native
+        // controls unconfirmed: keep the activation (it must never be silently
+        // reusable or reported as a completed experiment) and record the honest
+        // indeterminate status. Never writes `completed`.
+        function markIndeterminate(reason, failure = null) {
+            const state = loadState(String(MatchStateParser.getGameId() || ''));
+            if (!state?.activation || state.activation.status !== 'active') return null;
+            state.activation.status = 'indeterminate';
+            state.activation.indeterminateReason = reason || 'apply_unverified';
+            state.activation.indeterminateAtTs = Date.now();
+            state.activation.failure = clone(failure || null);
+            persistState(state);
+            renderUI();
+            return clone(state.activation);
         }
         async function checkpoint(source = 'explicit_checkpoint', snapshot = null) {
             snapshot = snapshot || SnapshotEngine.build();
             const state = loadState(getGameId(snapshot));
             if (!state?.assignment) return {active:false,completed:null};
             if (state.outbox?.length) void flushOutbox(state);
+            if (state?.activation?.status === 'indeterminate') {
+                // An unconfirmed apply stays indeterminate: record the observed
+                // fingerprint honestly instead of fabricating a tactic_changed
+                // completion the exit telemetry could not confirm.
+                const actual = tacticFingerprint(getCurrentTactic());
+                if (state.activation.lastObservedFingerprint !== actual) {
+                    state.activation.lastObservedFingerprint = actual;
+                    state.activation.lastObservedAtTs = Date.now();
+                    persistState(state);
+                }
+                renderUI();
+                return {active:false,indeterminate:true,completed:clone(state.completed || null)};
+            }
             if (!state?.activation || state.activation.status !== 'active') {
                 renderUI();
                 return {active:false,completed:clone(state.completed || null)};
@@ -836,7 +867,13 @@
             const shortId = experiment.experimentId.replace(/^EXP-561-P\d+-/,'EXP-');
             panel.dataset.experimentId = experiment.experimentId;
             panel.dataset.populationVersion = populationVersion;
-            if (state.activation?.status === 'active') {
+            if (state.activation?.status === 'indeterminate') {
+                status.textContent = `● ${shortId} ПРЕРВАН · состояние тактики не подтверждено`;
+                status.style.color = '#ff9f43';
+                detail.textContent = `Применение пресета не подтвердилось (${state.activation.indeterminateReason || 'apply_unverified'}). Тест не завершён и не будет засчитан как обычный.`;
+                button.disabled = true;
+                button.textContent = 'Тест прерван';
+            } else if (state.activation?.status === 'active') {
                 status.textContent = `● ${shortId} ACTIVE${state.activation.startedAtMinute!=null?` · применён на ${state.activation.startedAtMinute}'`:''}`;
                 status.style.color = '#43f58c';
                 detail.textContent = 'Эксперимент применён. Следующая проверка — только по ↻ Подсказка, выбору production preset или финальному парсингу.';
@@ -917,7 +954,7 @@
                 getPopulation(){return clone(population);},
                 getAssignment(gameId){return clone(loadState(String(gameId||MatchStateParser.getGameId()||''))?.assignment||null);},
                 assignForGame(gameId){const experiment=selectExperiment(String(gameId||''));return {experimentId:experiment.experimentId,genomeFingerprint:experiment.genomeFingerprint,parentExperimentId:experiment.parentExperimentId,selectionWeightPct:experiment.selectionWeightPct};},
-                activate,closeActive,checkpoint,isActive,mountUI,
+                activate,closeActive,checkpoint,isActive,markIndeterminate,mountUI,
                 flushOutbox(){return flushOutbox(loadState(String(MatchStateParser.getGameId()||'')));}
             };
             void mountUI();
