@@ -8,9 +8,11 @@ Fail-closed contract:
 - No OPENROUTER_API_KEY -> HTTP 503 {"available": false,
   "errorKind": "advisor_not_configured"}; the feature is dormant, nothing
   else on the API changes.
-- The model must answer with a JSON object selecting a preset id from the
-  client-sent catalog. Anything else gets one corrective retry, then an
-  honest HTTP 502 — a hallucinated preset never reaches the client.
+- The model must answer with a JSON object in one of two modes: "adjust"
+  (1..3 validated slider changes) or "switch" (a preset id from the
+  client-sent catalog). A legacy preset-only answer is accepted as a
+  "switch". Anything else gets one corrective retry, then an honest HTTP
+  502 — a hallucinated preset never reaches the client.
 - The advisor never returns apply instructions and never mutates tactical
   state; it is rendered as advice next to the rules hint.
 - Egress is direct by default. Setting SLF_ADVISOR_PROXY=socks5h://host:port
@@ -95,18 +97,56 @@ logger = logging.getLogger(__name__)
 
 CONFIDENCE_LEVELS = ("low", "medium", "high")
 
+# #465: two advisory modes. "adjust" nudges 1..3 individual sliders (the normal
+# case); "switch" replaces the preset and is reserved for a radical picture
+# change. Domains mirror native-template-api.js CONTROL_DOMAINS.
+CONTROL_DOMAINS = {
+    "def_line": (1, 3),
+    "press_line": (1, 3),
+    "def_width": (1, 3),
+    "press_intense": (1, 5),
+    "build_type": (1, 3),
+    "build_temp": (1, 3),
+    "build_long": (1, 3),
+    "build_fast": (1, 3),
+    "style": (1, 5),
+    "pass_risk": (1, 5),
+    "dribble": (1, 5),
+    "cross": (1, 3),
+    "corner": (1, 2),
+    "shot": (1, 3),
+}
+PRIORITY_DIRECTIONS = ("left", "center", "right")
+ADVISOR_MODES = ("adjust", "switch")
+MAX_ADJUST_CHANGES = 3
+CONTROL_DOMAINS_TEXT = ", ".join(
+    f"{name} {low}-{high}" for name, (low, high) in CONTROL_DOMAINS.items()
+)
+
 SYSTEM_PROMPT = (
     "Ты — футбольный тренер-аналитик в онлайн-менеджере SLF. Встроенный "
     "правилый движок уже дал рекомендацию; твоя роль — второе мнение.\n"
     "Жёсткие правила:\n"
-    "1. Выбери ОДИН пресет строго из каталога (поле id). Запрещено "
-    "выдумывать id или брать пресет вне каталога.\n"
-    "2. Ответ — ТОЛЬКО валидный JSON без markdown-обёртки, вида "
-    '{"preset":"<id>","confidence":"low|medium|high","reason":"<1-2 предложения по-русски>"}.\n'
-    "3. В reason объясни, почему этот пресет подходит именно сейчас. Если "
+    "1. Есть два режима ответа. По умолчанию (обычная игра) — режим "
+    '"adjust": тонкая подстройка ползунков. Режим "switch" — только когда '
+    "игру нужно радикально переломить (например, полностью в защиту или "
+    "полностью в атаку) и смена пресета оправдана.\n"
+    "2. Ответ — ТОЛЬКО валидный JSON без markdown-обёртки, один из двух видов:\n"
+    '{"mode":"adjust","changes":[{"control":"<ползунок>","value":"<в диапазоне>"}],'
+    '"confidence":"low|medium|high","reason":"<1-2 предложения по-русски>"}\n'
+    "или\n"
+    '{"mode":"switch","preset":"<id из каталога>","confidence":"low|medium|high",'
+    '"reason":"<1-2 предложения по-русски>"}.\n'
+    "3. В режиме adjust: от 1 до 3 изменений, один и тот же control — не "
+    "больше одного раза; value — строка с числом в допустимом диапазоне "
+    "ползунка (диапазоны указаны в запросе).\n"
+    "4. В режиме switch пресет строго из каталога (поле id); выдумывать id "
+    "запрещено. Если клиент не прислал текущие настройки, режим adjust "
+    "недоступен — выбирай switch из каталога.\n"
+    "5. В reason объясни, почему этот совет подходит именно сейчас. Если "
     "ты согласен с правилым движком — скажи это коротко; если нет — "
     "объясни, чем оправдано расхождение.\n"
-    "4. Учитывай подсказки тренеров (если даны) и поле риск у пресета."
+    "6. Учитывай подсказки тренеров (если даны) и поле риск у пресета."
 )
 
 # #461: the base prompt above assumes the rules engine already decided. In
@@ -150,6 +190,22 @@ def _clean_str(value, limit):
     if not isinstance(value, str):
         return ""
     return value.strip()[:limit]
+
+
+def _valid_control_value(control, value):
+    """A slider value is a plain decimal string inside the control's domain."""
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if not text.isascii() or not text.isdigit():
+        return False
+    # Every domain is single-digit (max 5): reject overlong strings BEFORE
+    # int(), which raises ValueError above Python's 4300-digit limit (3.11+).
+    # Two characters stay allowed so "05" keeps working.
+    if len(text) > 2:
+        return False
+    low, high = CONTROL_DOMAINS[control]
+    return low <= int(text) <= high
 
 
 def validate_context(data):
@@ -229,6 +285,27 @@ def validate_context(data):
             if text:
                 hints.append(text)
 
+    # #465: optional current slider vector. Cleaned like signals: unknown keys
+    # and out-of-domain values are dropped, the request is never failed on them.
+    controls_raw = data.get("currentControls")
+    current_controls = None
+    if controls_raw is not None:
+        if not isinstance(controls_raw, dict):
+            raise AdvisorValidationError("currentControls must be an object")
+        current_controls = {}
+        for key, value in controls_raw.items():
+            if key in CONTROL_DOMAINS and _valid_control_value(key, value):
+                current_controls[key] = value.strip()
+            elif key == "priority" and isinstance(value, list):
+                priority = []
+                for direction in value:
+                    if (isinstance(direction, str)
+                            and direction in PRIORITY_DIRECTIONS
+                            and direction not in priority):
+                        priority.append(direction)
+                if priority:
+                    current_controls["priority"] = priority
+
     # Phase 1 (#459): optional dialogue for the current match. Fail-closed like
     # presetCatalog: one malformed turn rejects the whole request.
     dialog_raw = data.get("dialog")
@@ -299,6 +376,7 @@ def validate_context(data):
         "score": score,
         "currentPreset": _clean_str(data.get("currentPreset"), 64) or None,
         "developerHints": hints,
+        "currentControls": current_controls,
         "dialog": dialog,
         # #461: partial mode keeps ruleDecision=None all the way to the prompt.
         "ruleDecision": None if decision_raw is None else {
@@ -756,11 +834,21 @@ def build_messages(context, enrichment=""):
             + "; кандидаты: " + candidates_text + "\n"
         )
     hints_text = "; ".join(context["developerHints"]) or "нет"
+    controls = context.get("currentControls")
+    controls_text = ""
+    if controls:
+        controls_text = (
+            "Текущие настройки (ползунки): "
+            + json.dumps(controls, ensure_ascii=False) + "\n"
+            "Допустимые диапазоны ползунков: " + CONTROL_DOMAINS_TEXT
+            + "; приоритет: left, center, right\n"
+        )
     situation = {k: context[k] for k in ("gameId", "minute", "bucket", "score", "currentPreset", "signals")}
     user_payload = (
         "Ситуация (JSON): " + json.dumps(situation, ensure_ascii=False) + "\n"
         "Подсказки тренеров: " + hints_text + "\n"
         + decision_text
+        + controls_text
         + "Каталог пресетов:\n" + catalog_lines + "\n"
     )
     if enrichment:
@@ -1020,20 +1108,72 @@ def extract_json_object(text):
     return None
 
 
+def _validate_changes(raw):
+    """Validate an adjust-mode change list; return the cleaned list."""
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("mode=adjust требует непустой список changes")
+    if len(raw) > MAX_ADJUST_CHANGES:
+        raise ValueError(f"changes: не больше {MAX_ADJUST_CHANGES} изменений за раз")
+    changes = []
+    seen = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            raise ValueError("каждое изменение — объект с control и value")
+        control = item.get("control")
+        if not isinstance(control, str) or control not in CONTROL_DOMAINS:
+            raise ValueError(f"control '{control}' не из списка ползунков")
+        if control in seen:
+            raise ValueError(f"control '{control}' повторяется; один ползунок — один раз")
+        value = item.get("value")
+        if not _valid_control_value(control, value):
+            low, high = CONTROL_DOMAINS[control]
+            raise ValueError(f"value для {control} должно быть строкой {low}..{high}")
+        seen.add(control)
+        changes.append({"control": control, "value": value.strip()})
+    return changes
+
+
 def validate_answer(obj, catalog_ids):
-    """Return (preset, confidence, reason) or raise AdvisorValidationError-like feedback."""
+    """Validate a model answer; return a normalized mode payload.
+
+    Accepted shapes:
+    - legacy, no "mode": {"preset":..., "confidence":..., "reason":...} —
+      treated as mode "switch" (backward compatibility);
+    - {"mode":"switch","preset":...}: preset must be in the catalog;
+    - {"mode":"adjust","changes":[{"control":...,"value":...}]}: 1..3 unique
+      controls with in-domain string values; preset is not required.
+
+    Returns {"mode","preset","changes","confidence","reason"} or raises
+    ValueError with corrective feedback.
+    """
     if not isinstance(obj, dict):
         raise ValueError("ответ не является JSON-объектом")
-    preset = obj.get("preset")
-    if not isinstance(preset, str) or preset not in catalog_ids:
-        raise ValueError(f"preset '{preset}' отсутствует в каталоге; выбери id строго из каталога")
+    mode = obj.get("mode")
+    if mode is None:
+        mode = "switch"
+    if mode not in ADVISOR_MODES:
+        raise ValueError('mode должен быть "adjust" или "switch"')
+    if mode == "switch":
+        preset = obj.get("preset")
+        if not isinstance(preset, str) or preset not in catalog_ids:
+            raise ValueError(f"preset '{preset}' отсутствует в каталоге; выбери id строго из каталога")
+        changes = None
+    else:
+        preset = None
+        changes = _validate_changes(obj.get("changes"))
     confidence = obj.get("confidence", "medium")
     if confidence not in CONFIDENCE_LEVELS:
         raise ValueError("confidence должен быть low|medium|high")
     reason = obj.get("reason")
     if not isinstance(reason, str) or not reason.strip():
         raise ValueError("reason обязателен")
-    return preset, confidence, reason.strip()[:MAX_REASON_CHARS]
+    return {
+        "mode": mode,
+        "preset": preset,
+        "changes": changes,
+        "confidence": confidence,
+        "reason": reason.strip()[:MAX_REASON_CHARS],
+    }
 
 
 def _quarantine_corrupt_log(path):
@@ -1404,7 +1544,10 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
         return (
             "Твой предыдущий ответ невалиден: " + str(feedback) + ". Ответь строго одним "
             "валидным JSON-объектом без markdown: "
-            '{"preset":"<id из каталога>","confidence":"low|medium|high","reason":"..."}'
+            '{"mode":"adjust","changes":[{"control":"<ползунок>","value":"<в диапазоне>"}],'
+            '"confidence":"low|medium|high","reason":"..."} или '
+            '{"mode":"switch","preset":"<id из каталога>","confidence":"low|medium|high",'
+            '"reason":"..."}'
         )
 
     started = time.monotonic()
@@ -1457,11 +1600,16 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
             prompt_tokens = None
         try:
             answer = extract_json_object(content)
-            preset, confidence, reason = validate_answer(answer, catalog_ids)
+            validated = validate_answer(answer, catalog_ids)
         except ValueError as exc:
             attempt_feedback = str(exc)
             last_error = AdvisorError("invalid_answer", str(exc), status=200)
             continue
+        mode = validated["mode"]
+        preset = validated["preset"]
+        changes = validated["changes"]
+        confidence = validated["confidence"]
+        reason = validated["reason"]
         advice_id = uuid.uuid4().hex
         record = {
             "id": advice_id,
@@ -1473,7 +1621,9 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
             # #461: partial mode has no rules preset — the record keeps the
             # same key set and logs None instead of crashing.
             "rulesPreset": (context["ruleDecision"] or {}).get("preset"),
+            # #465: adjust picks no preset — llmPreset stays None, honestly.
             "llmPreset": preset,
+            "mode": mode,
             "confidence": confidence,
             "latencyMs": latency_ms,
             "outcome": "ok",
@@ -1482,10 +1632,13 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
             # #463: token diagnostics land in advisor_log_v1 (measurement only).
             **token_diagnostics(),
         }
+        if changes is not None:
+            record["changes"] = changes
         append_log(data_dir, record)
-        return {
+        response = {
             "available": True,
             "adviceId": advice_id,
+            "mode": mode,
             "preset": preset,
             "presetLabel": catalog_labels.get(preset, preset),
             "confidence": confidence,
@@ -1493,7 +1646,10 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
             "model": model,
             "provider": provider,
             "latencyMs": latency_ms,
-        }, 200
+        }
+        if changes is not None:
+            response["changes"] = changes
+        return response, 200
 
     latency_ms = int((time.monotonic() - started) * 1000)
     kind = last_error.kind if last_error else "unknown"

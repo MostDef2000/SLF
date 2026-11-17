@@ -46,3 +46,47 @@ The model itself (free Nemotron via `SLF_ADVISOR_MODEL`) does not retrain. Impro
 ## Definition of Done
 
 Per phase: PR merged to `main` with green CI; release (`src/**`) and/or deploy (`vps/api/**`) verified; live probe; JOURNAL updated.
+
+## Two-mode advice (#467) — acceptance examples
+
+The advisor may answer in two modes. These examples pin the behavior; they complement (not replace) the tests.
+
+```gherkin
+Feature: LLM advisor two-mode advice
+  Rule: Normal play uses fine-grained slider adjustment; a full preset switch is reserved for a radical picture change.
+
+  Scenario: Advisor proposes a small adjustment during normal play
+    Given a live match with a current slider vector sent to the advisor
+    When the model returns mode "adjust" with 1 to 3 in-domain control changes
+    Then the answer renders a "Точечная подстройка" change list with an apply-adjust button
+    And no whole-preset apply button is shown
+
+  Scenario: Adjustment is applied only on explicit click and preserves priority
+    Given an adjust answer with changes for "press_intense" and "style"
+    And the current vector has priority ["center"]
+    When the user clicks "Применить изменения"
+    Then only those two controls are applied through the bridge with strict readback
+    And the current priority ["center"] is preserved (not cleared to [])
+    And an apply event is reported keyed by adviceId
+
+  Scenario: Adjustment is never applied automatically
+    Given an adjust answer is rendered
+    When no click occurs
+    Then no tactic control is changed
+
+  Scenario: Radical picture change uses a full preset switch
+    Given the model returns mode "switch" with a preset id from the catalog
+    When the answer renders
+    Then the existing "Применить пресет" button is shown
+    And clicking it applies the whole preset through the unchanged switch path
+
+  Scenario: Legacy answer stays compatible
+    Given the model returns a preset-only answer with no "mode" field
+    When the server validates and responds
+    Then it is treated as mode "switch" with the same response shape as before
+
+  Scenario: Invalid adjustment is rejected, not applied
+    Given the model returns mode "adjust" with an unknown control, an out-of-domain value, more than 3 changes, or a duplicate control
+    When the server validates the answer
+    Then it follows the invalid_answer corrective-retry path and never reaches the client as an applicable change
+```

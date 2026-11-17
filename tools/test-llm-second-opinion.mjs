@@ -537,6 +537,10 @@ function makeUiContext({ foreign = false, advisorRejection = null, decideRule = 
     const advisorCalls = [];
     const order = [];
     const created = [];
+    // #465: the module binds its click handlers via document.addEventListener;
+    // the stub keeps them so the adjust/preset delegation is testable.
+    const clickListeners = [];
+    const logs = [];
     const panel = { id: 'slf-match-parser-panel', children: [], insertBefore(node) { this.children.push(node); } };
     const status = { id: 'slf-parser-status', textContent: '' };
     // mountAnswer (llm-second-opinion.js) mounts here; `html` keeps the markup
@@ -577,9 +581,15 @@ function makeUiContext({ foreign = false, advisorRejection = null, decideRule = 
                 created.push(node);
                 return node;
             },
-            addEventListener() {}
+            addEventListener(type, handler) {
+                if (type === 'click' && typeof handler === 'function') clickListeners.push(handler);
+            }
         },
-        UI: { addMatchParserPanel() { return null; }, addParserLog() {}, updateParserStatus() {} },
+        UI: {
+            addMatchParserPanel() { return null; },
+            addParserLog(message) { logs.push(String(message)); },
+            updateParserStatus() {}
+        },
         STATE: {
             tacticalLabRuntime: {
                 checkpoint: async (source, snap) => {
@@ -644,7 +654,31 @@ function makeUiContext({ foreign = false, advisorRejection = null, decideRule = 
         { filename: 'strategy-data-task-a-ui-extension.js' }
     );
     const llmButton = created.find(node => node.id === 'slf-llm-second-opinion-btn');
-    return { context, snapshot, checkpoints, advisorCalls, order, llmButton, answerPanel, chatInput, chatSend };
+    return { context, snapshot, checkpoints, advisorCalls, order, llmButton, answerPanel, chatInput, chatSend, clickListeners, logs };
+}
+
+// One macrotask turn lets every already-resolved promise chain (the click
+// handler's awaited bridge/report calls) drain before assertions run.
+const flushAsync = () => new Promise(resolve => setTimeout(resolve, 0));
+
+// Deliver a synthetic click to every captured document listener. Only the
+// listener owning `selectorId` sees a matching target, so the unrelated
+// delegated handlers (final tactic / preset) no-op exactly like in the page.
+function dispatchDelegatedClick(run, selectorId, btn) {
+    const target = { closest: selector => (selector === selectorId ? btn : null) };
+    for (const listener of run.clickListeners) listener({ target });
+}
+
+function makeAdjustButton(changes, adviceId = '') {
+    return {
+        id: 'slf-llm-apply-adjust',
+        dataset: {
+            slfLlmApplyChanges: typeof changes === 'string' ? changes : JSON.stringify(changes),
+            slfLlmApplyAdviceId: adviceId
+        },
+        disabled: false,
+        textContent: 'Применить изменения'
+    };
 }
 
 {
@@ -1026,6 +1060,221 @@ function lastNodeHtml(run, id) {
     assert.ok(html.includes('пустой ответ'), `honest error text in partial mode: ${html}`);
     assert.ok(!html.includes('Предварительный совет'), 'no preliminary marker on a failure');
     assert.ok(!html.includes('slf-llm-apply-btn'), 'no apply button without an answer');
+}
+
+// --- 14. #465: currentControls vector in the payload -------------------------
+// The advisor needs the current slider vector to propose fine-grained «adjust»
+// changes. The key is purely additive: callers that send nothing keep the
+// exact legacy payload bytes, and cleaning drops unknown/non-string values.
+{
+    const { LLM } = loadModule();
+    const args = { snapshot: makeSnapshot(), ruleDecision: makeRuleDecision(), registry: makeRegistry() };
+    const withoutVector = LLM.buildPayload(args);
+    assert.ok(!Object.prototype.hasOwnProperty.call(withoutVector, 'currentControls'),
+        'no currentControls key when the caller sends none');
+    const nullVector = LLM.buildPayload({ ...args, currentControls: null });
+    assert.equal(JSON.stringify(nullVector), JSON.stringify(withoutVector),
+        'an absent/null vector keeps the legacy payload bytes');
+
+    const vector = {
+        def_line: '2', press_line: ' 2 ', def_width: '2', press_intense: '3',
+        build_type: '2', build_temp: '2', build_long: '2', build_fast: '2',
+        style: '3', pass_risk: '3', dribble: '3', cross: '2', corner: '1', shot: '2',
+        unknown_control: '9',
+        priority: ['left', 'center', 'left', 'up']
+    };
+    const withVector = LLM.buildPayload({ ...args, currentControls: vector });
+    const expectedVector = {
+        def_line: '2', press_line: '2', def_width: '2', press_intense: '3',
+        build_type: '2', build_temp: '2', build_long: '2', build_fast: '2',
+        style: '3', pass_risk: '3', dribble: '3', cross: '2', corner: '1', shot: '2',
+        priority: ['left', 'center']
+    };
+    assert.equal(JSON.stringify(withVector.currentControls), JSON.stringify(expectedVector),
+        'known control strings survive, unknown keys drop, priority is a clean subset');
+    const additive = JSON.parse(JSON.stringify(withVector));
+    delete additive.currentControls;
+    assert.equal(JSON.stringify(additive), JSON.stringify(withoutVector),
+        'the vector is purely additive; the rest of the payload is unchanged');
+
+    // Invalid values are dropped; an empty or non-object vector is omitted.
+    const invalidOnly = LLM.buildPayload({ ...args, currentControls: { def_line: 2, priority: ['up'] } });
+    assert.ok(!Object.prototype.hasOwnProperty.call(invalidOnly, 'currentControls'),
+        'emptied vector is omitted entirely');
+    const nonObject = LLM.buildPayload({ ...args, currentControls: 'def_line=2' });
+    assert.ok(!Object.prototype.hasOwnProperty.call(nonObject, 'currentControls'),
+        'non-object vector is omitted entirely');
+}
+
+// --- 15. #465: renderAnswer adjust vs switch/legacy --------------------------
+{
+    const { LLM } = loadModule();
+    const baseAnswer = {
+        available: true, adviceId: 'adv-9', confidence: 'low',
+        reason: 'сдвинь прессинг', model: 'm', latencyMs: 1200
+    };
+    const adjustAnswer = {
+        ...baseAnswer, mode: 'adjust', preset: null, presetLabel: null,
+        changes: [{ control: 'press_intense', value: '5' }, { control: 'style', value: '4<&"' }]
+    };
+    const adjustHtml = LLM.renderAnswer(adjustAnswer);
+    assert.ok(adjustHtml.includes('Точечная подстройка'), `adjust heading rendered: ${adjustHtml}`);
+    assert.ok(adjustHtml.includes('press_intense: 5'), 'first change rendered');
+    assert.ok(adjustHtml.includes('style: 4&lt;&amp;&quot;'), 'change value escaped');
+    assert.ok(adjustHtml.includes('id="slf-llm-apply-adjust"'), 'adjust apply button rendered');
+    assert.ok(adjustHtml.includes('data-slf-llm-apply-advice-id="adv-9"'), 'advice id carried');
+    assert.ok(!adjustHtml.includes('slf-llm-apply-btn'), 'no preset apply button for adjust');
+    assert.ok(!adjustHtml.includes('Применить пресет'), 'no preset apply label for adjust');
+    assert.ok(adjustHtml.includes('только совет, тактика не применена'), 'advisory disclaimer kept');
+    assert.ok(adjustHtml.includes('(уверенность: low)'), 'confidence meta kept');
+    assert.ok(adjustHtml.includes('1.2s'), 'latency meta kept');
+    const attr = adjustHtml.match(/data-slf-llm-apply-changes="([^"]*)"/);
+    assert.ok(attr, 'changes JSON attribute rendered');
+    const decoded = attr[1]
+        .replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    assert.deepEqual(JSON.parse(decoded), adjustAnswer.changes,
+        'attribute round-trips the exact changes JSON');
+    // reason stays escaped as before.
+    const hostileAdjust = LLM.renderAnswer({
+        ...adjustAnswer, changes: [{ control: 'shot', value: '3' }], reason: '<b>odd</b>'
+    });
+    assert.ok(hostileAdjust.includes('&lt;b&gt;odd&lt;/b&gt;'), 'adjust reason escaped');
+
+    // mode absent but changes present: still the adjust rendering.
+    const changesOnly = LLM.renderAnswer({
+        ...baseAnswer, changes: [{ control: 'corner', value: '1' }]
+    });
+    assert.ok(changesOnly.includes('Точечная подстройка'), 'changes without mode render as adjust');
+    assert.ok(!changesOnly.includes('slf-llm-apply-btn'), 'no preset button for changes-only answer');
+
+    // Switch and legacy answers keep the pre-#465 preset markup byte-for-byte.
+    const switchAnswer = {
+        ...baseAnswer, mode: 'switch', preset: 'Emery_BalancedBase_v11',
+        presetLabel: 'Emery Balanced Base'
+    };
+    const switchHtml = LLM.renderAnswer(switchAnswer);
+    assert.ok(switchHtml.includes('id="slf-llm-apply-btn"'), 'switch keeps the preset apply button');
+    assert.ok(switchHtml.includes('data-slf-llm-apply-preset="Emery_BalancedBase_v11"'),
+        'switch preset id carried');
+    assert.ok(switchHtml.includes('Применить пресет'), 'switch label unchanged');
+    assert.ok(!switchHtml.includes('slf-llm-apply-adjust'), 'switch has no adjust button');
+    const { mode: _mode, ...legacyAnswer } = switchAnswer;
+    assert.equal(LLM.renderAnswer(legacyAnswer), switchHtml,
+        'legacy no-mode answer renders byte-identically to an explicit switch');
+}
+
+// --- 16. #465: the UI request sends the current slider vector ----------------
+{
+    const run = makeUiContext();
+    assert.equal(run.advisorCalls.length, 0, 'fixture: no request yet');
+    run.context.getCurrentTactic = () => ({
+        def_line: '2', press_line: '2', def_width: '2', press_intense: '3',
+        build_type: '2', build_temp: '2', build_long: '2', build_fast: '2',
+        style: '3', pass_risk: '3', dribble: '3', cross: '2', corner: '1', shot: '2',
+        priority: ['left', 'center'], unknown_control: '9'
+    });
+    await run.llmButton.onclick();
+    assert.equal(run.advisorCalls.length, 1, 'advisor called once');
+    assert.equal(JSON.stringify(run.advisorCalls[0].payload.currentControls), JSON.stringify({
+        def_line: '2', press_line: '2', def_width: '2', press_intense: '3',
+        build_type: '2', build_temp: '2', build_long: '2', build_fast: '2',
+        style: '3', pass_risk: '3', dribble: '3', cross: '2', corner: '1', shot: '2',
+        priority: ['left', 'center']
+    }), 'current vector sent, unknown keys dropped');
+
+    const noVector = makeUiContext();
+    await noVector.llmButton.onclick();
+    assert.ok(!Object.prototype.hasOwnProperty.call(noVector.advisorCalls[0].payload, 'currentControls'),
+        'no currentControls key when getCurrentTactic is unavailable (server handles absence)');
+}
+
+// --- 17. #465: adjust click applies ONLY the changes, priority preserved -----
+// A partial vector without the current priority would be cleared to [] by the
+// bridge's normalizePresets(), silently wiping the direction priorities.
+{
+    const run = makeUiContext();
+    run.context.getCurrentTactic = () => ({
+        def_line: '2', shot: '2', corner: '1', priority: ['left', 'center']
+    });
+    const bridgeCalls = [];
+    run.context.STATE.tacticControlBridge = {
+        applyTacticObject: async (tactic, options) => {
+            bridgeCalls.push({ tactic, options });
+            return { ok: true, failures: [], mismatches: [], rolledBack: false };
+        }
+    };
+    assert.equal(bridgeCalls.length, 0, 'nothing is applied before the click');
+    const btn = makeAdjustButton([{ control: 'shot', value: '3' }, { control: 'corner', value: '2' }], 'adv-1');
+    dispatchDelegatedClick(run, '#slf-llm-apply-adjust', btn);
+    await flushAsync();
+
+    assert.equal(bridgeCalls.length, 1, 'one bridge apply per click');
+    assert.equal(JSON.stringify(bridgeCalls[0].tactic), JSON.stringify({
+        shot: '3', corner: '2', priority: ['left', 'center']
+    }), 'partial object carries only the changes plus the current priority');
+    assert.equal(bridgeCalls[0].options.strict, true, 'strict readback apply');
+    assert.equal(bridgeCalls[0].options.source, 'llm_adjust', 'distinct apply source');
+    assert.equal(btn.disabled, true, 'button disabled after confirmed apply');
+    assert.equal(btn.textContent, 'Применено ✓ (подтверждено в интерфейсе)');
+    assert.ok(run.logs.some(line => line.includes('Точечная подстройка из совета LLM применена')),
+        `success logged honestly: ${JSON.stringify(run.logs)}`);
+    const applyEvent = run.advisorCalls.find(call => call.collection === 'advisor_apply');
+    assert.ok(applyEvent, 'advice apply event reported');
+    assert.equal(JSON.stringify(applyEvent.payload), JSON.stringify({ adviceId: 'adv-1', ok: true }));
+
+    // A second click on the applied button is ignored.
+    dispatchDelegatedClick(run, '#slf-llm-apply-adjust', btn);
+    await flushAsync();
+    assert.equal(bridgeCalls.length, 1, 're-click is ignored');
+}
+
+// --- 18. #465: adjust failures are honest ------------------------------------
+{
+    const run = makeUiContext();
+    run.context.getCurrentTactic = () => ({ def_line: '2', priority: ['right'] });
+    run.context.STATE.tacticControlBridge = {
+        applyTacticObject: async () => ({
+            ok: false, reason: 'post_apply_rolled_back',
+            failures: ['shot:missing_dom_input'], mismatches: [], rolledBack: true
+        })
+    };
+    const btn = makeAdjustButton([{ control: 'shot', value: '3' }], 'adv-2');
+    dispatchDelegatedClick(run, '#slf-llm-apply-adjust', btn);
+    await flushAsync();
+    assert.equal(btn.disabled, false, 'button stays usable for a manual retry');
+    assert.equal(btn.textContent, 'Применить изменения');
+    assert.ok(run.logs.some(line => line.includes(
+        'Не удалось применить изменения (post_apply_rolled_back: shot:missing_dom_input)')),
+        `honest failure diagnostics: ${JSON.stringify(run.logs)}`);
+    const applyEvent = run.advisorCalls.find(call => call.collection === 'advisor_apply');
+    assert.equal(JSON.stringify(applyEvent.payload), JSON.stringify({ adviceId: 'adv-2', ok: false }));
+
+    // Unparsable changes payload: nothing reaches the bridge.
+    const malformed = makeUiContext();
+    const malformedCalls = [];
+    malformed.context.getCurrentTactic = () => ({ def_line: '2', priority: [] });
+    malformed.context.STATE.tacticControlBridge = {
+        applyTacticObject: async tactic => {
+            malformedCalls.push(tactic);
+            return { ok: true, failures: [], mismatches: [] };
+        }
+    };
+    const badBtn = makeAdjustButton('{not json', 'adv-3');
+    dispatchDelegatedClick(malformed, '#slf-llm-apply-adjust', badBtn);
+    await flushAsync();
+    assert.equal(malformedCalls.length, 0, 'malformed changes never reach the bridge');
+    assert.ok(malformed.logs.some(line => line.includes('список изменений не прочитан')),
+        `malformed changes reported honestly: ${JSON.stringify(malformed.logs)}`);
+    assert.equal(badBtn.disabled, false, 'malformed button stays clickable');
+
+    // Missing bridge: honest refusal, no crash, no mutation claim.
+    const noBridge = makeUiContext();
+    noBridge.context.getCurrentTactic = () => ({ def_line: '2', priority: [] });
+    const noBridgeBtn = makeAdjustButton([{ control: 'def_line', value: '3' }], 'adv-4');
+    dispatchDelegatedClick(noBridge, '#slf-llm-apply-adjust', noBridgeBtn);
+    await flushAsync();
+    assert.ok(noBridge.logs.some(line => line.includes('мост управления тактикой недоступен')),
+        `unavailable bridge reported honestly: ${JSON.stringify(noBridge.logs)}`);
 }
 
 console.log('test-llm-second-opinion: all assertions passed');

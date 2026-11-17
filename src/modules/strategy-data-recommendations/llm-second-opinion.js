@@ -12,6 +12,15 @@ const LLMSecondOpinion = {
     MAX_HINTS: 20,
     MAX_HINT_CHARS: 300,
     MAX_CATALOG_ENTRIES: 40,
+    // #465: the 14 slider controls + priority read from getCurrentTactic()
+    // and sent as the current vector so the advisor can propose fine-grained
+    // «adjust» changes. Mirrors the server control names.
+    CONTROL_KEYS: [
+        'def_line', 'press_line', 'def_width', 'press_intense',
+        'build_type', 'build_temp', 'build_long', 'build_fast',
+        'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
+    ],
+    PRIORITY_DIRECTIONS: ['left', 'center', 'right'],
     // Phase 1 (#459): optional per-match dialogue. Mirrors the server caps.
     MAX_DIALOG_TURNS: 20,
     MAX_DIALOG_TURN_CHARS: 500,
@@ -61,11 +70,30 @@ const LLMSecondOpinion = {
             .slice(0, this.MAX_DIALOG_TURNS);
     },
 
+    // #465: client-side cleaning for the current slider vector. Only known
+    // control keys with non-empty string values survive; priority keeps a
+    // de-duplicated subset of left/center/right. Anything else is dropped and
+    // an empty vector is omitted entirely (the server handles absence).
+    cleanCurrentControls(currentControls) {
+        if (!currentControls || typeof currentControls !== 'object' || Array.isArray(currentControls)) return null;
+        const cleaned = {};
+        for (const key of this.CONTROL_KEYS) {
+            const value = currentControls[key];
+            if (typeof value === 'string' && value.trim()) cleaned[key] = value.trim();
+        }
+        const priority = Array.isArray(currentControls.priority)
+            ? currentControls.priority.filter((direction, index, list) =>
+                this.PRIORITY_DIRECTIONS.includes(direction) && list.indexOf(direction) === index)
+            : [];
+        if (priority.length) cleaned.priority = priority;
+        return Object.keys(cleaned).length ? cleaned : null;
+    },
+
     // Fail-closed on "nothing to advise with": no registry or an empty catalog
     // still yields null (partial mode additionally needs the snapshot). #461: a
     // missing rules decision (early match, phase collect) no longer refuses the
     // request — it becomes an explicitly marked partial payload.
-    buildPayload({ snapshot, ruleDecision, registry, dialog }) {
+    buildPayload({ snapshot, ruleDecision, registry, dialog, currentControls }) {
         if (!registry || typeof registry !== 'object') return null;
         const active = Array.isArray(registry.active) ? registry.active : [];
         if (!active.length) return null;
@@ -141,6 +169,10 @@ const LLMSecondOpinion = {
         // cleaning, so a no-dialog payload keeps the exact legacy shape/bytes.
         const dialogTurns = this.cleanDialog(dialog);
         if (dialogTurns.length) payload.dialog = dialogTurns;
+        // #465: the current slider vector is appended only when it survives
+        // cleaning, so a caller without it keeps the exact legacy bytes.
+        const controls = this.cleanCurrentControls(currentControls);
+        if (controls) payload.currentControls = controls;
         return payload;
     },
 
@@ -171,6 +203,32 @@ const LLMSecondOpinion = {
         if (provider) metaParts.push(provider);
         metaParts.push(`${(Number(answer.latencyMs) / 1000).toFixed(1)}s`);
         const meta = this.escapeHtml(metaParts.join(' · '));
+        // #465: «adjust» answers change individual sliders, not the preset.
+        // They render a compact change list plus their own click-only apply
+        // button; the preset apply button belongs to «switch»/legacy answers
+        // only. Model-derived values are escaped in both the text and the
+        // JSON data attribute.
+        const adjustChanges = Array.isArray(answer.changes) ? answer.changes : [];
+        if (answer.mode === 'adjust' || adjustChanges.length) {
+            const changeRows = adjustChanges
+                .filter(change => change && typeof change === 'object' && change.control != null)
+                .map(change => `${this.escapeHtml(change.control)}: ${this.escapeHtml(change.value)}`)
+                .join(', ');
+            const adjustAdviceId = typeof answer.adviceId === 'string' ? answer.adviceId : '';
+            const adjustApplyHtml = adjustChanges.length
+                ? `<div style="margin-top:6px;"><button id="slf-llm-apply-adjust" type="button"` +
+                  ` data-slf-llm-apply-changes="${this.escapeHtml(JSON.stringify(adjustChanges))}"` +
+                  ` data-slf-llm-apply-advice-id="${this.escapeHtml(adjustAdviceId)}"` +
+                  ` style="padding:4px 10px;background:#2a4a2a;color:#cfc;border:1px solid #4a7;border-radius:3px;cursor:pointer;font-size:12px;">Применить изменения</button>` +
+                  `<span style="opacity:.55;margin-left:6px;">применение только по клику</span></div>`
+                : '';
+            return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#141a14;border:1px solid #3a5a3a;border-radius:5px;color:#cde;padding:7px 9px;font-size:12px;line-height:1.45;">` +
+                partialHtml +
+                `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>Точечная подстройка</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
+                `${changeRows ? `${changeRows}<br>` : ''}` +
+                `${reason}<br>` +
+                `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span>${adjustApplyHtml}</div>`;
+        }
         // Ф2a (#441): one-click apply. The button only carries data; the
         // click handler lives in the ui-extension (event delegation) and
         // applies strictly on explicit click — never auto.
