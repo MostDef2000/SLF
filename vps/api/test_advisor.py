@@ -232,6 +232,96 @@ class AdvisorTestCase(unittest.TestCase):
         self.assertIn("provider", payload)
         self.assertIsNone(payload["provider"])
 
+    def test_success_record_carries_token_diagnostics(self):
+        # #463: the six-tuple's tail lands in advisor_log_v1, not the response.
+        answer = json.dumps({
+            "preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"})
+        with mock.patch.object(
+                self.advisor, "call_openrouter",
+                return_value=(answer, 77, "Together", "length", 700, 1200)):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertNotIn("finishReason", payload)
+        self.assertNotIn("completionTokens", payload)
+        self.assertNotIn("promptTokens", payload)
+        record = self.read_log()[0]
+        self.assertEqual(record["outcome"], "ok")
+        self.assertEqual(record["finishReason"], "length")
+        self.assertEqual(record["completionTokens"], 700)
+        self.assertEqual(record["promptTokens"], 1200)
+
+    def test_error_record_carries_token_diagnostics(self):
+        # #463: a provider reply that fails validation still logs the
+        # measurement of the last call that returned.
+        with mock.patch.object(
+                self.advisor, "call_openrouter",
+                return_value=("извините, не могу", 500, None, "length", 700, 1200)), \
+                mock.patch.object(self.advisor.time, "sleep"):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.get_json()["errorKind"], "invalid_answer")
+        record = self.read_log()[0]
+        self.assertEqual(record["outcome"], "error")
+        self.assertEqual(record["finishReason"], "length")
+        self.assertEqual(record["completionTokens"], 700)
+        self.assertEqual(record["promptTokens"], 1200)
+
+    def test_error_record_diagnostics_belong_to_the_failing_attempt(self):
+        # #463: attempt 1 returns (invalid answer, its own diagnostics),
+        # attempt 2 raises empty_answer with different diagnostics. The record
+        # must describe the failing attempt, not the earlier returned one.
+        error = self.advisor.AdvisorError(
+            "empty_answer", "model returned no content", status=200,
+            finish_reason="stop", completion_tokens=0, prompt_tokens=900)
+        effects = [
+            ("извините, не могу", 500, None, "length", 1200, 1500),
+            error,
+        ]
+        with mock.patch.object(self.advisor, "call_openrouter", side_effect=effects):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.get_json()["errorKind"], "empty_answer")
+        record = self.read_log()[0]
+        self.assertEqual(record["outcome"], "error")
+        self.assertEqual(record["errorKind"], "empty_answer")
+        self.assertEqual(record["finishReason"], "stop")
+        self.assertEqual(record["completionTokens"], 0)
+        self.assertEqual(record["promptTokens"], 900)
+
+    def test_empty_answer_record_carries_token_diagnostics(self):
+        # #463: the measured case — empty_answer raised by the provider call,
+        # diagnostics carried on the exception into the error record.
+        error = self.advisor.AdvisorError(
+            "empty_answer", "model returned no content", status=200,
+            finish_reason="length", completion_tokens=700, prompt_tokens=1200)
+        with mock.patch.object(self.advisor, "call_openrouter", side_effect=error):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.get_json()["errorKind"], "empty_answer")
+        record = self.read_log()[0]
+        self.assertEqual(record["outcome"], "error")
+        self.assertEqual(record["errorKind"], "empty_answer")
+        self.assertEqual(record["finishReason"], "length")
+        self.assertEqual(record["completionTokens"], 700)
+        self.assertEqual(record["promptTokens"], 1200)
+
+    def test_short_call_results_still_work_and_omit_diagnostics(self):
+        # #463: older two-/three-value stubs stay valid; absent diagnostics
+        # are omitted from the record rather than logged as nulls.
+        answer = json.dumps({
+            "preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"})
+        for stub in ((answer, 10), (answer, 10, "Together")):
+            with mock.patch.object(self.advisor, "call_openrouter", return_value=stub):
+                response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+            self.assertEqual(response.status_code, 200)
+            record = self.read_log()[0]
+            self.assertNotIn("finishReason", record)
+            self.assertNotIn("completionTokens", record)
+            self.assertNotIn("promptTokens", record)
+            path = pathlib.Path(self.temp_dir.name) / "advisor_log_v1.json"
+            path.unlink()
+
     def test_context_budget_enforced(self):
         # Defense-in-depth backstop: with every per-field cap maxed the body
         # still fits the 64KiB budget, so shrink the budget to exercise the
@@ -1291,21 +1381,113 @@ class AdvisorProviderTestCase(unittest.TestCase):
                 timeout_s=2.0)
 
     def test_provider_is_returned_with_content_and_latency(self):
-        content, latency_ms, provider = self._call({
+        content, latency_ms, provider, finish_reason, completion_tokens, prompt_tokens = self._call({
             "choices": [{"message": {"content": "ответ"}}],
             "provider": "Together",
         })
         self.assertEqual(content, "ответ")
         self.assertIsInstance(latency_ms, int)
         self.assertEqual(provider, "Together")
+        self.assertIsNone(finish_reason)
+        self.assertIsNone(completion_tokens)
+        self.assertIsNone(prompt_tokens)
 
     def test_absent_or_blank_provider_is_none(self):
         for extra in ({}, {"provider": None}, {"provider": ""}, {"provider": 7}):
             payload = {"choices": [{"message": {"content": "ответ"}}]}
             payload.update(extra)
-            content, _, provider = self._call(payload)
+            content, _, provider = self._call(payload)[:3]
             self.assertEqual(content, "ответ")
             self.assertIsNone(provider, f"provider {extra!r} must normalize to None")
+
+
+class AdvisorTokenDiagnosticsTestCase(unittest.TestCase):
+    """#463: finish_reason/usage measurement added to the provider call.
+
+    Hermetic: urlopen is replaced by a canned response object; no network.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        advisor_path = pathlib.Path(__file__).with_name("advisor.py")
+        spec = importlib.util.spec_from_file_location("slf_advisor_tokens_test", advisor_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.advisor = module
+
+    def _call(self, payload):
+        with mock.patch.object(self.advisor.urllib.request, "urlopen",
+                               return_value=_FakeHttpResponse(payload)), \
+                mock.patch.dict(os.environ, {self.advisor.PROXY_ENV_VAR: ""}):
+            return self.advisor.call_openrouter(
+                [{"role": "user", "content": "hi"}], "test-key", "test-model",
+                timeout_s=2.0)
+
+    def test_finish_reason_and_usage_are_returned(self):
+        result = self._call({
+            "choices": [{"message": {"content": "ответ"}, "finish_reason": "length"}],
+            "usage": {"completion_tokens": 700, "prompt_tokens": 1200},
+        })
+        self.assertEqual(len(result), 6)
+        content, latency_ms, provider, finish_reason, completion_tokens, prompt_tokens = result
+        self.assertEqual(content, "ответ")
+        self.assertIsInstance(latency_ms, int)
+        self.assertIsNone(provider)
+        self.assertEqual(finish_reason, "length")
+        self.assertEqual(completion_tokens, 700)
+        self.assertEqual(prompt_tokens, 1200)
+
+    def test_absent_or_malformed_diagnostics_are_none(self):
+        cases = (
+            {},
+            {"finish_reason": None},
+            {"finish_reason": ""},
+            {"finish_reason": 7},
+        )
+        for extra in cases:
+            choice = {"message": {"content": "ответ"}}
+            choice.update(extra)
+            payload = {"choices": [choice]}
+            _, _, _, finish_reason, completion_tokens, prompt_tokens = self._call(payload)
+            self.assertIsNone(finish_reason, f"finish_reason {extra!r} must normalize to None")
+            self.assertIsNone(completion_tokens)
+            self.assertIsNone(prompt_tokens)
+        for usage in (None, "nope", [], {"completion_tokens": "700", "prompt_tokens": True},
+                      {"completion_tokens": True, "prompt_tokens": 12.5}):
+            payload = {"choices": [{"message": {"content": "ответ"}}], "usage": usage}
+            _, _, _, _, completion_tokens, prompt_tokens = self._call(payload)
+            self.assertIsNone(completion_tokens, f"usage {usage!r} must not fabricate counts")
+            self.assertIsNone(prompt_tokens, f"usage {usage!r} must not fabricate counts")
+
+    def test_max_tokens_is_1200(self):
+        # #463: the budget is the variable under test — pin it.
+        self.assertEqual(self.advisor.MAX_TOKENS, 1200)
+
+    def test_empty_answer_carries_diagnostics_on_the_error(self):
+        # #463: the empty_answer failure is the case under measurement; the
+        # diagnostics ride on the exception instead of being dropped.
+        with self.assertRaises(self.advisor.AdvisorError) as raised:
+            self._call({
+                "choices": [{"message": {"content": ""}, "finish_reason": "length"}],
+                "usage": {"completion_tokens": 700, "prompt_tokens": 1200},
+            })
+        error = raised.exception
+        self.assertEqual(error.kind, "empty_answer")
+        self.assertEqual(error.status, 200)
+        self.assertEqual(str(error), "model returned no content")
+        self.assertEqual(error.finish_reason, "length")
+        self.assertEqual(error.completion_tokens, 700)
+        self.assertEqual(error.prompt_tokens, 1200)
+
+    def test_advisor_error_diagnostics_default_to_none(self):
+        # #463: existing raise sites pass no diagnostics and keep working.
+        error = self.advisor.AdvisorError("network", "transport failure", retry_after=1.5, status=503)
+        self.assertEqual(error.kind, "network")
+        self.assertEqual(error.retry_after, 1.5)
+        self.assertEqual(error.status, 503)
+        self.assertIsNone(error.finish_reason)
+        self.assertIsNone(error.completion_tokens)
+        self.assertIsNone(error.prompt_tokens)
 
 
 class _FakeSocks5Server:

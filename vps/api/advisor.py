@@ -43,7 +43,7 @@ DEFAULT_MODEL = "particle-ai/particle-1:free"
 REQUEST_TIMEOUT_S = 15.0
 MAX_ATTEMPTS = 2
 RETRY_AFTER_CAP_S = 5.0
-MAX_TOKENS = 700
+MAX_TOKENS = 1200
 TEMPERATURE = 0.4
 
 MAX_CATALOG_ENTRIES = 40
@@ -122,12 +122,18 @@ PARTIAL_SYSTEM_ADDENDUM = (
 class AdvisorError(Exception):
     """Transport- or provider-level failure with a machine-readable kind."""
 
-    def __init__(self, kind, detail="", retry_after=None, status=None):
+    def __init__(self, kind, detail="", retry_after=None, status=None,
+                 finish_reason=None, completion_tokens=None, prompt_tokens=None):
         super().__init__(detail or kind)
         self.kind = kind
         self.detail = detail
         self.retry_after = retry_after
         self.status = status
+        # #463: provider measurement carried on the failure, so the error log
+        # record keeps the diagnostics an empty answer would otherwise drop.
+        self.finish_reason = finish_reason
+        self.completion_tokens = completion_tokens
+        self.prompt_tokens = prompt_tokens
 
 
 class AdvisorValidationError(Exception):
@@ -939,19 +945,46 @@ def call_openrouter(messages, api_key, model, timeout_s=REQUEST_TIMEOUT_S):
 
     choices = payload.get("choices") if isinstance(payload, dict) else None
     content = None
+    finish_reason = None
     if isinstance(choices, list) and choices:
-        message = choices[0].get("message") if isinstance(choices[0], dict) else None
-        if isinstance(message, dict):
-            content = message.get("content")
+        if isinstance(choices[0], dict):
+            message = choices[0].get("message")
+            if isinstance(message, dict):
+                content = message.get("content")
+            # #463: why the model stopped. "length" means the answer was cut
+            # by max_tokens — the measurement the empty_answer hunt needs.
+            finish_reason = _clean_str(choices[0].get("finish_reason"), 40) or None
+    # #463: token usage from the same payload. Only real ints are reported;
+    # anything else stays None instead of a fabricated count. Extracted before
+    # the empty_answer check so the failure can carry the measurement too.
+    usage = payload.get("usage") if isinstance(payload, dict) else None
+
+    def token_count(key):
+        value = usage.get(key) if isinstance(usage, dict) else None
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    completion_tokens = token_count("completion_tokens")
+    prompt_tokens = token_count("prompt_tokens")
     if not isinstance(content, str) or not content.strip():
-        raise AdvisorError("empty_answer", "model returned no content", status=200)
+        raise AdvisorError(
+            "empty_answer", "model returned no content", status=200,
+            finish_reason=finish_reason,
+            completion_tokens=completion_tokens,
+            prompt_tokens=prompt_tokens)
     # Ф2c (#441): OpenRouter reports which upstream served the request; the
     # client shows it next to the model name. Absent/blank -> None, never a
     # guessed value.
     provider = payload.get("provider") if isinstance(payload, dict) else None
     if not isinstance(provider, str) or not provider:
         provider = None
-    return content, latency_ms, provider
+    return (
+        content,
+        latency_ms,
+        provider,
+        finish_reason,
+        completion_tokens,
+        prompt_tokens,
+    )
 
 
 def extract_json_object(text):
@@ -1377,6 +1410,21 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
     started = time.monotonic()
     last_error = None
     attempt_feedback = None
+    # #463: diagnostics of the last provider call; None until a call returns.
+    finish_reason = None
+    completion_tokens = None
+    prompt_tokens = None
+
+    def token_diagnostics():
+        # #463: measurement only — absent values are omitted, never faked.
+        diagnostics = {}
+        if finish_reason is not None:
+            diagnostics["finishReason"] = finish_reason
+        if completion_tokens is not None:
+            diagnostics["completionTokens"] = completion_tokens
+        if prompt_tokens is not None:
+            diagnostics["promptTokens"] = prompt_tokens
+        return diagnostics
 
     for attempt in range(MAX_ATTEMPTS):
         attempt_messages = messages
@@ -1390,12 +1438,23 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
                 time.sleep(min(exc.retry_after or 2.0, RETRY_AFTER_CAP_S))
                 continue
             break
-        # call_openrouter returns (content, latency_ms, provider); the
-        # tolerant unpack keeps a two-value stub valid.
+        # call_openrouter returns (content, latency_ms, provider,
+        # finish_reason, completion_tokens, prompt_tokens); the tolerant unpack
+        # keeps a two-value stub valid.
         content, latency_ms = call_result[0], call_result[1]
         provider = call_result[2] if len(call_result) > 2 else None
         if not isinstance(provider, str) or not provider:
             provider = None
+        # #463: provider diagnostics; absent on shorter stubs, never guessed.
+        finish_reason = call_result[3] if len(call_result) > 3 else None
+        if not isinstance(finish_reason, str) or not finish_reason:
+            finish_reason = None
+        completion_tokens = call_result[4] if len(call_result) > 4 else None
+        if not isinstance(completion_tokens, int) or isinstance(completion_tokens, bool):
+            completion_tokens = None
+        prompt_tokens = call_result[5] if len(call_result) > 5 else None
+        if not isinstance(prompt_tokens, int) or isinstance(prompt_tokens, bool):
+            prompt_tokens = None
         try:
             answer = extract_json_object(content)
             preset, confidence, reason = validate_answer(answer, catalog_ids)
@@ -1420,6 +1479,8 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
             "outcome": "ok",
             "errorKind": None,
             "model": model,
+            # #463: token diagnostics land in advisor_log_v1 (measurement only).
+            **token_diagnostics(),
         }
         append_log(data_dir, record)
         return {
@@ -1436,6 +1497,18 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
 
     latency_ms = int((time.monotonic() - started) * 1000)
     kind = last_error.kind if last_error else "unknown"
+    if isinstance(last_error, AdvisorError):
+        # #463: the failing attempt's measurement wins over values cached from
+        # an earlier attempt that returned (e.g. attempt 1 invalid answer,
+        # attempt 2 empty_answer). The exception's fields are taken as a set so
+        # the record never mixes two attempts; the cached values are only the
+        # fallback when the exception carries no diagnostics at all.
+        if (last_error.finish_reason is not None
+                or last_error.completion_tokens is not None
+                or last_error.prompt_tokens is not None):
+            finish_reason = last_error.finish_reason
+            completion_tokens = last_error.completion_tokens
+            prompt_tokens = last_error.prompt_tokens
     record = {
         "ts": int(time.time() * 1000),
         "gameId": context["gameId"],
@@ -1450,6 +1523,8 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
         "outcome": "error",
         "errorKind": kind,
         "model": model,
+        # #463: same diagnostics on the error path when a call returned.
+        **token_diagnostics(),
     }
     append_log(data_dir, record)
     messages_by_kind = {
