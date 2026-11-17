@@ -177,6 +177,20 @@
     }
 
     async function applyPresetAsync(name) {
+        // A failed preset apply that may have left the native controls in an
+        // unconfirmed state must not look like a resumable active lab experiment.
+        // Preflight failures and verified rollbacks leave the page untouched and
+        // the lab activation stays active; only an unverified rollback or a
+        // lineup mutation is recorded as an honest indeterminate activation.
+        function markLabIndeterminateIfUnverified(applied) {
+            if (applied?.reason !== 'rollback_unverified' && applied?.reason !== 'unexpected_lineup_mutation') return;
+            try {
+                STATE.tacticalLabRuntime?.markIndeterminate?.(applied.reason, STATE.lastTacticApplyFailure || null);
+            } catch (error) {
+                debugWarn('[SLF] Tactical Lab indeterminate state not recorded', error);
+            }
+        }
+
         // Allow an old persisted v10 selection without reintroducing the old
         // ID into active preset controls or recording it as a new source ID.
         name = PresetStorage.resolvePresetId?.(name) || name;
@@ -191,17 +205,6 @@
         const beforeSnapshot = location.pathname.includes('/game.php')
             ? SnapshotEngine.build()
             : null;
-
-        if (location.pathname.includes('/game.php') && STATE.tacticalLabRuntime?.isActive?.()) {
-            try {
-                await STATE.tacticalLabRuntime.closeActive('user_selected_production', beforeSnapshot, {
-                    nextPresetId: name,
-                    nextTacticSource: 'production'
-                });
-            } catch (error) {
-                debugWarn('[SLF] Tactical Lab exit telemetry failed before production preset', error);
-            }
-        }
 
         const formationBefore = STATE.tacticControlBridge.inspectFixedLineup?.() || null;
         if (formationBefore?.available && !formationBefore.ok) {
@@ -223,6 +226,7 @@
                 rolledBack:applied.rolledBack === true, ts:Date.now()
             };
             debugWarn('[SLF] Не подтверждена установка тактики в интерфейсе:', name, applied.failures, applied.mismatches);
+            markLabIndeterminateIfUnverified(applied);
             return false;
         }
 
@@ -234,7 +238,27 @@
                 reason:'unexpected_lineup_mutation', ts:Date.now()
             };
             debugWarn('[SLF v11] Нативная страница неожиданно изменила позиции игроков:', name);
+            markLabIndeterminateIfUnverified({ reason:'unexpected_lineup_mutation' });
             return false;
+        }
+
+        // Variant A: the lab experiment survives a failed apply — it is closed
+        // only here, after the UI readback (and lineup) are confirmed.
+        const nextFingerprint = applied.tactic && typeof SnapshotEngine !== 'undefined'
+            ? SnapshotEngine.telemetryV2?.tacticFingerprint?.(applied.tactic) || null
+            : null;
+        const labExit = {
+            nextPresetId: name,
+            nextTacticSource: 'production'
+        };
+        if (nextFingerprint) labExit.nextTacticFingerprint = nextFingerprint;
+
+        if (location.pathname.includes('/game.php') && STATE.tacticalLabRuntime?.isActive?.()) {
+            try {
+                await STATE.tacticalLabRuntime.closeActive('user_selected_production', beforeSnapshot, labExit);
+            } catch (error) {
+                debugWarn('[SLF] Tactical Lab exit telemetry failed after production preset', error);
+            }
         }
 
         const labels = PresetStorage.getAllLabels ? PresetStorage.getAllLabels() : {};
