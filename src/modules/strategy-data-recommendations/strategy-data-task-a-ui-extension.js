@@ -926,7 +926,11 @@
                 || (typeof STATE !== 'undefined' ? STATE.lastRuleDecision : null)
                 || null);
         const registry = (typeof window !== 'undefined' && window.SLFActivePresetRegistry) || null;
-        const payload = LLMSecondOpinion.buildPayload({ snapshot, ruleDecision, registry, dialog });
+        // #465: the current slider vector (14 controls + priority) lets the
+        // advisor propose fine-grained «adjust» changes. Absence is honest:
+        // buildPayload omits the key and the prompt then allows switch only.
+        const currentControls = safeGetCurrentTactic();
+        const payload = LLMSecondOpinion.buildPayload({ snapshot, ruleDecision, registry, dialog, currentControls });
         if (!payload) {
             LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
                 available: false,
@@ -1159,6 +1163,88 @@
         }
     }
 
+    // #465: build the PARTIAL tactic object for an «adjust» answer. Only the
+    // changed controls are requested, but the CURRENT priority is included
+    // explicitly: the bridge's normalizePresets() turns an absent priority
+    // into [] and the apply would silently clear the direction priorities.
+    function llmAdjustTactic(changes, current) {
+        if (!Array.isArray(changes)) return null;
+        const tactic = {};
+        for (const change of changes) {
+            if (!change || typeof change !== 'object') continue;
+            const control = typeof change.control === 'string' ? change.control : '';
+            if (!control || change.value === undefined || change.value === null) continue;
+            tactic[control] = String(change.value);
+        }
+        if (!Object.keys(tactic).length) return null;
+        tactic.priority = Array.isArray(current?.priority) ? current.priority.slice() : [];
+        return tactic;
+    }
+
+    function parseLlmAdjustChanges(btn) {
+        const raw = btn?.dataset?.slfLlmApplyChanges;
+        if (typeof raw !== 'string' || !raw) return null;
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    // #465: one-click apply of an «adjust» answer. Runs ONLY on the explicit
+    // click (delegation below); the bridge is the same readback path the preset
+    // and final-tactic applies use. Honest failure reporting, never success.
+    async function applyLlmSuggestedAdjust(btn) {
+        if (!btn || btn.dataset?.slfApplyInFlight === '1') return;
+        const changes = parseLlmAdjustChanges(btn);
+        if (!changes || !changes.length) {
+            UI.addParserLog('Совет LLM: список изменений не прочитан — ничего не применено');
+            return;
+        }
+        const current = safeGetCurrentTactic();
+        if (!current || typeof STATE === 'undefined' || !STATE?.tacticControlBridge
+            || typeof STATE.tacticControlBridge.applyTacticObject !== 'function') {
+            UI.addParserLog('Совет LLM: мост управления тактикой недоступен — изменения не применены');
+            return;
+        }
+        const tactic = llmAdjustTactic(changes, current);
+        if (!tactic) {
+            UI.addParserLog('Совет LLM: пустой список изменений — ничего не применено');
+            return;
+        }
+        btn.dataset.slfApplyInFlight = '1';
+        btn.disabled = true;
+        btn.textContent = 'Применяю…';
+        let result = null;
+        try {
+            result = await STATE.tacticControlBridge.applyTacticObject(tactic, {
+                strict: true,
+                source: 'llm_adjust'
+            });
+        } catch (error) {
+            console.error('[SLF] LLM adjust apply failed', error);
+            result = { ok: false, reason: 'exception', failures: [], mismatches: [], rolledBack: false };
+        }
+        const adviceId = (btn.dataset && btn.dataset.slfLlmApplyAdviceId) || '';
+        if (result?.ok && !result.failures?.length && !result.mismatches?.length) {
+            btn.disabled = true;
+            btn.textContent = 'Применено ✓ (подтверждено в интерфейсе)';
+            UI.addParserLog('Точечная подстройка из совета LLM применена (readback подтверждён)');
+            if (adviceId) void reportLlmApplyEvent(adviceId, true);
+            return;
+        }
+        // Honest failure: keep the diagnostics visible and the button usable.
+        btn.dataset.slfApplyInFlight = '';
+        btn.disabled = false;
+        btn.textContent = 'Применить изменения';
+        const reason = String(result?.reason || 'не диагностирована');
+        const failureKeys = (Array.isArray(result?.failures) ? result.failures : []).join(', ');
+        UI.addParserLog(`Не удалось применить изменения (${reason}${failureKeys ? `: ${failureKeys}` : ''}) — можно повторить`);
+        UI.updateParserStatus('Точечная подстройка не подтверждена');
+        if (adviceId) void reportLlmApplyEvent(adviceId, false);
+    }
+
     function bindLlmApplyDelegation() {
         if (typeof document === 'undefined' || document.__slfLlmApplyDelegation) return;
         document.__slfLlmApplyDelegation = true;
@@ -1166,6 +1252,11 @@
             const btn = event?.target?.closest ? event.target.closest('#slf-llm-apply-btn') : null;
             if (!btn) return;
             void applyLlmSuggestedPreset(btn);
+        });
+        document.addEventListener('click', event => {
+            const btn = event?.target?.closest ? event.target.closest('#slf-llm-apply-adjust') : null;
+            if (!btn) return;
+            void applyLlmSuggestedAdjust(btn);
         });
     }
 

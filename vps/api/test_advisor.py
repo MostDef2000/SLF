@@ -2587,7 +2587,7 @@ class AdvisorPartialDataTestCase(unittest.TestCase):
             "Ты — футбольный тренер-аналитик в онлайн-менеджере SLF. "
             "Встроенный правилый движок уже дал рекомендацию"))
         self.assertTrue(messages[0]["content"].endswith(
-            "4. Учитывай подсказки тренеров (если даны) и поле риск у пресета."))
+            "6. Учитывай подсказки тренеров (если даны) и поле риск у пресета."))
 
     def test_full_mode_ignores_data_note_in_the_prompt(self):
         body = self.full_body()
@@ -2615,12 +2615,13 @@ class AdvisorPartialDataTestCase(unittest.TestCase):
         self.assertEqual(record["outcome"], "ok")
         self.assertIsNone(record["rulesPreset"])
         self.assertEqual(record["llmPreset"], "Pep_BoxControl_bal2")
-        # Advice-record format is unchanged: same keys, rulesPreset is None.
+        # Advice-record format is unchanged apart from #465 mode: same keys,
+        # rulesPreset is None, mode is logged for every successful answer.
         self.assertEqual(
             set(record),
             {"id", "ts", "gameId", "evaluationGameId", "scoreAtAdvice",
-             "minute", "rulesPreset", "llmPreset", "confidence", "latencyMs",
-             "outcome", "errorKind", "model"},
+             "minute", "rulesPreset", "llmPreset", "mode", "confidence",
+             "latencyMs", "outcome", "errorKind", "model"},
         )
 
     def test_partial_error_path_logs_null_rules_preset(self):
@@ -2635,6 +2636,378 @@ class AdvisorPartialDataTestCase(unittest.TestCase):
         self.assertEqual(len(log), 1)
         self.assertEqual(log[0]["outcome"], "error")
         self.assertIsNone(log[0]["rulesPreset"])
+
+
+class AdvisorModesTestCase(unittest.TestCase):
+    """#465: adjust/switch answer modes and the current slider vector.
+
+    The advisor normally nudges 1..3 sliders ("adjust"); a full preset
+    ("switch") is reserved for a radical picture change. Legacy preset-only
+    answers keep working as an implicit switch. Hermetic: provider mocked,
+    temporary data dir.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        os.environ["SLF_API_TOKEN"] = "test-token"
+        os.environ["SLF_DATA_DIR"] = cls.temp_dir.name
+        os.environ["SLF_FORUM_FAQ_DIR"] = os.path.join(cls.temp_dir.name, "forum")
+        os.environ["OPENROUTER_API_KEY"] = "test-key"
+        cls.server = _load_server()
+        cls.advisor = cls.server.advisor
+        cls.client = cls.server.app.test_client()
+        cls.auth = {"Authorization": "Bearer test-token"}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
+
+    def setUp(self):
+        for path in pathlib.Path(self.temp_dir.name).glob("*.json"):
+            path.unlink()
+
+    def valid_body(self):
+        return {
+            "gameId": "g-123",
+            "minute": 30,
+            "bucket": "16-30",
+            "score": {"home": 0, "away": 0},
+            "currentPreset": "Emery_BalancedBase_v11",
+            "developerHints": ["[Клопп] Отключите атаку по центру"],
+            "ruleDecision": {
+                "preset": "Emery_BalancedBase_v11",
+                "gameMode": "active_control",
+                "confidence": "medium",
+                "topCandidates": [
+                    {"id": "Emery_BalancedBase_v11", "score": 35.7},
+                    {"id": "Pep_BoxControl_bal2", "score": 23.5}
+                ]
+            },
+            "signals": {"strengthGap": -12, "pressureRisk": 41.4, "underPressure": True},
+            "presetCatalog": [
+                {"id": "Emery_BalancedBase_v11", "label": "Emery Balanced Base", "idea": "баланс", "use": "база", "risk": "низкий"},
+                {"id": "Pep_BoxControl_bal2", "label": "Pep Box Control", "idea": "контроль", "use": "при контроле", "risk": "средний"}
+            ]
+        }
+
+    @staticmethod
+    def answer(obj):
+        return json.dumps(obj, ensure_ascii=False)
+
+    def read_log(self):
+        path = pathlib.Path(self.temp_dir.name) / "advisor_log_v1.json"
+        if not path.exists():
+            return []
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def clear_log(self):
+        path = pathlib.Path(self.temp_dir.name) / "advisor_log_v1.json"
+        if path.exists():
+            path.unlink()
+
+    @staticmethod
+    def user_content(messages):
+        return next(m["content"] for m in messages if m.get("role") == "user")
+
+    def capture_messages(self, body):
+        captured = {}
+        answer = self.answer({
+            "preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"
+        })
+
+        def fake_call(messages, api_key, model):
+            captured["messages"] = messages
+            return answer, 1
+
+        with mock.patch.object(self.advisor, "call_openrouter", side_effect=fake_call):
+            response = self.client.post("/api/advisor", json=body, headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        return captured["messages"]
+
+    # -- backward compatibility ---------------------------------------------
+
+    def test_legacy_no_mode_answer_still_accepted(self):
+        # An old client/model answer carries no "mode": it must stay valid and
+        # keep exactly today's success shape, plus mode="switch".
+        answer = self.answer({
+            "preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"})
+        with mock.patch.object(
+                self.advisor, "call_openrouter",
+                return_value=(answer, 42, "Together")):
+            response = self.client.post(
+                "/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["mode"], "switch")
+        self.assertEqual(payload["preset"], "Pep_BoxControl_bal2")
+        self.assertEqual(payload["presetLabel"], "Pep Box Control")
+        self.assertEqual(payload["confidence"], "high")
+        self.assertEqual(payload["reason"], "ок")
+        self.assertEqual(payload["latencyMs"], 42)
+        self.assertTrue(payload["adviceId"])
+        self.assertNotIn("changes", payload)
+        self.assertEqual(
+            set(payload),
+            {"available", "adviceId", "mode", "preset", "presetLabel",
+             "confidence", "reason", "model", "provider", "latencyMs"},
+        )
+        record = self.read_log()[0]
+        self.assertEqual(record["mode"], "switch")
+        self.assertEqual(record["llmPreset"], "Pep_BoxControl_bal2")
+        self.assertNotIn("changes", record)
+
+    # -- switch ----------------------------------------------------------------
+
+    def test_switch_mode_with_valid_preset_accepted(self):
+        answer = self.answer({
+            "mode": "switch", "preset": "Emery_BalancedBase_v11",
+            "confidence": "medium", "reason": "нужна смена пресета"})
+        with mock.patch.object(self.advisor, "call_openrouter", return_value=(answer, 30)):
+            response = self.client.post(
+                "/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["mode"], "switch")
+        self.assertEqual(payload["preset"], "Emery_BalancedBase_v11")
+        self.assertEqual(payload["presetLabel"], "Emery Balanced Base")
+        self.assertNotIn("changes", payload)
+        record = self.read_log()[0]
+        self.assertEqual(record["mode"], "switch")
+        self.assertEqual(record["llmPreset"], "Emery_BalancedBase_v11")
+
+    def test_switch_mode_with_unknown_preset_is_invalid_answer(self):
+        answer = self.answer({
+            "mode": "switch", "preset": "Hallucinated_433_ultra",
+            "confidence": "high", "reason": "нет такого"})
+        with mock.patch.object(self.advisor, "call_openrouter", return_value=(answer, 10)), \
+                mock.patch.object(self.advisor.time, "sleep"):
+            response = self.client.post(
+                "/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.get_json()["errorKind"], "invalid_answer")
+        record = self.read_log()[0]
+        self.assertEqual(record["outcome"], "error")
+        self.assertEqual(record["errorKind"], "invalid_answer")
+        self.assertIsNone(record["llmPreset"])
+
+    def test_unknown_mode_is_rejected(self):
+        answer = self.answer({
+            "mode": "retune", "preset": "Emery_BalancedBase_v11",
+            "confidence": "medium", "reason": "ок"})
+        with mock.patch.object(self.advisor, "call_openrouter", return_value=(answer, 10)), \
+                mock.patch.object(self.advisor.time, "sleep"):
+            response = self.client.post(
+                "/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.get_json()["errorKind"], "invalid_answer")
+
+    # -- adjust ----------------------------------------------------------------
+
+    def test_adjust_mode_accepts_one_to_three_valid_changes(self):
+        cases = [
+            [{"control": "def_line", "value": "3"}],
+            [{"control": "press_intense", "value": "5"},
+             {"control": "corner", "value": "1"}],
+            [{"control": "style", "value": "2"},
+             {"control": "pass_risk", "value": "4"},
+             {"control": "shot", "value": "1"}],
+        ]
+        for changes in cases:
+            with self.subTest(changes=changes):
+                answer = self.answer({
+                    "mode": "adjust", "changes": changes,
+                    "confidence": "low", "reason": "тонкая правка"})
+                with mock.patch.object(
+                        self.advisor, "call_openrouter", return_value=(answer, 55)):
+                    response = self.client.post(
+                        "/api/advisor", json=self.valid_body(), headers=self.auth)
+                self.assertEqual(response.status_code, 200)
+                payload = response.get_json()
+                self.assertEqual(payload["mode"], "adjust")
+                self.assertIsNone(payload["preset"])
+                self.assertIsNone(payload["presetLabel"])
+                self.assertEqual(payload["changes"], changes)
+                record = self.read_log()[0]
+                self.assertEqual(record["mode"], "adjust")
+                self.assertIsNone(record["llmPreset"])
+                self.assertEqual(record["changes"], changes)
+                self.clear_log()
+
+    def test_adjust_mode_rejections_use_the_invalid_answer_path(self):
+        cases = {
+            "bad_control": ([{"control": "wingers", "value": "2"}],
+                            "не из списка ползунков"),
+            "value_above_domain": ([{"control": "def_line", "value": "4"}],
+                                   "value для def_line"),
+            "value_below_domain": ([{"control": "corner", "value": "0"}],
+                                   "value для corner"),
+            "non_string_value": ([{"control": "def_line", "value": 2}],
+                                 "value для def_line"),
+            "duplicate_control": ([{"control": "def_line", "value": "2"},
+                                   {"control": "def_line", "value": "3"}],
+                                  "повторяется"),
+            "too_many_changes": ([{"control": name, "value": "1"} for name in (
+                "def_line", "press_line", "def_width", "build_type")],
+                "не больше 3"),
+            "empty_changes": ([], "непустой список"),
+            "changes_not_a_list": ("def_line=3", "непустой список"),
+            "non_object_change": (["def_line"], "каждое изменение"),
+            "missing_changes": (None, "непустой список"),
+        }
+        for name, (changes, fragment) in cases.items():
+            with self.subTest(case=name):
+                answer_obj = {"mode": "adjust", "confidence": "low", "reason": "ок"}
+                if changes is not None:
+                    answer_obj["changes"] = changes
+                answer = self.answer(answer_obj)
+                calls = []
+
+                def fake_call(messages, api_key, model, _calls=calls):
+                    _calls.append(messages)
+                    return answer, 10
+
+                with mock.patch.object(
+                        self.advisor, "call_openrouter", side_effect=fake_call), \
+                        mock.patch.object(self.advisor.time, "sleep"):
+                    response = self.client.post(
+                        "/api/advisor", json=self.valid_body(), headers=self.auth)
+                self.assertEqual(response.status_code, 502)
+                self.assertEqual(response.get_json()["errorKind"], "invalid_answer")
+                # The corrective retry tells the model what exactly was wrong,
+                # in the adjust vocabulary (not a missing-preset complaint).
+                self.assertEqual(len(calls), 2)
+                feedback = calls[1][-1]["content"]
+                self.assertIn(fragment, feedback)
+                record = self.read_log()[0]
+                self.assertEqual(record["outcome"], "error")
+                self.assertEqual(record["errorKind"], "invalid_answer")
+                self.assertIsNone(record["llmPreset"])
+                self.clear_log()
+
+    def test_validate_answer_normalizes_and_validates(self):
+        catalog_ids = {"P1", "P2"}
+        legacy = self.advisor.validate_answer(
+            {"preset": "P1", "confidence": "high", "reason": "  r  "}, catalog_ids)
+        self.assertEqual(legacy, {
+            "mode": "switch", "preset": "P1", "changes": None,
+            "confidence": "high", "reason": "r"})
+        adjust = self.advisor.validate_answer(
+            {"mode": "adjust",
+             "changes": [{"control": "style", "value": " 4 "}],
+             "reason": "r"}, catalog_ids)
+        self.assertEqual(adjust["mode"], "adjust")
+        self.assertIsNone(adjust["preset"])
+        self.assertEqual(adjust["changes"], [{"control": "style", "value": "4"}])
+        self.assertEqual(adjust["confidence"], "medium")
+        self.assertEqual(adjust["reason"], "r")
+        bad = [
+            {"mode": "retune", "preset": "P1", "reason": "r"},
+            {"mode": "switch", "reason": "r"},
+            {"preset": "Nope", "reason": "r"},
+            {"mode": "adjust", "changes": [], "reason": "r"},
+            {"mode": "adjust", "changes": [{"control": "nope", "value": "1"}], "reason": "r"},
+            {"mode": "adjust", "changes": [{"control": "corner", "value": "3"}], "reason": "r"},
+            {"mode": "adjust", "changes": [{"control": "def_line", "value": "2"},
+                                           {"control": "def_line", "value": "3"}], "reason": "r"},
+            {"mode": "adjust", "changes": [{"control": "def_line", "value": "2"}] * 4,
+             "reason": "r"},
+            {"mode": "adjust", "changes": [{"control": "def_line", "value": "2"}], "reason": " "},
+        ]
+        for obj in bad:
+            with self.subTest(obj=obj):
+                with self.assertRaises(ValueError):
+                    self.advisor.validate_answer(obj, catalog_ids)
+
+    # -- currentControls --------------------------------------------------------
+
+    def test_current_controls_are_validated_and_cleaned(self):
+        body = self.valid_body()
+        body["currentControls"] = {
+            "def_line": "2",
+            "style": " 5 ",
+            "corner": "3",            # out of domain -> dropped
+            "unknown_control": "1",   # unknown -> dropped
+            "shot": 3,                # non-string -> dropped
+            "priority": ["left", "center", "left", "up"],
+        }
+        context = self.advisor.validate_context(body)
+        self.assertEqual(context["currentControls"], {
+            "def_line": "2",
+            "style": "5",
+            "priority": ["left", "center"],
+        })
+        # Absent key -> None, request still valid.
+        context = self.advisor.validate_context(self.valid_body())
+        self.assertIsNone(context["currentControls"])
+        # A non-object vector is a client error, not silently ignored.
+        body = self.valid_body()
+        body["currentControls"] = "def_line=2"
+        with self.assertRaises(self.advisor.AdvisorValidationError):
+            self.advisor.validate_context(body)
+
+    def test_huge_digit_control_value_is_dropped_not_500(self):
+        # Peer review (#465): int() raises ValueError for strings over 4300
+        # digits (Python 3.11+). The length guard must reject the value before
+        # the conversion, so validate_context cleans it and the endpoint never
+        # turns it into an unhandled 500.
+        body = self.valid_body()
+        body["currentControls"] = {"def_line": "9" * 4301}
+        context = self.advisor.validate_context(body)  # must not raise ValueError
+        # Dropped like any invalid entry: an empty vector (falsy, so the prompt
+        # block is omitted exactly as if it were absent).
+        self.assertEqual(context["currentControls"], {})
+
+        # The overlong value is dropped while a normal in-domain value survives.
+        body = self.valid_body()
+        body["currentControls"] = {"def_line": "9" * 4301, "style": "4"}
+        context = self.advisor.validate_context(body)
+        self.assertEqual(context["currentControls"], {"style": "4"})
+
+        # Two characters are still accepted ("05" is a valid press_intense 5).
+        body = self.valid_body()
+        body["currentControls"] = {"press_intense": "05"}
+        self.assertEqual(
+            self.advisor.validate_context(body)["currentControls"],
+            {"press_intense": "05"},
+        )
+
+        # Over the real endpoint: cleaned request, honest 200, no 500.
+        answer = self.answer({
+            "preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"})
+        body = self.valid_body()
+        body["currentControls"] = {"def_line": "9" * 4301}
+        with mock.patch.object(self.advisor, "call_openrouter", return_value=(answer, 10)):
+            response = self.client.post("/api/advisor", json=body, headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["available"])
+
+    def test_prompt_contains_current_controls_when_present(self):
+        body = self.valid_body()
+        body["currentControls"] = {"def_line": "2", "priority": ["left"]}
+        user = self.user_content(self.capture_messages(body))
+        self.assertIn("Текущие настройки (ползунки):", user)
+        self.assertIn('"def_line": "2"', user)
+        self.assertIn('"priority": ["left"]', user)
+        self.assertIn("Допустимые диапазоны ползунков:", user)
+        self.assertIn("corner 1-2", user)
+        self.assertLess(
+            user.index("Текущие настройки (ползунки):"),
+            user.index("Каталог пресетов:"),
+        )
+        # Without the vector the block is absent (byte identity is pinned by
+        # the existing legacy-prompt oracle).
+        plain = self.user_content(self.capture_messages(self.valid_body()))
+        self.assertNotIn("Текущие настройки", plain)
+
+    def test_system_prompt_offers_both_modes(self):
+        prompt = self.advisor.SYSTEM_PROMPT
+        self.assertIn('"mode":"adjust"', prompt)
+        self.assertIn('"mode":"switch"', prompt)
+        self.assertIn("changes", prompt)
+        # The honest fallback: without current controls only switch is usable.
+        self.assertIn("Если клиент не прислал текущие настройки, режим adjust", prompt)
+        self.assertIn("ТОЛЬКО валидный JSON без markdown-обёртки", prompt)
 
 
 if __name__ == "__main__":
