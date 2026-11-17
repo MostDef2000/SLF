@@ -41,11 +41,13 @@ function makeElement(id = '') {
 function makeDocument({ withPanel = true } = {}) {
     const panel = withPanel ? makeElement('slf-parser-recommendation') : null;
     const answerNode = makeElement('slf-llm-second-opinion-answer');
+    const chatNode = makeElement('slf-llm-chat');
     return {
-        panel, answerNode,
+        panel, answerNode, chatNode,
         getElementById(id) {
             if (id === 'slf-parser-recommendation') return panel;
             if (id === 'slf-llm-second-opinion-answer') return answerNode.removed ? null : answerNode;
+            if (id === 'slf-llm-chat') return chatNode.removed ? null : chatNode;
             return null;
         },
         createElement(tag) { return makeElement(tag === 'div' ? '' : ''); }
@@ -257,6 +259,144 @@ function makeSnapshot() {
     assert.equal(noPanel.mountAnswer('<div></div>'), false, 'no panel -> false');
 }
 
+// --- 4b. Phase 1 (#459): no-dialog payload is byte-identical ----------------
+{
+    const { LLM } = loadModule();
+    const expected = {
+        schema: 'slf_llm_advisor_request_v1',
+        gameId: 'g-123',
+        minute: 30,
+        bucket: '16-30',
+        score: { home: 0, away: 1 },
+        currentPreset: 'Emery_BalancedBase_v11',
+        developerHints: Array.from(
+            { length: 20 },
+            (_, i) => `hint-${i} ${'x'.repeat(400)}`.slice(0, 300)
+        ),
+        ruleDecision: {
+            preset: 'Emery_BalancedBase_v11',
+            gameMode: 'active_control',
+            confidence: 'medium',
+            topCandidates: [
+                { id: 'Emery_BalancedBase_v11', score: 35.7 },
+                { id: 'Pep_BoxControl_bal2', score: 23.5 }
+            ]
+        },
+        // SIGNAL_KEYS iteration order: minute, strengthGap, pressureRisk,
+        // gameMode, underPressure.
+        signals: {
+            minute: 30,
+            strengthGap: -12,
+            pressureRisk: 41.4,
+            gameMode: 'active_control',
+            underPressure: true
+        },
+        presetCatalog: [
+            { id: 'Emery_BalancedBase_v11', label: 'Emery Balanced Base', idea: 'баланс', use: 'база', risk: 'низкий' },
+            { id: 'Pep_BoxControl_bal2', label: 'Pep Box Control', idea: 'контроль', use: 'при контроле', risk: 'средний' }
+        ]
+    };
+    const baseArgs = {
+        snapshot: makeSnapshot(),
+        ruleDecision: makeRuleDecision(),
+        registry: makeRegistry()
+    };
+    // Absent, empty, or fully-cleaned-away dialogues must not add the key.
+    for (const dialog of [undefined, null, [], [{ role: 'system', text: 'nope' }], [{ role: 'user', text: '   ' }]]) {
+        const payload = LLM.buildPayload({ ...baseArgs, dialog });
+        assert.equal(
+            JSON.stringify(payload),
+            JSON.stringify(expected),
+            `no-dialog payload byte-identical for dialog=${JSON.stringify(dialog)}`
+        );
+        assert.ok(!Object.prototype.hasOwnProperty.call(payload, 'dialog'),
+            `no dialog key for dialog=${JSON.stringify(dialog)}`);
+    }
+}
+
+// --- 4c. Phase 1 (#459): dialog cleaning + caps -----------------------------
+{
+    const { LLM } = loadModule();
+    assert.equal(LLM.MAX_DIALOG_TURNS, 20);
+    assert.equal(LLM.MAX_DIALOG_TURN_CHARS, 500);
+    const baseArgs = {
+        snapshot: makeSnapshot(),
+        ruleDecision: makeRuleDecision(),
+        registry: makeRegistry()
+    };
+    const payload = LLM.buildPayload({
+        ...baseArgs,
+        dialog: [
+            { role: 'user', text: '  держим центр  ', ts: 111 },
+            { role: 'assistant', text: 'x'.repeat(900) },
+            { role: 'system', text: 'evil' },          // bad role dropped
+            { role: 'user', text: '' },                // blank dropped
+            { role: 'user', text: 42 },                // non-string dropped
+            { role: 'assistant', text: 'y', ts: 'not-a-number' }, // ts dropped
+            'nope', null                               // non-objects dropped
+        ]
+    });
+    assert.equal(payload.dialog.length, 3, 'only valid user/assistant turns survive');
+    assert.equal(JSON.stringify(payload.dialog[0]), JSON.stringify({ role: 'user', text: 'держим центр', ts: 111 }),
+        'text trimmed, numeric ts kept');
+    assert.equal(payload.dialog[1].text, 'x'.repeat(500), 'text capped at 500 chars');
+    assert.equal(JSON.stringify(payload.dialog[2]), JSON.stringify({ role: 'assistant', text: 'y' }),
+        'non-numeric ts omitted');
+    assert.equal(Object.keys(payload).at(-1), 'dialog', 'dialog appended after legacy keys');
+
+    const many = LLM.buildPayload({
+        ...baseArgs,
+        dialog: Array.from({ length: 30 }, (_, i) => ({
+            role: i % 2 ? 'assistant' : 'user',
+            text: `t${i}`
+        }))
+    });
+    assert.equal(many.dialog.length, 20, 'turns capped at 20');
+    assert.equal(many.dialog[0].text, 't0', 'cap keeps the first 20 turns');
+}
+
+// --- 4d. Phase 1 (#459): renderChat escaping + busy state -------------------
+{
+    const { LLM } = loadModule();
+    const html = LLM.renderChat({
+        turns: [
+            { role: 'user', text: '<script>alert(1)</script>' },
+            { role: 'assistant', text: 'a"b & <c>' }
+        ],
+        busy: true
+    });
+    assert.ok(!html.includes('<script>'), 'raw script tag must not survive renderChat');
+    assert.ok(html.includes('&lt;script&gt;'), 'user turn text escaped');
+    assert.ok(html.includes('a&quot;b &amp; &lt;c&gt;'), 'assistant turn text escaped');
+    assert.ok(html.includes('id="slf-llm-chat"'), 'chat container id');
+    assert.ok(html.includes('id="slf-llm-chat-input"'), 'chat input id');
+    assert.ok(html.includes('id="slf-llm-chat-send"'), 'chat send id');
+    assert.ok(html.includes('Диалог с тренером'), 'chat header present');
+
+    const busyInput = html.match(/<input[^>]*id="slf-llm-chat-input"[^>]*>/)[0];
+    const busySend = html.match(/<button[^>]*id="slf-llm-chat-send"[^>]*>/)[0];
+    assert.ok(busyInput.includes('disabled'), 'input disabled while busy');
+    assert.ok(busySend.includes('disabled'), 'send disabled while busy');
+
+    const idle = LLM.renderChat({ turns: [], busy: false });
+    const idleInput = idle.match(/<input[^>]*id="slf-llm-chat-input"[^>]*>/)[0];
+    const idleSend = idle.match(/<button[^>]*id="slf-llm-chat-send"[^>]*>/)[0];
+    assert.ok(!idleInput.includes('disabled'), 'input enabled when idle');
+    assert.ok(!idleSend.includes('disabled'), 'send enabled when idle');
+    assert.ok(idle.includes('Пока нет реплик'), 'empty chat shows the placeholder');
+}
+
+// --- 4e. Phase 1 (#459): mountChat ------------------------------------------
+{
+    const { LLM, document } = loadModule();
+    assert.equal(LLM.mountChat('<div id="slf-llm-chat">x</div>'), true, 'mounts into the recommendation panel');
+    assert.equal(document.chatNode.removed, true, 'previous chat node removed');
+    assert.equal(document.panel.children.length, 1);
+
+    const { LLM: noPanel } = loadModule({ withPanel: false });
+    assert.equal(noPanel.mountChat('<div id="slf-llm-chat"></div>'), false, 'no panel -> false');
+}
+
 // --- 5. Api.postJson timeout pass-through ------------------------------------
 function makeApiContext({ advisorResponse, advisorStatus, advisorRawText } = {}) {
     const requests = [];
@@ -397,10 +537,16 @@ function makeUiContext({ foreign = false, advisorRejection = null } = {}) {
     // mountAnswer (llm-second-opinion.js) mounts here; `html` keeps the markup
     // so the rendered advisor error text is assertable.
     const answerPanel = makeElement('slf-parser-recommendation');
+    // Phase 1 (#459): chat controls mounted by the ui-extension are looked up
+    // by id; the stubs keep their value/onclick so the send flow is testable.
+    const chatInput = { id: 'slf-llm-chat-input', value: '' };
+    const chatSend = { id: 'slf-llm-chat-send', disabled: false, onclick: null };
     const elements = new Map([
         ['slf-match-parser-panel', panel],
         ['slf-parser-status', status],
-        ['slf-parser-recommendation', answerPanel]
+        ['slf-parser-recommendation', answerPanel],
+        ['slf-llm-chat-input', chatInput],
+        ['slf-llm-chat-send', chatSend]
     ]);
     // The FRESH snapshot built by the LLM entry; the same object is mutated by
     // normalizeForeignSnapshot and handed to the checkpoint.
@@ -460,7 +606,17 @@ function makeUiContext({ foreign = false, advisorRejection = null } = {}) {
                 order.push('advisor');
                 advisorCalls.push({ collection, payload });
                 if (advisorRejection) throw advisorRejection;
-                return { available: true, model: 'test-model', provider: 'Particle', latencyMs: 2300 };
+                return {
+                    available: true,
+                    adviceId: 'adv-1',
+                    preset: 'Emery_BalancedBase_v11',
+                    presetLabel: 'Emery Balanced Base',
+                    confidence: 'medium',
+                    reason: 'держим баланс',
+                    model: 'test-model',
+                    provider: 'Particle',
+                    latencyMs: 2300
+                };
             }
         }
     };
@@ -479,7 +635,7 @@ function makeUiContext({ foreign = false, advisorRejection = null } = {}) {
         { filename: 'strategy-data-task-a-ui-extension.js' }
     );
     const llmButton = created.find(node => node.id === 'slf-llm-second-opinion-btn');
-    return { context, snapshot, checkpoints, advisorCalls, order, llmButton, answerPanel };
+    return { context, snapshot, checkpoints, advisorCalls, order, llmButton, answerPanel, chatInput, chatSend };
 }
 
 {
@@ -621,6 +777,110 @@ function makeAdvisorError(fields) {
     const text = mountedErrorText(run);
     assert.ok(text.includes('пустой ответ'), `chained empty_answer rendered honestly: ${text}`);
     assert.ok(!text.includes('невалидный ответ'), `chained empty_answer must not render as invalid answer: ${text}`);
+}
+
+// --- 10. Phase 1 (#459): chat send flow --------------------------------------
+// The chat window is an additional entry point next to the «🤖 LLM» button:
+// one send = one advisor request with the accumulated dialogue; the answer
+// still renders with the «Применить пресет» button (no auto-apply).
+function lastNodeHtml(run, id) {
+    const marker = `id="${id}"`;
+    const nodes = run.answerPanel.children.filter(node => String(node.html || '').includes(marker));
+    const node = nodes[nodes.length - 1];
+    return node ? String(node.html || '') : '';
+}
+
+{
+    const run = makeUiContext();
+    assert.ok(run.chatSend && typeof run.chatSend.onclick === 'function', 'chat send wired on mount');
+    run.chatInput.value = 'Соперник давит справа';
+    const callsBefore = run.advisorCalls.length;
+    await run.chatSend.onclick();
+
+    assert.equal(run.advisorCalls.length, callsBefore + 1, 'one advisor request per chat turn');
+    const payload = run.advisorCalls[run.advisorCalls.length - 1].payload;
+    assert.equal(payload.dialog.length, 1, 'payload carries the accumulated dialogue');
+    assert.equal(payload.dialog[0].role, 'user');
+    assert.equal(payload.dialog[0].text, 'Соперник давит справа');
+    assert.equal(typeof payload.dialog[0].ts, 'number', 'user turn stamped with ts');
+
+    const turns = run.context.STATE.llmDialogByGame['g-123'];
+    assert.equal(turns.length, 2, 'user + assistant turns kept per game');
+    assert.deepEqual(
+        { role: turns[0].role, text: turns[0].text },
+        { role: 'user', text: 'Соперник давит справа' }
+    );
+    assert.deepEqual(
+        { role: turns[1].role, text: turns[1].text },
+        { role: 'assistant', text: 'держим баланс' },
+        'assistant turn carries the model reason'
+    );
+
+    const chatHtml = lastNodeHtml(run, 'slf-llm-chat');
+    assert.ok(chatHtml.includes('Соперник давит справа'), 'user turn rendered');
+    assert.ok(chatHtml.includes('держим баланс'), 'assistant turn rendered');
+    assert.ok(chatHtml.includes('data-slf-llm-chat-turn="assistant"'), 'assistant turn marked');
+    const sendTag = chatHtml.match(/<button[^>]*id="slf-llm-chat-send"[^>]*>/)[0];
+    assert.ok(!sendTag.includes('disabled'), 'send re-enabled after a successful turn');
+    assert.equal(run.chatInput.value, '', 'input cleared after send');
+
+    const answerHtml = lastNodeHtml(run, 'slf-llm-second-opinion-answer');
+    assert.ok(answerHtml.includes('slf-llm-apply-btn'), 'answer rendered with the apply button');
+    assert.ok(answerHtml.includes('Применить пресет'), 'apply label is the existing one');
+}
+
+{
+    const run = makeUiContext();
+    run.chatInput.value = '   ';
+    const before = run.advisorCalls.length;
+    const result = await run.chatSend.onclick();
+    assert.equal(result, null, 'blank input sends nothing');
+    assert.equal(run.advisorCalls.length, before, 'no advisor request for blank input');
+    const turns = run.context.STATE.llmDialogByGame['g-123'] || [];
+    assert.equal(turns.length, 0, 'blank input appends no turn');
+}
+
+{
+    const run = makeUiContext({
+        advisorRejection: makeAdvisorError({ status: 502, errorKind: 'empty_answer' })
+    });
+    run.chatInput.value = 'жми выше';
+    await run.chatSend.onclick();
+
+    const turns = run.context.STATE.llmDialogByGame['g-123'];
+    assert.equal(turns.length, 1, 'only the user turn survives a failure');
+    assert.equal(turns[0].role, 'user');
+    assert.equal(turns[0].text, 'жми выше');
+    assert.ok(!turns.some(turn => turn.role === 'assistant'), 'no fake assistant turn on failure');
+
+    const answerHtml = lastNodeHtml(run, 'slf-llm-second-opinion-answer');
+    assert.ok(answerHtml.includes('пустой ответ'), `honest advisor error text rendered: ${answerHtml}`);
+
+    const chatHtml = lastNodeHtml(run, 'slf-llm-chat');
+    assert.ok(chatHtml.includes('жми выше'), 'user turn stays visible for a resend');
+    const sendTag = chatHtml.match(/<button[^>]*id="slf-llm-chat-send"[^>]*>/)[0];
+    assert.ok(!sendTag.includes('disabled'), 'send re-enabled after a failure');
+}
+
+{
+    // No gameId: the dialogue must not be shared across matches or sent with
+    // gameId:null. Honest refusal, nothing stored, no request.
+    const run = makeUiContext();
+    delete run.snapshot.gameId;
+    run.chatInput.value = 'жми выше';
+    const before = run.advisorCalls.length;
+    const result = await run.chatSend.onclick();
+    assert.equal(result, null, 'no game id -> no advisor request');
+    assert.equal(run.advisorCalls.length, before, 'nothing is sent without a match id');
+    const dialogs = run.context.STATE.llmDialogByGame || {};
+    assert.equal(dialogs.unknown, undefined, "nothing stored under a shared 'unknown' key");
+    assert.ok(
+        Object.values(dialogs).every(turns => !turns.length),
+        'no dialogue turns stored without a game id'
+    );
+    const answerHtml = lastNodeHtml(run, 'slf-llm-second-opinion-answer');
+    assert.ok(answerHtml.includes('только на странице матча'), `honest no-game message: ${answerHtml}`);
+    assert.equal(run.chatInput.value, 'жми выше', 'input is kept on the no-game refusal');
 }
 
 console.log('test-llm-second-opinion: all assertions passed');

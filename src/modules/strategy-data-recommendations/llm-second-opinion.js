@@ -12,6 +12,9 @@ const LLMSecondOpinion = {
     MAX_HINTS: 20,
     MAX_HINT_CHARS: 300,
     MAX_CATALOG_ENTRIES: 40,
+    // Phase 1 (#459): optional per-match dialogue. Mirrors the server caps.
+    MAX_DIALOG_TURNS: 20,
+    MAX_DIALOG_TURN_CHARS: 500,
 
     // Compact whitelist of decision-context signals sent to the advisor.
     // Everything else in the moment context stays local (payload budget).
@@ -34,8 +37,29 @@ const LLMSecondOpinion = {
             .replace(/"/g, '&quot;');
     },
 
+    // Client-side cleaning for the dialogue: only {role: user|assistant,
+    // text: string} turns survive, text is trimmed/capped, ts is kept only
+    // when numeric, and the list is capped at MAX_DIALOG_TURNS.
+    cleanDialog(dialog) {
+        if (!Array.isArray(dialog)) return [];
+        return dialog
+            .map(turn => {
+                if (!turn || typeof turn !== 'object') return null;
+                const role = turn.role === 'user' || turn.role === 'assistant' ? turn.role : '';
+                const text = typeof turn.text === 'string'
+                    ? turn.text.trim().slice(0, this.MAX_DIALOG_TURN_CHARS)
+                    : '';
+                if (!role || !text) return null;
+                const cleaned = { role, text };
+                if (typeof turn.ts === 'number' && Number.isFinite(turn.ts)) cleaned.ts = turn.ts;
+                return cleaned;
+            })
+            .filter(Boolean)
+            .slice(0, this.MAX_DIALOG_TURNS);
+    },
+
     // Fail-closed: null unless a rules decision AND a preset catalog exist.
-    buildPayload({ snapshot, ruleDecision, registry }) {
+    buildPayload({ snapshot, ruleDecision, registry, dialog }) {
         if (!ruleDecision || typeof ruleDecision !== 'object' || !registry || typeof registry !== 'object') return null;
         const active = Array.isArray(registry.active) ? registry.active : [];
         if (!active.length) return null;
@@ -72,7 +96,7 @@ const LLMSecondOpinion = {
             .slice(0, 5)
             .map(item => ({ id: item.preset || item.id, score: typeof item.score === 'number' ? item.score : null }));
 
-        return {
+        const payload = {
             schema: 'slf_llm_advisor_request_v1',
             gameId: (snapshot && snapshot.gameId) || null,
             minute: (snapshot && snapshot.minute != null) ? snapshot.minute : (context.minute ?? null),
@@ -93,6 +117,11 @@ const LLMSecondOpinion = {
             signals,
             presetCatalog: catalog
         };
+        // Phase 1 (#459): the dialogue key is appended only when turns survive
+        // cleaning, so a no-dialog payload keeps the exact legacy shape/bytes.
+        const dialogTurns = this.cleanDialog(dialog);
+        if (dialogTurns.length) payload.dialog = dialogTurns;
+        return payload;
     },
 
     requestSecondOpinion(payload) {
@@ -144,6 +173,52 @@ const LLMSecondOpinion = {
         if (existing) existing.remove();
         const holder = document.createElement('div');
         holder.innerHTML = answerHtml;
+        const node = holder.firstElementChild;
+        if (!node) return false;
+        panel.appendChild(node);
+        return true;
+    },
+
+    // Phase 1 (#459): compact chat window for the current match. Turns are
+    // user/assistant remarks about tactics; every text is escaped and the
+    // send control is disabled while a request is in flight. The window never
+    // applies anything — the answer's «Применить пресет» button stays the only
+    // trigger.
+    renderChat({ turns, busy } = {}) {
+        const safeTurns = this.cleanDialog(turns);
+        const rows = safeTurns.map(turn =>
+            `<div data-slf-llm-chat-turn="${turn.role}" style="margin:2px 0;line-height:1.4;">` +
+            `<span style="opacity:.6;">${turn.role === 'assistant' ? 'LLM' : 'Вы'}:</span> ` +
+            `${this.escapeHtml(turn.text)}</div>`
+        ).join('');
+        const placeholder = safeTurns.length
+            ? ''
+            : '<div style="opacity:.55;margin:2px 0;">Пока нет реплик — напишите замечание по тактике.</div>';
+        const disabled = busy ? ' disabled' : '';
+        const busyStyle = busy ? 'opacity:.55;cursor:not-allowed;' : 'cursor:pointer;';
+        return '<div id="slf-llm-chat" style="margin:5px 0;background:#141414;border:1px solid #444;border-radius:5px;color:#ddd;padding:7px 9px;font-size:12px;">' +
+            '<b style="color:#8fd3ff;">💬 Диалог с тренером:</b>' +
+            `<div id="slf-llm-chat-turns" style="max-height:150px;overflow-y:auto;margin:5px 0;">${rows || placeholder}</div>` +
+            '<div style="display:flex;gap:5px;align-items:flex-start;">' +
+            `<input id="slf-llm-chat-input" type="text" maxlength="${this.MAX_DIALOG_TURN_CHARS}"` +
+            ' placeholder="Замечание по тактике…"' +
+            `${disabled} style="flex:1;min-width:0;padding:4px 6px;background:#222;color:#eee;border:1px solid #555;border-radius:3px;font-size:12px;" />` +
+            `<button id="slf-llm-chat-send" type="button"${disabled}` +
+            ` style="padding:4px 10px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;${busyStyle}font-size:12px;">Отправить</button>` +
+            '</div>' +
+            '<span style="opacity:.55;">Реплики уходят в LLM вместе с ситуацией; пресет применяется только кнопкой.</span>' +
+            '</div>';
+    },
+
+    // Mount the chat window inside the recommendation panel, replacing any
+    // previous chat node (distinct id, never collides with the answer node).
+    mountChat(chatHtml) {
+        const panel = document.getElementById('slf-parser-recommendation');
+        if (!panel) return false;
+        const existing = document.getElementById('slf-llm-chat');
+        if (existing) existing.remove();
+        const holder = document.createElement('div');
+        holder.innerHTML = chatHtml;
         const node = holder.firstElementChild;
         if (!node) return false;
         panel.appendChild(node);
