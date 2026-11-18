@@ -50,6 +50,10 @@
                     if (body && typeof body === 'object') {
                         if (typeof body.errorKind === 'string') error.errorKind = body.errorKind;
                         if (typeof body.error === 'string') error.serverError = redactApiText(body.error);
+                        // #471: the only finish reason carried to the UI is the
+                        // server's own allowlisted 'length' (truncated-empty
+                        // answer); arbitrary provider strings are never echoed.
+                        if (body.finishReason === 'length') error.finishReason = 'length';
                     }
                 } catch (_) {
                     // non-JSON error body: keep the status-based fallbacks

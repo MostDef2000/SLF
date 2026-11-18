@@ -893,9 +893,16 @@
         misconfigured: 'advisor сконфигурирован неверно (SLF_ADVISOR_PROXY), обратитесь к администратору'
     };
 
+    // #471: a truncated-empty reply (finishReason=length) is its own honest
+    // cause — the generic empty_answer text would hide the exhausted limit.
+    const LLM_EMPTY_ANSWER_LENGTH_TEXT = 'Модель исчерпала лимит ответа и ничего не вернула. Попробуйте ещё раз.';
+
     function llmSecondOpinionErrorText(error) {
         const status = error && error.status;
         const serverKind = error && error.errorKind;
+        if (serverKind === 'empty_answer' && error && error.finishReason === 'length') {
+            return LLM_EMPTY_ANSWER_LENGTH_TEXT;
+        }
         if (typeof serverKind === 'string'
             && Object.prototype.hasOwnProperty.call(LLM_ADVISOR_ERROR_KIND_TEXT, serverKind)) {
             return LLM_ADVISOR_ERROR_KIND_TEXT[serverKind];
@@ -911,12 +918,26 @@
         return `Ошибка советника${status ? ` (HTTP ${status})` : ''}`;
     }
 
+    // #471: «Повторить» for the chat answer area — appended to the chat-path
+    // failure answer only. While a request is in flight the whole answer node
+    // is replaced by «Думает…» (the control disappears); on the next failure
+    // the node is mounted again with a fresh, enabled button.
+    function llmChatRetryHtml(answerHtml) {
+        const btn = '<button id="slf-llm-chat-retry" type="button"'
+            + ' style="margin-left:6px;padding:2px 8px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;cursor:pointer;font-size:12px;">Повторить</button>';
+        const close = answerHtml.lastIndexOf('</div>');
+        if (close === -1) return answerHtml + btn;
+        return answerHtml.slice(0, close) + btn + answerHtml.slice(close);
+    }
+
     async function requestLlmSecondOpinion(freshSnapshot, dialog, options = {}) {
         if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined') return null;
         const settings = options && typeof options === 'object' ? options : {};
         // #461: in partial mode a stale STATE.lastRuleDecision must never stand
         // in for the current state — the request goes out with ruleDecision:null.
         const partial = settings.partial === true;
+        // #471: the chat path marks its failures with a «Повторить» control.
+        const chat = settings.chat === true;
         const snapshot = freshSnapshot
             || (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot)
             || null;
@@ -945,10 +966,13 @@
             return answer || null;
         } catch (error) {
             console.error('[SLF] LLM second opinion request failed', error);
-            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+            const errorHtml = LLMSecondOpinion.renderAnswer({
                 available: false,
                 error: llmSecondOpinionErrorText(error)
-            }, { partial }));
+            }, { partial });
+            // #471: only the chat path gets «Повторить» — the one-shot button
+            // has no dialogue to resend.
+            LLMSecondOpinion.mountAnswer(chat ? llmChatRetryHtml(errorHtml) : errorHtml);
             return null;
         }
     }
@@ -1047,11 +1071,37 @@
         }
         const dialog = rememberLlmDialogTurn(gameId, 'user', text, Date.now());
         if (input) input.value = '';
+        return runLlmChatRequest(gameId, snapshot, dialog);
+    }
+
+    // #471: explicit retry of the LAST dialogue — the stored turns go out
+    // as-is, no new user turn is appended (a retry never duplicates the
+    // user's words). Same busy gating and render path as a normal send.
+    async function retryLlmChatTurn() {
+        if (llmChatBusy) return null;
+        if (typeof LLMSecondOpinion === 'undefined' || typeof SnapshotEngine === 'undefined') return null;
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) return null;
+        const gameId = snapshot.gameId ? String(snapshot.gameId) : '';
+        if (!gameId) return null; // no match id -> nothing to resend
+        const dialog = llmDialogForGame(gameId).slice();
+        if (!dialog.length || dialog[dialog.length - 1].role !== 'user') {
+            // Retry only makes sense after a failed send: the last stored
+            // turn must be the unanswered user remark.
+            return null;
+        }
+        return runLlmChatRequest(gameId, snapshot, dialog);
+    }
+
+    // Request+render part shared by Send and «Повторить»: one busy-gated
+    // advisor request with the given dialogue; an assistant turn is recorded
+    // only on available:true, a failure adds no fake turn.
+    async function runLlmChatRequest(gameId, snapshot, dialog) {
         llmChatBusy = true;
         renderLlmChatWindow(gameId);
         let answer = null;
         try {
-            answer = await requestLlmSecondOpinionFresh({ snapshot, dialog });
+            answer = await requestLlmSecondOpinionFresh({ snapshot, dialog, chat: true });
         } catch (error) {
             console.error('[SLF] LLM chat request failed', error);
         } finally {
@@ -1107,7 +1157,7 @@
         // its answer is shown with the honest preliminary marker and is never
         // auto-applied.
         const partial = !snapshot.ruleDecision;
-        return requestLlmSecondOpinion(snapshot, dialog, { partial });
+        return requestLlmSecondOpinion(snapshot, dialog, { partial, chat: settings.chat === true });
     }
 
     // Ф2a (#441): one-click apply of the suggested preset. Runs ONLY on an
@@ -1257,6 +1307,14 @@
             const btn = event?.target?.closest ? event.target.closest('#slf-llm-apply-adjust') : null;
             if (!btn) return;
             void applyLlmSuggestedAdjust(btn);
+        });
+        // #471: chat «Повторить» — resends the existing dialogue without a
+        // new user turn. Disabled on click; a failure re-mounts it enabled.
+        document.addEventListener('click', event => {
+            const btn = event?.target?.closest ? event.target.closest('#slf-llm-chat-retry') : null;
+            if (!btn) return;
+            btn.disabled = true;
+            void retryLlmChatTurn();
         });
     }
 

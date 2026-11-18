@@ -792,6 +792,30 @@ function makeAdvisorError(fields) {
         () => RawApi.postJson('advisor', {}, 'llm-advisor', 35000),
         error => error.kind === 'http' && error.errorKind === undefined && error.serverError === undefined
     );
+
+    // #471: the server's allowlisted finishReason is carried on the error
+    // object; any other value is never echoed.
+    const withLength = makeApiContext({
+        advisorResponse: { available: false, errorKind: 'empty_answer', error: 'model returned no content', finishReason: 'length' },
+        advisorStatus: 502
+    });
+    const LengthApi = loadApi(withLength.context);
+    await assert.rejects(
+        () => LengthApi.postJson('advisor', {}, 'llm-advisor', 35000),
+        error => error.kind === 'http'
+            && error.errorKind === 'empty_answer'
+            && error.finishReason === 'length'
+    );
+
+    const otherReason = makeApiContext({
+        advisorResponse: { available: false, errorKind: 'upstream_error', finishReason: 'content_filter' },
+        advisorStatus: 502
+    });
+    const OtherReasonApi = loadApi(otherReason.context);
+    await assert.rejects(
+        () => OtherReasonApi.postJson('advisor', {}, 'llm-advisor', 35000),
+        error => error.kind === 'http' && error.finishReason === undefined
+    );
 }
 
 {
@@ -903,6 +927,97 @@ function lastNodeHtml(run, id) {
     assert.ok(chatHtml.includes('жми выше'), 'user turn stays visible for a resend');
     const sendTag = chatHtml.match(/<button[^>]*id="slf-llm-chat-send"[^>]*>/)[0];
     assert.ok(!sendTag.includes('disabled'), 'send re-enabled after a failure');
+}
+
+{
+    // #471: chat «Повторить» — resends the EXISTING dialogue without appending
+    // another user turn; the one-shot button path gets no retry control.
+    const run = makeUiContext({
+        advisorRejection: makeAdvisorError({ status: 502, errorKind: 'empty_answer' })
+    });
+    run.chatInput.value = 'жми выше';
+    await run.chatSend.onclick();
+
+    let answerHtml = lastNodeHtml(run, 'slf-llm-second-opinion-answer');
+    assert.ok(answerHtml.includes('id="slf-llm-chat-retry"'), `retry control mounted on chat failure: ${answerHtml}`);
+    assert.ok(answerHtml.includes('Повторить'), 'retry label present');
+    assert.ok(!/id="slf-llm-chat-retry"[^>]*disabled/.test(answerHtml), 'retry control enabled on failure');
+
+    const buttonRun = makeUiContext({
+        advisorRejection: makeAdvisorError({ status: 502, errorKind: 'empty_answer', finishReason: 'length' })
+    });
+    await buttonRun.llmButton.onclick();
+    const buttonText = mountedErrorText(buttonRun);
+    assert.ok(buttonText.includes('Модель исчерпала лимит ответа'), `honest length text on the button path: ${buttonText}`);
+    assert.ok(!buttonText.includes('slf-llm-chat-retry'), 'no retry control on the one-shot button path');
+
+    // The retry succeeds: one advisor call, SAME dialogue, only the assistant
+    // turn is added.
+    run.context.Api.postJson = async (collection, payload) => {
+        run.advisorCalls.push({ collection, payload });
+        return {
+            available: true, adviceId: 'adv-2', preset: 'Emery_BalancedBase_v11',
+            presetLabel: 'Emery Balanced Base', confidence: 'medium',
+            reason: 'держим баланс', model: 'test-model', latencyMs: 100
+        };
+    };
+    const retryBtn = { id: 'slf-llm-chat-retry', disabled: false };
+    dispatchDelegatedClick(run, '#slf-llm-chat-retry', retryBtn);
+    await flushAsync();
+
+    assert.ok(retryBtn.disabled, 'retry button disabled on click');
+    const retryPayload = run.advisorCalls[run.advisorCalls.length - 1].payload;
+    assert.equal(retryPayload.dialog.length, 1, 'retry sends the EXISTING dialogue — no duplicate user turn');
+    assert.equal(retryPayload.dialog[0].role, 'user');
+    assert.equal(retryPayload.dialog[0].text, 'жми выше');
+    const turns = run.context.STATE.llmDialogByGame['g-123'];
+    assert.deepEqual([...turns].map(t => t.role), ['user', 'assistant'], 'assistant added once, no duplicated user turn');
+
+    answerHtml = lastNodeHtml(run, 'slf-llm-second-opinion-answer');
+    assert.ok(answerHtml.includes('slf-llm-apply-btn'), 'successful retry renders the answer');
+    assert.ok(!answerHtml.includes('slf-llm-chat-retry'), 'retry control gone after success');
+}
+
+{
+    // #471: while a retry request is in flight the answer node shows
+    // «Думает…» (no retry control) and send is disabled; a second click sends
+    // nothing; a failed retry restores the control enabled with the honest
+    // length text and adds no dialogue turn.
+    let rejectAdvisors;
+    const run = makeUiContext({
+        advisorRejection: makeAdvisorError({ status: 502, errorKind: 'empty_answer' })
+    });
+    run.chatInput.value = 'жми выше';
+    await run.chatSend.onclick(); // failure #1: retry control mounted
+
+    run.context.Api.postJson = (collection, payload) => {
+        run.advisorCalls.push({ collection, payload });
+        return new Promise((resolve, reject) => { rejectAdvisors = reject; });
+    };
+    dispatchDelegatedClick(run, '#slf-llm-chat-retry', { id: 'slf-llm-chat-retry', disabled: false });
+    await flushAsync();
+
+    assert.equal(run.advisorCalls.length, 2, 'retry issued exactly one advisor request');
+    let answerHtml = lastNodeHtml(run, 'slf-llm-second-opinion-answer');
+    assert.ok(answerHtml.includes('Думает'), `in-flight answer shows progress: ${answerHtml}`);
+    assert.ok(!answerHtml.includes('slf-llm-chat-retry'), 'retry control absent while busy');
+    const busySend = lastNodeHtml(run, 'slf-llm-chat').match(/<button[^>]*id="slf-llm-chat-send"[^>]*>/)[0];
+    assert.ok(busySend.includes('disabled'), 'send disabled while retry is in flight');
+
+    dispatchDelegatedClick(run, '#slf-llm-chat-retry', { id: 'slf-llm-chat-retry', disabled: false });
+    await flushAsync();
+    assert.equal(run.advisorCalls.length, 2, 'no second request while busy');
+
+    rejectAdvisors(makeAdvisorError({ status: 502, errorKind: 'empty_answer', finishReason: 'length' }));
+    await flushAsync();
+
+    answerHtml = lastNodeHtml(run, 'slf-llm-second-opinion-answer');
+    assert.ok(answerHtml.includes('id="slf-llm-chat-retry"'), 'retry control restored on failure');
+    assert.ok(!/id="slf-llm-chat-retry"[^>]*disabled/.test(answerHtml), 'restored retry control is enabled');
+    assert.ok(answerHtml.includes('Модель исчерпала лимит ответа'), `honest length text on retry failure: ${answerHtml}`);
+    const sendTag = lastNodeHtml(run, 'slf-llm-chat').match(/<button[^>]*id="slf-llm-chat-send"[^>]*>/)[0];
+    assert.ok(!sendTag.includes('disabled'), 'send re-enabled after failed retry');
+    assert.equal(run.context.STATE.llmDialogByGame['g-123'].length, 1, 'failed retry adds no turn');
 }
 
 {
