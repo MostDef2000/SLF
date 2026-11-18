@@ -46,6 +46,10 @@ REQUEST_TIMEOUT_S = 15.0
 MAX_ATTEMPTS = 2
 RETRY_AFTER_CAP_S = 5.0
 MAX_TOKENS = 1200
+# #471: dialogue replies exhausted the base budget (game 33723111: empty_answer
+# with finishReason=length at 1200 completion tokens). A request carrying a
+# validated dialog gets this larger cap; non-dialog requests keep MAX_TOKENS.
+DIALOGUE_MAX_TOKENS = 2400
 TEMPERATURE = 0.4
 
 MAX_CATALOG_ENTRIES = 40
@@ -992,11 +996,11 @@ def _build_socks_opener(proxy_host, proxy_port):
     return urllib.request.build_opener(urllib.request.ProxyHandler({}), handler)
 
 
-def call_openrouter(messages, api_key, model, timeout_s=REQUEST_TIMEOUT_S):
+def call_openrouter(messages, api_key, model, timeout_s=REQUEST_TIMEOUT_S, max_tokens=MAX_TOKENS):
     body = json.dumps({
         "model": model,
         "messages": messages,
-        "max_tokens": MAX_TOKENS,
+        "max_tokens": max_tokens,
         "temperature": TEMPERATURE,
     }).encode("utf-8")
     request = urllib.request.Request(
@@ -1537,6 +1541,9 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
     # provider call; the log lock is released inside build_enrichment.
     enrichment = build_enrichment(data_dir, context, read_knowledge)
     messages = build_messages(context, enrichment)
+    # #471: one budget per consultation — the SAME value on every attempt.
+    # A nonempty validated dialog selects the larger dialogue cap.
+    max_tokens = DIALOGUE_MAX_TOKENS if context.get("dialog") else MAX_TOKENS
 
     def corrective_message(feedback):
         # Built by concatenation on purpose: str.format would treat the JSON
@@ -1574,7 +1581,7 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
         if attempt_feedback:
             attempt_messages = messages + [{"role": "user", "content": corrective_message(attempt_feedback)}]
         try:
-            call_result = call_openrouter(attempt_messages, api_key, model)
+            call_result = call_openrouter(attempt_messages, api_key, model, max_tokens=max_tokens)
         except AdvisorError as exc:
             last_error = exc
             if attempt + 1 < MAX_ATTEMPTS and exc.kind in ("rate_limited", "upstream_error", "network"):
@@ -1691,8 +1698,15 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
         "invalid_answer": "LLM вернул невалидный ответ, попробуйте ещё раз",
         "misconfigured": "advisor сконфигурирован неверно (SLF_ADVISOR_PROXY), обратитесь к администратору",
     }
-    return jsonify_available_false(kind, messages_by_kind.get(kind, "LLM недоступен")), 503 if kind in ("rate_limited", "network", "upstream_error") else 502
+    return jsonify_available_false(kind, messages_by_kind.get(kind, "LLM недоступен"), finish_reason=finish_reason), 503 if kind in ("rate_limited", "network", "upstream_error") else 502
 
 
-def jsonify_available_false(error_kind, message):
-    return {"available": False, "errorKind": error_kind, "error": message}
+def jsonify_available_false(error_kind, message, finish_reason=None):
+    response = {"available": False, "errorKind": error_kind, "error": message}
+    # #471: the only provider string this contract echoes is the allowlisted
+    # 'length' on empty_answer — the client needs it to tell a truncated-empty
+    # reply from any other empty answer. Never echoed for other kinds or other
+    # finish reasons.
+    if error_kind == "empty_answer" and finish_reason == "length":
+        response["finishReason"] = "length"
+    return response

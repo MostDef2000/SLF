@@ -164,6 +164,7 @@ jobs:
 
       - name: Run tactic runtime and analytics regressions
         run: |
+          node tools/test-llm-second-opinion.mjs
           node tools/check-bundle-order.mjs
           node tools/test-tactic-telemetry-envelope.mjs
           node tools/test-tactical-record-keys.mjs

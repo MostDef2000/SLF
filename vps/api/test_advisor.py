@@ -306,6 +306,134 @@ class AdvisorTestCase(unittest.TestCase):
         self.assertEqual(record["completionTokens"], 700)
         self.assertEqual(record["promptTokens"], 1200)
 
+    def _provider_payload(self, content, finish_reason="stop", completion_tokens=500, prompt_tokens=2000):
+        return {
+            "choices": [{"message": {"content": content}, "finish_reason": finish_reason}],
+            "usage": {"completion_tokens": completion_tokens, "prompt_tokens": prompt_tokens},
+        }
+
+    def _stub_transport(self, payloads, captured):
+        # Scripted urlopen stand-in: records every serialized request body and
+        # serves the payloads in order (the last one repeats).
+        class _Response:
+            def __init__(self, payload):
+                self.payload = payload
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self):
+                return json.dumps(self.payload).encode("utf-8")
+
+        state = {"i": 0}
+        def fake_urlopen(request, timeout=None):
+            captured.append(json.loads(request.data.decode("utf-8")))
+            payload = payloads[min(state["i"], len(payloads) - 1)]
+            state["i"] += 1
+            return _Response(payload)
+        return fake_urlopen
+
+    def test_serialized_max_tokens_1200_without_dialog(self):
+        # #471: a request without a dialog serializes the base budget.
+        answer = json.dumps(
+            {"preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"},
+            ensure_ascii=False)
+        captured = []
+        with mock.patch.object(self.advisor.urllib.request, "urlopen",
+                               side_effect=self._stub_transport(
+                                   [self._provider_payload(answer)], captured)):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0]["max_tokens"], 1200)
+
+    def test_serialized_max_tokens_2400_with_dialog(self):
+        # #471: a validated nonempty dialog selects the larger dialogue budget.
+        body = self.valid_body()
+        body["dialog"] = [{"role": "user", "text": "держим центр", "ts": 111}]
+        answer = json.dumps(
+            {"preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"},
+            ensure_ascii=False)
+        captured = []
+        with mock.patch.object(self.advisor.urllib.request, "urlopen",
+                               side_effect=self._stub_transport(
+                                   [self._provider_payload(answer)], captured)):
+            response = self.client.post("/api/advisor", json=body, headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0]["max_tokens"], 2400)
+
+    def test_dialog_budget_identical_on_retry(self):
+        # #471: attempt 1 returns prose (invalid answer), attempt 2 is the
+        # corrective retry — the serialized budget is the SAME selected value.
+        body = self.valid_body()
+        body["dialog"] = [{"role": "user", "text": "держим центр", "ts": 111}]
+        answer = json.dumps(
+            {"preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"},
+            ensure_ascii=False)
+        captured = []
+        with mock.patch.object(self.advisor.urllib.request, "urlopen",
+                               side_effect=self._stub_transport([
+                                   self._provider_payload("извините, не могу",
+                                                          finish_reason="length",
+                                                          completion_tokens=1200,
+                                                          prompt_tokens=3896),
+                                   self._provider_payload(answer),
+                               ], captured)), \
+                mock.patch.object(self.advisor.time, "sleep"):
+            response = self.client.post("/api/advisor", json=body, headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(captured), 2)
+        self.assertEqual(captured[0]["max_tokens"], 2400)
+        self.assertEqual(captured[1]["max_tokens"], 2400)
+        self.assertEqual(captured[0]["max_tokens"], captured[1]["max_tokens"])
+
+    def test_empty_answer_length_error_carries_finish_reason(self):
+        # #471: the truncated-empty case propagates the allowlisted finishReason
+        # so the client can tell it from any other empty answer.
+        error = self.advisor.AdvisorError(
+            "empty_answer", "model returned no content", status=200,
+            finish_reason="length", completion_tokens=1200, prompt_tokens=3896)
+        with mock.patch.object(self.advisor, "call_openrouter", side_effect=error):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        body = response.get_json()
+        self.assertEqual(body["errorKind"], "empty_answer")
+        self.assertEqual(body["finishReason"], "length")
+
+    def test_error_response_has_no_finish_reason_for_other_cases(self):
+        # #471: the field is allowlisted — empty_answer with any other finish
+        # reason, other failure kinds, and success never echo it.
+        answer = json.dumps(
+            {"preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"},
+            ensure_ascii=False)
+
+        # empty_answer + finish_reason='stop'
+        stop_error = self.advisor.AdvisorError(
+            "empty_answer", "model returned no content", status=200,
+            finish_reason="stop", completion_tokens=0, prompt_tokens=900)
+        with mock.patch.object(self.advisor, "call_openrouter", side_effect=stop_error):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.get_json()["errorKind"], "empty_answer")
+        self.assertNotIn("finishReason", response.get_json())
+
+        # invalid_answer + finish_reason='length' (truncated but non-empty)
+        with mock.patch.object(
+                self.advisor, "call_openrouter",
+                return_value=("извините, не могу", 500, None, "length", 700, 1200)), \
+                mock.patch.object(self.advisor.time, "sleep"):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.get_json()["errorKind"], "invalid_answer")
+        self.assertNotIn("finishReason", response.get_json())
+
+        # success never carries the field
+        with mock.patch.object(self.advisor, "call_openrouter", return_value=(answer, 10)):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("finishReason", response.get_json())
+
     def test_short_call_results_still_work_and_omit_diagnostics(self):
         # #463: older two-/three-value stubs stay valid; absent diagnostics
         # are omitted from the record rather than logged as nulls.
@@ -432,7 +560,7 @@ class AdvisorEnrichmentTestCase(unittest.TestCase):
             "preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"
         })
 
-        def fake_call(messages, api_key, model):
+        def fake_call(messages, api_key, model, max_tokens=None):
             captured["messages"] = messages
             return answer, 1
 
@@ -2056,7 +2184,7 @@ class AdvisorDialogTestCase(unittest.TestCase):
     def capture_messages(self, body):
         captured = {}
 
-        def fake_call(messages, api_key, model):
+        def fake_call(messages, api_key, model, max_tokens=None):
             captured["messages"] = messages
             return self.answer(), 1
 
@@ -2716,7 +2844,7 @@ class AdvisorModesTestCase(unittest.TestCase):
             "preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"
         })
 
-        def fake_call(messages, api_key, model):
+        def fake_call(messages, api_key, model, max_tokens=None):
             captured["messages"] = messages
             return answer, 1
 
@@ -2863,7 +2991,7 @@ class AdvisorModesTestCase(unittest.TestCase):
                 answer = self.answer(answer_obj)
                 calls = []
 
-                def fake_call(messages, api_key, model, _calls=calls):
+                def fake_call(messages, api_key, model, _calls=calls, max_tokens=None):
                     _calls.append(messages)
                     return answer, 10
 
