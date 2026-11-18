@@ -388,6 +388,92 @@ class AdvisorTestCase(unittest.TestCase):
         self.assertEqual(captured[1]["max_tokens"], 2400)
         self.assertEqual(captured[0]["max_tokens"], captured[1]["max_tokens"])
 
+    def test_empty_answer_length_retries_with_doubled_budget(self):
+        # #471 follow-up: an empty answer truncated by max_tokens gets ONE
+        # retry with a doubled budget, and the retried call succeeds.
+        answer = json.dumps(
+            {"preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"},
+            ensure_ascii=False)
+        captured = []
+        with mock.patch.object(self.advisor.urllib.request, "urlopen",
+                               side_effect=self._stub_transport([
+                                   self._provider_payload("", finish_reason="length",
+                                                          completion_tokens=1200,
+                                                          prompt_tokens=3896),
+                                   self._provider_payload(answer),
+                               ], captured)):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["available"])
+        self.assertEqual([call["max_tokens"] for call in captured], [1200, 2400])
+        self.assertEqual(self.read_log()[0]["outcome"], "ok")
+
+    def test_dialog_empty_answer_length_retries_with_doubled_budget(self):
+        # #471 follow-up: the dialogue budget (2400) doubles on the same retry,
+        # capped at HARD_CAP (4800).
+        body = self.valid_body()
+        body["dialog"] = [{"role": "user", "text": "держим центр", "ts": 111}]
+        answer = json.dumps(
+            {"preset": "Pep_BoxControl_bal2", "confidence": "high", "reason": "ок"},
+            ensure_ascii=False)
+        captured = []
+        with mock.patch.object(self.advisor.urllib.request, "urlopen",
+                               side_effect=self._stub_transport([
+                                   self._provider_payload("", finish_reason="length",
+                                                          completion_tokens=2400,
+                                                          prompt_tokens=3896),
+                                   self._provider_payload(answer),
+                               ], captured)):
+            response = self.client.post("/api/advisor", json=body, headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([call["max_tokens"] for call in captured], [2400, 4800])
+        # The dialogue turn is logged first; the advice record is the newest.
+        self.assertEqual(self.read_log()[-1]["outcome"], "ok")
+
+    def test_empty_answer_non_length_is_not_retried(self):
+        # #471 follow-up: only finish_reason='length' is retried; any other
+        # empty_answer reason keeps the immediate break.
+        calls = []
+
+        def fake_call(messages, api_key, model, max_tokens=None):
+            calls.append(max_tokens)
+            raise self.advisor.AdvisorError(
+                "empty_answer", "model returned no content", status=200,
+                finish_reason="error", completion_tokens=0, prompt_tokens=900)
+
+        with mock.patch.object(self.advisor, "call_openrouter", side_effect=fake_call):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.get_json()["errorKind"], "empty_answer")
+        self.assertNotIn("finishReason", response.get_json())
+        self.assertEqual(calls, [1200])
+
+    def test_empty_answer_length_retry_failure_reports_last_attempt(self):
+        # #471 follow-up: both attempts truncated-empty -> the error response
+        # still says finishReason=length and carries the LAST attempt's tokens.
+        calls = []
+
+        def fake_call(messages, api_key, model, max_tokens=None):
+            calls.append(max_tokens)
+            raise self.advisor.AdvisorError(
+                "empty_answer", "model returned no content", status=200,
+                finish_reason="length",
+                completion_tokens=1200 if len(calls) == 1 else 2400,
+                prompt_tokens=3896)
+
+        with mock.patch.object(self.advisor, "call_openrouter", side_effect=fake_call):
+            response = self.client.post("/api/advisor", json=self.valid_body(), headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        body = response.get_json()
+        self.assertEqual(body["errorKind"], "empty_answer")
+        self.assertEqual(body["finishReason"], "length")
+        self.assertEqual(calls, [1200, 2400])
+        record = self.read_log()[0]
+        self.assertEqual(record["outcome"], "error")
+        self.assertEqual(record["finishReason"], "length")
+        self.assertEqual(record["completionTokens"], 2400)
+        self.assertEqual(record["promptTokens"], 3896)
+
     def test_empty_answer_length_error_carries_finish_reason(self):
         # #471: the truncated-empty case propagates the allowlisted finishReason
         # so the client can tell it from any other empty answer.
