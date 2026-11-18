@@ -50,6 +50,10 @@ MAX_TOKENS = 1200
 # with finishReason=length at 1200 completion tokens). A request carrying a
 # validated dialog gets this larger cap; non-dialog requests keep MAX_TOKENS.
 DIALOGUE_MAX_TOKENS = 2400
+# #471 follow-up: a length-truncated empty answer is retried once with a
+# doubled budget. 4800 = 2x DIALOGUE_MAX_TOKENS: enough headroom for a reply
+# that ran out of room at 2400, still a bounded worst case per request.
+HARD_CAP = 4800
 TEMPERATURE = 0.4
 
 MAX_CATALOG_ENTRIES = 40
@@ -1541,9 +1545,10 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
     # provider call; the log lock is released inside build_enrichment.
     enrichment = build_enrichment(data_dir, context, read_knowledge)
     messages = build_messages(context, enrichment)
-    # #471: one budget per consultation — the SAME value on every attempt.
-    # A nonempty validated dialog selects the larger dialogue cap.
+    # #471: one budget per consultation, doubled by the empty_answer/length
+    # retry below. A nonempty validated dialog selects the larger dialogue cap.
     max_tokens = DIALOGUE_MAX_TOKENS if context.get("dialog") else MAX_TOKENS
+    attempt_max_tokens = max_tokens
 
     def corrective_message(feedback):
         # Built by concatenation on purpose: str.format would treat the JSON
@@ -1581,11 +1586,18 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
         if attempt_feedback:
             attempt_messages = messages + [{"role": "user", "content": corrective_message(attempt_feedback)}]
         try:
-            call_result = call_openrouter(attempt_messages, api_key, model, max_tokens=max_tokens)
+            call_result = call_openrouter(attempt_messages, api_key, model, max_tokens=attempt_max_tokens)
         except AdvisorError as exc:
             last_error = exc
             if attempt + 1 < MAX_ATTEMPTS and exc.kind in ("rate_limited", "upstream_error", "network"):
                 time.sleep(min(exc.retry_after or 2.0, RETRY_AFTER_CAP_S))
+                continue
+            # #471 follow-up: a reply cut by max_tokens came back empty; the
+            # remaining attempt gets a doubled budget. Any other empty_answer
+            # reason (error/stop/absent) keeps the immediate break.
+            if (attempt + 1 < MAX_ATTEMPTS and exc.kind == "empty_answer"
+                    and exc.finish_reason == "length"):
+                attempt_max_tokens = min(max_tokens * 2, HARD_CAP)
                 continue
             break
         # call_openrouter returns (content, latency_ms, provider,
