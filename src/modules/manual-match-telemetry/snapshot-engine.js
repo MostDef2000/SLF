@@ -472,9 +472,21 @@ const SnapshotEngine = {
             return Promise.resolve({ status: 208, deduplicated: true, resultKey: key });
         }
 
+        // #469: the finished-match POST body was the stall offender (~23 KB).
+        // These four verbose fields are transport-dead for the results endpoint
+        // (server.py reads only status/score/gameId/parsedAt/resultKey/teams/
+        // myTeam) — the same field set compactOutboxPayload strips for snapshot
+        // outbox storage. Compact a copy: snapshot.lineupRows must survive for
+        // sendPlayerObservations below, and tacticTelemetry stays verbatim.
+        const transportResult = Object.assign({}, result);
+        delete transportResult.lineupRows;
+        delete transportResult.shotsTable;
+        delete transportResult.eventsText;
+        delete transportResult.developerHints;
+
         const request = Promise.resolve(Api.postAppend(
             CONFIG.COLLECTIONS.MATCH_RESULTS,
-            result,
+            transportResult,
             'match result history'
         )).then(response => {
             this._sentMatchResultKeys.add(key);

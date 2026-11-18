@@ -154,6 +154,7 @@ jobs:
           node tools/test-manual-match-state-bridge.mjs
           node tools/test-manual-telemetry-legacy-boundary.mjs
           node tools/test-manual-telemetry-final-boundary.mjs
+          node tests/test-match-result-transport-compaction.mjs
 
       - name: Run reachability audit
         run: |
