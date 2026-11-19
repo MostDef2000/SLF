@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.372
+// @version      4.4.374
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.372',
-        scriptVersion: '4.4.372',
+        version: '4.4.374',
+        scriptVersion: '4.4.374',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.372',
+        scriptVersion: '4.4.374',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -792,7 +792,27 @@ const DomUtils = {
             error.status = metadata.status;
             error.statusText = metadata.statusText;
             error.response = metadata;
-    
+
+            // Carry the server's own failure classification from a non-2xx JSON
+            // body so the UI can report the honest cause (e.g. empty_answer)
+            // instead of a generic status guess. Non-JSON or fieldless bodies
+            // leave the fields absent; the raw body is never logged or echoed.
+            if (kind === 'http') {
+                try {
+                    const body = JSON.parse(response && response.responseText);
+                    if (body && typeof body === 'object') {
+                        if (typeof body.errorKind === 'string') error.errorKind = body.errorKind;
+                        if (typeof body.error === 'string') error.serverError = redactApiText(body.error);
+                        // #471: the only finish reason carried to the UI is the
+                        // server's own allowlisted 'length' (truncated-empty
+                        // answer); arbitrary provider strings are never echoed.
+                        if (body.finishReason === 'length') error.finishReason = 'length';
+                    }
+                } catch (_) {
+                    // non-JSON error body: keep the status-based fallbacks
+                }
+            }
+
             return error;
         }
     
@@ -989,6 +1009,7 @@ const DomUtils = {
                     schema: 'slf_canonical_api_status_v2',
                     status: (data && data.status) ? data.status : (degraded ? 'degraded' : 'ok'),
                     games: (data && Number.isFinite(data.games)) ? data.games : 0,
+                    advisor: data && data.advisor,
                     collections
                 };
             })
@@ -2925,6 +2946,20 @@ const DomUtils = {
     }
 
     async function applyPresetAsync(name) {
+        // A failed preset apply that may have left the native controls in an
+        // unconfirmed state must not look like a resumable active lab experiment.
+        // Preflight failures and verified rollbacks leave the page untouched and
+        // the lab activation stays active; only an unverified rollback or a
+        // lineup mutation is recorded as an honest indeterminate activation.
+        function markLabIndeterminateIfUnverified(applied) {
+            if (applied?.reason !== 'rollback_unverified' && applied?.reason !== 'unexpected_lineup_mutation') return;
+            try {
+                STATE.tacticalLabRuntime?.markIndeterminate?.(applied.reason, STATE.lastTacticApplyFailure || null);
+            } catch (error) {
+                debugWarn('[SLF] Tactical Lab indeterminate state not recorded', error);
+            }
+        }
+
         // Allow an old persisted v10 selection without reintroducing the old
         // ID into active preset controls or recording it as a new source ID.
         name = PresetStorage.resolvePresetId?.(name) || name;
@@ -2939,17 +2974,6 @@ const DomUtils = {
         const beforeSnapshot = location.pathname.includes('/game.php')
             ? SnapshotEngine.build()
             : null;
-
-        if (location.pathname.includes('/game.php') && STATE.tacticalLabRuntime?.isActive?.()) {
-            try {
-                await STATE.tacticalLabRuntime.closeActive('user_selected_production', beforeSnapshot, {
-                    nextPresetId: name,
-                    nextTacticSource: 'production'
-                });
-            } catch (error) {
-                debugWarn('[SLF] Tactical Lab exit telemetry failed before production preset', error);
-            }
-        }
 
         const formationBefore = STATE.tacticControlBridge.inspectFixedLineup?.() || null;
         if (formationBefore?.available && !formationBefore.ok) {
@@ -2971,6 +2995,7 @@ const DomUtils = {
                 rolledBack:applied.rolledBack === true, ts:Date.now()
             };
             debugWarn('[SLF] Не подтверждена установка тактики в интерфейсе:', name, applied.failures, applied.mismatches);
+            markLabIndeterminateIfUnverified(applied);
             return false;
         }
 
@@ -2982,7 +3007,27 @@ const DomUtils = {
                 reason:'unexpected_lineup_mutation', ts:Date.now()
             };
             debugWarn('[SLF v11] Нативная страница неожиданно изменила позиции игроков:', name);
+            markLabIndeterminateIfUnverified({ reason:'unexpected_lineup_mutation' });
             return false;
+        }
+
+        // Variant A: the lab experiment survives a failed apply — it is closed
+        // only here, after the UI readback (and lineup) are confirmed.
+        const nextFingerprint = applied.tactic && typeof SnapshotEngine !== 'undefined'
+            ? SnapshotEngine.telemetryV2?.tacticFingerprint?.(applied.tactic) || null
+            : null;
+        const labExit = {
+            nextPresetId: name,
+            nextTacticSource: 'production'
+        };
+        if (nextFingerprint) labExit.nextTacticFingerprint = nextFingerprint;
+
+        if (location.pathname.includes('/game.php') && STATE.tacticalLabRuntime?.isActive?.()) {
+            try {
+                await STATE.tacticalLabRuntime.closeActive('user_selected_production', beforeSnapshot, labExit);
+            } catch (error) {
+                debugWarn('[SLF] Tactical Lab exit telemetry failed after production preset', error);
+            }
         }
 
         const labels = PresetStorage.getAllLabels ? PresetStorage.getAllLabels() : {};
@@ -4044,7 +4089,7 @@ const DomUtils = {
         async function closeActive(reason, snapshot = null, next = {}) {
             snapshot = snapshot || SnapshotEngine.build();
             const state = loadState(getGameId(snapshot));
-            if (!state?.activation || state.activation.status !== 'active') return null;
+            if (!state?.activation || (state.activation.status !== 'active' && state.activation.status !== 'indeterminate')) return null;
             const experiment = experimentFor(state);
             if (!experiment) return null;
             const activation = clone(state.activation);
@@ -4083,13 +4128,44 @@ const DomUtils = {
 
         function isActive() {
             const state = loadState(String(MatchStateParser.getGameId() || ''));
-            return state?.activation?.status === 'active';
+            // An indeterminate activation is still in progress (never reusable
+            // and never completed): the shared apply path must be able to
+            // resolve it with a later confirmed production preset.
+            return state?.activation?.status === 'active' || state?.activation?.status === 'indeterminate';
+        }
+        // A failed production preset apply that may have left the native
+        // controls unconfirmed: keep the activation (it must never be silently
+        // reusable or reported as a completed experiment) and record the honest
+        // indeterminate status. Never writes `completed`.
+        function markIndeterminate(reason, failure = null) {
+            const state = loadState(String(MatchStateParser.getGameId() || ''));
+            if (!state?.activation || state.activation.status !== 'active') return null;
+            state.activation.status = 'indeterminate';
+            state.activation.indeterminateReason = reason || 'apply_unverified';
+            state.activation.indeterminateAtTs = Date.now();
+            state.activation.failure = clone(failure || null);
+            persistState(state);
+            renderUI();
+            return clone(state.activation);
         }
         async function checkpoint(source = 'explicit_checkpoint', snapshot = null) {
             snapshot = snapshot || SnapshotEngine.build();
             const state = loadState(getGameId(snapshot));
             if (!state?.assignment) return {active:false,completed:null};
             if (state.outbox?.length) void flushOutbox(state);
+            if (state?.activation?.status === 'indeterminate') {
+                // An unconfirmed apply stays indeterminate: record the observed
+                // fingerprint honestly instead of fabricating a tactic_changed
+                // completion the exit telemetry could not confirm.
+                const actual = tacticFingerprint(getCurrentTactic());
+                if (state.activation.lastObservedFingerprint !== actual) {
+                    state.activation.lastObservedFingerprint = actual;
+                    state.activation.lastObservedAtTs = Date.now();
+                    persistState(state);
+                }
+                renderUI();
+                return {active:false,indeterminate:true,completed:clone(state.completed || null)};
+            }
             if (!state?.activation || state.activation.status !== 'active') {
                 renderUI();
                 return {active:false,completed:clone(state.completed || null)};
@@ -4166,7 +4242,13 @@ const DomUtils = {
             const shortId = experiment.experimentId.replace(/^EXP-561-P\d+-/,'EXP-');
             panel.dataset.experimentId = experiment.experimentId;
             panel.dataset.populationVersion = populationVersion;
-            if (state.activation?.status === 'active') {
+            if (state.activation?.status === 'indeterminate') {
+                status.textContent = `● ${shortId} ПРЕРВАН · состояние тактики не подтверждено`;
+                status.style.color = '#ff9f43';
+                detail.textContent = `Применение пресета не подтвердилось (${state.activation.indeterminateReason || 'apply_unverified'}). Тест не завершён и не будет засчитан как обычный.`;
+                button.disabled = true;
+                button.textContent = 'Тест прерван';
+            } else if (state.activation?.status === 'active') {
                 status.textContent = `● ${shortId} ACTIVE${state.activation.startedAtMinute!=null?` · применён на ${state.activation.startedAtMinute}'`:''}`;
                 status.style.color = '#43f58c';
                 detail.textContent = 'Эксперимент применён. Следующая проверка — только по ↻ Подсказка, выбору production preset или финальному парсингу.';
@@ -4247,7 +4329,7 @@ const DomUtils = {
                 getPopulation(){return clone(population);},
                 getAssignment(gameId){return clone(loadState(String(gameId||MatchStateParser.getGameId()||''))?.assignment||null);},
                 assignForGame(gameId){const experiment=selectExperiment(String(gameId||''));return {experimentId:experiment.experimentId,genomeFingerprint:experiment.genomeFingerprint,parentExperimentId:experiment.parentExperimentId,selectionWeightPct:experiment.selectionWeightPct};},
-                activate,closeActive,checkpoint,isActive,mountUI,
+                activate,closeActive,checkpoint,isActive,markIndeterminate,mountUI,
                 flushOutbox(){return flushOutbox(loadState(String(MatchStateParser.getGameId()||'')));}
             };
             void mountUI();
@@ -5347,9 +5429,21 @@ const SnapshotEngine = {
             return Promise.resolve({ status: 208, deduplicated: true, resultKey: key });
         }
 
+        // #469: the finished-match POST body was the stall offender (~23 KB).
+        // These four verbose fields are transport-dead for the results endpoint
+        // (server.py reads only status/score/gameId/parsedAt/resultKey/teams/
+        // myTeam) — the same field set compactOutboxPayload strips for snapshot
+        // outbox storage. Compact a copy: snapshot.lineupRows must survive for
+        // sendPlayerObservations below, and tacticTelemetry stays verbatim.
+        const transportResult = Object.assign({}, result);
+        delete transportResult.lineupRows;
+        delete transportResult.shotsTable;
+        delete transportResult.eventsText;
+        delete transportResult.developerHints;
+
         const request = Promise.resolve(Api.postAppend(
             CONFIG.COLLECTIONS.MATCH_RESULTS,
-            result,
+            transportResult,
             'match result history'
         )).then(response => {
             this._sentMatchResultKeys.add(key);
@@ -11932,6 +12026,15 @@ TacticalKnowledgePack.init();
                         this.addParserLog(
                             `${prefix} | games:${status.games} snapshots:${fmt('snapshots')} results:${fmt('results')} events:${fmt('events')} effects:${fmt('effects')} players:${fmt('players')} transfers:${fmt('transfers')} tactics:${fmt('tactics')}`
                         );
+                        // #441: the configured LLM model/service goes on its own
+                        // short line so the API status line keeps fitting the log.
+                        // Older servers omit the advisor block -> no second line.
+                        // addParserLog() assigns textContent, so the model string
+                        // is never parsed as HTML.
+                        const advisor = status.advisor;
+                        if (advisor && advisor.model) {
+                            this.addParserLog(`LLM: ${advisor.model} @ ${advisor.service || 'OpenRouter'}`);
+                        }
 
                         debugLog('[SLF API v2 canonical]', status);
                     })
@@ -12959,7 +13062,7 @@ html[data-slf-design="fm2026"] #slf-parser-recommendation{width:100%!important;m
 html[data-slf-design="fm2026"] #slf-parser-recommendation>div,html[data-slf-design="fm2026"] [data-slf-rec-priority]{color:var(--slf-text)!important;background:var(--slf-bg2)!important;border:1px solid var(--slf-border)!important;border-radius:10px!important}
 html[data-slf-design="fm2026"] #slf-match-parser-panel button,html[data-slf-design="fm2026"] #slf-tactics-dropdown button,html[data-slf-design="fm2026"] #slf-save-dialog button,html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar button,html[data-slf-design="fm2026"] #slf-transfer-candidate-panel button,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel button{min-height:30px!important;padding:6px 10px!important;color:var(--slf-text)!important;background:var(--slf-bg3)!important;border:1px solid var(--slf-border)!important;border-radius:8px!important;font:600 12px var(--slf-font)!important;cursor:pointer!important}
 html[data-slf-design="fm2026"] #slf-match-parser-panel button:hover,html[data-slf-design="fm2026"] #slf-tactics-dropdown button:hover,html[data-slf-design="fm2026"] #slf-save-dialog button:hover,html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar button:hover,html[data-slf-design="fm2026"] #slf-transfer-candidate-panel button:hover,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel button:hover{color:var(--slf-accent2)!important;border-color:var(--slf-accent)!important;background:rgba(43,217,124,.10)!important}
-html[data-slf-design="fm2026"] #slf-manual-recommendation-btn,html[data-slf-design="fm2026"] #slf-transfer-analyze-visible,html[data-slf-design="fm2026"] #slf-candidate-scan,html[data-slf-design="fm2026"] #slf-purchase-forecast-calc{color:#07130c!important;background:linear-gradient(180deg,var(--slf-accent2),#1fb863)!important;border-color:transparent!important}
+html[data-slf-design="fm2026"] #slf-transfer-analyze-visible,html[data-slf-design="fm2026"] #slf-candidate-scan,html[data-slf-design="fm2026"] #slf-purchase-forecast-calc{color:#07130c!important;background:linear-gradient(180deg,var(--slf-accent2),#1fb863)!important;border-color:transparent!important}
 html[data-slf-design="fm2026"] #slf-tactics-dropdown.slf-panel{width:100%!important;max-width:100%!important;margin:4px 0 12px!important;padding:10px 12px!important;color:var(--slf-text)!important;font-size:12.5px!important}
 html[data-slf-design="fm2026"] #slf-tactics-dropdown select,html[data-slf-design="fm2026"] #slf-foreign-match-target,html[data-slf-design="fm2026"] #slf-save-dialog select,html[data-slf-design="fm2026"] #slf-save-dialog input,html[data-slf-design="fm2026"] #slf-transfer-candidate-panel input,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel input,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel select{min-height:32px!important;padding:6px 9px!important;color:var(--slf-text)!important;background:var(--slf-bg2)!important;border:1px solid var(--slf-border)!important;border-radius:8px!important;font:500 12px var(--slf-font)!important;outline:none!important}
 html[data-slf-design="fm2026"] #slf-tactics-dropdown select:focus,html[data-slf-design="fm2026"] #slf-foreign-match-target:focus,html[data-slf-design="fm2026"] #slf-save-dialog select:focus,html[data-slf-design="fm2026"] #slf-save-dialog input:focus,html[data-slf-design="fm2026"] #slf-transfer-candidate-panel input:focus,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel input:focus,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel select:focus{border-color:var(--slf-accent)!important;box-shadow:0 0 0 3px rgba(43,217,124,.14)!important}
@@ -13160,6 +13263,21 @@ const LLMSecondOpinion = {
     MAX_HINTS: 20,
     MAX_HINT_CHARS: 300,
     MAX_CATALOG_ENTRIES: 40,
+    // #465: the 14 slider controls + priority read from getCurrentTactic()
+    // and sent as the current vector so the advisor can propose fine-grained
+    // «adjust» changes. Mirrors the server control names.
+    CONTROL_KEYS: [
+        'def_line', 'press_line', 'def_width', 'press_intense',
+        'build_type', 'build_temp', 'build_long', 'build_fast',
+        'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
+    ],
+    PRIORITY_DIRECTIONS: ['left', 'center', 'right'],
+    // Phase 1 (#459): optional per-match dialogue. Mirrors the server caps.
+    MAX_DIALOG_TURNS: 20,
+    MAX_DIALOG_TURN_CHARS: 500,
+    // #461: partial-data mode. On an early match the rules engine has no
+    // decision yet; the payload then says so honestly instead of refusing.
+    PARTIAL_DATA_NOTE: 'Правила не дали решения на текущих данных матча',
 
     // Compact whitelist of decision-context signals sent to the advisor.
     // Everything else in the moment context stays local (payload budget).
@@ -13182,11 +13300,59 @@ const LLMSecondOpinion = {
             .replace(/"/g, '&quot;');
     },
 
-    // Fail-closed: null unless a rules decision AND a preset catalog exist.
-    buildPayload({ snapshot, ruleDecision, registry }) {
-        if (!ruleDecision || typeof ruleDecision !== 'object' || !registry || typeof registry !== 'object') return null;
+    // Client-side cleaning for the dialogue: only {role: user|assistant,
+    // text: string} turns survive, text is trimmed/capped, ts is kept only
+    // when numeric, and the list is capped at MAX_DIALOG_TURNS.
+    cleanDialog(dialog) {
+        if (!Array.isArray(dialog)) return [];
+        return dialog
+            .map(turn => {
+                if (!turn || typeof turn !== 'object') return null;
+                const role = turn.role === 'user' || turn.role === 'assistant' ? turn.role : '';
+                const text = typeof turn.text === 'string'
+                    ? turn.text.trim().slice(0, this.MAX_DIALOG_TURN_CHARS)
+                    : '';
+                if (!role || !text) return null;
+                const cleaned = { role, text };
+                if (typeof turn.ts === 'number' && Number.isFinite(turn.ts)) cleaned.ts = turn.ts;
+                return cleaned;
+            })
+            .filter(Boolean)
+            .slice(0, this.MAX_DIALOG_TURNS);
+    },
+
+    // #465: client-side cleaning for the current slider vector. Only known
+    // control keys with non-empty string values survive; priority keeps a
+    // de-duplicated subset of left/center/right. Anything else is dropped and
+    // an empty vector is omitted entirely (the server handles absence).
+    cleanCurrentControls(currentControls) {
+        if (!currentControls || typeof currentControls !== 'object' || Array.isArray(currentControls)) return null;
+        const cleaned = {};
+        for (const key of this.CONTROL_KEYS) {
+            const value = currentControls[key];
+            if (typeof value === 'string' && value.trim()) cleaned[key] = value.trim();
+        }
+        const priority = Array.isArray(currentControls.priority)
+            ? currentControls.priority.filter((direction, index, list) =>
+                this.PRIORITY_DIRECTIONS.includes(direction) && list.indexOf(direction) === index)
+            : [];
+        if (priority.length) cleaned.priority = priority;
+        return Object.keys(cleaned).length ? cleaned : null;
+    },
+
+    // Fail-closed on "nothing to advise with": no registry or an empty catalog
+    // still yields null (partial mode additionally needs the snapshot). #461: a
+    // missing rules decision (early match, phase collect) no longer refuses the
+    // request — it becomes an explicitly marked partial payload.
+    buildPayload({ snapshot, ruleDecision, registry, dialog, currentControls }) {
+        if (!registry || typeof registry !== 'object') return null;
         const active = Array.isArray(registry.active) ? registry.active : [];
         if (!active.length) return null;
+        const partial = !ruleDecision || typeof ruleDecision !== 'object';
+        // #461: only partial mode requires the snapshot's own situation to be
+        // meaningful; full mode keeps the pre-existing contract untouched.
+        if (partial && (!snapshot || typeof snapshot !== 'object')) return null;
+        const decision = partial ? null : ruleDecision;
 
         const catalog = active.slice(0, this.MAX_CATALOG_ENTRIES).map(id => {
             const meta = (registry.meta && registry.meta[id]) || {};
@@ -13199,62 +13365,138 @@ const LLMSecondOpinion = {
             };
         }).filter(entry => entry.id);
 
-        const context = (ruleDecision.moment && ruleDecision.moment.context) || {};
+        // The decision's moment context is the only signal source; in partial
+        // mode there is none, and the situation (score/minute) still rides in
+        // the top-level fields below.
+        const context = partial ? {} : ((decision.moment && decision.moment.context) || {});
         const signals = {};
         for (const key of this.SIGNAL_KEYS) {
             if (context[key] !== undefined && context[key] !== null) signals[key] = context[key];
         }
 
         const hints = (Array.isArray(snapshot && snapshot.developerHints) ? snapshot.developerHints : [])
-            .map(hint => String(hint || '').trim().slice(0, this.MAX_HINT_CHARS))
+            .map(hint => {
+                // Hints may be plain strings or {text} objects; never
+                // stringify the object itself ('[object Object]').
+                const text = (hint && typeof hint === 'object') ? hint.text : hint;
+                return String(text || '').trim().slice(0, this.MAX_HINT_CHARS);
+            })
             .filter(Boolean)
             .slice(0, this.MAX_HINTS);
 
-        const candidates = (Array.isArray(ruleDecision.candidates) ? ruleDecision.candidates : [])
+        const candidates = (Array.isArray(decision && decision.candidates) ? decision.candidates : [])
             .filter(item => item && !item.vetoed && (item.preset || item.id))
             .slice(0, 5)
             .map(item => ({ id: item.preset || item.id, score: typeof item.score === 'number' ? item.score : null }));
 
-        return {
+        const payload = {
             schema: 'slf_llm_advisor_request_v1',
             gameId: (snapshot && snapshot.gameId) || null,
             minute: (snapshot && snapshot.minute != null) ? snapshot.minute : (context.minute ?? null),
             bucket: (snapshot && snapshot.bucket) || '',
             score: (snapshot && snapshot.score) || null,
             currentPreset: context.currentPreset
-                || (ruleDecision.telemetry && ruleDecision.telemetry.currentPreset)
+                || (decision && decision.telemetry && decision.telemetry.currentPreset)
                 || (snapshot && snapshot.presetName)
                 || null,
             developerHints: hints,
-            ruleDecision: {
-                preset: (ruleDecision.action && ruleDecision.action.preset) || null,
-                gameMode: context.gameMode || (ruleDecision.action && ruleDecision.action.decision) || null,
+            ruleDecision: partial ? null : {
+                preset: (decision.action && decision.action.preset) || null,
+                gameMode: context.gameMode || (decision.action && decision.action.decision) || null,
                 // confidence is {level, gap, ...} from the scorer; accept a bare string too.
-                confidence: (ruleDecision.confidence && ruleDecision.confidence.level) || ruleDecision.confidence || null,
+                confidence: (decision.confidence && decision.confidence.level) || decision.confidence || null,
                 topCandidates: candidates
             },
             signals,
             presetCatalog: catalog
         };
+        // #461: the partial marker is appended only in partial mode, so a
+        // full-data payload keeps the exact legacy shape/bytes.
+        if (partial) {
+            payload.dataCompleteness = 'partial';
+            payload.dataNote = this.PARTIAL_DATA_NOTE;
+        }
+        // Phase 1 (#459): the dialogue key is appended only when turns survive
+        // cleaning, so a no-dialog payload keeps the exact legacy shape/bytes.
+        const dialogTurns = this.cleanDialog(dialog);
+        if (dialogTurns.length) payload.dialog = dialogTurns;
+        // #465: the current slider vector is appended only when it survives
+        // cleaning, so a caller without it keeps the exact legacy bytes.
+        const controls = this.cleanCurrentControls(currentControls);
+        if (controls) payload.currentControls = controls;
+        return payload;
     },
 
     requestSecondOpinion(payload) {
         return Api.postJson(this.ENDPOINT_COLLECTION, payload, 'llm-advisor', this.REQUEST_TIMEOUT_MS);
     },
 
-    renderAnswer(answer) {
+    renderAnswer(answer, options = {}) {
         if (!answer || answer.available !== true) {
             const message = this.escapeHtml((answer && answer.error) || 'LLM недоступен');
             return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#181818;border:1px dashed #555;border-radius:5px;color:#999;padding:7px 9px;font-size:12px;">🤖 LLM недоступен: ${message}</div>`;
         }
+        // #461: the advisor answered without a rules decision (early match).
+        // Mark the advice as preliminary; the answer itself is unchanged.
+        const partial = !!(options && options.partial === true);
+        const partialHtml = partial
+            ? '<div style="opacity:.75;margin-bottom:4px;color:#e8c87a;">Предварительный совет на неполных данных (правила не дали решения)</div>'
+            : '';
         const label = this.escapeHtml(answer.presetLabel || answer.preset || '');
         const confidence = this.escapeHtml(answer.confidence || '');
         const reason = this.escapeHtml(answer.reason || '');
-        const meta = this.escapeHtml(`${answer.model || ''} · ${(Number(answer.latencyMs) / 1000).toFixed(1)}s`);
+        // Show which model served the answer AND (when the server reports it)
+        // the upstream provider. The provider is optional — an older server or
+        // an upstream payload without it must keep the pre-existing
+        // `<model> · <latency>` line, never a dangling separator.
+        const provider = typeof answer.provider === 'string' ? answer.provider.trim() : '';
+        const metaParts = [answer.model || ''];
+        if (provider) metaParts.push(provider);
+        metaParts.push(`${(Number(answer.latencyMs) / 1000).toFixed(1)}s`);
+        const meta = this.escapeHtml(metaParts.join(' · '));
+        // #465: «adjust» answers change individual sliders, not the preset.
+        // They render a compact change list plus their own click-only apply
+        // button; the preset apply button belongs to «switch»/legacy answers
+        // only. Model-derived values are escaped in both the text and the
+        // JSON data attribute.
+        const adjustChanges = Array.isArray(answer.changes) ? answer.changes : [];
+        if (answer.mode === 'adjust' || adjustChanges.length) {
+            const changeRows = adjustChanges
+                .filter(change => change && typeof change === 'object' && change.control != null)
+                .map(change => `${this.escapeHtml(change.control)}: ${this.escapeHtml(change.value)}`)
+                .join(', ');
+            const adjustAdviceId = typeof answer.adviceId === 'string' ? answer.adviceId : '';
+            const adjustApplyHtml = adjustChanges.length
+                ? `<div style="margin-top:6px;"><button id="slf-llm-apply-adjust" type="button"` +
+                  ` data-slf-llm-apply-changes="${this.escapeHtml(JSON.stringify(adjustChanges))}"` +
+                  ` data-slf-llm-apply-advice-id="${this.escapeHtml(adjustAdviceId)}"` +
+                  ` style="padding:4px 10px;background:#2a4a2a;color:#cfc;border:1px solid #4a7;border-radius:3px;cursor:pointer;font-size:12px;">Применить изменения</button>` +
+                  `<span style="opacity:.55;margin-left:6px;">применение только по клику</span></div>`
+                : '';
+            return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#141a14;border:1px solid #3a5a3a;border-radius:5px;color:#cde;padding:7px 9px;font-size:12px;line-height:1.45;">` +
+                partialHtml +
+                `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>Точечная подстройка</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
+                `${changeRows ? `${changeRows}<br>` : ''}` +
+                `${reason}<br>` +
+                `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span>${adjustApplyHtml}</div>`;
+        }
+        // Ф2a (#441): one-click apply. The button only carries data; the
+        // click handler lives in the ui-extension (event delegation) and
+        // applies strictly on explicit click — never auto.
+        const presetId = typeof answer.preset === 'string' ? answer.preset : '';
+        const adviceId = typeof answer.adviceId === 'string' ? answer.adviceId : '';
+        const applyHtml = presetId
+            ? `<div style="margin-top:6px;"><button id="slf-llm-apply-btn" type="button"` +
+              ` data-slf-llm-apply-preset="${this.escapeHtml(presetId)}"` +
+              ` data-slf-llm-apply-advice-id="${this.escapeHtml(adviceId)}"` +
+              ` style="padding:4px 10px;background:#2a4a2a;color:#cfc;border:1px solid #4a7;border-radius:3px;cursor:pointer;font-size:12px;">Применить пресет</button>` +
+              `<span style="opacity:.55;margin-left:6px;">применение только по клику</span></div>`
+            : '';
         return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#141a14;border:1px solid #3a5a3a;border-radius:5px;color:#cde;padding:7px 9px;font-size:12px;line-height:1.45;">` +
+            partialHtml +
             `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>${label}</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
             `${reason}<br>` +
-            `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span></div>`;
+            `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span>${applyHtml}</div>`;
     },
 
     // Mount the answer inside the recommendation panel; a fresh hint render
@@ -13267,6 +13509,52 @@ const LLMSecondOpinion = {
         if (existing) existing.remove();
         const holder = document.createElement('div');
         holder.innerHTML = answerHtml;
+        const node = holder.firstElementChild;
+        if (!node) return false;
+        panel.appendChild(node);
+        return true;
+    },
+
+    // Phase 1 (#459): compact chat window for the current match. Turns are
+    // user/assistant remarks about tactics; every text is escaped and the
+    // send control is disabled while a request is in flight. The window never
+    // applies anything — the answer's «Применить пресет» button stays the only
+    // trigger.
+    renderChat({ turns, busy } = {}) {
+        const safeTurns = this.cleanDialog(turns);
+        const rows = safeTurns.map(turn =>
+            `<div data-slf-llm-chat-turn="${turn.role}" style="margin:2px 0;line-height:1.4;">` +
+            `<span style="opacity:.6;">${turn.role === 'assistant' ? 'LLM' : 'Вы'}:</span> ` +
+            `${this.escapeHtml(turn.text)}</div>`
+        ).join('');
+        const placeholder = safeTurns.length
+            ? ''
+            : '<div style="opacity:.55;margin:2px 0;">Пока нет реплик — напишите замечание по тактике.</div>';
+        const disabled = busy ? ' disabled' : '';
+        const busyStyle = busy ? 'opacity:.55;cursor:not-allowed;' : 'cursor:pointer;';
+        return '<div id="slf-llm-chat" style="margin:5px 0;background:#141414;border:1px solid #444;border-radius:5px;color:#ddd;padding:7px 9px;font-size:12px;">' +
+            '<b style="color:#8fd3ff;">💬 Диалог с тренером:</b>' +
+            `<div id="slf-llm-chat-turns" style="max-height:150px;overflow-y:auto;margin:5px 0;">${rows || placeholder}</div>` +
+            '<div style="display:flex;gap:5px;align-items:flex-start;">' +
+            `<input id="slf-llm-chat-input" type="text" maxlength="${this.MAX_DIALOG_TURN_CHARS}"` +
+            ' placeholder="Замечание по тактике…"' +
+            `${disabled} style="flex:1;min-width:0;padding:4px 6px;background:#222;color:#eee;border:1px solid #555;border-radius:3px;font-size:12px;" />` +
+            `<button id="slf-llm-chat-send" type="button"${disabled}` +
+            ` style="padding:4px 10px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;${busyStyle}font-size:12px;">Отправить</button>` +
+            '</div>' +
+            '<span style="opacity:.55;">Реплики уходят в LLM вместе с ситуацией; пресет применяется только кнопкой.</span>' +
+            '</div>';
+    },
+
+    // Mount the chat window inside the recommendation panel, replacing any
+    // previous chat node (distinct id, never collides with the answer node).
+    mountChat(chatHtml) {
+        const panel = document.getElementById('slf-parser-recommendation');
+        if (!panel) return false;
+        const existing = document.getElementById('slf-llm-chat');
+        if (existing) existing.remove();
+        const holder = document.createElement('div');
+        holder.innerHTML = chatHtml;
         const node = holder.firstElementChild;
         if (!node) return false;
         panel.appendChild(node);
@@ -14119,6 +14407,9 @@ if (typeof window !== 'undefined') {
         // contains candidate scores, veto reasons, vectors and confidence.
         const html = buildManualRecommendationHtml(snapshot);
         if (el) el.innerHTML = html;
+        // The panel redraw wipes the chat node with the rest of the content;
+        // re-mount it from STATE so the dialogue survives the refresh.
+        mountLlmChatWindow();
         rememberManualRecommendation(html, snapshot);
         submitManualTelemetry(snapshot);
 
@@ -14133,50 +14424,63 @@ if (typeof window !== 'undefined') {
     function mountManualButton() {
         if (!location.pathname.includes('/game.php')) return;
         const panel = document.getElementById('slf-match-parser-panel');
-        if (!panel || document.getElementById('slf-manual-recommendation-btn')) return;
+        if (!panel || document.getElementById('slf-llm-second-opinion-btn')) return;
 
-        const btn = document.createElement('button');
-        btn.id = 'slf-manual-recommendation-btn';
-        btn.type = 'button';
-        btn.textContent = '↻ Подсказка';
-        btn.title = 'Собрать текущий snapshot и показать rule-based подсказку по текущему состоянию';
-        btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
-        btn.onclick = async () => {
-            btn.disabled = true;
-            try {
-                await renderManualRecommendation();
-            } catch (error) {
-                console.error('[SLF] Manual recommendation refresh failed', error);
-                UI.addParserLog('Подсказка: ошибка, см. console');
-            } finally {
-                btn.disabled = false;
-            }
-        };
-
-        const status = document.getElementById('slf-parser-status');
-        panel.insertBefore(btn, status || null);
-
+        // Ф2a (#441): the manual hint button is hidden from the UI; the rule
+        // ladder stays internal as the LLM's structured input. The LLM button
+        // is the single primary entry and mounts on its own — its presence no
+        // longer depends on the manual button being rendered.
         const llmBtn = document.createElement('button');
         llmBtn.id = 'slf-llm-second-opinion-btn';
         llmBtn.type = 'button';
         llmBtn.textContent = '🤖 LLM';
-        llmBtn.title = 'Второе мнение от LLM по текущей подсказке. Только совет — тактика не применяется.';
-        llmBtn.style.cssText = 'padding:5px 8px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;cursor:pointer;margin-left:5px;';
+        llmBtn.title = 'Второе мнение от LLM по текущему состоянию матча. Только совет — тактика применяется только по явному клику.';
+        llmBtn.style.cssText = 'padding:5px 8px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;cursor:pointer;';
         llmBtn.onclick = async () => {
             llmBtn.disabled = true;
             try {
-                await requestLlmSecondOpinion();
+                await requestLlmSecondOpinionFresh();
             } catch (error) {
                 console.error('[SLF] LLM second opinion failed', error);
             } finally {
                 llmBtn.disabled = false;
             }
         };
-        panel.insertBefore(llmBtn, btn.nextSibling);
+
+        const status = document.getElementById('slf-parser-status');
+        panel.insertBefore(llmBtn, status || null);
     }
+
+    // Server-side advisor failure kinds (vps/api/advisor.py messages_by_kind).
+    // The API layer carries the body's errorKind on the error object; the UI
+    // must surface the real cause instead of guessing from the HTTP status.
+    const LLM_ADVISOR_ERROR_KIND_TEXT = {
+        rate_limited: 'LLM перегружен (лимит провайдера), попробуйте позже',
+        network: 'LLM-провайдер недоступен (сеть), попробуйте позже',
+        upstream_error: 'LLM-провайдер временно ошибается, попробуйте позже',
+        upstream_rejected: 'запрос отклонён LLM-провайдером',
+        invalid_answer: 'LLM вернул невалидный ответ, попробуйте ещё раз',
+        empty_answer: 'модель вернула пустой ответ, попробуйте ещё раз',
+        misconfigured: 'advisor сконфигурирован неверно (SLF_ADVISOR_PROXY), обратитесь к администратору'
+    };
+
+    // #471: a truncated-empty reply (finishReason=length) is its own honest
+    // cause — the generic empty_answer text would hide the exhausted limit.
+    const LLM_EMPTY_ANSWER_LENGTH_TEXT = 'Модель исчерпала лимит ответа и ничего не вернула. Попробуйте ещё раз.';
 
     function llmSecondOpinionErrorText(error) {
         const status = error && error.status;
+        const serverKind = error && error.errorKind;
+        if (serverKind === 'empty_answer' && error && error.finishReason === 'length') {
+            return LLM_EMPTY_ANSWER_LENGTH_TEXT;
+        }
+        if (typeof serverKind === 'string'
+            && Object.prototype.hasOwnProperty.call(LLM_ADVISOR_ERROR_KIND_TEXT, serverKind)) {
+            return LLM_ADVISOR_ERROR_KIND_TEXT[serverKind];
+        }
+        if (error && typeof error.serverError === 'string' && error.serverError.trim()) {
+            return error.serverError;
+        }
         if (error && error.kind === 'timeout') return 'Таймаут запроса к LLM (35 с)';
         if (error && error.kind === 'network') return 'Сервер недоступен';
         if (status === 503) return 'LLM-советник не настроен на сервере или перегружен';
@@ -14185,32 +14489,404 @@ if (typeof window !== 'undefined') {
         return `Ошибка советника${status ? ` (HTTP ${status})` : ''}`;
     }
 
-    async function requestLlmSecondOpinion() {
-        if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined') return;
-        const snapshot = (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot) || null;
-        const ruleDecision = (snapshot && snapshot.ruleDecision)
-            || (typeof STATE !== 'undefined' ? STATE.lastRuleDecision : null)
+    // #471: «Повторить» for the chat answer area — appended to the chat-path
+    // failure answer only. While a request is in flight the whole answer node
+    // is replaced by «Думает…» (the control disappears); on the next failure
+    // the node is mounted again with a fresh, enabled button.
+    function llmChatRetryHtml(answerHtml) {
+        const btn = '<button id="slf-llm-chat-retry" type="button"'
+            + ' style="margin-left:6px;padding:2px 8px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;cursor:pointer;font-size:12px;">Повторить</button>';
+        const close = answerHtml.lastIndexOf('</div>');
+        if (close === -1) return answerHtml + btn;
+        return answerHtml.slice(0, close) + btn + answerHtml.slice(close);
+    }
+
+    async function requestLlmSecondOpinion(freshSnapshot, dialog, options = {}) {
+        if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined') return null;
+        const settings = options && typeof options === 'object' ? options : {};
+        // #461: in partial mode a stale STATE.lastRuleDecision must never stand
+        // in for the current state — the request goes out with ruleDecision:null.
+        const partial = settings.partial === true;
+        // #471: the chat path marks its failures with a «Повторить» control.
+        const chat = settings.chat === true;
+        const snapshot = freshSnapshot
+            || (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot)
             || null;
+        const ruleDecision = partial
+            ? null
+            : ((snapshot && snapshot.ruleDecision)
+                || (typeof STATE !== 'undefined' ? STATE.lastRuleDecision : null)
+                || null);
         const registry = (typeof window !== 'undefined' && window.SLFActivePresetRegistry) || null;
-        const payload = LLMSecondOpinion.buildPayload({ snapshot, ruleDecision, registry });
+        // #465: the current slider vector (14 controls + priority) lets the
+        // advisor propose fine-grained «adjust» changes. Absence is honest:
+        // buildPayload omits the key and the prompt then allows switch only.
+        const currentControls = safeGetCurrentTactic();
+        const payload = LLMSecondOpinion.buildPayload({ snapshot, ruleDecision, registry, dialog, currentControls });
         if (!payload) {
             LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
                 available: false,
-                error: 'Нет сохранённой подсказки — сначала нажмите «↻ Подсказка»'
-            }));
-            return;
+                error: 'Недостаточно данных: правило не дало решения или каталог пресетов пуст'
+            }, { partial }));
+            return null;
         }
         LLMSecondOpinion.mountAnswer('<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#181818;border:1px dashed #555;border-radius:5px;color:#999;padding:7px 9px;font-size:12px;">🤖 Думает…</div>');
         try {
             const answer = await LLMSecondOpinion.requestSecondOpinion(payload);
-            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer(answer));
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer(answer, { partial }));
+            return answer || null;
         } catch (error) {
             console.error('[SLF] LLM second opinion request failed', error);
-            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+            const errorHtml = LLMSecondOpinion.renderAnswer({
                 available: false,
                 error: llmSecondOpinionErrorText(error)
-            }));
+            }, { partial });
+            // #471: only the chat path gets «Повторить» — the one-shot button
+            // has no dialogue to resend.
+            LLMSecondOpinion.mountAnswer(chat ? llmChatRetryHtml(errorHtml) : errorHtml);
+            return null;
         }
+    }
+
+    // Phase 1 (#459): per-match dialogue kept in STATE so it survives panel
+    // redraws. Mirrors the server caps (≤20 turns, ≤500 chars per turn).
+    let llmChatBusy = false;
+
+    function llmDialogTurnCap() {
+        return (typeof LLMSecondOpinion !== 'undefined' && LLMSecondOpinion.MAX_DIALOG_TURNS) || 20;
+    }
+
+    function llmDialogForGame(gameId) {
+        if (typeof STATE === 'undefined' || !STATE) return [];
+        // No gameId -> no dialogue: a shared placeholder key would mix
+        // different matches together and send dialogue with gameId:null.
+        const key = gameId ? String(gameId) : '';
+        if (!key) return [];
+        if (!STATE.llmDialogByGame || typeof STATE.llmDialogByGame !== 'object') {
+            STATE.llmDialogByGame = {};
+        }
+        const turns = Array.isArray(STATE.llmDialogByGame[key]) ? STATE.llmDialogByGame[key] : [];
+        STATE.llmDialogByGame[key] = turns;
+        return turns;
+    }
+
+    function rememberLlmDialogTurn(gameId, role, text, ts) {
+        if (!gameId) return []; // nothing is stored without a real gameId
+        const turns = llmDialogForGame(gameId);
+        const turnCap = llmDialogTurnCap();
+        const charCap = (typeof LLMSecondOpinion !== 'undefined' && LLMSecondOpinion.MAX_DIALOG_TURN_CHARS) || 500;
+        turns.push({
+            role: role === 'assistant' ? 'assistant' : 'user',
+            text: String(text || '').trim().slice(0, charCap),
+            ts: typeof ts === 'number' ? ts : Date.now()
+        });
+        while (turns.length > turnCap) turns.shift();
+        return turns.slice();
+    }
+
+    function currentLlmGameId() {
+        const last = (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot) || null;
+        if (last && last.gameId) return String(last.gameId);
+        try {
+            if (typeof SnapshotEngine !== 'undefined' && typeof SnapshotEngine.build === 'function') {
+                const snapshot = SnapshotEngine.build();
+                if (snapshot && snapshot.gameId) return String(snapshot.gameId);
+            }
+        } catch (_) {
+            // No snapshot: the chat renders empty and sending is refused.
+        }
+        return '';
+    }
+
+    function wireLlmChatControls() {
+        const send = document.getElementById('slf-llm-chat-send');
+        // Direct handler (the node is freshly mounted) — same delegation-free
+        // pattern as the LLM button; the promise is returned for testability.
+        if (send) send.onclick = () => sendLlmChatTurn();
+    }
+
+    function renderLlmChatWindow(gameId) {
+        if (typeof LLMSecondOpinion === 'undefined' || typeof LLMSecondOpinion.renderChat !== 'function') return;
+        const turns = llmDialogForGame(gameId || currentLlmGameId());
+        LLMSecondOpinion.mountChat(LLMSecondOpinion.renderChat({ turns, busy: llmChatBusy }));
+        wireLlmChatControls();
+    }
+
+    function mountLlmChatWindow() {
+        if (typeof document === 'undefined') return;
+        if (typeof location !== 'undefined' && !location.pathname.includes('/game.php')) return;
+        if (!document.getElementById('slf-parser-recommendation')) return;
+        renderLlmChatWindow();
+    }
+
+    // One chat turn = one advisor request carrying the WHOLE accumulated
+    // dialogue. The answer still renders through the unchanged renderAnswer
+    // (with the «Применить пресет» button) — nothing is applied automatically.
+    async function sendLlmChatTurn() {
+        if (llmChatBusy) return null;
+        if (typeof LLMSecondOpinion === 'undefined' || typeof SnapshotEngine === 'undefined') return null;
+        const input = document.getElementById('slf-llm-chat-input');
+        const text = input && typeof input.value === 'string' ? input.value.trim() : '';
+        if (!text) return null; // blank input is ignored
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) return null;
+        const gameId = snapshot.gameId ? String(snapshot.gameId) : '';
+        if (!gameId) {
+            // Without a match id the dialogue would be shared across matches
+            // and sent with gameId:null — refuse honestly, store nothing.
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+                available: false,
+                error: 'Диалог доступен только на странице матча'
+            }));
+            return null;
+        }
+        const dialog = rememberLlmDialogTurn(gameId, 'user', text, Date.now());
+        if (input) input.value = '';
+        return runLlmChatRequest(gameId, snapshot, dialog);
+    }
+
+    // #471: explicit retry of the LAST dialogue — the stored turns go out
+    // as-is, no new user turn is appended (a retry never duplicates the
+    // user's words). Same busy gating and render path as a normal send.
+    async function retryLlmChatTurn() {
+        if (llmChatBusy) return null;
+        if (typeof LLMSecondOpinion === 'undefined' || typeof SnapshotEngine === 'undefined') return null;
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) return null;
+        const gameId = snapshot.gameId ? String(snapshot.gameId) : '';
+        if (!gameId) return null; // no match id -> nothing to resend
+        const dialog = llmDialogForGame(gameId).slice();
+        if (!dialog.length || dialog[dialog.length - 1].role !== 'user') {
+            // Retry only makes sense after a failed send: the last stored
+            // turn must be the unanswered user remark.
+            return null;
+        }
+        return runLlmChatRequest(gameId, snapshot, dialog);
+    }
+
+    // Request+render part shared by Send and «Повторить»: one busy-gated
+    // advisor request with the given dialogue; an assistant turn is recorded
+    // only on available:true, a failure adds no fake turn.
+    async function runLlmChatRequest(gameId, snapshot, dialog) {
+        llmChatBusy = true;
+        renderLlmChatWindow(gameId);
+        let answer = null;
+        try {
+            answer = await requestLlmSecondOpinionFresh({ snapshot, dialog, chat: true });
+        } catch (error) {
+            console.error('[SLF] LLM chat request failed', error);
+        } finally {
+            llmChatBusy = false;
+        }
+        if (answer && answer.available === true) {
+            // Honest assistant turn: the model's own reason (or a compact
+            // preset/confidence summary). A failed request adds no fake turn.
+            const summary = typeof answer.reason === 'string' && answer.reason.trim()
+                ? answer.reason
+                : `${answer.presetLabel || answer.preset || 'совет'} (уверенность: ${answer.confidence || '?'})`;
+            rememberLlmDialogTurn(gameId, 'assistant', summary, Date.now());
+        }
+        renderLlmChatWindow(gameId);
+        return answer;
+    }
+
+    // Ф2a (#441): self-sufficient entry — the LLM button no longer depends on
+    // a manual hint click. Builds a fresh snapshot, runs the SAME rule ladder
+    // the manual hint runs (RecommendationEngine.make stamps
+    // snapshot.ruleDecision) and feeds it straight into the advisor flow.
+    // Phase 1 (#459): accepts an optional prebuilt snapshot and dialogue so the
+    // chat reuses this exact path instead of duplicating snapshot logic.
+    async function requestLlmSecondOpinionFresh(options = {}) {
+        const settings = options && typeof options === 'object' ? options : {};
+        const dialog = Array.isArray(settings.dialog) ? settings.dialog : [];
+        if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined'
+            || typeof SnapshotEngine === 'undefined') return null;
+        const snapshot = settings.snapshot || normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) {
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+                available: false,
+                error: 'Snapshot матча недоступен'
+            }));
+            return null;
+        }
+        snapshot.recommendationSource = 'llm_second_opinion';
+        snapshot.generatorVersion = GENERATOR_VERSION;
+        // Ф2c recovery (#441): the retired manual hint was the only lab
+        // checkpoint on the live path; without it the lab activation never
+        // records lastSeenMinute and the exit loses exposure (toMinute /
+        // durationMinutes null). Record presence from the LLM entry, under the
+        // same guard as the manual path — BEFORE the advisor request, so a
+        // failed LLM call still records that the user was present.
+        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.checkpoint && snapshot.matchOwnership !== 'foreign') {
+            await STATE.tacticalLabRuntime.checkpoint('llm_second_opinion', snapshot);
+        }
+        // Same pipeline the manual hint runs; make() stamps ruleDecision when
+        // the data supports one.
+        buildManualRecommendationHtml(snapshot);
+        // #461: an early match (phase collect) may have no rules decision yet.
+        // The advisor still gets a marked partial payload instead of a refusal;
+        // its answer is shown with the honest preliminary marker and is never
+        // auto-applied.
+        const partial = !snapshot.ruleDecision;
+        return requestLlmSecondOpinion(snapshot, dialog, { partial, chat: settings.chat === true });
+    }
+
+    // Ф2a (#441): one-click apply of the suggested preset. Runs ONLY on an
+    // explicit click (event delegation below) — no timers, no auto-apply,
+    // no auto-retry. Success = UI readback confirmed by applyPresetAsync;
+    // no game-server acknowledgement is claimed anywhere.
+    async function applyLlmSuggestedPreset(btn) {
+        const presetId = (btn && btn.dataset && btn.dataset.slfLlmApplyPreset) || '';
+        if (!presetId || typeof applyPresetAsync !== 'function') return;
+        if (btn.dataset.slfApplyInFlight === '1') return;
+        btn.dataset.slfApplyInFlight = '1';
+        btn.disabled = true;
+        btn.textContent = 'Применяю…';
+        let applied = false;
+        try {
+            // applyPresetAsync returns false on the early "preset not found"
+            // path without writing lastTacticApplyFailure — clear stale
+            // diagnostics from an unrelated earlier failure so the failure
+            // branch below reports honestly.
+            if (typeof STATE !== 'undefined') STATE.lastTacticApplyFailure = null;
+            applied = (await applyPresetAsync(presetId)) === true;
+        } catch (error) {
+            console.error('[SLF] LLM suggested preset apply failed', error);
+            applied = false;
+        }
+        btn.dataset.slfApplyInFlight = '';
+        const adviceId = (btn.dataset && btn.dataset.slfLlmApplyAdviceId) || '';
+        if (applied) {
+            btn.disabled = true;
+            btn.textContent = 'Применено ✓ (подтверждено в интерфейсе)';
+            UI.addParserLog('Пресет из совета LLM применён (readback подтверждён)');
+            if (adviceId) void reportLlmApplyEvent(adviceId, true);
+            return;
+        }
+        // Honest failure: surface the bridge diagnostics, keep the button
+        // enabled for a manual retry, never report success.
+        btn.disabled = false;
+        btn.textContent = 'Применить';
+        const failure = (typeof STATE !== 'undefined' && STATE.lastTacticApplyFailure) || null;
+        const reason = failure && failure.reason ? String(failure.reason) : 'не диагностирована';
+        UI.addParserLog(`Не удалось применить пресет (${reason}) — можно повторить`);
+        UI.updateParserStatus('Применение пресета не подтверждено');
+        if (adviceId) void reportLlmApplyEvent(adviceId, false);
+    }
+
+    async function reportLlmApplyEvent(adviceId, ok) {
+        if (typeof Api === 'undefined' || !adviceId) return;
+        try {
+            await Api.postJson('advisor_apply', { adviceId: String(adviceId), ok: ok === true }, 'llm-advisor-apply', 10000);
+        } catch (error) {
+            console.error('[SLF] LLM apply event report failed', error);
+            UI.addParserLog('Событие применения не доставлено на сервер');
+        }
+    }
+
+    // #465: build the PARTIAL tactic object for an «adjust» answer. Only the
+    // changed controls are requested, but the CURRENT priority is included
+    // explicitly: the bridge's normalizePresets() turns an absent priority
+    // into [] and the apply would silently clear the direction priorities.
+    function llmAdjustTactic(changes, current) {
+        if (!Array.isArray(changes)) return null;
+        const tactic = {};
+        for (const change of changes) {
+            if (!change || typeof change !== 'object') continue;
+            const control = typeof change.control === 'string' ? change.control : '';
+            if (!control || change.value === undefined || change.value === null) continue;
+            tactic[control] = String(change.value);
+        }
+        if (!Object.keys(tactic).length) return null;
+        tactic.priority = Array.isArray(current?.priority) ? current.priority.slice() : [];
+        return tactic;
+    }
+
+    function parseLlmAdjustChanges(btn) {
+        const raw = btn?.dataset?.slfLlmApplyChanges;
+        if (typeof raw !== 'string' || !raw) return null;
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    // #465: one-click apply of an «adjust» answer. Runs ONLY on the explicit
+    // click (delegation below); the bridge is the same readback path the preset
+    // and final-tactic applies use. Honest failure reporting, never success.
+    async function applyLlmSuggestedAdjust(btn) {
+        if (!btn || btn.dataset?.slfApplyInFlight === '1') return;
+        const changes = parseLlmAdjustChanges(btn);
+        if (!changes || !changes.length) {
+            UI.addParserLog('Совет LLM: список изменений не прочитан — ничего не применено');
+            return;
+        }
+        const current = safeGetCurrentTactic();
+        if (!current || typeof STATE === 'undefined' || !STATE?.tacticControlBridge
+            || typeof STATE.tacticControlBridge.applyTacticObject !== 'function') {
+            UI.addParserLog('Совет LLM: мост управления тактикой недоступен — изменения не применены');
+            return;
+        }
+        const tactic = llmAdjustTactic(changes, current);
+        if (!tactic) {
+            UI.addParserLog('Совет LLM: пустой список изменений — ничего не применено');
+            return;
+        }
+        btn.dataset.slfApplyInFlight = '1';
+        btn.disabled = true;
+        btn.textContent = 'Применяю…';
+        let result = null;
+        try {
+            result = await STATE.tacticControlBridge.applyTacticObject(tactic, {
+                strict: true,
+                source: 'llm_adjust'
+            });
+        } catch (error) {
+            console.error('[SLF] LLM adjust apply failed', error);
+            result = { ok: false, reason: 'exception', failures: [], mismatches: [], rolledBack: false };
+        }
+        const adviceId = (btn.dataset && btn.dataset.slfLlmApplyAdviceId) || '';
+        if (result?.ok && !result.failures?.length && !result.mismatches?.length) {
+            btn.disabled = true;
+            btn.textContent = 'Применено ✓ (подтверждено в интерфейсе)';
+            UI.addParserLog('Точечная подстройка из совета LLM применена (readback подтверждён)');
+            if (adviceId) void reportLlmApplyEvent(adviceId, true);
+            return;
+        }
+        // Honest failure: keep the diagnostics visible and the button usable.
+        btn.dataset.slfApplyInFlight = '';
+        btn.disabled = false;
+        btn.textContent = 'Применить изменения';
+        const reason = String(result?.reason || 'не диагностирована');
+        const failureKeys = (Array.isArray(result?.failures) ? result.failures : []).join(', ');
+        UI.addParserLog(`Не удалось применить изменения (${reason}${failureKeys ? `: ${failureKeys}` : ''}) — можно повторить`);
+        UI.updateParserStatus('Точечная подстройка не подтверждена');
+        if (adviceId) void reportLlmApplyEvent(adviceId, false);
+    }
+
+    function bindLlmApplyDelegation() {
+        if (typeof document === 'undefined' || document.__slfLlmApplyDelegation) return;
+        document.__slfLlmApplyDelegation = true;
+        document.addEventListener('click', event => {
+            const btn = event?.target?.closest ? event.target.closest('#slf-llm-apply-btn') : null;
+            if (!btn) return;
+            void applyLlmSuggestedPreset(btn);
+        });
+        document.addEventListener('click', event => {
+            const btn = event?.target?.closest ? event.target.closest('#slf-llm-apply-adjust') : null;
+            if (!btn) return;
+            void applyLlmSuggestedAdjust(btn);
+        });
+        // #471: chat «Повторить» — resends the existing dialogue without a
+        // new user turn. Disabled on click; a failure re-mounts it enabled.
+        document.addEventListener('click', event => {
+            const btn = event?.target?.closest ? event.target.closest('#slf-llm-chat-retry') : null;
+            if (!btn) return;
+            btn.disabled = true;
+            void retryLlmChatTurn();
+        });
     }
 
     function mountForeignSelector() {
@@ -14239,7 +14915,9 @@ if (typeof window !== 'undefined') {
         patchCompactCoachMode();
         mountManualButton();
         mountForeignSelector();
+        mountLlmChatWindow();
         bindFinalTacticApplyDelegation();
+        bindLlmApplyDelegation();
     }
 
     const originalAddMatchParserPanel = UI.addMatchParserPanel;
@@ -26356,6 +27034,40 @@ const TrainingGuidePanel = {
         return {ok:true,footer,controls};
     },
 
+    inspectBulkPanel() {
+        const panel=document.querySelector('.train-bulk');
+        if (!panel) return {present:false};
+        const chips=[...panel.querySelectorAll('.train-bulk__sk')].map(chip=>({
+            chip,
+            index:Number(chip.dataset.i),
+            name:chip.querySelector('.train-bulk__name'),
+            input:chip.querySelector('.train-bulk__up')
+        }));
+        const indexes=new Set(chips.map(item=>item.index));
+        const malformed=chips.length!==11 || indexes.size!==11 || chips.some(item=>!Number.isInteger(item.index) || item.index<1 || item.index>11 || !item.name || !item.input);
+        if (malformed) return {present:true,ok:false,reason:'Не распознана групповая панель тренировок.'};
+        return {present:true,ok:true,chips:chips.sort((a,b)=>a.index-b.index)};
+    },
+
+    prepareBulkPanel(chips, targets) {
+        chips.forEach(item=>{
+            const input=item.input;
+            if (item.index<=10) {
+                item.chip.classList.add('is-on');
+                item.chip.dataset.order=String(item.index);
+                input.disabled=false;
+                input.value=String(targets[item.index-1].target);
+            } else {
+                item.chip.classList.remove('is-on');
+                item.chip.dataset.order='0';
+                input.disabled=true;
+                input.value='';
+            }
+            input.dispatchEvent(new Event('input',{bubbles:true}));
+            input.dispatchEvent(new Event('change',{bubbles:true}));
+        });
+    },
+
     restoreFooters(snapshots) {
         snapshots.forEach(snapshot=>{
             snapshot.controls.forEach(item=>{
@@ -26381,6 +27093,15 @@ const TrainingGuidePanel = {
         const selectedType=[...selectedTypes][0];
         const profileType=role==='GK'?'GK':'FIELD';
         if (selectedType!==profileType) return this.setStatus(role==='GK'?'Профиль GK можно применить только к выбранным вратарям.':'Полевой профиль нельзя применить к выбранным вратарям.','error');
+        const bulk=this.inspectBulkPanel();
+        if (bulk.present) {
+            if (!bulk.ok) return this.setStatus(`Профиль ${role} не применён. ${bulk.reason}`,'error');
+            const targets=this.skillOrderForRole(role).map(skill=>({skill,target:Math.round(Number(profile.skills?.[skill]?.value))}));
+            if (targets.length!==10 || targets.some(target=>!Number.isFinite(target.target))) return this.setStatus(`Профиль ${role} содержит неполный набор навыков.`,'error');
+            this.prepareBulkPanel(bulk.chips,targets);
+            this.setStatus(`Профиль ${role} подготовлен для ${selected.length} выбранных игроков. Нажмите штатную кнопку «Сохранить».`,'ok');
+            return;
+        }
         const inspected=groups.map(group=>({...this.inspectGroupFooter(group.table),selected:group.selected}));
         const failed=inspected.find(item=>!item.ok);
         if (failed) return this.setStatus(`Профиль ${role} не применён. ${failed.reason}`,'error');
@@ -28755,15 +29476,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.372',
-        scriptVersion: '4.4.372',
+        version: '4.4.374',
+        scriptVersion: '4.4.374',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.372',
+        scriptVersion: '4.4.374',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
