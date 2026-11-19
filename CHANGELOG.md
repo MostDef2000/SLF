@@ -1,19 +1,27 @@
 # Changelog
 
-## 4.4.374
+## 4.4.392
 
 ### Automatic latest-only build
 - Built deterministic latest-only artifacts from the approved source commit.
 
 Changed files:
+- specs/475-train-apply-selected-new-design/plan.md
+- specs/475-train-apply-selected-new-design/spec.md
+- specs/475-train-apply-selected-new-design/tasks.md
+- src/modules/team-management/training-reference-guide.js
+- tests/browser/fixtures/fm2026-training.html
+- tests/browser/test_fm2026_design_adapter.py
 - vps/api/advisor.py
 - vps/api/test_advisor.py
+- vps/exporter-rag/forum_official_claims.json
+- vps/exporter-rag/test_slf_rag_build.py
 
 Approved base commit:
-- c07903dbb72ff53292bb7428cc8f7bc08179e8cc
+- 7e6abce84828d458ba9fd6dcd58cfee7158d78d3
 
 Approved commit:
-- 23cf5a8022a69633efccc5ac85f7865963cf2144
+- 78bda2bf54eb59157f78c7bdfa4632cab9cb1323
 
 Compatibility / storage:
 - Cache/schema/storage keys changed: NO
@@ -22,20 +30,25 @@ Compatibility / storage:
 Safety notes:
 - Generated artifacts are workflow outputs and must not be edited manually.
 
-## 4.4.373
+## 4.4.391
 
 ### Automatic latest-only build
 - Built deterministic latest-only artifacts from the approved source commit.
 
 Changed files:
+- .github/workflows/quality-integration.yml
+- specs/434-llm-tactical-advisor/spec.md
+- src/core/api.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/test-llm-second-opinion.mjs
 - vps/api/advisor.py
 - vps/api/test_advisor.py
 
 Approved base commit:
-- c07903dbb72ff53292bb7428cc8f7bc08179e8cc
+- f9de0b7bd4846618b1ef68045d196618858760f4
 
 Approved commit:
-- 23cf5a8022a69633efccc5ac85f7865963cf2144
+- 7e6abce84828d458ba9fd6dcd58cfee7158d78d3
 
 Compatibility / storage:
 - Cache/schema/storage keys changed: NO
@@ -44,16 +57,311 @@ Compatibility / storage:
 Safety notes:
 - Generated artifacts are workflow outputs and must not be edited manually.
 
-## 4.4.372
+## 4.4.390
 
 ### Automatic latest-only build
 - Built deterministic latest-only artifacts from the approved source commit.
 
 Changed files:
-- CHANGELOG.md
-- data/version.json
-- releases/latest.meta.js
-- releases/latest.user.js
+- .github/workflows/quality-integration.yml
+- src/modules/manual-match-telemetry/snapshot-engine.js
+- tests/test-match-result-transport-compaction.mjs
+
+Approved base commit:
+- ea0733993ed59eb23db29f7481e51a09496042e1
+
+Approved commit:
+- f9de0b7bd4846618b1ef68045d196618858760f4
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.389
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- specs/441-llm-advisor-feedback-loop/spec.md
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/test-llm-second-opinion.mjs
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- 954ee6bb6d1efc2bf3625bd845b3c2aa086c49dc
+
+Approved commit:
+- ea0733993ed59eb23db29f7481e51a09496042e1
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.388
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/test-llm-second-opinion.mjs
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- a9baef0cac3339448db55746cee718aeb63e3513
+
+Approved commit:
+- 954ee6bb6d1efc2bf3625bd845b3c2aa086c49dc
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.387
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/runtime-reachability-review-v1.json
+- specs/441-llm-advisor-feedback-loop/tasks.md
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/test-llm-second-opinion.mjs
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- 26908b628a843da4eb7d9d7785217e1a9c6a661c
+
+Approved commit:
+- a9baef0cac3339448db55746cee718aeb63e3513
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.386
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/tactics-presets/tactic-control-engine.js
+- src/modules/tactics-presets/tactical-lab-v1.js
+- tests/test-lab-apply-order.mjs
+
+Approved base commit:
+- 5f937919d38d9f1b6ba2285c237af962cdb6f1b0
+
+Approved commit:
+- 26908b628a843da4eb7d9d7785217e1a9c6a661c
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.385
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/core/api.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/test-llm-second-opinion.mjs
+
+Approved base commit:
+- 5560d35f642bcdf1b30dc66915d5c65869ce1fb9
+
+Approved commit:
+- 5f937919d38d9f1b6ba2285c237af962cdb6f1b0
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.384
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+
+Approved base commit:
+- 338eb492744385bdc9c5570ea890745670b03c22
+
+Approved commit:
+- 5560d35f642bcdf1b30dc66915d5c65869ce1fb9
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.383
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/contracts/fixtures-v1.json
+- data/contracts/slf-contracts-v1.schema.json
+- specs/441-llm-advisor-feedback-loop/tasks.md
+- src/app/ui-layer.js
+- src/core/api.js
+- tools/test-api-status-analysis.mjs
+- vps/api/advisor.py
+- vps/api/server.py
+- vps/api/test_advisor.py
+- vps/api/test_server.py
+- vps/api/test_server_contract.py
+
+Approved base commit:
+- f5a030bf89259b55bc37e6b18281fefb2b596b28
+
+Approved commit:
+- 338eb492744385bdc9c5570ea890745670b03c22
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.382
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/deploy-vps.yml
+- specs/441-llm-advisor-feedback-loop/tasks.md
+- src/app/version-badge.js
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/test-llm-second-opinion.mjs
+- vps/api/advisor.py
+- vps/api/server.py
+- vps/api/test_advisor.py
+- vps/ops/deploy-code.sh
+- vps/ops/tests/test_deploy_transport_contract.py
+
+Approved base commit:
+- 61cb44d7dfa8da13b726dae3c4283d0be7b226f2
+
+Approved commit:
+- f5a030bf89259b55bc37e6b18281fefb2b596b28
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.381
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .github/workflows/quality-integration.yml
+- specs/434-llm-tactical-advisor/tasks.md
+- specs/441-llm-advisor-feedback-loop/plan.md
+- specs/441-llm-advisor-feedback-loop/spec.md
+- specs/441-llm-advisor-feedback-loop/tasks.md
+- src/app/bundle-order.json
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tests/browser/test_exact_userscript.py
+- tests/browser/test_fm2026_design_adapter.py
+- tools/test-llm-second-opinion.mjs
+- vps/api/advisor.py
+- vps/api/server.py
+- vps/api/test_advisor.py
+- vps/ops/deploy-code.sh
+- vps/ops/rollback-code.sh
+- vps/ops/test_service_contract.py
+
+Approved base commit:
+- 627189bc722fc083bfade8e65af04f43059fea4e
+
+Approved commit:
+- 61cb44d7dfa8da13b726dae3c4283d0be7b226f2
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.380
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/quality/reliability-budget-v1.json
+- specs/434-llm-tactical-advisor/plan.md
+- specs/434-llm-tactical-advisor/spec.md
+- specs/434-llm-tactical-advisor/tasks.md
+- src/app/bundle-order.json
+- src/core/api.js
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/test-llm-second-opinion.mjs
+- vps/api/advisor.py
+- vps/api/server.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- 5ae920320cd98c29a21c31d7d62e8e906c702851
+
+Approved commit:
+- 627189bc722fc083bfade8e65af04f43059fea4e
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.379
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
 - src/modules/strategy-data-recommendations/cah-runtime-context.js
 - tests/test-tactics-2026-semantics.mjs
 
@@ -70,42 +378,12 @@ Compatibility / storage:
 Safety notes:
 - Generated artifacts are workflow outputs and must not be edited manually.
 
-## 4.4.371
+## 4.4.378
 
 ### Automatic latest-only build
 - Built deterministic latest-only artifacts from the approved source commit.
 
 Changed files:
-- CHANGELOG.md
-- data/version.json
-- releases/latest.meta.js
-- releases/latest.user.js
-- src/modules/strategy-data-recommendations/cah-runtime-context.js
-- tests/test-tactics-2026-semantics.mjs
-
-Approved base commit:
-- 25103f58b7f1f1abac9b3a4ba30fb8f2e1b23d16
-
-Approved commit:
-- 5ae920320cd98c29a21c31d7d62e8e906c702851
-
-Compatibility / storage:
-- Cache/schema/storage keys changed: NO
-- Bundle-order changes needed: NO
-
-Safety notes:
-- Generated artifacts are workflow outputs and must not be edited manually.
-
-## 4.4.370
-
-### Automatic latest-only build
-- Built deterministic latest-only artifacts from the approved source commit.
-
-Changed files:
-- CHANGELOG.md
-- data/version.json
-- releases/latest.meta.js
-- releases/latest.user.js
 - src/modules/team-management/team4-championship-table-swap.js
 
 Approved base commit:
@@ -121,23 +399,201 @@ Compatibility / storage:
 Safety notes:
 - Generated artifacts are workflow outputs and must not be edited manually.
 
-## 4.4.369
+## 4.4.377
 
 ### Automatic latest-only build
 - Built deterministic latest-only artifacts from the approved source commit.
 
 Changed files:
-- CHANGELOG.md
-- data/version.json
-- releases/latest.meta.js
-- releases/latest.user.js
 - src/modules/team-management/team4-championship-table-swap.js
 
 Approved base commit:
 - d3ea0d6ad24fbac608ccc713bb1e2dbd801e0386
 
 Approved commit:
-- 4db6737a996287c1964a87009fd5f3295e9d418f
+- 3f0a214d1290e9a05818121b372a3cca8ae33454
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.376
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- .gitignore
+- src/modules/team-management/team4-championship-table-swap.js
+- src/modules/team-management/team4-form-saved-choice-notice.js
+
+Approved base commit:
+- e4adca3de1e4ac699b26ef579c4dd2200e8e2c20
+
+Approved commit:
+- d3ea0d6ad24fbac608ccc713bb1e2dbd801e0386
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.375
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/modules/strategy-data-recommendations/cah-runtime-context.js
+- src/modules/tactics-presets/tactic-preset-direction-policy.js
+- tests/test-situation-telemetry.mjs
+
+Approved base commit:
+- e4d341437993911102f780c726c1028180fa8313
+
+Approved commit:
+- e4adca3de1e4ac699b26ef579c4dd2200e8e2c20
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.374
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/tactics/active-preset-inventory-v3.json
+- src/modules/tactics-presets/active-preset-registry.js
+
+Approved base commit:
+- 10c266da604a978ce6f858f1bf1b16270db3c4e4
+
+Approved commit:
+- e4d341437993911102f780c726c1028180fa8313
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.373
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/tactics/active-preset-inventory-v3.json
+- specs/361-lead-press-hold-v12/spec.md
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- src/modules/tactics-presets/active-preset-registry.js
+- tests/test-preset-hints-rendering.mjs
+- tests/test-tactic-suite-v12-lead-press-hold.mjs
+
+Approved base commit:
+- d5ab615fa7780a6a937eb1d311c5b3f5528bf1a5
+
+Approved commit:
+- 10c266da604a978ce6f858f1bf1b16270db3c4e4
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.372
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- aedd6453a3376abbdaa510a23d8452c2c8d2d727
+
+Approved commit:
+- d5ab615fa7780a6a937eb1d311c5b3f5528bf1a5
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.371
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- ace73edc582a980171146d248235a0c6ec251538
+
+Approved commit:
+- aedd6453a3376abbdaa510a23d8452c2c8d2d727
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.370
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- 992af0165742d57471332e522ba6423c0d5838f8
+
+Approved commit:
+- ace73edc582a980171146d248235a0c6ec251538
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.369
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- src/app/ui-layer.js
+- tools/test-tactic-dropdown-mount.mjs
+
+Approved base commit:
+- 93273c4671b3cd37db18b3fdfb2c0a575528f941
+
+Approved commit:
+- 992af0165742d57471332e522ba6423c0d5838f8
 
 Compatibility / storage:
 - Cache/schema/storage keys changed: NO
@@ -152,18 +608,16 @@ Safety notes:
 - Built deterministic latest-only artifacts from the approved source commit.
 
 Changed files:
-- CHANGELOG.md
-- data/version.json
-- releases/latest.meta.js
-- releases/latest.user.js
-- src/modules/team-management/team4-championship-table-swap.js
-- src/modules/team-management/team4-form-saved-choice-notice.js
+- src/app/bundle-order.json
+- src/app/ui-layer.js
+- src/modules/tactics-presets/tactic-control-engine.js
+- tests/test-preset-native-storage.mjs
 
 Approved base commit:
-- 8d7fe2aebf3cd1d972457be73896e17c66332419
+- b9411f7aea690e5d8196fa99143fe37db8e794cc
 
 Approved commit:
-- d3ea0d6ad24fbac608ccc713bb1e2dbd801e0386
+- 93273c4671b3cd37db18b3fdfb2c0a575528f941
 
 Compatibility / storage:
 - Cache/schema/storage keys changed: NO
@@ -178,13 +632,14 @@ Safety notes:
 - Built deterministic latest-only artifacts from the approved source commit.
 
 Changed files:
-- .gitignore
+- src/modules/tactics-presets/preset-storage.js
+- tests/test-preset-native-storage.mjs
 
 Approved base commit:
-- 70f643b5cdae92dbcb888f66c6b875ebb677f797
+- ccdee1e62f21f0f6795e635b748b65b726516310
 
 Approved commit:
-- 8d7fe2aebf3cd1d972457be73896e17c66332419
+- b9411f7aea690e5d8196fa99143fe37db8e794cc
 
 Compatibility / storage:
 - Cache/schema/storage keys changed: NO
