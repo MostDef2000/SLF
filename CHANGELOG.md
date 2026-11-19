@@ -1,5 +1,49 @@
 # Changelog
 
+## 4.4.374
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- c07903dbb72ff53292bb7428cc8f7bc08179e8cc
+
+Approved commit:
+- 23cf5a8022a69633efccc5ac85f7865963cf2144
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.373
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- c07903dbb72ff53292bb7428cc8f7bc08179e8cc
+
+Approved commit:
+- 23cf5a8022a69633efccc5ac85f7865963cf2144
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.372
 
 ### Automatic latest-only build
