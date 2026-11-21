@@ -107,6 +107,24 @@ function assertVector(canon, id, priority, vector, label) {
     console.log('R1 ok: 15 examples (12 rows incl. row4 both flanks and row6 three strengths) resolve exactly');
 }
 
+// ===========================================================================
+// R7 — the hint carries the manual's verbatim setting words, not only numbers
+// ===========================================================================
+{
+    const { canon, finalTactic } = advise({ deepBlock: true });
+    assert.equal(canon.id, 8, 'row 8 for the bus-breaking situation');
+    assert.ok(canon.settingText && typeof canon.settingText === 'object', 'matched decision carries the manual words');
+    assert.equal(canon.settingText.build_type, 'Позиционный', 'verbatim buildup word');
+    assert.equal(canon.settingText.build_temp, 'Низкий / средний', 'verbatim tempo range');
+    assert.equal(canon.settingText.build_long, 'Умеренно / часто', 'verbatim diagonals range');
+    assert.equal(canon.settingText.build_fast, 'Умеренно / часто', 'verbatim one-touch range');
+    assert.equal(canon.settingText.style, 'Обычный / атака', 'verbatim style range');
+    assert.match(finalTactic.referenceLine, /Позиционный/, 'reference line shows the manual buildup word');
+    assert.match(finalTactic.referenceLine, /Низкий \/ средний/, 'reference line shows the manual tempo words');
+    assert.ok(finalTactic.notes.some(note => note.includes('Умеренно / часто')), 'notes repeat the manual diagonal/one-touch words');
+    console.log('R7 setting words ok: matched hint shows the manual text, not only ordinals');
+}
+
 function canonicalLanes(priority) {
     const lanes = [];
     if (priority[0] === '1') lanes.push('left');
@@ -149,6 +167,10 @@ function canonicalLanes(priority) {
     assert.deepEqual([...canon.candidates.map(item => item.id)].sort((a, b) => a - b), [4, 12], 'ambiguous names both alternatives');
     assert.ok(canon.missingInputs.includes('intended_approach'), 'ambiguous asks for the distinguishing choice');
     assert.equal(finalTactic.canon.status, 'ambiguous', 'finalTactic exposes the ambiguity');
+    assert.equal(finalTactic.vector, null, 'ambiguous canon never offers an actionable vector');
+    assert.equal(finalTactic.overrides, null, 'ambiguous canon has no preset/etalon overrides to apply');
+    assert.equal(finalTactic.source, 'canon:ambiguous', 'source names the unresolved canon status');
+    assert.ok(finalTactic.referenceLine.includes('неоднозначно'), 'reference line explains the ambiguity');
 }
 
 // ===========================================================================
@@ -160,19 +182,24 @@ function canonicalLanes(priority) {
     assert.equal(noEvidence.canon.vector, null);
     assert.ok(noEvidence.canon.missingInputs.length > 0, 'missing inputs named');
     assert.equal(noEvidence.finalTactic.canon.status, 'missing_inputs');
+    assert.equal(noEvidence.finalTactic.vector, null, 'missing inputs → no final vector');
+    assert.equal(noEvidence.finalTactic.overrides, null, 'missing inputs → no overrides');
 
     const noFlank = advise({ needGoal: true });
     assert.equal(noFlank.canon.status, 'missing_inputs', 'goal needed without flank → missing input');
     assert.ok(noFlank.canon.missingInputs.includes('attacking_flank'), 'asks for the attacking flank');
     assert.equal(noFlank.canon.vector, null);
+    assert.equal(noFlank.finalTactic.vector, null, 'missing flank → no final vector');
 
     const unknownStrength = advise({ firstPassPressure: true, strength: 'unknown' });
     assert.equal(unknownStrength.canon.status, 'missing_inputs', 'unknown strength is not equality');
     assert.ok(unknownStrength.canon.missingInputs.includes('relative_strength'), 'asks for relative strength');
+    assert.equal(unknownStrength.finalTactic.vector, null, 'unknown strength → no final vector');
 
     const absentPressure = advise({ strength: undefined });
     assert.notEqual(absentPressure.canon.id, 7, 'absent pressure observation is not row 7 (low pressure)');
     assert.equal(absentPressure.canon.vector, null, 'no resolved tactic without evidence');
+    assert.equal(absentPressure.finalTactic.vector, null, 'no resolved final vector without evidence');
 }
 
 // ===========================================================================
@@ -189,6 +216,17 @@ function canonicalLanes(priority) {
     assert.equal(both.canon.status, 'matched');
     assert.equal(both.canon.id, 8, 'a resolved manual row keeps its identity over an addition');
     assert.equal(both.finalTactic.vector.build_temp, '1', 'manual row settings survive the addition');
+
+    // The addition declares ['press_fatigue','no_urgent_chase']; fatigue alone
+    // is not enough when an urgent chase context is present.
+    const urgentChase = advise({ pressFatigue: true, needGoal: true, attackFlank: 'left' });
+    assert.equal(urgentChase.canon.status, 'matched');
+    assert.equal(urgentChase.canon.id, 4, 'need-goal row resolves');
+    assert.ok(!urgentChase.canon.additions.some(item => item.id === 'press_cooldown'),
+        'fatigue + urgent chase → press_cooldown is not offered');
+    const noUrgentChase = advise({ pressFatigue: true, deepBlock: true });
+    assert.ok(noUrgentChase.canon.additions.some(item => item.id === 'press_cooldown'),
+        'fatigue + no urgent chase → press_cooldown is offered');
 }
 
 // ===========================================================================
@@ -276,6 +314,19 @@ function canonicalLanes(priority) {
         club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', strengthZone: 'mid', totalTeams: 0
     });
     assert.equal(noPopulation.status, 'insufficient', 'incomparable population → insufficient');
+
+    // Unknown percentile is NOT zero: Number(null)/Number('') must never
+    // classify a club as underdog (row 3).
+    const nullPercentile = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation({
+        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', totalTeams: 14, strengthPercentile: null
+    });
+    assert.equal(nullPercentile.status, 'insufficient', 'null percentile → insufficient');
+    assert.equal(nullPercentile.row, null, 'null percentile never defaults to row 3');
+    const emptyPercentile = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation({
+        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', totalTeams: 14, strengthPercentile: ''
+    });
+    assert.equal(emptyPercentile.status, 'insufficient', 'empty-string percentile → insufficient');
+    assert.equal(emptyPercentile.row, null, 'empty-string percentile never defaults to row 3');
 }
 
 // ===========================================================================
@@ -319,6 +370,23 @@ async function loadLlm() {
     assert.equal(payload.canonReference.vector.build_temp, '1', 'selected vector');
     assert.ok(!payload.developerHints.includes(canonDecision.situationText), 'canon is NOT smuggled into developerHints');
     assert.equal(payload.developerHints.length, 1, 'developerHints keeps only page hints');
+    // #477 P1-5: candidates travel in the reference channel (bounded), so the
+    // advisor sees the alternatives without receiving the full 12-row catalog.
+    assert.ok(Array.isArray(payload.canonReference.candidates), 'reference carries the bounded candidates');
+    assert.equal(payload.canonReference.candidates.length, 1, 'matched row contributes one candidate');
+    assert.equal(payload.canonReference.candidates[0].id, 8, 'candidate id');
+    assert.equal(payload.canonReference.candidates[0].situationText, canonDecision.situationText, 'candidate situation text');
+
+    const ambiguousDecision = advise({ needGoal: true, fastWideIntent: true }).canon;
+    const ambiguousPayload = LLM.buildPayload({
+        snapshot: { gameId: 'g477', minute: 40 },
+        ruleDecision: { action: { preset: 'Emery_BalancedBase_v11' }, moment: { context: {} }, finalTactic: { canon: ambiguousDecision } },
+        registry
+    });
+    assert.equal(ambiguousPayload.canonReference.status, 'ambiguous');
+    assert.ok(ambiguousPayload.canonReference.candidates.length <= 12, 'candidates are bounded to the 12 rows');
+    assert.ok(ambiguousPayload.canonReference.candidates.every(item => typeof item.situationText === 'string'
+        && item.situationText.length <= 200), 'candidate situation text is bounded');
 
     // Valid 2-change row 8 adjustment is actionable; rendering does not apply.
     const valid = {
@@ -370,6 +438,30 @@ async function loadLlm() {
     LLM.buildPayload({ snapshot: { gameId: 'g477' }, ruleDecision: { action: { preset: 'Emery_BalancedBase_v11' }, moment: { context: {} } }, registry });
     const legacy = LLM.renderAnswer({ available: true, preset: 'Emery_BalancedBase_v11', confidence: 'low', reason: 'legacy', model: 'm', latencyMs: 10 });
     assert.ok(legacy.includes('id="slf-llm-apply-btn"'), 'legacy switch rendering is preserved without a canon decision');
+
+    // #477 P1-3: the canon must be bound to the REQUEST, not to a single
+    // mutable slot. Two overlapping payloads: an answer from payload A must
+    // validate against A's canon even after payload B was built.
+    const payloadA = LLM.buildPayload({
+        snapshot: { gameId: 'g477', minute: 60 },
+        ruleDecision: { action: { preset: 'Emery_BalancedBase_v11' }, moment: { context: {} }, finalTactic: { canon: canonDecision } },
+        registry
+    });
+    const row1Decision2 = advise({ strength: 'equal' }).canon;
+    const payloadB = LLM.buildPayload({
+        snapshot: { gameId: 'g477', minute: 60 },
+        ruleDecision: { action: { preset: 'Emery_BalancedBase_v11' }, moment: { context: {} }, finalTactic: { canon: row1Decision2 } },
+        registry
+    });
+    const lateAnswer = {
+        available: true, mode: 'adjust', confidence: 'medium', reason: 'late', model: 'm', latencyMs: 100,
+        changes: [{ control: 'build_temp', value: '1' }, { control: 'build_fast', value: '3' }]
+    };
+    const boundToA = LLM.renderAnswer(lateAnswer, { payload: payloadA });
+    assert.ok(boundToA.includes('id="slf-llm-apply-adjust"'), 'answer validated against payload A (row 8) is actionable');
+    const boundToB = LLM.renderAnswer(lateAnswer, { payload: payloadB });
+    assert.ok(!boundToB.includes('id="slf-llm-apply-adjust"'), 'the same answer validated against payload B (row 1) is rejected');
+    assert.ok(boundToB.includes('Не применено'), 'mismatched request canon is visibly non-actionable');
 }
 
 // ===========================================================================
@@ -400,6 +492,15 @@ async function loadLlm() {
     const body = uiSource.slice(start, start + 900);
     assert.match(body, /startsWith\('canon:'\)/, 'provenance renderer recognises canon: overrides');
     assert.match(body, /канон/, 'canon overrides are labelled as canon, not as the base preset');
+
+    // Knowledge attribution must follow the displayed canon row, not the
+    // competing preset that only supplied the base/defense/attack controls.
+    const knowledgeStart = uiSource.indexOf('function buildKnowledgeProvenanceHtml');
+    assert.ok(knowledgeStart >= 0, 'knowledge provenance renderer exists');
+    const knowledgeBody = uiSource.slice(knowledgeStart, knowledgeStart + 2200);
+    assert.match(knowledgeBody, /canon\.status === 'matched'/, 'knowledge attribution checks a matched canon row');
+    assert.match(knowledgeBody, /канон №/, 'knowledge attribution names the canon row');
+    assert.match(knowledgeBody, /situationText/, 'knowledge attribution may include the situation text');
 }
 
 console.log('canon situation presets #477: R1 rows + variants + collisions + missing/ambiguous + additions + R6 survival + league starts + adjust/switch validation + no auto-apply + canon provenance: OK');

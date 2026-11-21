@@ -213,13 +213,60 @@
             && canon.status === 'matched' && canon.vector && typeof canon.vector === 'object';
     }
 
+    function canonSettingWord(canon, key, fallback) {
+        const text = canon && canon.settingText && typeof canon.settingText === 'object' ? canon.settingText : null;
+        return text && text[key] ? text[key] : fallback;
+    }
+
     function canonReferenceText(canon) {
         const vector = canon.vector || {};
         const lanes = String(vector.priority || '000');
+        // #477: the manual's verbatim words are shown alongside the ordinals so
+        // the hint explains itself ("Позиционный", "Низкий / средний", ...),
+        // never just bare numbers.
         return `Канон №${canon.id} «${canon.situationText}»`
             + (canon.variant ? ` (${canon.variant})` : '')
-            + `: направление ${lanes} · выход ${vector.build_type} · темп ${vector.build_temp}`
-            + ` · диагонали ${vector.build_long} · в касание ${vector.build_fast} · стиль ${vector.style}`;
+            + `: направление ${lanes} · выход ${canonSettingWord(canon, 'build_type', vector.build_type)}`
+            + ` · темп ${canonSettingWord(canon, 'build_temp', vector.build_temp)}`
+            + ` · диагонали ${canonSettingWord(canon, 'build_long', vector.build_long)}`
+            + ` · в касание ${canonSettingWord(canon, 'build_fast', vector.build_fast)}`
+            + ` · стиль ${canonSettingWord(canon, 'style', vector.style)}`;
+    }
+
+    // #477 P1-2: a canon decision that exists but did not resolve a row must
+    // never be papered over with a preset/etalon vector. It is surfaced as a
+    // non-actionable reference explaining why (status/candidates/missing).
+    function canonUnresolvedReference(canon) {
+        const parts = [];
+        if (canon.status === 'ambiguous') {
+            parts.push('Канон: выбор неоднозначно определён — нужно уточнить ситуацию');
+        } else if (canon.status === 'missing_inputs') {
+            parts.push('Канон: недостаточно данных для выбора строки');
+        } else {
+            parts.push(`Канон: строка не сопоставлена (${canon.status})`);
+        }
+        const candidates = Array.isArray(canon.candidates) ? canon.candidates.filter(item => item && item.id != null) : [];
+        if (candidates.length) {
+            parts.push('кандидаты: ' + candidates
+                .map(item => `№${item.id}${item.variant ? '/' + item.variant : ''}`)
+                .join(', '));
+        }
+        const missing = Array.isArray(canon.missingInputs) ? canon.missingInputs.filter(Boolean) : [];
+        if (missing.length) parts.push('не хватает: ' + missing.join(', '));
+        return parts.join(' · ');
+    }
+
+    function canonSettingNotes(canon) {
+        const text = canon && canon.settingText && typeof canon.settingText === 'object' ? canon.settingText : null;
+        if (!text) return [];
+        const notes = [];
+        if (text.build_type) notes.push(`Выход из обороны: ${text.build_type}`);
+        if (text.build_temp) notes.push(`Темп: ${text.build_temp}`);
+        if (text.build_long || text.build_fast) {
+            notes.push(`Диагонали: ${text.build_long || '—'} · в касание: ${text.build_fast || '—'}`);
+        }
+        if (text.style) notes.push(`Стиль: ${text.style}`);
+        return notes;
     }
 
     function applyCanon(vector, canon, overrides) {
@@ -244,6 +291,28 @@
         const etalon = result?.etalon || null;
         const canon = result?.canon || null;
         const canonMatched = isMatchedCanon(canon);
+
+        // #477 P1-2: a canon decision that exists but did not resolve a row is
+        // authoritative in the NEGATIVE — it must never fall through to a
+        // preset/etalon vector. Only canon == null keeps the legacy path.
+        if (canon && !canonMatched) {
+            return {
+                schema: VERSION,
+                vector: null,
+                base: null,
+                overrides: null,
+                source: `canon:${canon.status}`,
+                strong: { defense: false, buildup: false, scenario: null, canon: false },
+                deltaVsCurrent: null,
+                presetId: null,
+                etalonIds: Array.isArray(etalon?.ids) ? etalon.ids.filter(Boolean).map(String) : [],
+                insufficientData: Array.isArray(canon.missingInputs) ? canon.missingInputs.map(String) : [],
+                notes: [],
+                referenceLine: canonUnresolvedReference(canon),
+                canon
+            };
+        }
+
         let baseInfo = resolveBase(snapshot, result);
         // A resolved manual row is actionable even without a readable preset
         // or current tactic: only the six manual settings are known, the rest
@@ -283,7 +352,7 @@
             applyCanon(vector, canon, overrides);
             strong = { defense: false, buildup: true, scenario: null, canon: true };
             referenceLine = canonReferenceText(canon);
-            notes = [canon.situationText].concat(CANON_LEGEND);
+            notes = [canon.situationText].concat(canonSettingNotes(canon), CANON_LEGEND);
             insufficientData = [];
             source = `canon:${canon.id}${canon.variant ? '/' + canon.variant : ''}+base:${baseInfo.base}`;
         } else {

@@ -27,6 +27,10 @@ const LLMSecondOpinion = {
     // #461: partial-data mode. On an early match the rules engine has no
     // decision yet; the payload then says so honestly instead of refusing.
     PARTIAL_DATA_NOTE: 'Правила не дали решения на текущих данных матча',
+    // #477 P1-3: the canon that constrains a rendered answer belongs to the
+    // exact payload that produced it. WeakMap keeps the payloads collectable
+    // and lets a late answer validate against ITS request, not a mutable slot.
+    __payloadCanon: new WeakMap(),
 
     // Compact whitelist of decision-context signals sent to the advisor.
     // Everything else in the moment context stays local (payload budget).
@@ -103,6 +107,20 @@ const LLMSecondOpinion = {
     buildCanonReference(canon) {
         if (!canon) return null;
         const vector = canon.vector && typeof canon.vector === 'object' ? canon.vector : null;
+        // #477 P1-5: the bounded alternatives travel in the reference channel so
+        // the advisor can weigh them without receiving the full 12-row catalog.
+        // The matched row + candidates + legend are the decision; the catalog
+        // itself stays out of the prompt.
+        const candidates = Array.isArray(canon.candidates) ? canon.candidates
+            .filter(item => item && typeof item === 'object' && item.id != null)
+            .slice(0, 12)
+            .map(item => ({
+                id: Number(item.id),
+                variant: item.variant == null ? null : String(item.variant),
+                situationText: typeof item.situationText === 'string'
+                    ? item.situationText.slice(0, 200)
+                    : null
+            })) : [];
         return {
             version: typeof canon.version === 'string' ? canon.version : null,
             title: 'Шпаргалка: построение атаки',
@@ -114,8 +132,21 @@ const LLMSecondOpinion = {
             legend: Array.isArray(canon.legend) ? canon.legend.filter(line => typeof line === 'string').slice(0, 8) : [],
             evidence: Array.isArray(canon.evidence) ? canon.evidence.filter(item => typeof item === 'string').slice(0, 20) : [],
             missingInputs: Array.isArray(canon.missingInputs) ? canon.missingInputs.filter(item => typeof item === 'string').slice(0, 10) : [],
-            additions: Array.isArray(canon.additions) ? canon.additions.slice(0, 5) : []
+            additions: Array.isArray(canon.additions) ? canon.additions.slice(0, 5) : [],
+            candidates
         };
+    },
+
+    // #477 P1-3: the canon that constrains a rendered answer belongs to the
+    // REQUEST that produced it, not to a mutable slot that a later request can
+    // overwrite. options.payload binding wins; the legacy single slot is the
+    // fallback for callers that do not pass the payload.
+    resolveCanonFor(options) {
+        const payload = options && options.payload;
+        if (payload && this.__payloadCanon && this.__payloadCanon.has(payload)) {
+            return this.__payloadCanon.get(payload) || null;
+        }
+        return this.__lastCanonDecision || null;
     },
 
     // Client-boundary validation for «adjust» (#477 R8/R10). A matched row
@@ -290,9 +321,15 @@ const LLMSecondOpinion = {
         // field, appended only when the local matcher produced one. Legacy
         // (no canon) requests keep the exact legacy payload bytes.
         const canon = this.canonDecisionFrom(ruleDecision);
-        // #477: always refresh the decision slot, including to null. A stale
-        // canon from a previous hint must never constrain a later answer.
-        this.__lastCanonDecision = canon || null;
+        // #477 P1-3: bind the decision to the payload that carries it, so the
+        // render validates against its OWN request instead of a shared slot.
+        this.__payloadCanon.set(payload, canon || null);
+        // #477: an absent canon clears the legacy slot so a stale row never
+        // constrains a canon-less request. A decision that resolves no row
+        // (ambiguous/missing_inputs) cannot constrain an answer either, so it
+        // leaves the last constraining decision in place for legacy callers
+        // that do not pass the payload.
+        if (!canon || canon.status === 'matched') this.__lastCanonDecision = canon || null;
         this.__lastRegistry = registry;
         if (canon) payload.canonReference = this.buildCanonReference(canon);
         return payload;
@@ -332,7 +369,7 @@ const LLMSecondOpinion = {
         // JSON data attribute.
         const adjustChanges = Array.isArray(answer.changes) ? answer.changes : [];
         if (answer.mode === 'adjust' || adjustChanges.length) {
-            const check = this.validateAdjustAgainstCanon(adjustChanges, this.__lastCanonDecision);
+            const check = this.validateAdjustAgainstCanon(adjustChanges, this.resolveCanonFor(options));
             if (!check.ok) {
                 const blocked = this.escapeHtml(check.reason || 'предложение не соответствует канону');
                 return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#1a1414;border:1px solid #5a3a3a;border-radius:5px;color:#dcc;padding:7px 9px;font-size:12px;line-height:1.45;">` +
@@ -369,7 +406,7 @@ const LLMSecondOpinion = {
         // #477 R8: a «switch» is actionable only for an eligible preset that
         // exactly realizes the matched canon row AND variant. Without a canon
         // decision (legacy/old API) the pre-existing switch path is preserved.
-        const switchCheck = presetId ? this.validateSwitchAgainstCanon(presetId, this.__lastCanonDecision) : { ok: true };
+        const switchCheck = presetId ? this.validateSwitchAgainstCanon(presetId, this.resolveCanonFor(options)) : { ok: true };
         if (presetId && !switchCheck.ok) {
             const blocked = this.escapeHtml(switchCheck.reason || 'предложение не соответствует канону');
             return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#1a1414;border:1px solid #5a3a3a;border-radius:5px;color:#dcc;padding:7px 9px;font-size:12px;line-height:1.45;">` +

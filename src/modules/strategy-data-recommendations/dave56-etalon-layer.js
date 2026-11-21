@@ -212,6 +212,7 @@
             id: null,
             variant: null,
             situationText: null,
+            settingText: null,
             legend: CANON ? CANON.legend.slice() : [],
             vector: null,
             priorityLanes: null,
@@ -268,6 +269,16 @@
         return null;
     }
 
+    const CANON_OBSERVATION_FLAGS = ['needGoal', 'protectLead', 'firstPassPressure', 'firstPassFree', 'deepBlock',
+        'transitionChaos', 'targetForward', 'controlIntent', 'fastWideIntent', 'pressFatigue'];
+
+    function hasCanonRequest(context) {
+        // The rich evidence bundle is the explicit "canon is in play" signal:
+        // an empty {} still counts (the caller asked, there was just nothing).
+        return !!(context && Object.prototype.hasOwnProperty.call(context, 'canonEvidence')
+            && context.canonEvidence && typeof context.canonEvidence === 'object');
+    }
+
     function computeCanon(snapshot, context, result) {
         if (!CANON) return null;
         const ctx = collectContext(snapshot, context, result);
@@ -275,13 +286,24 @@
         const evidence = [];
         const additions = [];
         if (obs.strength) evidence.push(`strength:${obs.strength}`);
-        for (const key of ['needGoal', 'protectLead', 'firstPassPressure', 'firstPassFree', 'deepBlock',
-            'transitionChaos', 'targetForward', 'controlIntent', 'fastWideIntent', 'pressFatigue']) {
+        for (const key of CANON_OBSERVATION_FLAGS) {
             if (obs[key]) evidence.push(key);
         }
         if (obs.attackFlank) evidence.push(`attackFlank:${obs.attackFlank}`);
 
-        if (obs.pressFatigue) {
+        // #477: the canon matcher only produces a decision when the situation
+        // actually asks for it — either the caller supplied the structured
+        // canonEvidence bundle, or a canon-relevant page signal resolved an
+        // observation. With neither, the legacy etalon/preset merge owns the
+        // hint (canon == null keeps the pre-#477 final-tactic path).
+        const observed = !!obs.strength || !!obs.attackFlank
+            || CANON_OBSERVATION_FLAGS.some(key => obs[key]);
+        if (!observed && !hasCanonRequest(context)) return null;
+
+        // The press_cooldown addition declares ['press_fatigue','no_urgent_chase']:
+        // fatigue alone is not enough while an urgent chase context is present.
+        const noUrgentChase = !obs.needGoal && !obs.protectLead;
+        if (obs.pressFatigue && noUrgentChase) {
             for (const addition of (CANON.additions || [])) {
                 if (addition.id === 'press_cooldown') additions.push(Object.assign({}, addition, { entryConditions: (addition.entryConditions || []).slice() }));
             }
@@ -349,6 +371,7 @@
                 id: Number(pickedRow.id),
                 variant: variantId,
                 situationText: pickedRow.situation,
+                settingText: pickedRow.settingText || null,
                 vector,
                 priorityLanes: canonLanes(vector.priority),
                 candidates: [canonCandidate(pickedRow, pickedVariant)]
@@ -369,6 +392,7 @@
                 id,
                 variant: null,
                 situationText: row.situation,
+                settingText: row.settingText || null,
                 vector,
                 priorityLanes: canonLanes(vector.priority),
                 candidates: [canonCandidate(row, null)]
@@ -406,7 +430,13 @@
         const total = Number(evidence.totalTeams);
         if (!Number.isFinite(total) || total < 2) return insufficient('incomparable_population');
         let strengthZone = LEAGUE_ZONES.includes(evidence.strengthZone) ? evidence.strengthZone : null;
-        const percentile = Number(evidence.strengthPercentile);
+        // Unknown percentile is NOT zero: null/undefined/'' must never classify
+        // a club as underdog (Number(null) === 0, Number('') === 0). Treat them
+        // as missing so the result is 'insufficient', never an implicit row 3.
+        const rawPercentile = evidence.strengthPercentile;
+        const percentile = (rawPercentile === null || rawPercentile === undefined || rawPercentile === '')
+            ? null
+            : Number(rawPercentile);
         if (!strengthZone) strengthZone = leagueZoneFromPercentile(percentile, rule);
         if (!strengthZone) return insufficient('missing_strength');
         const rankZone = LEAGUE_ZONES.includes(evidence.rankZone) ? evidence.rankZone : null;

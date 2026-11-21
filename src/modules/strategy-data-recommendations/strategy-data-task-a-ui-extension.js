@@ -699,36 +699,52 @@
 
     function buildKnowledgeProvenanceHtml(snapshot, primaryPresetName) {
         let matched = false;
+        let canonLabel = '';
         try {
             const decision = snapshot?.ruleDecision || null;
-            const preset = resolveDisplayedKnowledgePreset(snapshot, primaryPresetName);
-            // Prefer the decision's OWN computed adjustment (same-decision data):
-            // the candidate parts carry the boundedEvidenceAdjustment the policy
-            // actually applied. This never diverges from the decision, unlike a
-            // live re-evaluation on the raw moment.context (whose normalized
-            // fields — e.g. signal-derived underPressure — can differ). Fall back
-            // to a live assessment only when the candidate parts are unavailable.
-            const candidate = Array.isArray(decision?.candidates)
-                ? decision.candidates.find(item => item && item.preset === preset)
-                : null;
-            if (candidate && candidate.parts && typeof candidate.parts.boundedEvidenceAdjustment === 'number') {
-                matched = candidate.parts.boundedEvidenceAdjustment !== 0;
-            } else {
-                const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
-                const assessment = registry && typeof registry.knowledgeAssessment === 'function'
-                    ? registry.knowledgeAssessment({
-                        preset,
-                        situation: decision?.situation || decision?.moment?.context?.gameMode || '',
-                        context: decision?.moment?.context || null
-                    })
+            // #477: a matched canon row is the authority the hint displays, so
+            // the knowledge attribution follows that row — not the preset that
+            // only supplied the base/defense/attack controls. base/presetId
+            // stay untouched; this is display attribution only.
+            const canon = decision?.finalTactic?.canon;
+            if (canon && canon.status === 'matched') {
+                const variant = canon.variant == null ? '' : ` · вариант ${canon.variant}`;
+                const situation = typeof canon.situationText === 'string' && canon.situationText
+                    ? ` · ${canon.situationText}`
+                    : '';
+                canonLabel = `База: канон №${canon.id}${variant}${situation}`;
+            }
+            if (!canonLabel) {
+                const preset = resolveDisplayedKnowledgePreset(snapshot, primaryPresetName);
+                // Prefer the decision's OWN computed adjustment (same-decision data):
+                // the candidate parts carry the boundedEvidenceAdjustment the policy
+                // actually applied. This never diverges from the decision, unlike a
+                // live re-evaluation on the raw moment.context (whose normalized
+                // fields — e.g. signal-derived underPressure — can differ). Fall back
+                // to a live assessment only when the candidate parts are unavailable.
+                const candidate = Array.isArray(decision?.candidates)
+                    ? decision.candidates.find(item => item && item.preset === preset)
                     : null;
-                matched = Boolean(assessment && assessment.source === 'seed'
-                    && Array.isArray(assessment.ruleIds) && assessment.ruleIds.length > 0);
+                if (candidate && candidate.parts && typeof candidate.parts.boundedEvidenceAdjustment === 'number') {
+                    matched = candidate.parts.boundedEvidenceAdjustment !== 0;
+                } else {
+                    const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+                    const assessment = registry && typeof registry.knowledgeAssessment === 'function'
+                        ? registry.knowledgeAssessment({
+                            preset,
+                            situation: decision?.situation || decision?.moment?.context?.gameMode || '',
+                            context: decision?.moment?.context || null
+                        })
+                        : null;
+                    matched = Boolean(assessment && assessment.source === 'seed'
+                        && Array.isArray(assessment.ruleIds) && assessment.ruleIds.length > 0);
+                }
             }
         } catch (_) {
             matched = false; // attribution unavailable → none-variant
+            canonLabel = '';
         }
-        const label = matched ? 'База: seed (гипотеза)' : 'База: нет совпавших данных';
+        const label = canonLabel || (matched ? 'База: seed (гипотеза)' : 'База: нет совпавших данных');
         return `<div style="line-height:1.4;opacity:.85;">${etalonEscape(label)}</div>`;
     }
 
@@ -963,14 +979,14 @@
         LLMSecondOpinion.mountAnswer('<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#181818;border:1px dashed #555;border-radius:5px;color:#999;padding:7px 9px;font-size:12px;">🤖 Думает…</div>');
         try {
             const answer = await LLMSecondOpinion.requestSecondOpinion(payload);
-            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer(answer, { partial }));
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer(answer, { partial, payload }));
             return answer || null;
         } catch (error) {
             console.error('[SLF] LLM second opinion request failed', error);
             const errorHtml = LLMSecondOpinion.renderAnswer({
                 available: false,
                 error: llmSecondOpinionErrorText(error)
-            }, { partial });
+            }, { partial, payload });
             // #471: only the chat path gets «Повторить» — the one-shot button
             // has no dialogue to resend.
             LLMSecondOpinion.mountAnswer(chat ? llmChatRetryHtml(errorHtml) : errorHtml);

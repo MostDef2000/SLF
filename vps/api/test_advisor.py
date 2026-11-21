@@ -3297,6 +3297,9 @@ class AdvisorCanonReferenceTestCase(unittest.TestCase):
             "evidence": ["flank:right", "need_goal"],
             "missingInputs": [],
             "additions": [],
+            "candidates": [
+                {"id": 4, "variant": "right", "situationText": "Нужен гол, атака справа"},
+            ],
         }
 
     def wire_context(self, body):
@@ -3355,6 +3358,9 @@ class AdvisorCanonReferenceTestCase(unittest.TestCase):
         reference["situationText"] = "  " + ("x" * 400) + "  "
         reference["evidence"] = ["e" * 200]
         reference["legend"] = ["l" * 400]
+        reference["candidates"] = [
+            {"id": 4, "variant": "right", "situationText": "  " + ("c" * 400) + "  "},
+        ]
         body["canonReference"] = reference
         context = self.wire_context(body)
         canon = context["canonReference"]
@@ -3370,6 +3376,9 @@ class AdvisorCanonReferenceTestCase(unittest.TestCase):
         self.assertEqual(canon["legend"], ["l" * self.advisor.MAX_CANON_LEGEND_CHARS])
         self.assertEqual(canon["missingInputs"], [])
         self.assertEqual(canon["additions"], [])
+        self.assertEqual(canon["candidates"], [
+            {"id": 4, "variant": "right", "situationText": "c" * self.advisor.MAX_CANON_CANDIDATE_CHARS},
+        ])
         self.assertEqual(canon["vector"], {
             "build_type": "3",
             "build_temp": "3",
@@ -3411,6 +3420,20 @@ class AdvisorCanonReferenceTestCase(unittest.TestCase):
                 "additions": [{"id": "a"}] * (self.advisor.MAX_CANON_ADDITIONS + 1),
             },
             "addition_not_object": {"status": "no_match", "additions": ["a"]},
+            "candidates_too_many": {
+                "status": "no_match",
+                "candidates": [{"id": 1}] * (self.advisor.MAX_CANON_CANDIDATES + 1),
+            },
+            "candidate_not_object": {"status": "no_match", "candidates": ["a"]},
+            "candidate_bad_id": {"status": "no_match", "candidates": [{"id": 13}]},
+            "candidate_bad_variant": {
+                "status": "no_match",
+                "candidates": [{"id": 4, "variant": 4}],
+            },
+            "candidate_bad_situation": {
+                "status": "no_match",
+                "candidates": [{"id": 4, "situationText": 4}],
+            },
         }
         for name, reference in cases.items():
             with self.subTest(case=name):

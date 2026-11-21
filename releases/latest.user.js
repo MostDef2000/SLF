@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.381
+// @version      4.4.383
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.381',
-        scriptVersion: '4.4.381',
+        version: '4.4.383',
+        scriptVersion: '4.4.383',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.381',
+        scriptVersion: '4.4.383',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -11080,32 +11080,41 @@ TacticalKnowledgePack.init();
                 'Стиль атака — для дожима',
                 'Стиль защита — для выживания и удержания'
             ],
+            // settingText repeats the manual's verbatim Russian words for the
+            // six manual columns (build_type = «Выход из обороны», build_temp =
+            // «Темп», build_long = «Диагонали», build_fast = «В касание»,
+            // style = «Стиль»). A slash pair is ONE column's permitted range and
+            // is rendered as ' / ' exactly as transcribed from
+            // shared/slf-developer-tactics-analysis.md:10-23. The numbers above
+            // make a row actionable; these words keep the hint honest.
             rows: [
-                { id: 1, situation: 'Равный матч', priority: '000', vector: { build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3' } },
-                { id: 2, situation: 'Ты фаворит', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' } },
-                { id: 3, situation: 'Ты андердог', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '2' } },
+                { id: 1, situation: 'Равный матч', priority: '000', vector: { build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Умеренно', build_fast: 'Умеренно', style: 'Обычный' } },
+                { id: 2, situation: 'Ты фаворит', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Средний', build_long: 'Умеренно', build_fast: 'Умеренно / часто', style: 'Обычный / атака' } },
+                { id: 3, situation: 'Ты андердог', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '2' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Редко', build_fast: 'Редко', style: 'Защита / обычный' } },
                 {
                     id: 4, situation: 'Нужно забить',
+                    settingText: { build_type: 'Позиционный', build_temp: 'Средний / высокий', build_long: 'Умеренно', build_fast: 'Умеренно / часто', style: 'Атака / атака+' },
                     variants: [
                         { id: 'left', label: 'левая сторона', priority: '110', vector: { build_type: '3', build_temp: '3', build_long: '2', build_fast: '2', style: '4' } },
                         { id: 'right', label: 'правая сторона', priority: '011', vector: { build_type: '3', build_temp: '3', build_long: '2', build_fast: '2', style: '4' } }
                     ]
                 },
-                { id: 5, situation: 'Нужно удержать', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '1' } },
+                { id: 5, situation: 'Нужно удержать', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '1' }, settingText: { build_type: 'Смешанный / выносы', build_temp: 'Низкий / средний', build_long: 'Редко', build_fast: 'Редко / умеренно', style: 'Защита / защита+' } },
                 {
                     id: 6, situation: 'Соперник сильно прессингует',
+                    settingText: { build_type: 'Смешанный', build_temp: 'Средний / высокий', build_long: 'Редко', build_fast: 'Редко', style: 'По силе команд' },
                     variants: [
                         { id: 'weaker', label: 'наша XI слабее', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '2' } },
                         { id: 'equal', label: 'XI равны', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '3' } },
                         { id: 'stronger', label: 'наша XI сильнее', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '4' } }
                     ]
                 },
-                { id: 7, situation: 'Соперник почти не прессингует', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' } },
-                { id: 8, situation: 'Взлом автобуса', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '3', style: '3' } },
-                { id: 9, situation: 'Хаотичный матч', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '3' } },
-                { id: 10, situation: 'Игра через «столба»', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '3' } },
-                { id: 11, situation: 'Схема контроля', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '2', style: '3' } },
-                { id: 12, situation: 'Самолёт / много атаки', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '4' } }
+                { id: 7, situation: 'Соперник почти не прессингует', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Низкий / средний', build_long: 'Умеренно / часто', build_fast: 'Умеренно / часто', style: 'Обычный / атака' } },
+                { id: 8, situation: 'Взлом автобуса', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '3', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Низкий / средний', build_long: 'Умеренно / часто', build_fast: 'Умеренно / часто', style: 'Обычный / атака' } },
+                { id: 9, situation: 'Хаотичный матч', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '3' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Редко', build_fast: 'Редко', style: 'Обычный' } },
+                { id: 10, situation: 'Игра через «столба»', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '3' }, settingText: { build_type: 'Выносы', build_temp: 'Средний', build_long: 'Редко', build_fast: 'Редко', style: 'Обычный / защита' } },
+                { id: 11, situation: 'Схема контроля', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Низкий', build_long: 'Умеренно', build_fast: 'Умеренно / часто', style: 'Обычный' } },
+                { id: 12, situation: 'Самолёт / много атаки', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '4' }, settingText: { build_type: 'Смешанный / выносы', build_temp: 'Высокий', build_long: 'Редко / умеренно', build_fast: 'Редко', style: 'Обычный / атака' } }
             ],
             // Data-backed SLF additions live in their own namespace: they are
             // NOT screenshot rows and may never displace a resolved manual row.
@@ -11585,6 +11594,7 @@ TacticalKnowledgePack.init();
             id: null,
             variant: null,
             situationText: null,
+            settingText: null,
             legend: CANON ? CANON.legend.slice() : [],
             vector: null,
             priorityLanes: null,
@@ -11641,6 +11651,16 @@ TacticalKnowledgePack.init();
         return null;
     }
 
+    const CANON_OBSERVATION_FLAGS = ['needGoal', 'protectLead', 'firstPassPressure', 'firstPassFree', 'deepBlock',
+        'transitionChaos', 'targetForward', 'controlIntent', 'fastWideIntent', 'pressFatigue'];
+
+    function hasCanonRequest(context) {
+        // The rich evidence bundle is the explicit "canon is in play" signal:
+        // an empty {} still counts (the caller asked, there was just nothing).
+        return !!(context && Object.prototype.hasOwnProperty.call(context, 'canonEvidence')
+            && context.canonEvidence && typeof context.canonEvidence === 'object');
+    }
+
     function computeCanon(snapshot, context, result) {
         if (!CANON) return null;
         const ctx = collectContext(snapshot, context, result);
@@ -11648,13 +11668,24 @@ TacticalKnowledgePack.init();
         const evidence = [];
         const additions = [];
         if (obs.strength) evidence.push(`strength:${obs.strength}`);
-        for (const key of ['needGoal', 'protectLead', 'firstPassPressure', 'firstPassFree', 'deepBlock',
-            'transitionChaos', 'targetForward', 'controlIntent', 'fastWideIntent', 'pressFatigue']) {
+        for (const key of CANON_OBSERVATION_FLAGS) {
             if (obs[key]) evidence.push(key);
         }
         if (obs.attackFlank) evidence.push(`attackFlank:${obs.attackFlank}`);
 
-        if (obs.pressFatigue) {
+        // #477: the canon matcher only produces a decision when the situation
+        // actually asks for it — either the caller supplied the structured
+        // canonEvidence bundle, or a canon-relevant page signal resolved an
+        // observation. With neither, the legacy etalon/preset merge owns the
+        // hint (canon == null keeps the pre-#477 final-tactic path).
+        const observed = !!obs.strength || !!obs.attackFlank
+            || CANON_OBSERVATION_FLAGS.some(key => obs[key]);
+        if (!observed && !hasCanonRequest(context)) return null;
+
+        // The press_cooldown addition declares ['press_fatigue','no_urgent_chase']:
+        // fatigue alone is not enough while an urgent chase context is present.
+        const noUrgentChase = !obs.needGoal && !obs.protectLead;
+        if (obs.pressFatigue && noUrgentChase) {
             for (const addition of (CANON.additions || [])) {
                 if (addition.id === 'press_cooldown') additions.push(Object.assign({}, addition, { entryConditions: (addition.entryConditions || []).slice() }));
             }
@@ -11722,6 +11753,7 @@ TacticalKnowledgePack.init();
                 id: Number(pickedRow.id),
                 variant: variantId,
                 situationText: pickedRow.situation,
+                settingText: pickedRow.settingText || null,
                 vector,
                 priorityLanes: canonLanes(vector.priority),
                 candidates: [canonCandidate(pickedRow, pickedVariant)]
@@ -11742,6 +11774,7 @@ TacticalKnowledgePack.init();
                 id,
                 variant: null,
                 situationText: row.situation,
+                settingText: row.settingText || null,
                 vector,
                 priorityLanes: canonLanes(vector.priority),
                 candidates: [canonCandidate(row, null)]
@@ -11779,7 +11812,13 @@ TacticalKnowledgePack.init();
         const total = Number(evidence.totalTeams);
         if (!Number.isFinite(total) || total < 2) return insufficient('incomparable_population');
         let strengthZone = LEAGUE_ZONES.includes(evidence.strengthZone) ? evidence.strengthZone : null;
-        const percentile = Number(evidence.strengthPercentile);
+        // Unknown percentile is NOT zero: null/undefined/'' must never classify
+        // a club as underdog (Number(null) === 0, Number('') === 0). Treat them
+        // as missing so the result is 'insufficient', never an implicit row 3.
+        const rawPercentile = evidence.strengthPercentile;
+        const percentile = (rawPercentile === null || rawPercentile === undefined || rawPercentile === '')
+            ? null
+            : Number(rawPercentile);
         if (!strengthZone) strengthZone = leagueZoneFromPercentile(percentile, rule);
         if (!strengthZone) return insufficient('missing_strength');
         const rankZone = LEAGUE_ZONES.includes(evidence.rankZone) ? evidence.rankZone : null;
@@ -12234,13 +12273,60 @@ TacticalKnowledgePack.init();
             && canon.status === 'matched' && canon.vector && typeof canon.vector === 'object';
     }
 
+    function canonSettingWord(canon, key, fallback) {
+        const text = canon && canon.settingText && typeof canon.settingText === 'object' ? canon.settingText : null;
+        return text && text[key] ? text[key] : fallback;
+    }
+
     function canonReferenceText(canon) {
         const vector = canon.vector || {};
         const lanes = String(vector.priority || '000');
+        // #477: the manual's verbatim words are shown alongside the ordinals so
+        // the hint explains itself ("Позиционный", "Низкий / средний", ...),
+        // never just bare numbers.
         return `Канон №${canon.id} «${canon.situationText}»`
             + (canon.variant ? ` (${canon.variant})` : '')
-            + `: направление ${lanes} · выход ${vector.build_type} · темп ${vector.build_temp}`
-            + ` · диагонали ${vector.build_long} · в касание ${vector.build_fast} · стиль ${vector.style}`;
+            + `: направление ${lanes} · выход ${canonSettingWord(canon, 'build_type', vector.build_type)}`
+            + ` · темп ${canonSettingWord(canon, 'build_temp', vector.build_temp)}`
+            + ` · диагонали ${canonSettingWord(canon, 'build_long', vector.build_long)}`
+            + ` · в касание ${canonSettingWord(canon, 'build_fast', vector.build_fast)}`
+            + ` · стиль ${canonSettingWord(canon, 'style', vector.style)}`;
+    }
+
+    // #477 P1-2: a canon decision that exists but did not resolve a row must
+    // never be papered over with a preset/etalon vector. It is surfaced as a
+    // non-actionable reference explaining why (status/candidates/missing).
+    function canonUnresolvedReference(canon) {
+        const parts = [];
+        if (canon.status === 'ambiguous') {
+            parts.push('Канон: выбор неоднозначно определён — нужно уточнить ситуацию');
+        } else if (canon.status === 'missing_inputs') {
+            parts.push('Канон: недостаточно данных для выбора строки');
+        } else {
+            parts.push(`Канон: строка не сопоставлена (${canon.status})`);
+        }
+        const candidates = Array.isArray(canon.candidates) ? canon.candidates.filter(item => item && item.id != null) : [];
+        if (candidates.length) {
+            parts.push('кандидаты: ' + candidates
+                .map(item => `№${item.id}${item.variant ? '/' + item.variant : ''}`)
+                .join(', '));
+        }
+        const missing = Array.isArray(canon.missingInputs) ? canon.missingInputs.filter(Boolean) : [];
+        if (missing.length) parts.push('не хватает: ' + missing.join(', '));
+        return parts.join(' · ');
+    }
+
+    function canonSettingNotes(canon) {
+        const text = canon && canon.settingText && typeof canon.settingText === 'object' ? canon.settingText : null;
+        if (!text) return [];
+        const notes = [];
+        if (text.build_type) notes.push(`Выход из обороны: ${text.build_type}`);
+        if (text.build_temp) notes.push(`Темп: ${text.build_temp}`);
+        if (text.build_long || text.build_fast) {
+            notes.push(`Диагонали: ${text.build_long || '—'} · в касание: ${text.build_fast || '—'}`);
+        }
+        if (text.style) notes.push(`Стиль: ${text.style}`);
+        return notes;
     }
 
     function applyCanon(vector, canon, overrides) {
@@ -12265,6 +12351,28 @@ TacticalKnowledgePack.init();
         const etalon = result?.etalon || null;
         const canon = result?.canon || null;
         const canonMatched = isMatchedCanon(canon);
+
+        // #477 P1-2: a canon decision that exists but did not resolve a row is
+        // authoritative in the NEGATIVE — it must never fall through to a
+        // preset/etalon vector. Only canon == null keeps the legacy path.
+        if (canon && !canonMatched) {
+            return {
+                schema: VERSION,
+                vector: null,
+                base: null,
+                overrides: null,
+                source: `canon:${canon.status}`,
+                strong: { defense: false, buildup: false, scenario: null, canon: false },
+                deltaVsCurrent: null,
+                presetId: null,
+                etalonIds: Array.isArray(etalon?.ids) ? etalon.ids.filter(Boolean).map(String) : [],
+                insufficientData: Array.isArray(canon.missingInputs) ? canon.missingInputs.map(String) : [],
+                notes: [],
+                referenceLine: canonUnresolvedReference(canon),
+                canon
+            };
+        }
+
         let baseInfo = resolveBase(snapshot, result);
         // A resolved manual row is actionable even without a readable preset
         // or current tactic: only the six manual settings are known, the rest
@@ -12304,7 +12412,7 @@ TacticalKnowledgePack.init();
             applyCanon(vector, canon, overrides);
             strong = { defense: false, buildup: true, scenario: null, canon: true };
             referenceLine = canonReferenceText(canon);
-            notes = [canon.situationText].concat(CANON_LEGEND);
+            notes = [canon.situationText].concat(canonSettingNotes(canon), CANON_LEGEND);
             insufficientData = [];
             source = `canon:${canon.id}${canon.variant ? '/' + canon.variant : ''}+base:${baseInfo.base}`;
         } else {
@@ -13738,6 +13846,10 @@ const LLMSecondOpinion = {
     // #461: partial-data mode. On an early match the rules engine has no
     // decision yet; the payload then says so honestly instead of refusing.
     PARTIAL_DATA_NOTE: 'Правила не дали решения на текущих данных матча',
+    // #477 P1-3: the canon that constrains a rendered answer belongs to the
+    // exact payload that produced it. WeakMap keeps the payloads collectable
+    // and lets a late answer validate against ITS request, not a mutable slot.
+    __payloadCanon: new WeakMap(),
 
     // Compact whitelist of decision-context signals sent to the advisor.
     // Everything else in the moment context stays local (payload budget).
@@ -13814,6 +13926,20 @@ const LLMSecondOpinion = {
     buildCanonReference(canon) {
         if (!canon) return null;
         const vector = canon.vector && typeof canon.vector === 'object' ? canon.vector : null;
+        // #477 P1-5: the bounded alternatives travel in the reference channel so
+        // the advisor can weigh them without receiving the full 12-row catalog.
+        // The matched row + candidates + legend are the decision; the catalog
+        // itself stays out of the prompt.
+        const candidates = Array.isArray(canon.candidates) ? canon.candidates
+            .filter(item => item && typeof item === 'object' && item.id != null)
+            .slice(0, 12)
+            .map(item => ({
+                id: Number(item.id),
+                variant: item.variant == null ? null : String(item.variant),
+                situationText: typeof item.situationText === 'string'
+                    ? item.situationText.slice(0, 200)
+                    : null
+            })) : [];
         return {
             version: typeof canon.version === 'string' ? canon.version : null,
             title: 'Шпаргалка: построение атаки',
@@ -13825,8 +13951,21 @@ const LLMSecondOpinion = {
             legend: Array.isArray(canon.legend) ? canon.legend.filter(line => typeof line === 'string').slice(0, 8) : [],
             evidence: Array.isArray(canon.evidence) ? canon.evidence.filter(item => typeof item === 'string').slice(0, 20) : [],
             missingInputs: Array.isArray(canon.missingInputs) ? canon.missingInputs.filter(item => typeof item === 'string').slice(0, 10) : [],
-            additions: Array.isArray(canon.additions) ? canon.additions.slice(0, 5) : []
+            additions: Array.isArray(canon.additions) ? canon.additions.slice(0, 5) : [],
+            candidates
         };
+    },
+
+    // #477 P1-3: the canon that constrains a rendered answer belongs to the
+    // REQUEST that produced it, not to a mutable slot that a later request can
+    // overwrite. options.payload binding wins; the legacy single slot is the
+    // fallback for callers that do not pass the payload.
+    resolveCanonFor(options) {
+        const payload = options && options.payload;
+        if (payload && this.__payloadCanon && this.__payloadCanon.has(payload)) {
+            return this.__payloadCanon.get(payload) || null;
+        }
+        return this.__lastCanonDecision || null;
     },
 
     // Client-boundary validation for «adjust» (#477 R8/R10). A matched row
@@ -14001,9 +14140,15 @@ const LLMSecondOpinion = {
         // field, appended only when the local matcher produced one. Legacy
         // (no canon) requests keep the exact legacy payload bytes.
         const canon = this.canonDecisionFrom(ruleDecision);
-        // #477: always refresh the decision slot, including to null. A stale
-        // canon from a previous hint must never constrain a later answer.
-        this.__lastCanonDecision = canon || null;
+        // #477 P1-3: bind the decision to the payload that carries it, so the
+        // render validates against its OWN request instead of a shared slot.
+        this.__payloadCanon.set(payload, canon || null);
+        // #477: an absent canon clears the legacy slot so a stale row never
+        // constrains a canon-less request. A decision that resolves no row
+        // (ambiguous/missing_inputs) cannot constrain an answer either, so it
+        // leaves the last constraining decision in place for legacy callers
+        // that do not pass the payload.
+        if (!canon || canon.status === 'matched') this.__lastCanonDecision = canon || null;
         this.__lastRegistry = registry;
         if (canon) payload.canonReference = this.buildCanonReference(canon);
         return payload;
@@ -14043,7 +14188,7 @@ const LLMSecondOpinion = {
         // JSON data attribute.
         const adjustChanges = Array.isArray(answer.changes) ? answer.changes : [];
         if (answer.mode === 'adjust' || adjustChanges.length) {
-            const check = this.validateAdjustAgainstCanon(adjustChanges, this.__lastCanonDecision);
+            const check = this.validateAdjustAgainstCanon(adjustChanges, this.resolveCanonFor(options));
             if (!check.ok) {
                 const blocked = this.escapeHtml(check.reason || 'предложение не соответствует канону');
                 return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#1a1414;border:1px solid #5a3a3a;border-radius:5px;color:#dcc;padding:7px 9px;font-size:12px;line-height:1.45;">` +
@@ -14080,7 +14225,7 @@ const LLMSecondOpinion = {
         // #477 R8: a «switch» is actionable only for an eligible preset that
         // exactly realizes the matched canon row AND variant. Without a canon
         // decision (legacy/old API) the pre-existing switch path is preserved.
-        const switchCheck = presetId ? this.validateSwitchAgainstCanon(presetId, this.__lastCanonDecision) : { ok: true };
+        const switchCheck = presetId ? this.validateSwitchAgainstCanon(presetId, this.resolveCanonFor(options)) : { ok: true };
         if (presetId && !switchCheck.ok) {
             const blocked = this.escapeHtml(switchCheck.reason || 'предложение не соответствует канону');
             return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#1a1414;border:1px solid #5a3a3a;border-radius:5px;color:#dcc;padding:7px 9px;font-size:12px;line-height:1.45;">` +
@@ -14875,36 +15020,52 @@ if (typeof window !== 'undefined') {
 
     function buildKnowledgeProvenanceHtml(snapshot, primaryPresetName) {
         let matched = false;
+        let canonLabel = '';
         try {
             const decision = snapshot?.ruleDecision || null;
-            const preset = resolveDisplayedKnowledgePreset(snapshot, primaryPresetName);
-            // Prefer the decision's OWN computed adjustment (same-decision data):
-            // the candidate parts carry the boundedEvidenceAdjustment the policy
-            // actually applied. This never diverges from the decision, unlike a
-            // live re-evaluation on the raw moment.context (whose normalized
-            // fields — e.g. signal-derived underPressure — can differ). Fall back
-            // to a live assessment only when the candidate parts are unavailable.
-            const candidate = Array.isArray(decision?.candidates)
-                ? decision.candidates.find(item => item && item.preset === preset)
-                : null;
-            if (candidate && candidate.parts && typeof candidate.parts.boundedEvidenceAdjustment === 'number') {
-                matched = candidate.parts.boundedEvidenceAdjustment !== 0;
-            } else {
-                const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
-                const assessment = registry && typeof registry.knowledgeAssessment === 'function'
-                    ? registry.knowledgeAssessment({
-                        preset,
-                        situation: decision?.situation || decision?.moment?.context?.gameMode || '',
-                        context: decision?.moment?.context || null
-                    })
+            // #477: a matched canon row is the authority the hint displays, so
+            // the knowledge attribution follows that row — not the preset that
+            // only supplied the base/defense/attack controls. base/presetId
+            // stay untouched; this is display attribution only.
+            const canon = decision?.finalTactic?.canon;
+            if (canon && canon.status === 'matched') {
+                const variant = canon.variant == null ? '' : ` · вариант ${canon.variant}`;
+                const situation = typeof canon.situationText === 'string' && canon.situationText
+                    ? ` · ${canon.situationText}`
+                    : '';
+                canonLabel = `База: канон №${canon.id}${variant}${situation}`;
+            }
+            if (!canonLabel) {
+                const preset = resolveDisplayedKnowledgePreset(snapshot, primaryPresetName);
+                // Prefer the decision's OWN computed adjustment (same-decision data):
+                // the candidate parts carry the boundedEvidenceAdjustment the policy
+                // actually applied. This never diverges from the decision, unlike a
+                // live re-evaluation on the raw moment.context (whose normalized
+                // fields — e.g. signal-derived underPressure — can differ). Fall back
+                // to a live assessment only when the candidate parts are unavailable.
+                const candidate = Array.isArray(decision?.candidates)
+                    ? decision.candidates.find(item => item && item.preset === preset)
                     : null;
-                matched = Boolean(assessment && assessment.source === 'seed'
-                    && Array.isArray(assessment.ruleIds) && assessment.ruleIds.length > 0);
+                if (candidate && candidate.parts && typeof candidate.parts.boundedEvidenceAdjustment === 'number') {
+                    matched = candidate.parts.boundedEvidenceAdjustment !== 0;
+                } else {
+                    const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+                    const assessment = registry && typeof registry.knowledgeAssessment === 'function'
+                        ? registry.knowledgeAssessment({
+                            preset,
+                            situation: decision?.situation || decision?.moment?.context?.gameMode || '',
+                            context: decision?.moment?.context || null
+                        })
+                        : null;
+                    matched = Boolean(assessment && assessment.source === 'seed'
+                        && Array.isArray(assessment.ruleIds) && assessment.ruleIds.length > 0);
+                }
             }
         } catch (_) {
             matched = false; // attribution unavailable → none-variant
+            canonLabel = '';
         }
-        const label = matched ? 'База: seed (гипотеза)' : 'База: нет совпавших данных';
+        const label = canonLabel || (matched ? 'База: seed (гипотеза)' : 'База: нет совпавших данных');
         return `<div style="line-height:1.4;opacity:.85;">${etalonEscape(label)}</div>`;
     }
 
@@ -15139,14 +15300,14 @@ if (typeof window !== 'undefined') {
         LLMSecondOpinion.mountAnswer('<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#181818;border:1px dashed #555;border-radius:5px;color:#999;padding:7px 9px;font-size:12px;">🤖 Думает…</div>');
         try {
             const answer = await LLMSecondOpinion.requestSecondOpinion(payload);
-            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer(answer, { partial }));
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer(answer, { partial, payload }));
             return answer || null;
         } catch (error) {
             console.error('[SLF] LLM second opinion request failed', error);
             const errorHtml = LLMSecondOpinion.renderAnswer({
                 available: false,
                 error: llmSecondOpinionErrorText(error)
-            }, { partial });
+            }, { partial, payload });
             // #471: only the chat path gets «Повторить» — the one-shot button
             // has no dialogue to resend.
             LLMSecondOpinion.mountAnswer(chat ? llmChatRetryHtml(errorHtml) : errorHtml);
@@ -30082,15 +30243,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.381',
-        scriptVersion: '4.4.381',
+        version: '4.4.383',
+        scriptVersion: '4.4.383',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.381',
+        scriptVersion: '4.4.383',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

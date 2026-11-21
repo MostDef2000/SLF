@@ -1,5 +1,57 @@
 # Changelog
 
+## 4.4.383
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- tools/test-dave56-etalon-apply-contract.mjs
+- tools/test-dave56-etalon-panel.mjs
+
+Approved base commit:
+- 45ed943ddbd7e87acbd7fc45540f4c180b7bbb8d
+
+Approved commit:
+- 531a6d5bebad0e3c1dc74744901d2b6784400359
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.382
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- tools/test-dave56-etalon-apply-contract.mjs
+- tools/test-dave56-etalon-panel.mjs
+
+Approved base commit:
+- 45ed943ddbd7e87acbd7fc45540f4c180b7bbb8d
+
+Approved commit:
+- 531a6d5bebad0e3c1dc74744901d2b6784400359
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.381
 
 ### Automatic latest-only build

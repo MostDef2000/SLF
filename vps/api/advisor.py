@@ -85,6 +85,10 @@ MAX_CANON_EVIDENCE_CHARS = 120
 MAX_CANON_MISSING_ITEMS = 10
 MAX_CANON_MISSING_CHARS = 60
 MAX_CANON_ADDITIONS = 5
+# #477 P1-5: bounded alternatives from an ambiguous/matched decision, so the
+# advisor can weigh them without receiving the full 12-row catalog.
+MAX_CANON_CANDIDATES = 12
+MAX_CANON_CANDIDATE_CHARS = 200
 CANON_STATUSES = ("matched", "ambiguous", "missing_inputs", "no_match")
 # The six manual settings: an adjust that touches one of these must move it TO
 # the matched row's value (client validation stays authoritative per plan §6).
@@ -336,6 +340,40 @@ def _clean_canon_reference(raw):
                 cleaned["entryConditions"] = cleaned_conditions
             additions.append(cleaned)
 
+    # #477 P1-5: bounded alternatives. Each candidate is a row id (1..12) with
+    # an optional variant/situation text; the matched row + candidates + legend
+    # are the decision, the full catalog stays out of the prompt.
+    candidates_raw = raw.get("candidates")
+    candidates = []
+    if candidates_raw is not None:
+        if not isinstance(candidates_raw, list):
+            raise AdvisorValidationError("canonReference.candidates must be a list")
+        if len(candidates_raw) > MAX_CANON_CANDIDATES:
+            raise AdvisorValidationError(
+                f"canonReference.candidates must have at most {MAX_CANON_CANDIDATES} items")
+        for item in candidates_raw:
+            if not isinstance(item, dict):
+                raise AdvisorValidationError(
+                    "canonReference.candidates entries must be objects")
+            candidate_id = item.get("id")
+            if (isinstance(candidate_id, bool) or not isinstance(candidate_id, int)
+                    or not 1 <= candidate_id <= 12):
+                raise AdvisorValidationError(
+                    "canonReference.candidates[].id must be an integer 1..12")
+            candidate_variant = item.get("variant")
+            if candidate_variant is not None and not isinstance(candidate_variant, str):
+                raise AdvisorValidationError(
+                    "canonReference.candidates[].variant must be a string or null")
+            candidate_situation = item.get("situationText")
+            if candidate_situation is not None and not isinstance(candidate_situation, str):
+                raise AdvisorValidationError(
+                    "canonReference.candidates[].situationText must be a string or null")
+            candidates.append({
+                "id": candidate_id,
+                "variant": _clean_str(candidate_variant, MAX_CANON_VARIANT_CHARS) or None,
+                "situationText": _clean_str(candidate_situation, MAX_CANON_CANDIDATE_CHARS) or None,
+            })
+
     variant = raw.get("variant")
     if variant is not None and not isinstance(variant, str):
         raise AdvisorValidationError("canonReference.variant must be a string or null")
@@ -361,6 +399,7 @@ def _clean_canon_reference(raw):
         "evidence": bounded_list("evidence", MAX_CANON_EVIDENCE_ITEMS, MAX_CANON_EVIDENCE_CHARS),
         "missingInputs": bounded_list("missingInputs", MAX_CANON_MISSING_ITEMS, MAX_CANON_MISSING_CHARS),
         "additions": additions,
+        "candidates": candidates,
     }
 
 

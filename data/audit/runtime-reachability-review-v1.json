@@ -595,6 +595,14 @@
         "Issue #477: canon situation matcher added at the existing dave56 etalon seam; registered in bundle-order dependency audit (95 modules, no new src file).",
         "Legacy etalon path preserved: canon-first selection only when a matched canon decision exists; autoApply stays false; existing T1-T6 etalon tests green."
       ]
+    },
+    {
+      "file": "src/modules/strategy-data-recommendations/final-tactic-merge-layer.js",
+      "classification": "ACTIVE_WITH_LEGACY_MARKERS",
+      "evidence": [
+        "Issue #477: canon-first final selection added at the existing merge seam; matched canon owns six manual settings, unresolved canon suppresses the actionable vector (P1-2).",
+        "Legacy preset/etalon path preserved when no canon decision exists; autoApply stays false; existing T1-T6 + s2/s3/s6 tests green."
+      ]
     }
   ],
   "symbolReviewQueue": [

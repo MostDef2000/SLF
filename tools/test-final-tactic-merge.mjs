@@ -313,17 +313,15 @@ function computeDirect(sandbox, result) {
   const r = run(s, baseSnapshot, ctx({ tags: ['opponent_high_press'] }));
   const ft = r.finalTactic;
   assert.equal(r.etalon.situationIds.buildup, 'b6');
+  // #477 P1-2: an unresolved canon decision (missing_inputs here) suppresses
+  // the actionable vector — no preset/etalon tactic is offered as resolved.
+  assert.equal(r.canon.status, 'missing_inputs');
+  assert.equal(ft.vector, null, 'unresolved canon → no actionable vector');
   assert.equal(ft.strong.defense, false);
-  assert.equal(ft.strong.buildup, true);
-  assert.equal(Object.prototype.hasOwnProperty.call(r.etalon.buildupVector, 'style'), false, 'b6 etalon vector really omits style');
-  for (const key of ['build_type', 'build_temp', 'build_long', 'build_fast']) {
-    assert.equal(ft.vector[key], String(r.etalon.buildupVector[key]), `T4a ${key} from the etalon buildupVector`);
-  }
-  assert.equal(ft.vector.style, '4', 'T4a style falls back to the preset when the etalon omits it');
-  assert.equal(ft.overrides.style, 'preset', 'T4a style provenance stays preset');
-  assert.equal(ft.overrides.buildup, 'etalon:b6');
-  assert.equal(ft.overrides.defense, 'preset');
-  assert.equal(ft.vector.def_line, '2', 'T4a defense stays preset');
+  assert.equal(ft.strong.buildup, false);
+  assert.equal(ft.overrides, null, 'unresolved canon → no overrides');
+  assert.equal(ft.source, 'canon:missing_inputs', 'unresolved canon source');
+  assert.ok(ft.referenceLine && ft.referenceLine.includes('неоднозначно') === false, 'reference line explains the missing inputs');
   console.log('T4a ok: b6 → buildup overridden, style falls back to preset');
 }
 
@@ -521,7 +519,9 @@ function computeDirect(sandbox, result) {
 {
   const s = makeSandbox();
   const r = run(s, baseSnapshot, ctx({ tags: ['opponent_high_press'] }));
-  assert.match(r.finalTactic.source, /^merged:etalon:d1\+b6\+presets:Conte_WideChannels_v11$/, 'T4 source format pin');
+  // #477: this context resolves an unresolved canon decision, so the source
+  // is canon-scoped and no preset/etalon vector is offered.
+  assert.equal(r.finalTactic.source, 'canon:missing_inputs', 'T4 source format pin (canon unresolved)');
   console.log('source format ok:', r.finalTactic.source);
 }
 
@@ -529,10 +529,9 @@ function computeDirect(sandbox, result) {
 {
   const s = makeSandbox();
   const r = run(s, baseSnapshot, ctx({ tags: ['opponent_high_press'] }));
-  for (const key of CONTROL_KEYS) {
-    assert.equal(typeof r.finalTactic.vector[key], 'string', `vector.${key} is a STRING even when the etalon supplied a number`);
-  }
-  console.log('string domain ok: 14/14 values are strings');
+  // #477: unresolved canon suppresses the vector entirely (P1-2).
+  assert.equal(r.finalTactic.vector, null, 'unresolved canon → no vector to type-check');
+  console.log('string domain ok: unresolved canon vector suppressed');
 }
 
 // No preset and no readable current tactic → finalTactic is null.

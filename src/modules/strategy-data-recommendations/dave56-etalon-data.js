@@ -140,32 +140,41 @@
                 'Стиль атака — для дожима',
                 'Стиль защита — для выживания и удержания'
             ],
+            // settingText repeats the manual's verbatim Russian words for the
+            // six manual columns (build_type = «Выход из обороны», build_temp =
+            // «Темп», build_long = «Диагонали», build_fast = «В касание»,
+            // style = «Стиль»). A slash pair is ONE column's permitted range and
+            // is rendered as ' / ' exactly as transcribed from
+            // shared/slf-developer-tactics-analysis.md:10-23. The numbers above
+            // make a row actionable; these words keep the hint honest.
             rows: [
-                { id: 1, situation: 'Равный матч', priority: '000', vector: { build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3' } },
-                { id: 2, situation: 'Ты фаворит', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' } },
-                { id: 3, situation: 'Ты андердог', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '2' } },
+                { id: 1, situation: 'Равный матч', priority: '000', vector: { build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Умеренно', build_fast: 'Умеренно', style: 'Обычный' } },
+                { id: 2, situation: 'Ты фаворит', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Средний', build_long: 'Умеренно', build_fast: 'Умеренно / часто', style: 'Обычный / атака' } },
+                { id: 3, situation: 'Ты андердог', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '2' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Редко', build_fast: 'Редко', style: 'Защита / обычный' } },
                 {
                     id: 4, situation: 'Нужно забить',
+                    settingText: { build_type: 'Позиционный', build_temp: 'Средний / высокий', build_long: 'Умеренно', build_fast: 'Умеренно / часто', style: 'Атака / атака+' },
                     variants: [
                         { id: 'left', label: 'левая сторона', priority: '110', vector: { build_type: '3', build_temp: '3', build_long: '2', build_fast: '2', style: '4' } },
                         { id: 'right', label: 'правая сторона', priority: '011', vector: { build_type: '3', build_temp: '3', build_long: '2', build_fast: '2', style: '4' } }
                     ]
                 },
-                { id: 5, situation: 'Нужно удержать', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '1' } },
+                { id: 5, situation: 'Нужно удержать', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '1' }, settingText: { build_type: 'Смешанный / выносы', build_temp: 'Низкий / средний', build_long: 'Редко', build_fast: 'Редко / умеренно', style: 'Защита / защита+' } },
                 {
                     id: 6, situation: 'Соперник сильно прессингует',
+                    settingText: { build_type: 'Смешанный', build_temp: 'Средний / высокий', build_long: 'Редко', build_fast: 'Редко', style: 'По силе команд' },
                     variants: [
                         { id: 'weaker', label: 'наша XI слабее', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '2' } },
                         { id: 'equal', label: 'XI равны', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '3' } },
                         { id: 'stronger', label: 'наша XI сильнее', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '4' } }
                     ]
                 },
-                { id: 7, situation: 'Соперник почти не прессингует', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' } },
-                { id: 8, situation: 'Взлом автобуса', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '3', style: '3' } },
-                { id: 9, situation: 'Хаотичный матч', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '3' } },
-                { id: 10, situation: 'Игра через «столба»', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '3' } },
-                { id: 11, situation: 'Схема контроля', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '2', style: '3' } },
-                { id: 12, situation: 'Самолёт / много атаки', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '4' } }
+                { id: 7, situation: 'Соперник почти не прессингует', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Низкий / средний', build_long: 'Умеренно / часто', build_fast: 'Умеренно / часто', style: 'Обычный / атака' } },
+                { id: 8, situation: 'Взлом автобуса', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '3', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Низкий / средний', build_long: 'Умеренно / часто', build_fast: 'Умеренно / часто', style: 'Обычный / атака' } },
+                { id: 9, situation: 'Хаотичный матч', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '3' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Редко', build_fast: 'Редко', style: 'Обычный' } },
+                { id: 10, situation: 'Игра через «столба»', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '3' }, settingText: { build_type: 'Выносы', build_temp: 'Средний', build_long: 'Редко', build_fast: 'Редко', style: 'Обычный / защита' } },
+                { id: 11, situation: 'Схема контроля', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Низкий', build_long: 'Умеренно', build_fast: 'Умеренно / часто', style: 'Обычный' } },
+                { id: 12, situation: 'Самолёт / много атаки', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '4' }, settingText: { build_type: 'Смешанный / выносы', build_temp: 'Высокий', build_long: 'Редко / умеренно', build_fast: 'Редко', style: 'Обычный / атака' } }
             ],
             // Data-backed SLF additions live in their own namespace: they are
             // NOT screenshot rows and may never displace a resolved manual row.
