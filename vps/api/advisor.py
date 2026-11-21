@@ -70,6 +70,25 @@ MAX_DIALOG_TURN_CHARS = 500
 # yet, so the client may send ruleDecision=null plus dataCompleteness="partial".
 # The optional dataNote says why the rules are silent; capped like a hint.
 MAX_DATA_NOTE_CHARS = 300
+# #477: the canon manual («Шпаргалка: построение атаки») arrives as its own
+# structured channel. It is deliberately separate from developerHints: page
+# coach hints keep their own 20-line budget. The block is bounded and
+# fail-closed (a malformed reference is a 400), mirroring presetCatalog/dialog.
+MAX_CANON_SITUATION_CHARS = 300
+MAX_CANON_TITLE_CHARS = 120
+MAX_CANON_VERSION_CHARS = 64
+MAX_CANON_VARIANT_CHARS = 40
+MAX_CANON_LEGEND_LINES = 8
+MAX_CANON_LEGEND_CHARS = 300
+MAX_CANON_EVIDENCE_ITEMS = 20
+MAX_CANON_EVIDENCE_CHARS = 120
+MAX_CANON_MISSING_ITEMS = 10
+MAX_CANON_MISSING_CHARS = 60
+MAX_CANON_ADDITIONS = 5
+CANON_STATUSES = ("matched", "ambiguous", "missing_inputs", "no_match")
+# The six manual settings: an adjust that touches one of these must move it TO
+# the matched row's value (client validation stays authoritative per plan §6).
+CANON_MANUAL_KEYS = ("build_type", "build_temp", "build_long", "build_fast", "style")
 LOG_COLLECTION = "advisor_log_v1"
 LOG_MAX_RECORDS = 5000
 
@@ -214,6 +233,135 @@ def _valid_control_value(control, value):
         return False
     low, high = CONTROL_DOMAINS[control]
     return low <= int(text) <= high
+
+
+def _clean_canon_reference(raw):
+    """Clean the #477 canon reference channel or raise AdvisorValidationError.
+
+    The reference is the client-side matcher's decision over the canon manual.
+    Structure is validated fail-closed (a malformed reference is a 400); bounded
+    scalar/list members are truncated to their documented caps, mirroring the
+    dialog/hints channels. Returns None when the field is absent.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise AdvisorValidationError("canonReference must be an object or null")
+
+    status = raw.get("status")
+    if not isinstance(status, str) or status not in CANON_STATUSES:
+        raise AdvisorValidationError(
+            "canonReference.status must be one of " + ", ".join(CANON_STATUSES))
+
+    matched_id = raw.get("matchedId")
+    if matched_id is not None:
+        if isinstance(matched_id, bool) or not isinstance(matched_id, int) or not 1 <= matched_id <= 12:
+            raise AdvisorValidationError("canonReference.matchedId must be an integer 1..12 or null")
+
+    vector_raw = raw.get("vector")
+    vector = None
+    if vector_raw is not None:
+        if not isinstance(vector_raw, dict):
+            raise AdvisorValidationError("canonReference.vector must be an object or null")
+        vector = {}
+        for key in CANON_MANUAL_KEYS:
+            if key not in vector_raw:
+                raise AdvisorValidationError(
+                    f"canonReference.vector must carry {key}")
+            if not _valid_control_value(key, vector_raw.get(key)):
+                raise AdvisorValidationError(
+                    f"canonReference.vector.{key} is out of range")
+            vector[key] = vector_raw[key].strip()
+        priority = vector_raw.get("priority")
+        if priority is not None:
+            if (not isinstance(priority, str) or len(priority) != 3
+                    or any(char not in "01" for char in priority)):
+                raise AdvisorValidationError(
+                    "canonReference.vector.priority must be a 3-digit 0/1 string")
+            vector["priority"] = priority
+
+    if status == "matched" and (matched_id is None or vector is None):
+        raise AdvisorValidationError(
+            "canonReference.matched requires matchedId and vector")
+
+    def bounded_list(key, max_items, item_chars):
+        value = raw.get(key)
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise AdvisorValidationError(f"canonReference.{key} must be a list")
+        if len(value) > max_items:
+            raise AdvisorValidationError(
+                f"canonReference.{key} must have at most {max_items} items")
+        cleaned = []
+        for item in value:
+            if not isinstance(item, str):
+                raise AdvisorValidationError(
+                    f"canonReference.{key} entries must be strings")
+            text = _clean_str(item, item_chars)
+            if text:
+                cleaned.append(text)
+        return cleaned
+
+    additions_raw = raw.get("additions")
+    additions = []
+    if additions_raw is not None:
+        if not isinstance(additions_raw, list):
+            raise AdvisorValidationError("canonReference.additions must be a list")
+        if len(additions_raw) > MAX_CANON_ADDITIONS:
+            raise AdvisorValidationError(
+                f"canonReference.additions must have at most {MAX_CANON_ADDITIONS} items")
+        for item in additions_raw:
+            if not isinstance(item, dict):
+                raise AdvisorValidationError(
+                    "canonReference.additions entries must be objects")
+            cleaned = {}
+            for key in ("id", "situation", "provenance", "eligibleRole"):
+                value = item.get(key)
+                if value is not None:
+                    cleaned[key] = _clean_str(value, MAX_CANON_EVIDENCE_CHARS)
+            conditions = item.get("entryConditions")
+            if conditions is not None:
+                if not isinstance(conditions, list) or len(conditions) > MAX_CANON_EVIDENCE_ITEMS:
+                    raise AdvisorValidationError(
+                        "canonReference.additions[].entryConditions must be a bounded list")
+                cleaned_conditions = []
+                for condition in conditions:
+                    if not isinstance(condition, str):
+                        raise AdvisorValidationError(
+                            "canonReference.additions[].entryConditions entries must be strings")
+                    text = _clean_str(condition, MAX_CANON_MISSING_CHARS)
+                    if text:
+                        cleaned_conditions.append(text)
+                cleaned["entryConditions"] = cleaned_conditions
+            additions.append(cleaned)
+
+    variant = raw.get("variant")
+    if variant is not None and not isinstance(variant, str):
+        raise AdvisorValidationError("canonReference.variant must be a string or null")
+    situation_text = raw.get("situationText")
+    if situation_text is not None and not isinstance(situation_text, str):
+        raise AdvisorValidationError("canonReference.situationText must be a string or null")
+    version = raw.get("version")
+    if version is not None and not isinstance(version, str):
+        raise AdvisorValidationError("canonReference.version must be a string or null")
+    title = raw.get("title")
+    if title is not None and not isinstance(title, str):
+        raise AdvisorValidationError("canonReference.title must be a string or null")
+
+    return {
+        "version": _clean_str(version, MAX_CANON_VERSION_CHARS) or None,
+        "title": _clean_str(title, MAX_CANON_TITLE_CHARS) or None,
+        "status": status,
+        "matchedId": matched_id,
+        "variant": _clean_str(variant, MAX_CANON_VARIANT_CHARS) or None,
+        "situationText": _clean_str(situation_text, MAX_CANON_SITUATION_CHARS) or None,
+        "vector": vector,
+        "legend": bounded_list("legend", MAX_CANON_LEGEND_LINES, MAX_CANON_LEGEND_CHARS),
+        "evidence": bounded_list("evidence", MAX_CANON_EVIDENCE_ITEMS, MAX_CANON_EVIDENCE_CHARS),
+        "missingInputs": bounded_list("missingInputs", MAX_CANON_MISSING_ITEMS, MAX_CANON_MISSING_CHARS),
+        "additions": additions,
+    }
 
 
 def validate_context(data):
@@ -375,6 +523,10 @@ def validate_context(data):
     else:
         evaluation_game_id = None
 
+    # #477: the canon manual arrives as its own structured channel, separate
+    # from developerHints. A malformed reference is a 400 (fail-closed).
+    canon_reference = _clean_canon_reference(data.get("canonReference"))
+
     context = {
         "schema": "slf_llm_advisor_request_v1",
         "gameId": _clean_str(str(data.get("gameId") or ""), 40) or None,
@@ -384,6 +536,9 @@ def validate_context(data):
         "score": score,
         "currentPreset": _clean_str(data.get("currentPreset"), 64) or None,
         "developerHints": hints,
+        # #477: None when the client sent no canon reference; the legacy prompt
+        # and validation stay byte-identical in that case.
+        "canonReference": canon_reference,
         "currentControls": current_controls,
         "dialog": dialog,
         # #461: partial mode keeps ruleDecision=None all the way to the prompt.
@@ -810,6 +965,60 @@ def build_enrichment(data_dir, context, read_knowledge=None):
     return _assemble_enrichment(sections, ENRICHMENT_BUDGET_CHARS)
 
 
+def _render_canon_reference(canon):
+    """Render the #477 canon channel as its own prompt section.
+
+    Returns "" when the reference is absent, so the legacy prompt keeps its
+    exact bytes. The block is deliberately distinct from «Подсказки тренеров»:
+    the manual is authoritative for a matched situation, not a page hint.
+    """
+    if not canon:
+        return ""
+    title = canon.get("title") or "Шпаргалка: построение атаки"
+    lines = [f"Канон «{title}» (версия {canon.get('version') or '—'}):"]
+    lines.append("Статус сопоставления: " + canon["status"])
+    if canon.get("matchedId") is not None:
+        row = f"Строка канона: №{canon['matchedId']}"
+        if canon.get("variant"):
+            row += f", вариант {canon['variant']}"
+        vector = canon.get("vector") or {}
+        if vector.get("priority"):
+            row += f", приоритет {vector['priority']}"
+        lines.append(row)
+    if canon.get("situationText"):
+        lines.append("Ситуация по канону: " + canon["situationText"])
+    if canon.get("vector"):
+        settings = {key: canon["vector"][key] for key in CANON_MANUAL_KEYS
+                    if key in canon["vector"]}
+        lines.append("Настройки строки: " + json.dumps(settings, ensure_ascii=False))
+    if canon.get("legend"):
+        lines.append("Легенда канона:")
+        lines.extend("- " + line for line in canon["legend"])
+    if canon.get("evidence"):
+        lines.append("Доказательства сопоставления: " + "; ".join(canon["evidence"]))
+    if canon.get("missingInputs"):
+        lines.append("Не хватает данных: " + "; ".join(canon["missingInputs"]))
+    if canon.get("additions"):
+        lines.append("SLF-дополнения (не строки шпаргалки):")
+        for addition in canon["additions"]:
+            description = addition.get("id") or "?"
+            if addition.get("situation"):
+                description += ": " + addition["situation"]
+            if addition.get("entryConditions"):
+                description += " (условия: " + ", ".join(addition["entryConditions"]) + ")"
+            if addition.get("eligibleRole"):
+                description += " (роль: " + addition["eligibleRole"] + ")"
+            lines.append("- " + description)
+    lines.append(
+        "Правила канона: для сопоставленной ситуации строка канона авторитетна — "
+        "режим adjust должен двигать ручные настройки ТОЛЬКО к значениям этой "
+        "строки; режим switch допустим только на пресет, точно реализующий эту "
+        "строку и её вариант. Если статус не matched, не выдавай выдуманную "
+        "строку и не предлагай переключение по догадке."
+    )
+    return "\n".join(lines) + "\n"
+
+
 def build_messages(context, enrichment=""):
     catalog_lines = "\n".join(
         f"- {entry['id']} | {entry['label']}"
@@ -852,11 +1061,13 @@ def build_messages(context, enrichment=""):
             + "; приоритет: left, center, right\n"
         )
     situation = {k: context[k] for k in ("gameId", "minute", "bucket", "score", "currentPreset", "signals")}
+    canon_text = _render_canon_reference(context.get("canonReference"))
     user_payload = (
         "Ситуация (JSON): " + json.dumps(situation, ensure_ascii=False) + "\n"
         "Подсказки тренеров: " + hints_text + "\n"
         + decision_text
         + controls_text
+        + canon_text
         + "Каталог пресетов:\n" + catalog_lines + "\n"
     )
     if enrichment:
@@ -1141,7 +1352,7 @@ def _validate_changes(raw):
     return changes
 
 
-def validate_answer(obj, catalog_ids):
+def validate_answer(obj, catalog_ids, canon=None):
     """Validate a model answer; return a normalized mode payload.
 
     Accepted shapes:
@@ -1150,6 +1361,11 @@ def validate_answer(obj, catalog_ids):
     - {"mode":"switch","preset":...}: preset must be in the catalog;
     - {"mode":"adjust","changes":[{"control":...,"value":...}]}: 1..3 unique
       controls with in-domain string values; preset is not required.
+
+    #477 defense-in-depth: when a canon reference is present, an adjust that
+    touches a manual control must move it TO the matched row's value, and a
+    switch is refused unless the canon row is matched. Client validation stays
+    authoritative; the server never trusts the model more than the client.
 
     Returns {"mode","preset","changes","confidence","reason"} or raises
     ValueError with corrective feedback.
@@ -1165,10 +1381,25 @@ def validate_answer(obj, catalog_ids):
         preset = obj.get("preset")
         if not isinstance(preset, str) or preset not in catalog_ids:
             raise ValueError(f"preset '{preset}' отсутствует в каталоге; выбери id строго из каталога")
+        if canon is not None and canon.get("status") != "matched":
+            raise ValueError(
+                "канон не определён — переключение по догадке не предлагается")
         changes = None
     else:
         preset = None
         changes = _validate_changes(obj.get("changes"))
+        if canon is not None and canon.get("status") == "matched":
+            vector = canon.get("vector") or {}
+            for change in changes:
+                control = change["control"]
+                if control not in CANON_MANUAL_KEYS:
+                    continue
+                expected = vector.get(control)
+                if expected is not None and change["value"] != expected:
+                    raise ValueError(
+                        "противоречит строке "
+                        f"{canon.get('matchedId')} канона: {control} должно быть "
+                        f"{expected}, предложено {change['value']}")
     confidence = obj.get("confidence", "medium")
     if confidence not in CONFIDENCE_LEVELS:
         raise ValueError("confidence должен быть low|medium|high")
@@ -1619,7 +1850,8 @@ def handle_advisor_request(data, data_dir, read_knowledge=None):
             prompt_tokens = None
         try:
             answer = extract_json_object(content)
-            validated = validate_answer(answer, catalog_ids)
+            validated = validate_answer(
+                answer, catalog_ids, canon=context.get("canonReference"))
         except ValueError as exc:
             attempt_feedback = str(exc)
             last_error = AdvisorError("invalid_answer", str(exc), status=200)

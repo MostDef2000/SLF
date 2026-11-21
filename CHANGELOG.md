@@ -1,5 +1,95 @@
 # Changelog
 
+## 4.4.377
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- specs/475-train-apply-selected-new-design/plan.md
+- specs/475-train-apply-selected-new-design/spec.md
+- specs/475-train-apply-selected-new-design/tasks.md
+- src/modules/team-management/training-reference-guide.js
+- tests/browser/fixtures/fm2026-training.html
+- tests/browser/test_fm2026_design_adapter.py
+
+Approved base commit:
+- 23cf5a8022a69633efccc5ac85f7865963cf2144
+
+Approved commit:
+- 78bda2bf54eb59157f78c7bdfa4632cab9cb1323
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.376
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- specs/475-train-apply-selected-new-design/plan.md
+- specs/475-train-apply-selected-new-design/spec.md
+- specs/475-train-apply-selected-new-design/tasks.md
+- src/modules/team-management/training-reference-guide.js
+- tests/browser/fixtures/fm2026-training.html
+- tests/browser/test_fm2026_design_adapter.py
+
+Approved base commit:
+- 23cf5a8022a69633efccc5ac85f7865963cf2144
+
+Approved commit:
+- 78bda2bf54eb59157f78c7bdfa4632cab9cb1323
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.375
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- specs/475-train-apply-selected-new-design/plan.md
+- specs/475-train-apply-selected-new-design/spec.md
+- specs/475-train-apply-selected-new-design/tasks.md
+- src/modules/team-management/training-reference-guide.js
+- tests/browser/fixtures/fm2026-training.html
+- tests/browser/test_fm2026_design_adapter.py
+
+Approved base commit:
+- 23cf5a8022a69633efccc5ac85f7865963cf2144
+
+Approved commit:
+- 78bda2bf54eb59157f78c7bdfa4632cab9cb1323
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.374
 
 ### Automatic latest-only build

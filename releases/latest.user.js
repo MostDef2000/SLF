@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.374
+// @version      4.4.377
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.374',
-        scriptVersion: '4.4.374',
+        version: '4.4.377',
+        scriptVersion: '4.4.377',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.374',
+        scriptVersion: '4.4.377',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -9875,6 +9875,29 @@ TacticalKnowledgePack.init();
     Object.entries(PRESETS).forEach(([name,preset])=>{if(Number(preset.press_intense)>=3&&META[name])META[name]=Object.assign({},META[name],{use:`${META[name].use}. ${HIGH_PRESS_ROLE_NOTE}`});});
     const TRAITS={"Emery_BalancedBase_v11":{"requires":[],"avoids":["late_emergency_chase","transition_crisis"],"attackLanes":["center","left","right"],"build":"fixed_lineup_patient_progression","tempo":"medium","press":"low","risk":"low"},"Mourinho_CleanCounter_v11":{"requires":["confirmed_counter_exit"],"avoids":["counter_exit_blocked","press_fatigue","high_bad_actions"],"attackLanes":["left","right","center"],"build":"confirmed_counter_outlet","tempo":"medium_high","press":"low","risk":"medium"},"Guardiola_PressEscape_v11":{"requires":["pressure_without_counter_exit"],"avoids":["urgent_chase"],"attackLanes":["center"],"build":"press_resistant_control","tempo":"low","press":"low","risk":"low"},"Arteta_SafePossession_v11":{"requires":["manual_selection_only"],"avoids":["late_emergency_chase"],"attackLanes":["center","left","right"],"build":"structural_control","tempo":"medium","press":"medium","risk":"medium"},"Guardiola_PressCooldown_v11":{"requires":["press_fatigue"],"avoids":["late_emergency_chase"],"attackLanes":["center","right"],"build":"cooldown_outlet","tempo":"low","press":"very_low","risk":"low"},"Guardiola_ControlledPush_v11":{"requires":["need_goal_or_attack_need"],"avoids":["very_high_bad_actions"],"attackLanes":["center","left","right"],"build":"controlled_push","tempo":"high","press":"medium","risk":"medium_high"},"Guardiola_PositionalSiege_v11":{"requires":["attacking_momentum","transition_control"],"avoids":["transition_threat","press_fatigue"],"attackLanes":["center","left","right"],"build":"fixed_back_four_positional_siege","tempo":"high","press":"high","risk":"very_high"},"Conte_WideChannels_v11":{"requires":["wide_quality","center_closed"],"avoids":["own_crosses_bad","opponent_crosses_dangerous"],"attackLanes":["left","right"],"build":"fixed_lineup_wide_channels","tempo":"medium_high","press":"medium","risk":"high"},"Klopp_LateGegenpress_v11":{"requires":["late_need_goal","fitness"],"avoids":["press_fatigue","high_bad_actions","transition_threat"],"attackLanes":["center","left","right"],"build":"gegenpress_424","tempo":"very_high","press":"very_high","risk":"very_high"},"Simeone_CompactLead_v11":{"requires":["protect_lead"],"avoids":["urgent_chase"],"attackLanes":["left","right"],"build":"compact442","tempo":"low","press":"low","risk":"low"},"Simeone_EmergencyBlock_v11":{"requires":["mandatory_reassessment_next_window"],"avoids":["permanent_losing_state"],"attackLanes":[],"build":"temporary_emergency_lock","tempo":"very_low","press":"very_low","risk":"very_low"},"Allegri_LeadOutlet_v11":{"requires":["protect_lead","safe_first_pass"],"avoids":["urgent_chase"],"attackLanes":["left","right","center"],"build":"safe_lead_outlet","tempo":"low","press":"very_low","risk":"low"},"Flick_LeadPressHold_v12":{"requires":["lead_one_goal","opponent_press_vector_high"],"avoids":["transition_threat","high_bad_actions"],"attackLanes":["center","left","right"],"build":"lead_press_hold_4231","tempo":"high","press":"high","risk":"medium_high"}};
     const ROLE_CONTRACTS={"Emery_BalancedBase_v11":{"presetId":"Emery_BalancedBase_v11","role":"default_start","primarySituation":"default_start","allowedSituations":["default_start"],"entryConditions":["balanced_opposition","same_fixed_lineup"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Mourinho_CleanCounter_v11":{"presetId":"Mourinho_CleanCounter_v11","role":"pressure_counter","primarySituation":"pressure_counter","allowedSituations":["pressure_counter","pressure_escape"],"entryConditions":["confirmed_counter_exit","только подтверждённый чистый контрвыход"],"exitConditions":[],"hardVetoes":["подтверждённый чистый выход","нет блокировки первого паса"],"riskClass":"medium","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PressEscape_v11":{"presetId":"Guardiola_PressEscape_v11","role":"pressure_escape","primarySituation":"pressure_escape","allowedSituations":["pressure_escape"],"entryConditions":["pressure_without_counter_exit","давление без открытого контрвыхода"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Arteta_SafePossession_v11":{"presetId":"Arteta_SafePossession_v11","role":"possession_control","primarySituation":"possession_control","allowedSituations":["possession_control"],"entryConditions":["manual_only","underperforming_in_three_user_matches"],"exitConditions":[],"hardVetoes":["manual_only_diagnostic"],"riskClass":"low","fallbackEligible":false,"manualOnly":true,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PressCooldown_v11":{"presetId":"Guardiola_PressCooldown_v11","role":"press_cooldown","primarySituation":"press_cooldown","allowedSituations":["press_cooldown","pressure_escape","default_start"],"entryConditions":["press_fatigue","усталость/рост брака"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_ControlledPush_v11":{"presetId":"Guardiola_ControlledPush_v11","role":"controlled_chase","primarySituation":"controlled_chase","allowedSituations":["controlled_chase","positional_siege","default_start"],"entryConditions":["need_goal_or_attack_need","нужен гол без экстренного all-in"],"exitConditions":[],"hardVetoes":[],"riskClass":"medium_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PositionalSiege_v11":{"presetId":"Guardiola_PositionalSiege_v11","role":"positional_siege","primarySituation":"positional_siege","allowedSituations":["positional_siege","controlled_chase","late_high_pressure"],"entryConditions":["attacking_momentum","transition_control","моментум при контроле переходов"],"exitConditions":[],"hardVetoes":["запрещено при угрозе переходов и усталости"],"riskClass":"very_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Conte_WideChannels_v11":{"presetId":"Conte_WideChannels_v11","role":"width_attack","primarySituation":"width_attack","allowedSituations":["width_attack","positional_siege"],"entryConditions":["wide_quality","center_closed","закрытый центр, качественные фланги"],"exitConditions":[],"hardVetoes":[],"riskClass":"high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Klopp_LateGegenpress_v11":{"presetId":"Klopp_LateGegenpress_v11","role":"late_high_pressure","primarySituation":"late_high_pressure","allowedSituations":["late_high_pressure","positional_siege"],"entryConditions":["late_need_goal","fitness","позднее отставание и хорошая физика"],"exitConditions":[],"hardVetoes":["только поздняя погоня","физика должна быть достаточна"],"riskClass":"very_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Simeone_CompactLead_v11":{"presetId":"Simeone_CompactLead_v11","role":"protect_lead","primarySituation":"protect_lead","allowedSituations":["protect_lead","emergency_lock","default_start"],"entryConditions":["protect_lead","небольшое преимущество без осады"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Simeone_EmergencyBlock_v11":{"presetId":"Simeone_EmergencyBlock_v11","role":"emergency_lock","primarySituation":"emergency_lock","allowedSituations":["emergency_lock","protect_lead"],"entryConditions":["mandatory_reassessment_next_window","экстренная осада при отсутствии выхода"],"exitConditions":[],"hardVetoes":["только временная экстренная оборона"],"riskClass":"very_low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Allegri_LeadOutlet_v11":{"presetId":"Allegri_LeadOutlet_v11","role":"protect_lead_with_outlet","primarySituation":"protect_lead_with_outlet","allowedSituations":["protect_lead_with_outlet","protect_lead","default_start"],"entryConditions":["protect_lead","safe_first_pass","преимущество и доступен первый пас"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Flick_LeadPressHold_v12":{"presetId":"Flick_LeadPressHold_v12","role":"lead_press_hold","primarySituation":"lead_press_hold","allowedSituations":["lead_press_hold","protect_lead"],"entryConditions":["lead_one_goal","opponent_press_vector_high","преимущество в один гол против прессинга выше плана"],"exitConditions":[],"hardVetoes":["вне окна 60–85 минут при преимуществе","вектор прессинга соперника ниже +20%"],"riskClass":"medium_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"}};
+    // Issue #477 — documented canon crosswalk between the 13 active coach
+    // presets and the 12 manual rows. Identity is never vector proximity:
+    // only an entry with exact:true realizes the row's six attack settings
+    // for its declared variant and may therefore back an actionable switch.
+    // Emery realizes row 1 exactly (controls 2 2 2 2 3, priority []); every
+    // other entry is an explicitly non-exact association (or an SLF addition)
+    // and can never authorize a switch. Rows with no association (2, 3, 9,
+    // 10) and row 4/6 variants have no exact preset realization at all.
+    const CANON_MAPPINGS={
+        Emery_BalancedBase_v11:{row:1,variant:'default',exact:true,note:'Контроли 2 2 2 2 3 и приоритет [] совпадают со строкой 1 точно.'},
+        Mourinho_CleanCounter_v11:{row:7,variant:null,exact:false,note:'Контрвыход через свободный первый пас — ассоциация со строкой 7; вектор не совпадает.'},
+        Guardiola_PressEscape_v11:{row:6,variant:null,exact:false,note:'Выход из прессинга — ассоциация со строкой 6; вариант зависит от относительной силы XI.'},
+        Arteta_SafePossession_v11:{row:11,variant:null,exact:false,note:'Схема контроля — ассоциация со строкой 11; manual-only, автоматический switch запрещён.'},
+        Guardiola_PressCooldown_v11:{row:null,variant:null,exact:false,addition:'press_cooldown',note:'SLF-дополнение press_cooldown, не строка шпаргалки (R4).'},
+        Guardiola_ControlledPush_v11:{row:4,variant:null,exact:false,note:'Дожим при потребности в голе — ассоциация со строкой 4; фланг не выбран.'},
+        Guardiola_PositionalSiege_v11:{row:8,variant:null,exact:false,note:'Позиционный дожим против автобуса — ассоциация со строкой 8.'},
+        Conte_WideChannels_v11:{row:4,variant:null,exact:false,note:'Широкие каналы — ассоциация со строкой 4; включает оба фланга, ни один вариант не реализован точно.'},
+        Klopp_LateGegenpress_v11:{row:12,variant:null,exact:false,note:'Поздний навал — ассоциация со строкой 12; приоритеты и вектор не совпадают.'},
+        Simeone_CompactLead_v11:{row:5,variant:null,exact:false,note:'Удержание счёта — ассоциация со строкой 5.'},
+        Simeone_EmergencyBlock_v11:{row:5,variant:null,exact:false,note:'Аварийная блокировка — ассоциация со строкой 5.'},
+        Allegri_LeadOutlet_v11:{row:5,variant:null,exact:false,note:'Удержание через outlet — ассоциация со строкой 5; outlet не входит в мануальные контроли.'},
+        Flick_LeadPressHold_v12:{row:5,variant:null,exact:false,note:'Удержание с прессингом — ассоциация со строкой 5.'}
+    };
     const SCHEME_STATES={"midblock_control_4231":"Fixed 4-2-3-1 RW/RM — Unai Emery — Balanced Base","midblock_counter_4411":"Fixed 4-2-3-1 RW/RM — José Mourinho — Clean Counter","box_control":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Press Escape","arteta_control":"Fixed 4-2-3-1 RW/RM — Mikel Arteta — Safe Possession","press_cooldown":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Press Cooldown","controlled_push":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Controlled Push","positional_325":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Positional Siege","wingback_width":"Fixed 4-2-3-1 RW/RM — Antonio Conte — Wide Channels","gegenpress_424":"Fixed 4-2-3-1 RW/RM — Jürgen Klopp — Late Gegenpress","compact_442":"Fixed 4-2-3-1 RW/RM — Diego Simeone — Compact Lead","low_block_541":"Fixed 4-2-3-1 RW/RM — Diego Simeone — Emergency Block","lead_outlet_4141":"Fixed 4-2-3-1 RW/RM — Massimiliano Allegri — Lead Outlet","lead_press_hold_4231":"Fixed 4-2-3-1 RW/RM — Hansi Flick — Lead Press Hold"};
     const PRESET_SCHEME_STATE={"Emery_BalancedBase_v11":"midblock_control_4231","Mourinho_CleanCounter_v11":"midblock_counter_4411","Guardiola_PressEscape_v11":"box_control","Arteta_SafePossession_v11":"arteta_control","Guardiola_PressCooldown_v11":"press_cooldown","Guardiola_ControlledPush_v11":"controlled_push","Guardiola_PositionalSiege_v11":"positional_325","Conte_WideChannels_v11":"wingback_width","Klopp_LateGegenpress_v11":"gegenpress_424","Simeone_CompactLead_v11":"compact_442","Simeone_EmergencyBlock_v11":"low_block_541","Allegri_LeadOutlet_v11":"lead_outlet_4141","Flick_LeadPressHold_v12":"lead_press_hold_4231"};
     const LADDERS={"defensive":["Emery_BalancedBase_v11","Allegri_LeadOutlet_v11","Flick_LeadPressHold_v12","Simeone_CompactLead_v11","Simeone_EmergencyBlock_v11","Guardiola_PressCooldown_v11"],"balance":["Emery_BalancedBase_v11","Guardiola_PressEscape_v11","Mourinho_CleanCounter_v11","Conte_WideChannels_v11"],"attack":["Guardiola_ControlledPush_v11","Guardiola_PositionalSiege_v11","Klopp_LateGegenpress_v11"]};
@@ -9976,7 +9999,7 @@ TacticalKnowledgePack.init();
         // {delta, source:'seed'|'none', ruleIds, n, packVersion}. No I/O, no
         // mutation; the pack itself is read synchronously from the loader.
         knowledgeAssessment:function(args){return knowledgeAssessment(args);},
-        roleContracts:Object.fromEntries(Object.entries(ROLE_CONTRACTS).map(([id,c])=>[id,Object.assign({},c,{allowedSituations:c.allowedSituations.slice(),entryConditions:c.entryConditions.slice(),exitConditions:c.exitConditions.slice(),hardVetoes:c.hardVetoes.slice(),formation:(FORMATIONS[id]||[]).slice(),controls:Object.assign({},PRESETS[id],{priority:(PRESETS[id]?.priority||[]).slice()})})]))
+        roleContracts:Object.fromEntries(Object.entries(ROLE_CONTRACTS).map(([id,c])=>[id,Object.assign({},c,{allowedSituations:c.allowedSituations.slice(),entryConditions:c.entryConditions.slice(),exitConditions:c.exitConditions.slice(),hardVetoes:c.hardVetoes.slice(),formation:(FORMATIONS[id]||[]).slice(),controls:Object.assign({},PRESETS[id],{priority:(PRESETS[id]?.priority||[]).slice()}),canon:CANON_MAPPINGS[id]?Object.assign({},CANON_MAPPINGS[id]):null})]))
     };
 })();
 // <<< src/modules/tactics-presets/active-preset-registry.js
@@ -11025,6 +11048,104 @@ TacticalKnowledgePack.init();
             b12: { id: 'b12', label: 'Самолёт/много атаки', lanes: 'фланги / фланг+центр', words: { build_type: ['Смешанный', 'выносы'], build_temp: ['Высокий'], build_long: ['Редко', 'умеренно'], build_fast: ['Редко'], style: ['Обычный', 'атака'] } }
         },
 
+        // Issue #477 — the developer manual («Шпаргалка: построение атаки»)
+        // is the canon authority for the hint. The 12 rows and the eight
+        // legend lines below are transcribed verbatim from
+        // shared/slf-developer-tactics-analysis.md:8-33; the concrete numeric
+        // realizations (including the row 4 flank and row 6 relative-strength
+        // variants) come from shared/slf-manual-vs-teams.md:11-26. The
+        // numbers make a row actionable; they do not turn the manual's
+        // permitted ranges into new claims. Rows 2 and 7 intentionally share
+        // a vector and stay distinct situations; rows 6-stronger and 12
+        // share a vector too. Identity is never the vector.
+        canon: {
+            schema: 'slf_canon_manual_v1',
+            version: 'slf_canon_manual_v1_2026_11_21',
+            title: 'Шпаргалка: построение атаки',
+            subtitle: 'Быстрые настройки перед матчем',
+            source: [
+                'shared/slf-developer-tactics-analysis.md:8-33',
+                'shared/slf-manual-vs-teams.md:11-26',
+                'shared/slf-canon-hints-integration.md'
+            ],
+            controlOrder: ['priority', 'build_type', 'build_temp', 'build_long', 'build_fast', 'style'],
+            settingsTextOrder: ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'],
+            legend: [
+                'Фланги — надёжнее и проще',
+                'Центр — опаснее, но рискованнее',
+                'Позиционный выход — сильнее, но опаснее',
+                'Выносы — проще, но тупее',
+                'Высокий темп — быстрее к воротам, больше брака',
+                'Диагонали / в касание — хороши против пассивного соперника',
+                'Стиль атака — для дожима',
+                'Стиль защита — для выживания и удержания'
+            ],
+            rows: [
+                { id: 1, situation: 'Равный матч', priority: '000', vector: { build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3' } },
+                { id: 2, situation: 'Ты фаворит', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' } },
+                { id: 3, situation: 'Ты андердог', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '2' } },
+                {
+                    id: 4, situation: 'Нужно забить',
+                    variants: [
+                        { id: 'left', label: 'левая сторона', priority: '110', vector: { build_type: '3', build_temp: '3', build_long: '2', build_fast: '2', style: '4' } },
+                        { id: 'right', label: 'правая сторона', priority: '011', vector: { build_type: '3', build_temp: '3', build_long: '2', build_fast: '2', style: '4' } }
+                    ]
+                },
+                { id: 5, situation: 'Нужно удержать', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '1' } },
+                {
+                    id: 6, situation: 'Соперник сильно прессингует',
+                    variants: [
+                        { id: 'weaker', label: 'наша XI слабее', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '2' } },
+                        { id: 'equal', label: 'XI равны', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '3' } },
+                        { id: 'stronger', label: 'наша XI сильнее', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '4' } }
+                    ]
+                },
+                { id: 7, situation: 'Соперник почти не прессингует', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' } },
+                { id: 8, situation: 'Взлом автобуса', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '3', style: '3' } },
+                { id: 9, situation: 'Хаотичный матч', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '3' } },
+                { id: 10, situation: 'Игра через «столба»', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '3' } },
+                { id: 11, situation: 'Схема контроля', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '2', style: '3' } },
+                { id: 12, situation: 'Самолёт / много атаки', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '4' } }
+            ],
+            // Data-backed SLF additions live in their own namespace: they are
+            // NOT screenshot rows and may never displace a resolved manual row.
+            additions: [
+                {
+                    id: 'press_cooldown', situation: 'Прессинг-усталость',
+                    provenance: 'SLF data-backed addition (not a screenshot row)',
+                    entryConditions: ['press_fatigue', 'no_urgent_chase'],
+                    eligibleRole: 'Guardiola_PressCooldown_v11'
+                }
+            ],
+            // Issue #477 R9. One documented own-league rule (owner decision
+            // #477 comment 7057658763): the STRENGTH zone decides a mixed
+            // club; the points-rank zone is confirmation only. Thresholds:
+            // favourite >= 75th strength percentile, underdog <= 25th,
+            // otherwise middle. Missing/incomparable/wrong-season evidence is
+            // insufficient — never row 1. Owner-internal rank is irrelevant.
+            leagueRule: {
+                primarySignal: 'strength_zone',
+                confirmationSignal: 'rank_zone',
+                favouriteMinPercentile: 75,
+                underdogMaxPercentile: 25,
+                mixedResolution: 'strength_zone',
+                note: 'Эйрбас last among the owner seven is not underdog evidence (#477 R9).'
+            },
+            // Dated snapshot validated 2026-11-21 from the read-only standings
+            // intake (source: slf.fm champ.php standings, GET-only). Only the
+            // classification-relevant fields are retained; the full league
+            // dump stays in the delivery evidence, not the userscript.
+            leagueStarts: [
+                { club: 'Эйрбас', league: 'Уэльса (Лига Севера)', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Эйрбас', league: 'Уэльса (Лига Севера)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 14, rank: 8, strengthRank: 5, strengthPercentile: 69.2, strengthZone: 'mid', rankZone: 'mid' } },
+                { club: 'Луч', league: 'России (Вторая Лига Б (Группа 4))', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Луч', league: 'России (Вторая Лига Б (Группа 4))', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 18, rank: 9, strengthRank: 6, strengthPercentile: 70.6, strengthZone: 'mid', rankZone: 'mid' } },
+                { club: 'Норт Дистрикт', league: 'Гонконга (Премьер-Лига)', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Норт Дистрикт', league: 'Гонконга (Премьер-Лига)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 10, rank: 5, strengthRank: 7, strengthPercentile: 33.3, strengthZone: 'mid', rankZone: 'mid' } },
+                { club: 'Пршибрам', league: 'Чехии (Фортуна лига)', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Пршибрам', league: 'Чехии (Фортуна лига)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 18, rank: 14, strengthRank: 13, strengthPercentile: 29.4, strengthZone: 'mid', rankZone: 'underdog' } },
+                { club: 'Честер', league: 'Англии (2-ая лига)', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Честер', league: 'Англии (2-ая лига)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 24, rank: 2, strengthRank: 8, strengthPercentile: 69.6, strengthZone: 'mid', rankZone: 'favourite' } },
+                { club: 'Каррарезе', league: 'Италии (Серия С1Б)', evidenceDate: '2026-11-21', row: 2, evidence: { club: 'Каррарезе', league: 'Италии (Серия С1Б)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 18, rank: 7, strengthRank: 4, strengthPercentile: 82.4, strengthZone: 'favourite', rankZone: 'mid' } },
+                { club: 'Боа', league: 'Бразилии (Серия Б)', evidenceDate: '2026-11-21', row: 2, evidence: { club: 'Боа', league: 'Бразилии (Серия Б)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 20, rank: 6, strengthRank: 4, strengthPercentile: 84.2, strengthZone: 'favourite', rankZone: 'mid' } }
+            ]
+        },
+
         // Score-play scenarios: deltas applied over the matched base
         // situations when the conditions hold. Deltas are numeric shifts
         // clamped to the domain of each control; override scenarios replace
@@ -11410,6 +11531,276 @@ TacticalKnowledgePack.init();
         return false;
     }
 
+    // =====================================================================
+    // Issue #477 — canon manual matcher.
+    // The 12 rows live in dave56-etalon-data.js (`canon`). This seam turns
+    // observed evidence into {status,id,variant,vector,missingInputs}; it
+    // never invents a match and never writes a tactic. A vector is NOT an
+    // identity: rows 2/7 (and 6-stronger/12) share one and stay distinct.
+    // =====================================================================
+    const CANON = data.canon && data.canon.schema === 'slf_canon_manual_v1' ? data.canon : null;
+    const CANON_STRENGTH = ['advantage', 'equal', 'disadvantage'];
+    const CANON_MANUAL_KEYS = ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'];
+
+    function canonRow(id) {
+        return CANON ? (CANON.rows.find(row => Number(row.id) === Number(id)) || null) : null;
+    }
+
+    function canonVariant(row, variantId) {
+        if (!row || !Array.isArray(row.variants) || !row.variants.length) return row;
+        return row.variants.find(variant => variant.id === variantId) || null;
+    }
+
+    function canonLanes(priority) {
+        const text = String(priority || '000');
+        const lanes = [];
+        if (text[0] === '1') lanes.push('left');
+        if (text[1] === '1') lanes.push('center');
+        if (text[2] === '1') lanes.push('right');
+        return lanes;
+    }
+
+    function canonVector(row, variant) {
+        const source = variant && variant.vector ? variant : row;
+        if (!source || !source.vector) return null;
+        const vector = { priority: String(source.priority || row.priority || '000') };
+        for (const key of CANON_MANUAL_KEYS) vector[key] = String(source.vector[key]);
+        return vector;
+    }
+
+    function canonCandidate(row, variant) {
+        return {
+            id: Number(row.id),
+            variant: variant && variant.id ? variant.id : 'default',
+            situationText: row.situation
+        };
+    }
+
+    function canonDecision(status, fields) {
+        return Object.assign({
+            schema: 'slf_canon_decision_v1',
+            version: CANON ? CANON.version : null,
+            source: 'canon_manual',
+            status,
+            id: null,
+            variant: null,
+            situationText: null,
+            legend: CANON ? CANON.legend.slice() : [],
+            vector: null,
+            priorityLanes: null,
+            evidence: [],
+            missingInputs: [],
+            candidates: [],
+            additions: []
+        }, fields || {});
+    }
+
+    // Derive the observation bundle. `context.canonEvidence` is the rich
+    // structured channel; a few specific page signals can corroborate it.
+    // Generic strength tags alone never resolve a canon row here (the legacy
+    // etalon path keeps owning those, preserving #350 behavior).
+    function canonObservations(ctx, context) {
+        const rawEvidence = context && context.canonEvidence && typeof context.canonEvidence === 'object'
+            ? context.canonEvidence
+            : null;
+        // When the caller supplies the structured evidence bundle it is the
+        // authoritative observation set; page tags are only a fallback for
+        // callers that do not (they must never add a competing canon trigger
+        // to an explicitly stated situation).
+        const explicit = rawEvidence && Object.keys(rawEvidence).length > 0;
+        const ev = rawEvidence || {};
+        const tag = name => !explicit && has(ctx.tags, name);
+        const flag = (name, tagName) => explicit ? ev[name] === true : (tag(tagName || name) || ev[name] === true);
+        const strength = CANON_STRENGTH.includes(ev.strength) ? ev.strength : null;
+        const flank = ev.attackFlank === 'left' || ev.attackFlank === 'right'
+            ? ev.attackFlank
+            : (!explicit && (context.attackFlank === 'left' || context.attackFlank === 'right') ? context.attackFlank : null);
+        return {
+            strength,
+            needGoal: flag('needGoal', 'need_goal'),
+            attackFlank: flank,
+            protectLead: explicit
+                ? ev.protectLead === true
+                : ((tag('protect_lead') || tag('late_protect_lead')) && ctx.scoreState === 'winning') || ev.protectLead === true,
+            firstPassPressure: flag('firstPassPressure', 'opponent_high_press'),
+            firstPassFree: flag('firstPassFree', 'opponent_first_pass_free')
+                || (!explicit && context.opponentFirstPassFree === true),
+            deepBlock: flag('deepBlock', 'opponent_low_block'),
+            transitionChaos: flag('transitionChaos', 'chaotic_match'),
+            targetForward: flag('targetForward', 'target_forward_aerial'),
+            controlIntent: flag('controlIntent', 'control_intent'),
+            fastWideIntent: flag('fastWideIntent', 'fast_wide_intent'),
+            pressFatigue: flag('pressFatigue', 'press_fatigue')
+        };
+    }
+
+    function canonStrengthVariant(strength) {
+        if (strength === 'disadvantage') return 'weaker';
+        if (strength === 'advantage') return 'stronger';
+        if (strength === 'equal') return 'equal';
+        return null;
+    }
+
+    function computeCanon(snapshot, context, result) {
+        if (!CANON) return null;
+        const ctx = collectContext(snapshot, context, result);
+        const obs = canonObservations(ctx, context);
+        const evidence = [];
+        const additions = [];
+        if (obs.strength) evidence.push(`strength:${obs.strength}`);
+        for (const key of ['needGoal', 'protectLead', 'firstPassPressure', 'firstPassFree', 'deepBlock',
+            'transitionChaos', 'targetForward', 'controlIntent', 'fastWideIntent', 'pressFatigue']) {
+            if (obs[key]) evidence.push(key);
+        }
+        if (obs.attackFlank) evidence.push(`attackFlank:${obs.attackFlank}`);
+
+        if (obs.pressFatigue) {
+            for (const addition of (CANON.additions || [])) {
+                if (addition.id === 'press_cooldown') additions.push(Object.assign({}, addition, { entryConditions: (addition.entryConditions || []).slice() }));
+            }
+        }
+
+        const specific = [];
+        const unresolved = [];
+        const resolvedAdds = (id, variant) => {
+            const row = canonRow(id);
+            const picked = canonVariant(row, variant);
+            if (!row || !picked) return;
+            specific.push({ row, variant: picked });
+        };
+
+        if (obs.needGoal) {
+            if (obs.attackFlank) resolvedAdds(4, obs.attackFlank);
+            else unresolved.push({ id: 4, need: 'attacking_flank' });
+        }
+        if (obs.firstPassPressure) {
+            const variant = canonStrengthVariant(obs.strength);
+            if (variant) resolvedAdds(6, variant);
+            else unresolved.push({ id: 6, need: 'relative_strength' });
+        }
+        if (obs.firstPassFree) resolvedAdds(7, null);
+        if (obs.deepBlock) resolvedAdds(8, null);
+        if (obs.transitionChaos) resolvedAdds(9, null);
+        if (obs.targetForward) resolvedAdds(10, null);
+        if (obs.controlIntent) resolvedAdds(11, null);
+        if (obs.fastWideIntent) resolvedAdds(12, null);
+        if (obs.protectLead) {
+            if (ctx.scoreState === 'winning') resolvedAdds(5, null);
+            else unresolved.push({ id: 5, need: 'score_state' });
+        }
+
+        const base = { evidence, additions };
+        const candidates = specific.map(item => canonCandidate(item.row, item.variant));
+        for (const item of unresolved) {
+            if (!candidates.some(candidate => candidate.id === item.id)) {
+                const row = canonRow(item.id);
+                if (row) candidates.push(canonCandidate(row, null));
+            }
+        }
+
+        if (specific.length > 1) {
+            const ids = [...new Set(specific.map(item => Number(item.row.id)))];
+            return canonDecision('ambiguous', Object.assign(base, {
+                candidates,
+                missingInputs: ['intended_approach'],
+                evidence: evidence.concat([`ambiguous:${ids.join('+')}`])
+            }));
+        }
+        if (specific.length === 1) {
+            if (unresolved.length) {
+                return canonDecision('ambiguous', Object.assign(base, {
+                    candidates,
+                    missingInputs: ['intended_approach', ...new Set(unresolved.map(item => item.need))],
+                    evidence
+                }));
+            }
+            const pickedRow = specific[0].row;
+            const pickedVariant = specific[0].variant;
+            const variantId = pickedRow.variants ? pickedVariant.id : null;
+            const vector = canonVector(pickedRow, pickedVariant);
+            return canonDecision('matched', Object.assign(base, {
+                id: Number(pickedRow.id),
+                variant: variantId,
+                situationText: pickedRow.situation,
+                vector,
+                priorityLanes: canonLanes(vector.priority),
+                candidates: [canonCandidate(pickedRow, pickedVariant)]
+            }));
+        }
+        if (unresolved.length) {
+            return canonDecision('missing_inputs', Object.assign(base, {
+                candidates,
+                missingInputs: [...new Set(unresolved.map(item => item.need))]
+            }));
+        }
+        // No specific observation: a generic XI comparison can resolve 1/2/3.
+        if (obs.strength) {
+            const id = obs.strength === 'advantage' ? 2 : (obs.strength === 'disadvantage' ? 3 : 1);
+            const row = canonRow(id);
+            const vector = canonVector(row, row);
+            return canonDecision('matched', Object.assign(base, {
+                id,
+                variant: null,
+                situationText: row.situation,
+                vector,
+                priorityLanes: canonLanes(vector.priority),
+                candidates: [canonCandidate(row, null)]
+            }));
+        }
+        if (additions.length) {
+            return canonDecision('no_match', base);
+        }
+        return canonDecision('missing_inputs', Object.assign(base, {
+            missingInputs: ['relative_xi_or_situation']
+        }));
+    }
+
+    // League-relative starting recommendation (#477 R9). The classification
+    // rule is documented in data.canon.leagueRule: the strength zone decides,
+    // the points-rank zone only confirms. Missing/incomparable/wrong-season
+    // evidence is insufficient — never an implicit row 1.
+    const LEAGUE_ZONES = ['favourite', 'mid', 'underdog'];
+    function leagueZoneFromPercentile(percentile, rule) {
+        if (!Number.isFinite(percentile)) return null;
+        if (percentile >= Number(rule.favouriteMinPercentile)) return 'favourite';
+        if (percentile <= Number(rule.underdogMaxPercentile)) return 'underdog';
+        return 'mid';
+    }
+
+    function leagueStartingRecommendation(evidence) {
+        const rule = CANON && CANON.leagueRule ? CANON.leagueRule : { favouriteMinPercentile: 75, underdogMaxPercentile: 25 };
+        const insufficient = reason => ({ status: 'insufficient', row: null, reason, class: null, league: evidence && evidence.league ? evidence.league : null, evidenceDate: evidence && evidence.evidenceDate ? evidence.evidenceDate : null });
+        if (!evidence || typeof evidence !== 'object') return insufficient('missing_evidence');
+        if (!evidence.club || !evidence.league) return insufficient('missing_club_or_league');
+        if (!evidence.evidenceDate) return insufficient('missing_evidence_date');
+        if (evidence.season && evidence.expectedSeason && String(evidence.season) !== String(evidence.expectedSeason)) {
+            return insufficient('wrong_season');
+        }
+        const total = Number(evidence.totalTeams);
+        if (!Number.isFinite(total) || total < 2) return insufficient('incomparable_population');
+        let strengthZone = LEAGUE_ZONES.includes(evidence.strengthZone) ? evidence.strengthZone : null;
+        const percentile = Number(evidence.strengthPercentile);
+        if (!strengthZone) strengthZone = leagueZoneFromPercentile(percentile, rule);
+        if (!strengthZone) return insufficient('missing_strength');
+        const rankZone = LEAGUE_ZONES.includes(evidence.rankZone) ? evidence.rankZone : null;
+        // Mixed clubs are decided by the strength zone (owner decision #477
+        // comment 7057658763); the rank zone is confirmation only.
+        const recognised = strengthZone === 'favourite' ? 'favourite'
+            : (strengthZone === 'underdog' ? 'underdog' : 'middle');
+        const row = recognised === 'favourite' ? 2 : (recognised === 'underdog' ? 3 : 1);
+        return {
+            status: 'classified',
+            row,
+            class: recognised,
+            strengthZone,
+            rankZone,
+            league: evidence.league,
+            club: evidence.club,
+            evidenceDate: evidence.evidenceDate,
+            note: 'starting baseline from own-league evidence; not a live-opponent observation'
+        };
+    }
+
     function applyDelta(vector, delta) {
         const out = Object.assign({}, vector);
         for (const [key, shift] of Object.entries(delta || {})) {
@@ -11599,6 +11990,11 @@ TacticalKnowledgePack.init();
                 notes: []
             };
         }
+        try {
+            result.canon = computeCanon(snapshot, context, result);
+        } catch (error) {
+            result.canon = CANON ? canonDecision('no_match', { evidence: ['exception'] }) : null;
+        }
         return result;
     };
 
@@ -11610,7 +12006,10 @@ TacticalKnowledgePack.init();
             suiteVersion: registry.suiteVersion,
             source: 'dave56_etalon',
             autoApply: false,
-            computeEtalon
+            computeEtalon,
+            computeCanon,
+            leagueStartingRecommendation,
+            canonVersion: CANON ? CANON.version : null
         };
     }
 })();
@@ -11823,9 +12222,56 @@ TacticalKnowledgePack.init();
         return `Эталон: ${defenseId}/${buildupId} — равный матч, ${tail}`;
     }
 
+    // Issue #477 — canon-first final selection. When the manual matcher
+    // resolved a situation, its row id, variant and all six manual settings
+    // are authoritative. The unrelated controls (defense block, attack keys)
+    // keep the preset/current contract; the six manual fields are never
+    // overlaid again by a preset, etalon, scenario delta or LLM reply.
+    const CANON_MANUAL_KEYS = ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'];
+
+    function isMatchedCanon(canon) {
+        return !!canon && canon.schema === 'slf_canon_decision_v1'
+            && canon.status === 'matched' && canon.vector && typeof canon.vector === 'object';
+    }
+
+    function canonReferenceText(canon) {
+        const vector = canon.vector || {};
+        const lanes = String(vector.priority || '000');
+        return `Канон №${canon.id} «${canon.situationText}»`
+            + (canon.variant ? ` (${canon.variant})` : '')
+            + `: направление ${lanes} · выход ${vector.build_type} · темп ${vector.build_temp}`
+            + ` · диагонали ${vector.build_long} · в касание ${vector.build_fast} · стиль ${vector.style}`;
+    }
+
+    function applyCanon(vector, canon, overrides) {
+        for (const key of CANON_MANUAL_KEYS) {
+            if (canon.vector[key] !== undefined && canon.vector[key] !== null) {
+                vector[key] = String(canon.vector[key]);
+            }
+        }
+        const priorities = Array.isArray(canon.priorityLanes)
+            ? canon.priorityLanes.map(String)
+            : (String(canon.vector.priority || '000').split('').map((flag, index) => (
+                flag === '1' ? ['left', 'center', 'right'][index] : null
+            )).filter(Boolean));
+        vector.priority = priorities;
+        overrides.buildup = `canon:row${canon.id}`;
+        overrides.style = `canon:row${canon.id}`;
+        overrides.priority = `canon:row${canon.id}`;
+        return vector;
+    }
+
     function computeFinalTactic(snapshot, context, result) {
         const etalon = result?.etalon || null;
-        const baseInfo = resolveBase(snapshot, result);
+        const canon = result?.canon || null;
+        const canonMatched = isMatchedCanon(canon);
+        let baseInfo = resolveBase(snapshot, result);
+        // A resolved manual row is actionable even without a readable preset
+        // or current tactic: only the six manual settings are known, the rest
+        // stay absent (never invented).
+        if (!baseInfo && canonMatched) {
+            baseInfo = { base: 'canon_only', presetId: null, vector: normalizeBaseVector({}), fromCurrent: false, stalePreset: false };
+        }
         if (!baseInfo) return null; // no preset and no readable current tactic
 
         const overrides = {
@@ -11838,37 +12284,49 @@ TacticalKnowledgePack.init();
 
         const vector = Object.assign({}, baseInfo.vector);
         const etalonIds = Array.isArray(etalon?.ids) ? etalon.ids.filter(Boolean).map(String) : [];
-        const insufficientData = Array.isArray(etalon?.insufficientData)
+        let insufficientData = Array.isArray(etalon?.insufficientData)
             ? etalon.insufficientData.map(String)
             : ['etalon_layer_absent'];
-        const notes = Array.isArray(etalon?.notes) ? etalon.notes.filter(Boolean).map(String) : [];
+        const CANON_LEGEND = Array.isArray(canon?.legend) ? canon.legend.filter(Boolean).map(String) : [];
+        let notes = Array.isArray(etalon?.notes) ? etalon.notes.filter(Boolean).map(String) : [];
 
         let referenceLine = null;
         let strong = { defense: false, buildup: false, scenario: null };
+        let source = null;
 
         if (baseInfo.stalePreset) {
             insufficientData.push('stale_preset_name');
         }
 
-        if (!isInsufficientEtalon(etalon)) {
-            const strength = computeStrength(etalon);
-            strong = { defense: strength.defenseBlock || strength.defenseKeys.length > 0,
-                buildup: strength.buildupBlock || strength.buildupKeys.length > 0,
-                scenario: strength.scenario };
+        if (canonMatched) {
+            // Canon wins: no etalon overlay, no scenario delta, no preset
+            // mutation of the six manual settings.
+            applyCanon(vector, canon, overrides);
+            strong = { defense: false, buildup: true, scenario: null, canon: true };
+            referenceLine = canonReferenceText(canon);
+            notes = [canon.situationText].concat(CANON_LEGEND);
+            insufficientData = [];
+            source = `canon:${canon.id}${canon.variant ? '/' + canon.variant : ''}+base:${baseInfo.base}`;
+        } else {
+            if (!isInsufficientEtalon(etalon)) {
+                const strength = computeStrength(etalon);
+                strong = { defense: strength.defenseBlock || strength.defenseKeys.length > 0,
+                    buildup: strength.buildupBlock || strength.buildupKeys.length > 0,
+                    scenario: strength.scenario };
 
-            if (strong.defense || strong.buildup) {
-                applyEtalonOverrides(vector, etalon, strength, overrides);
-            } else {
-                // T2 generic-only: preset/current base, etalon as a reference line.
-                referenceLine = buildReferenceLine(baseInfo.base, etalon);
+                if (strong.defense || strong.buildup) {
+                    applyEtalonOverrides(vector, etalon, strength, overrides);
+                } else {
+                    // T2 generic-only: preset/current base, etalon as a reference line.
+                    referenceLine = buildReferenceLine(baseInfo.base, etalon);
+                }
             }
+            // Provenance of the merged recommendation: etalon ids + base preset,
+            // or the etalon ids over the current tactic (hold_current).
+            source = baseInfo.fromCurrent
+                ? `merged:current:${etalonIds.join('+')}`
+                : `merged:etalon:${etalonIds.join('+')}+presets:${baseInfo.presetId}`;
         }
-
-        // Provenance of the merged recommendation: etalon ids + base preset,
-        // or the etalon ids over the current tactic (hold_current).
-        const source = baseInfo.fromCurrent
-            ? `merged:current:${etalonIds.join('+')}`
-            : `merged:etalon:${etalonIds.join('+')}+presets:${baseInfo.presetId}`;
 
         return {
             schema: VERSION,
@@ -11882,7 +12340,8 @@ TacticalKnowledgePack.init();
             etalonIds,
             insufficientData,
             notes,
-            referenceLine
+            referenceLine,
+            canon: canon || null
         };
     }
 
@@ -11901,7 +12360,8 @@ TacticalKnowledgePack.init();
             etalonIds: [],
             insufficientData: ['exception'],
             notes: [],
-            referenceLine: null
+            referenceLine: null,
+            canon: null
         };
     }
 
@@ -13340,6 +13800,116 @@ const LLMSecondOpinion = {
         return Object.keys(cleaned).length ? cleaned : null;
     },
 
+    // #477: canon manual channel. The decision comes from the local matcher
+    // (finalTactic.canon); it is sent to the advisor as its own structured
+    // field and is NEVER mixed into developerHints (page coach hints keep
+    // their full 20-line budget).
+    canonDecisionFrom(ruleDecision) {
+        const canon = ruleDecision && ruleDecision.finalTactic ? ruleDecision.finalTactic.canon : null;
+        if (!canon || typeof canon !== 'object' || canon.schema !== 'slf_canon_decision_v1') return null;
+        if (typeof canon.status !== 'string') return null;
+        return canon;
+    },
+
+    buildCanonReference(canon) {
+        if (!canon) return null;
+        const vector = canon.vector && typeof canon.vector === 'object' ? canon.vector : null;
+        return {
+            version: typeof canon.version === 'string' ? canon.version : null,
+            title: 'Шпаргалка: построение атаки',
+            status: canon.status,
+            matchedId: canon.id == null ? null : canon.id,
+            variant: canon.variant == null ? null : canon.variant,
+            situationText: typeof canon.situationText === 'string' ? canon.situationText : null,
+            vector: vector ? Object.assign({}, vector) : null,
+            legend: Array.isArray(canon.legend) ? canon.legend.filter(line => typeof line === 'string').slice(0, 8) : [],
+            evidence: Array.isArray(canon.evidence) ? canon.evidence.filter(item => typeof item === 'string').slice(0, 20) : [],
+            missingInputs: Array.isArray(canon.missingInputs) ? canon.missingInputs.filter(item => typeof item === 'string').slice(0, 10) : [],
+            additions: Array.isArray(canon.additions) ? canon.additions.slice(0, 5) : []
+        };
+    },
+
+    // Client-boundary validation for «adjust» (#477 R8/R10). A matched row
+    // makes its six manual settings authoritative: a change to one of those
+    // fields must move TO the selected value. Valid changes on other
+    // controls are allowed; any contradiction rejects the whole proposal
+    // (never apply the valid half of a mixed answer).
+    CONTROL_DOMAINS: {
+        def_line: [1, 3], press_line: [1, 3], def_width: [1, 3], press_intense: [1, 5],
+        build_type: [1, 3], build_temp: [1, 3], build_long: [1, 3], build_fast: [1, 3],
+        style: [1, 5], pass_risk: [1, 5], dribble: [1, 5], cross: [1, 3], corner: [1, 2], shot: [1, 3]
+    },
+
+    validateAdjustAgainstCanon(changes, canon) {
+        // Legacy path (no canon decision): preserve the pre-#477 rendering contract.
+        if (!canon) return { ok: true, legacy: true, changes };
+        if (!Array.isArray(changes) || !changes.length) return { ok: false, reason: 'пустой список изменений' };
+        if (changes.length > 3) return { ok: false, reason: 'больше 3 изменений за раз' };
+        const matched = canon && canon.status === 'matched' && canon.vector && typeof canon.vector === 'object' ? canon : null;
+        const manualKeys = ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'];
+        const seen = new Set();
+        for (const change of changes) {
+            if (!change || typeof change !== 'object') return { ok: false, reason: 'изменение не объект' };
+            const control = change.control;
+            const value = change.value;
+            if (typeof control !== 'string' || !Object.prototype.hasOwnProperty.call(this.CONTROL_DOMAINS, control)) {
+                return { ok: false, reason: `неизвестный ползунок ${String(control)}` };
+            }
+            if (seen.has(control)) return { ok: false, reason: `ползунок ${control} повторяется` };
+            seen.add(control);
+            const text = typeof value === 'string' ? value.trim() : '';
+            if (!/^\d{1,2}$/.test(text)) return { ok: false, reason: `значение ${control} вне диапазона` };
+            const [low, high] = this.CONTROL_DOMAINS[control];
+            if (Number(text) < low || Number(text) > high) return { ok: false, reason: `значение ${control} вне диапазона` };
+            if (matched && manualKeys.includes(control) && String(text) !== String(matched.vector[control])) {
+                return {
+                    ok: false,
+                    reason: `противоречит строке ${matched.id} канона: ${control} должно быть ${matched.vector[control]}, предложено ${text}`
+                };
+            }
+        }
+        return { ok: true, changes };
+    },
+
+    // Client-boundary validation for «switch» (#477 R8/R10). When a manual
+    // row is matched, only an eligible preset mapped to that exact row AND
+    // variant may be offered. A coach name, catalog id or a different
+    // variant is never enough. Without a canon decision the legacy behaviour
+    // is preserved; with an unresolved canon decision no canon switch is
+    // offered at all.
+    validateSwitchAgainstCanon(preset, canon) {
+        if (!canon) return { ok: true, legacy: true };
+        if (canon.status !== 'matched') return { ok: false, reason: 'канон не определён — переключение по догадке не предлагается' };
+        const registry = this.__lastRegistry
+            || (typeof window !== 'undefined' && window.SLFActivePresetRegistry ? window.SLFActivePresetRegistry : null)
+            || (typeof SLFActivePresetRegistry !== 'undefined' ? SLFActivePresetRegistry : null);
+        if (!registry || typeof preset !== 'string' || !preset) return { ok: false, reason: 'нет данных о пресетах' };
+        const contract = registry.roleContracts && registry.roleContracts[preset];
+        const mapping = contract && contract.canon;
+        if (!mapping || mapping.exact !== true || Number(mapping.row) !== Number(canon.id)) {
+            return { ok: false, reason: `пресет ${preset} не реализует строку ${canon.id} канона точно` };
+        }
+        const expectedVariant = canon.variant == null ? 'default' : String(canon.variant);
+        if (String(mapping.variant == null ? 'default' : mapping.variant) !== expectedVariant) {
+            return { ok: false, reason: `пресет ${preset} реализует другой вариант строки ${canon.id}` };
+        }
+        // Guard against a stale mapping: the declared preset controls must
+        // still equal the selected manual vector.
+        const controls = registry.presets && registry.presets[preset];
+        if (!controls) return { ok: false, reason: `нет настроек пресета ${preset}` };
+        for (const key of ['build_type', 'build_temp', 'build_long', 'build_fast', 'style']) {
+            if (String(controls[key]) !== String(canon.vector[key])) {
+                return { ok: false, reason: `настройки пресета ${preset} не совпадают со строкой ${canon.id}` };
+            }
+        }
+        const lanes = canon.priorityLanes || [];
+        const presetPriority = Array.isArray(controls.priority) ? controls.priority.map(String) : [];
+        if (presetPriority.slice().sort().join(',') !== lanes.slice().map(String).sort().join(',')) {
+            return { ok: false, reason: `приоритеты пресета ${preset} не совпадают со строкой ${canon.id}` };
+        }
+        return { ok: true };
+    },
+
     // Fail-closed on "nothing to advise with": no registry or an empty catalog
     // still yields null (partial mode additionally needs the snapshot). #461: a
     // missing rules decision (early match, phase collect) no longer refuses the
@@ -13424,6 +13994,13 @@ const LLMSecondOpinion = {
         // cleaning, so a caller without it keeps the exact legacy bytes.
         const controls = this.cleanCurrentControls(currentControls);
         if (controls) payload.currentControls = controls;
+        // #477: the canon reference + deterministic decision ride in their own
+        // field, appended only when the local matcher produced one. Legacy
+        // (no canon) requests keep the exact legacy payload bytes.
+        const canon = this.canonDecisionFrom(ruleDecision);
+        this.__lastCanonDecision = canon;
+        this.__lastRegistry = registry;
+        if (canon) payload.canonReference = this.buildCanonReference(canon);
         return payload;
     },
 
@@ -13461,6 +14038,16 @@ const LLMSecondOpinion = {
         // JSON data attribute.
         const adjustChanges = Array.isArray(answer.changes) ? answer.changes : [];
         if (answer.mode === 'adjust' || adjustChanges.length) {
+            const check = this.validateAdjustAgainstCanon(adjustChanges, this.__lastCanonDecision);
+            if (!check.ok) {
+                const blocked = this.escapeHtml(check.reason || 'предложение не соответствует канону');
+                return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#1a1414;border:1px solid #5a3a3a;border-radius:5px;color:#dcc;padding:7px 9px;font-size:12px;line-height:1.45;">` +
+                    partialHtml +
+                    `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>Точечная подстройка</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
+                    `<span style="color:#e8c87a;">Не применено: ${blocked}</span><br>` +
+                    `${reason}<br>` +
+                    `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span></div>`;
+            }
             const changeRows = adjustChanges
                 .filter(change => change && typeof change === 'object' && change.control != null)
                 .map(change => `${this.escapeHtml(change.control)}: ${this.escapeHtml(change.value)}`)
@@ -13485,6 +14072,19 @@ const LLMSecondOpinion = {
         // applies strictly on explicit click — never auto.
         const presetId = typeof answer.preset === 'string' ? answer.preset : '';
         const adviceId = typeof answer.adviceId === 'string' ? answer.adviceId : '';
+        // #477 R8: a «switch» is actionable only for an eligible preset that
+        // exactly realizes the matched canon row AND variant. Without a canon
+        // decision (legacy/old API) the pre-existing switch path is preserved.
+        const switchCheck = presetId ? this.validateSwitchAgainstCanon(presetId, this.__lastCanonDecision) : { ok: true };
+        if (presetId && !switchCheck.ok) {
+            const blocked = this.escapeHtml(switchCheck.reason || 'предложение не соответствует канону');
+            return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#1a1414;border:1px solid #5a3a3a;border-radius:5px;color:#dcc;padding:7px 9px;font-size:12px;line-height:1.45;">` +
+                partialHtml +
+                `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>${label}</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
+                `<span style="color:#e8c87a;">Не применено: ${blocked}</span><br>` +
+                `${reason}<br>` +
+                `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span></div>`;
+        }
         const applyHtml = presetId
             ? `<div style="margin-top:6px;"><button id="slf-llm-apply-btn" type="button"` +
               ` data-slf-llm-apply-preset="${this.escapeHtml(presetId)}"` +
@@ -13878,6 +14478,7 @@ if (typeof window !== 'undefined') {
         const presetText = `пресет ${rec?.presetId || '?'}`;
         const render = value => {
             if (typeof value === 'string' && value.startsWith('etalon')) return etalonText;
+            if (typeof value === 'string' && value.startsWith('canon:')) return `канон ${value.slice(6)}`;
             if (value === 'current') return 'текущая тактика';
             return presetText;
         };
@@ -29476,15 +30077,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.374',
-        scriptVersion: '4.4.374',
+        version: '4.4.377',
+        scriptVersion: '4.4.377',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.374',
+        scriptVersion: '4.4.377',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

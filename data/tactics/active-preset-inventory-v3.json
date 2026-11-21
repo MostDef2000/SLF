@@ -670,6 +670,12 @@
         "corner": "1",
         "shot": "2",
         "priority": []
+      },
+      "canon": {
+        "row": 1,
+        "variant": "default",
+        "exact": true,
+        "note": "Контроли 2 2 2 2 3 и приоритет [] совпадают со строкой 1 точно."
       }
     },
     "Mourinho_CleanCounter_v11": {
@@ -722,6 +728,12 @@
         "corner": "1",
         "shot": "2",
         "priority": []
+      },
+      "canon": {
+        "row": 7,
+        "variant": null,
+        "exact": false,
+        "note": "Контрвыход через свободный первый пас — ассоциация со строкой 7; вектор не совпадает."
       }
     },
     "Guardiola_PressEscape_v11": {
@@ -770,6 +782,12 @@
         "corner": "1",
         "shot": "2",
         "priority": []
+      },
+      "canon": {
+        "row": 6,
+        "variant": null,
+        "exact": false,
+        "note": "Выход из прессинга — ассоциация со строкой 6; вариант зависит от относительной силы XI."
       }
     },
     "Arteta_SafePossession_v11": {
@@ -820,6 +838,12 @@
         "corner": "1",
         "shot": "2",
         "priority": []
+      },
+      "canon": {
+        "row": 11,
+        "variant": null,
+        "exact": false,
+        "note": "Схема контроля — ассоциация со строкой 11; manual-only, автоматический switch запрещён."
       }
     },
     "Guardiola_PressCooldown_v11": {
@@ -870,6 +894,13 @@
         "corner": "1",
         "shot": "1",
         "priority": []
+      },
+      "canon": {
+        "row": null,
+        "variant": null,
+        "exact": false,
+        "addition": "press_cooldown",
+        "note": "SLF-дополнение press_cooldown, не строка шпаргалки (R4)."
       }
     },
     "Guardiola_ControlledPush_v11": {
@@ -920,6 +951,12 @@
         "corner": "1",
         "shot": "3",
         "priority": []
+      },
+      "canon": {
+        "row": 4,
+        "variant": null,
+        "exact": false,
+        "note": "Дожим при потребности в голе — ассоциация со строкой 4; фланг не выбран."
       }
     },
     "Guardiola_PositionalSiege_v11": {
@@ -973,6 +1010,12 @@
         "corner": "1",
         "shot": "3",
         "priority": []
+      },
+      "canon": {
+        "row": 8,
+        "variant": null,
+        "exact": false,
+        "note": "Позиционный дожим против автобуса — ассоциация со строкой 8."
       }
     },
     "Conte_WideChannels_v11": {
@@ -1026,6 +1069,12 @@
           "left",
           "right"
         ]
+      },
+      "canon": {
+        "row": 4,
+        "variant": null,
+        "exact": false,
+        "note": "Широкие каналы — ассоциация со строкой 4; включает оба фланга, ни один вариант не реализован точно."
       }
     },
     "Klopp_LateGegenpress_v11": {
@@ -1079,6 +1128,12 @@
         "corner": "1",
         "shot": "3",
         "priority": []
+      },
+      "canon": {
+        "row": 12,
+        "variant": null,
+        "exact": false,
+        "note": "Поздний навал — ассоциация со строкой 12; приоритеты и вектор не совпадают."
       }
     },
     "Simeone_CompactLead_v11": {
@@ -1129,6 +1184,12 @@
         "corner": "1",
         "shot": "1",
         "priority": []
+      },
+      "canon": {
+        "row": 5,
+        "variant": null,
+        "exact": false,
+        "note": "Удержание счёта — ассоциация со строкой 5."
       }
     },
     "Simeone_EmergencyBlock_v11": {
@@ -1180,6 +1241,12 @@
         "corner": "1",
         "shot": "1",
         "priority": []
+      },
+      "canon": {
+        "row": 5,
+        "variant": null,
+        "exact": false,
+        "note": "Аварийная блокировка — ассоциация со строкой 5."
       }
     },
     "Allegri_LeadOutlet_v11": {
@@ -1231,6 +1298,12 @@
         "corner": "1",
         "shot": "1",
         "priority": []
+      },
+      "canon": {
+        "row": 5,
+        "variant": null,
+        "exact": false,
+        "note": "Удержание через outlet — ассоциация со строкой 5; outlet не входит в мануальные контроли."
       }
     },
     "Flick_LeadPressHold_v12": {
@@ -1284,6 +1357,12 @@
         "corner": "1",
         "shot": "2",
         "priority": []
+      },
+      "canon": {
+        "row": 5,
+        "variant": null,
+        "exact": false,
+        "note": "Удержание с прессингом — ассоциация со строкой 5."
       }
     }
   },

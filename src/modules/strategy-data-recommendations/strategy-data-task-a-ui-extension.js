@@ -307,6 +307,7 @@
         const presetText = `пресет ${rec?.presetId || '?'}`;
         const render = value => {
             if (typeof value === 'string' && value.startsWith('etalon')) return etalonText;
+            if (typeof value === 'string' && value.startsWith('canon:')) return `канон ${value.slice(6)}`;
             if (value === 'current') return 'текущая тактика';
             return presetText;
         };

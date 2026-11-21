@@ -89,6 +89,116 @@ const LLMSecondOpinion = {
         return Object.keys(cleaned).length ? cleaned : null;
     },
 
+    // #477: canon manual channel. The decision comes from the local matcher
+    // (finalTactic.canon); it is sent to the advisor as its own structured
+    // field and is NEVER mixed into developerHints (page coach hints keep
+    // their full 20-line budget).
+    canonDecisionFrom(ruleDecision) {
+        const canon = ruleDecision && ruleDecision.finalTactic ? ruleDecision.finalTactic.canon : null;
+        if (!canon || typeof canon !== 'object' || canon.schema !== 'slf_canon_decision_v1') return null;
+        if (typeof canon.status !== 'string') return null;
+        return canon;
+    },
+
+    buildCanonReference(canon) {
+        if (!canon) return null;
+        const vector = canon.vector && typeof canon.vector === 'object' ? canon.vector : null;
+        return {
+            version: typeof canon.version === 'string' ? canon.version : null,
+            title: 'Шпаргалка: построение атаки',
+            status: canon.status,
+            matchedId: canon.id == null ? null : canon.id,
+            variant: canon.variant == null ? null : canon.variant,
+            situationText: typeof canon.situationText === 'string' ? canon.situationText : null,
+            vector: vector ? Object.assign({}, vector) : null,
+            legend: Array.isArray(canon.legend) ? canon.legend.filter(line => typeof line === 'string').slice(0, 8) : [],
+            evidence: Array.isArray(canon.evidence) ? canon.evidence.filter(item => typeof item === 'string').slice(0, 20) : [],
+            missingInputs: Array.isArray(canon.missingInputs) ? canon.missingInputs.filter(item => typeof item === 'string').slice(0, 10) : [],
+            additions: Array.isArray(canon.additions) ? canon.additions.slice(0, 5) : []
+        };
+    },
+
+    // Client-boundary validation for «adjust» (#477 R8/R10). A matched row
+    // makes its six manual settings authoritative: a change to one of those
+    // fields must move TO the selected value. Valid changes on other
+    // controls are allowed; any contradiction rejects the whole proposal
+    // (never apply the valid half of a mixed answer).
+    CONTROL_DOMAINS: {
+        def_line: [1, 3], press_line: [1, 3], def_width: [1, 3], press_intense: [1, 5],
+        build_type: [1, 3], build_temp: [1, 3], build_long: [1, 3], build_fast: [1, 3],
+        style: [1, 5], pass_risk: [1, 5], dribble: [1, 5], cross: [1, 3], corner: [1, 2], shot: [1, 3]
+    },
+
+    validateAdjustAgainstCanon(changes, canon) {
+        // Legacy path (no canon decision): preserve the pre-#477 rendering contract.
+        if (!canon) return { ok: true, legacy: true, changes };
+        if (!Array.isArray(changes) || !changes.length) return { ok: false, reason: 'пустой список изменений' };
+        if (changes.length > 3) return { ok: false, reason: 'больше 3 изменений за раз' };
+        const matched = canon && canon.status === 'matched' && canon.vector && typeof canon.vector === 'object' ? canon : null;
+        const manualKeys = ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'];
+        const seen = new Set();
+        for (const change of changes) {
+            if (!change || typeof change !== 'object') return { ok: false, reason: 'изменение не объект' };
+            const control = change.control;
+            const value = change.value;
+            if (typeof control !== 'string' || !Object.prototype.hasOwnProperty.call(this.CONTROL_DOMAINS, control)) {
+                return { ok: false, reason: `неизвестный ползунок ${String(control)}` };
+            }
+            if (seen.has(control)) return { ok: false, reason: `ползунок ${control} повторяется` };
+            seen.add(control);
+            const text = typeof value === 'string' ? value.trim() : '';
+            if (!/^\d{1,2}$/.test(text)) return { ok: false, reason: `значение ${control} вне диапазона` };
+            const [low, high] = this.CONTROL_DOMAINS[control];
+            if (Number(text) < low || Number(text) > high) return { ok: false, reason: `значение ${control} вне диапазона` };
+            if (matched && manualKeys.includes(control) && String(text) !== String(matched.vector[control])) {
+                return {
+                    ok: false,
+                    reason: `противоречит строке ${matched.id} канона: ${control} должно быть ${matched.vector[control]}, предложено ${text}`
+                };
+            }
+        }
+        return { ok: true, changes };
+    },
+
+    // Client-boundary validation for «switch» (#477 R8/R10). When a manual
+    // row is matched, only an eligible preset mapped to that exact row AND
+    // variant may be offered. A coach name, catalog id or a different
+    // variant is never enough. Without a canon decision the legacy behaviour
+    // is preserved; with an unresolved canon decision no canon switch is
+    // offered at all.
+    validateSwitchAgainstCanon(preset, canon) {
+        if (!canon) return { ok: true, legacy: true };
+        if (canon.status !== 'matched') return { ok: false, reason: 'канон не определён — переключение по догадке не предлагается' };
+        const registry = this.__lastRegistry
+            || (typeof window !== 'undefined' && window.SLFActivePresetRegistry ? window.SLFActivePresetRegistry : null)
+            || (typeof SLFActivePresetRegistry !== 'undefined' ? SLFActivePresetRegistry : null);
+        if (!registry || typeof preset !== 'string' || !preset) return { ok: false, reason: 'нет данных о пресетах' };
+        const contract = registry.roleContracts && registry.roleContracts[preset];
+        const mapping = contract && contract.canon;
+        if (!mapping || mapping.exact !== true || Number(mapping.row) !== Number(canon.id)) {
+            return { ok: false, reason: `пресет ${preset} не реализует строку ${canon.id} канона точно` };
+        }
+        const expectedVariant = canon.variant == null ? 'default' : String(canon.variant);
+        if (String(mapping.variant == null ? 'default' : mapping.variant) !== expectedVariant) {
+            return { ok: false, reason: `пресет ${preset} реализует другой вариант строки ${canon.id}` };
+        }
+        // Guard against a stale mapping: the declared preset controls must
+        // still equal the selected manual vector.
+        const controls = registry.presets && registry.presets[preset];
+        if (!controls) return { ok: false, reason: `нет настроек пресета ${preset}` };
+        for (const key of ['build_type', 'build_temp', 'build_long', 'build_fast', 'style']) {
+            if (String(controls[key]) !== String(canon.vector[key])) {
+                return { ok: false, reason: `настройки пресета ${preset} не совпадают со строкой ${canon.id}` };
+            }
+        }
+        const lanes = canon.priorityLanes || [];
+        const presetPriority = Array.isArray(controls.priority) ? controls.priority.map(String) : [];
+        if (presetPriority.slice().sort().join(',') !== lanes.slice().map(String).sort().join(',')) {
+            return { ok: false, reason: `приоритеты пресета ${preset} не совпадают со строкой ${canon.id}` };
+        }
+        return { ok: true };
+    },
+
     // Fail-closed on "nothing to advise with": no registry or an empty catalog
     // still yields null (partial mode additionally needs the snapshot). #461: a
     // missing rules decision (early match, phase collect) no longer refuses the
@@ -173,6 +283,13 @@ const LLMSecondOpinion = {
         // cleaning, so a caller without it keeps the exact legacy bytes.
         const controls = this.cleanCurrentControls(currentControls);
         if (controls) payload.currentControls = controls;
+        // #477: the canon reference + deterministic decision ride in their own
+        // field, appended only when the local matcher produced one. Legacy
+        // (no canon) requests keep the exact legacy payload bytes.
+        const canon = this.canonDecisionFrom(ruleDecision);
+        this.__lastCanonDecision = canon;
+        this.__lastRegistry = registry;
+        if (canon) payload.canonReference = this.buildCanonReference(canon);
         return payload;
     },
 
@@ -210,6 +327,16 @@ const LLMSecondOpinion = {
         // JSON data attribute.
         const adjustChanges = Array.isArray(answer.changes) ? answer.changes : [];
         if (answer.mode === 'adjust' || adjustChanges.length) {
+            const check = this.validateAdjustAgainstCanon(adjustChanges, this.__lastCanonDecision);
+            if (!check.ok) {
+                const blocked = this.escapeHtml(check.reason || 'предложение не соответствует канону');
+                return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#1a1414;border:1px solid #5a3a3a;border-radius:5px;color:#dcc;padding:7px 9px;font-size:12px;line-height:1.45;">` +
+                    partialHtml +
+                    `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>Точечная подстройка</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
+                    `<span style="color:#e8c87a;">Не применено: ${blocked}</span><br>` +
+                    `${reason}<br>` +
+                    `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span></div>`;
+            }
             const changeRows = adjustChanges
                 .filter(change => change && typeof change === 'object' && change.control != null)
                 .map(change => `${this.escapeHtml(change.control)}: ${this.escapeHtml(change.value)}`)
@@ -234,6 +361,19 @@ const LLMSecondOpinion = {
         // applies strictly on explicit click — never auto.
         const presetId = typeof answer.preset === 'string' ? answer.preset : '';
         const adviceId = typeof answer.adviceId === 'string' ? answer.adviceId : '';
+        // #477 R8: a «switch» is actionable only for an eligible preset that
+        // exactly realizes the matched canon row AND variant. Without a canon
+        // decision (legacy/old API) the pre-existing switch path is preserved.
+        const switchCheck = presetId ? this.validateSwitchAgainstCanon(presetId, this.__lastCanonDecision) : { ok: true };
+        if (presetId && !switchCheck.ok) {
+            const blocked = this.escapeHtml(switchCheck.reason || 'предложение не соответствует канону');
+            return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#1a1414;border:1px solid #5a3a3a;border-radius:5px;color:#dcc;padding:7px 9px;font-size:12px;line-height:1.45;">` +
+                partialHtml +
+                `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>${label}</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
+                `<span style="color:#e8c87a;">Не применено: ${blocked}</span><br>` +
+                `${reason}<br>` +
+                `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span></div>`;
+        }
         const applyHtml = presetId
             ? `<div style="margin-top:6px;"><button id="slf-llm-apply-btn" type="button"` +
               ` data-slf-llm-apply-preset="${this.escapeHtml(presetId)}"` +
