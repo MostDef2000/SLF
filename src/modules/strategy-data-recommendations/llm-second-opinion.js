@@ -133,7 +133,13 @@ const LLMSecondOpinion = {
             evidence: Array.isArray(canon.evidence) ? canon.evidence.filter(item => typeof item === 'string').slice(0, 20) : [],
             missingInputs: Array.isArray(canon.missingInputs) ? canon.missingInputs.filter(item => typeof item === 'string').slice(0, 10) : [],
             additions: Array.isArray(canon.additions) ? canon.additions.slice(0, 5) : [],
-            candidates
+            candidates,
+            // #477 R9: the club's dated own-league starting baseline travels
+            // with the decision so the advisor can present it as a baseline,
+            // never as a live-opponent observation.
+            leagueStart: canon.leagueStart && typeof canon.leagueStart === 'object'
+                ? Object.assign({}, canon.leagueStart)
+                : null
         };
     },
 
@@ -199,10 +205,23 @@ const LLMSecondOpinion = {
     // offered at all.
     validateSwitchAgainstCanon(preset, canon) {
         if (!canon) return { ok: true, legacy: true };
-        // An unresolved canon decision must not disable the ordinary preset
-        // switch: R8 forbids inventing a canon match, not using the legacy
-        // switch path. Only a MATCHED row constrains which preset is eligible.
-        if (canon.status !== 'matched') return { ok: true, unresolvedCanon: true };
+        // #477 NEW-P1-1/P1-2: an actionable addition is switchable ONLY
+        // through its eligible role preset. Any other preset is refused.
+        if (canon.status === 'addition') {
+            if (typeof preset !== 'string' || !preset) return { ok: false, reason: 'нет данных о пресетах' };
+            const eligible = typeof canon.eligibleRole === 'string' && canon.eligibleRole
+                ? canon.eligibleRole
+                : (Array.isArray(canon.eligibleRoles)
+                    ? canon.eligibleRoles.find(item => typeof item === 'string' && item)
+                    : null);
+            if (eligible && preset === eligible) return { ok: true };
+            return { ok: false, reason: `пресет ${preset} не реализует дополнение канона` };
+        }
+        // Any other non-matched decision (ambiguous/missing_inputs/no_match)
+        // is authoritative in the negative: no canon switch is offered.
+        if (canon.status !== 'matched') {
+            return { ok: false, reason: `канон не сопоставлен (${canon.status}) — переключение не предлагается` };
+        }
         const registry = this.__lastRegistry
             || (typeof window !== 'undefined' && window.SLFActivePresetRegistry ? window.SLFActivePresetRegistry : null)
             || (typeof SLFActivePresetRegistry !== 'undefined' ? SLFActivePresetRegistry : null);
@@ -328,8 +347,9 @@ const LLMSecondOpinion = {
         // constrains a canon-less request. A decision that resolves no row
         // (ambiguous/missing_inputs) cannot constrain an answer either, so it
         // leaves the last constraining decision in place for legacy callers
-        // that do not pass the payload.
-        if (!canon || canon.status === 'matched') this.__lastCanonDecision = canon || null;
+        // that do not pass the payload. An actionable addition IS constraining
+        // (only its eligible role is switchable), so it is stored too.
+        if (!canon || canon.status === 'matched' || canon.status === 'addition') this.__lastCanonDecision = canon || null;
         this.__lastRegistry = registry;
         if (canon) payload.canonReference = this.buildCanonReference(canon);
         return payload;

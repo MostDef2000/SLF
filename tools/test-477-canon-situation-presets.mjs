@@ -21,6 +21,7 @@ const jeq = (a, b, msg) => assert.equal(JSON.stringify(a), JSON.stringify(b), ms
 
 const EMERY = { def_line: '2', press_line: '2', def_width: '2', press_intense: '2', build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3', pass_risk: '2', dribble: '2', cross: '2', corner: '1', shot: '2', priority: [] };
 const CONTE = { def_line: '2', press_line: '2', def_width: '3', press_intense: '3', build_type: '3', build_temp: '2', build_long: '2', build_fast: '3', style: '4', pass_risk: '3', dribble: '3', cross: '3', corner: '1', shot: '2', priority: ['left', 'right'] };
+const PRESS_COOLDOWN = { def_line: '1', press_line: '2', def_width: '2', press_intense: '1', build_type: '1', build_temp: '2', build_long: '2', build_fast: '2', style: '2', pass_risk: '1', dribble: '1', cross: '1', corner: '1', shot: '1', priority: [] };
 
 const CANON_CONTROLS = ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'];
 
@@ -39,10 +40,11 @@ function makeSandbox({ presetId = 'Emery_BalancedBase_v11', currentTactic = null
     vm.runInContext(`globalThis.CurrentActionHintEngine.__stubAction = ${JSON.stringify({ preset: presetId, rawPreset: presetId, decision: 'active_control', ruleId: 'x', reason: 'test', libraryVersion: 'slf_tactic_suite_561_v12' })};`, sandbox);
     vm.runInContext(`globalThis.window.SLFActivePresetRegistry = {
         suiteVersion: 'slf_tactic_suite_561_v12',
-        presets: { Emery_BalancedBase_v11: ${JSON.stringify(EMERY)}, Conte_WideChannels_v11: ${JSON.stringify(CONTE)} },
+        presets: { Emery_BalancedBase_v11: ${JSON.stringify(EMERY)}, Conte_WideChannels_v11: ${JSON.stringify(CONTE)}, Guardiola_PressCooldown_v11: ${JSON.stringify(PRESS_COOLDOWN)} },
         roleContracts: ${JSON.stringify({
             Emery_BalancedBase_v11: { canon: { row: 1, variant: 'default', exact: true } },
-            Conte_WideChannels_v11: { canon: { row: null, variant: null, exact: false } }
+            Conte_WideChannels_v11: { canon: { row: null, variant: null, exact: false } },
+            Guardiola_PressCooldown_v11: { canon: { row: null, variant: null, exact: false, addition: 'press_cooldown' } }
         })}
     };`, sandbox);
     vm.runInContext(read('src/modules/strategy-data-recommendations/dave56-etalon-layer.js'), sandbox, { filename: 'dave56-etalon-layer.js' });
@@ -207,15 +209,30 @@ function canonicalLanes(priority) {
 // ===========================================================================
 {
     const addition = advise({ pressFatigue: true });
+    assert.equal(addition.canon.status, 'addition', 'fatigue alone with no urgent chase resolves an actionable addition');
     assert.equal(addition.canon.id, null, 'press fatigue is not a screenshot row');
+    assert.equal(addition.canon.eligibleRole, 'Guardiola_PressCooldown_v11', 'addition names the actionable eligible role');
     assert.ok(addition.canon.additions.some(item => item.id === 'press_cooldown'), 'press_cooldown addition reported');
     const entry = addition.canon.additions.find(item => item.id === 'press_cooldown');
     assert.equal(entry.eligibleRole, 'Guardiola_PressCooldown_v11', 'addition names its eligible coach role');
+    // NEW-P1-1: the addition must stay actionable at the final seam and the
+    // advisor seam, never suppressed as an unresolved canon decision.
+    assert.ok(addition.finalTactic, 'addition yields a final tactic');
+    assert.ok(addition.finalTactic.vector && typeof addition.finalTactic.vector === 'object',
+        'addition keeps an actionable final vector');
+    assert.equal(addition.finalTactic.presetId, 'Guardiola_PressCooldown_v11',
+        'addition final tactic is the eligible role preset');
+    assert.equal(addition.finalTactic.vector.build_type, '1', 'addition vector is the eligible preset, not the base');
+    assert.equal(addition.finalTactic.canon.status, 'addition', 'final tactic exposes the addition status');
+    assert.match(addition.finalTactic.referenceLine, /Прессинг-усталость/, 'reference line names the addition');
+    assert.match(addition.finalTactic.referenceLine, /Guardiola_PressCooldown_v11/, 'reference line names the eligible role');
+    assert.ok(!/Канон №/.test(addition.finalTactic.referenceLine), 'an addition is never represented as a manual row');
 
     const both = advise({ deepBlock: true, pressFatigue: true });
     assert.equal(both.canon.status, 'matched');
     assert.equal(both.canon.id, 8, 'a resolved manual row keeps its identity over an addition');
     assert.equal(both.finalTactic.vector.build_temp, '1', 'manual row settings survive the addition');
+    assert.notEqual(both.finalTactic.presetId, 'Guardiola_PressCooldown_v11', 'an addition never displaces a matched row');
 
     // The addition declares ['press_fatigue','no_urgent_chase']; fatigue alone
     // is not enough when an urgent chase context is present.
@@ -291,15 +308,37 @@ function canonicalLanes(priority) {
 
     // Эйрбас favourite fixture: owner-internal rank is irrelevant.
     const airbusFavourite = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation({
-        club: 'Эйрбас', league: 'test', evidenceDate: '2026-11-21', totalTeams: 14,
-        strengthRank: 1, rank: 14, strengthZone: 'favourite', rankZone: 'underdog'
+        club: 'Эйрбас', league: 'test', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27',
+        totalTeams: 14, strengthRank: 1, rank: 14, strengthZone: 'favourite', rankZone: 'underdog'
     });
     assert.equal(airbusFavourite.row, 2, 'favourite in its own league → row 2, not row 3 from owner rank');
     const airbusRankChanged = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation({
-        club: 'Эйрбас', league: 'test', evidenceDate: '2026-11-21', totalTeams: 14,
-        strengthRank: 4, rank: 14, strengthZone: 'mid', rankZone: 'underdog'
+        club: 'Эйрбас', league: 'test', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27',
+        totalTeams: 14, strengthRank: 4, rank: 14, strengthZone: 'mid', rankZone: 'underdog'
     });
     assert.equal(airbusRankChanged.row, 1, 'owner-internal/rank change without strength-zone change keeps row 1');
+
+    // NEW-P2-1: BOTH season identifiers are required before classifying. A
+    // valid club/league/population/strength zone with either season missing is
+    // insufficient — never an implicit row.
+    const missingSeason = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation({
+        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', expectedSeason: '2026/27',
+        totalTeams: 14, strengthZone: 'mid', rankZone: 'mid'
+    });
+    assert.equal(missingSeason.status, 'insufficient', 'missing season → insufficient');
+    assert.equal(missingSeason.row, null, 'missing season never classifies a row');
+    const missingExpectedSeason = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation({
+        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', season: '2026/27',
+        totalTeams: 14, strengthZone: 'mid', rankZone: 'mid'
+    });
+    assert.equal(missingExpectedSeason.status, 'insufficient', 'missing expectedSeason → insufficient');
+    assert.equal(missingExpectedSeason.row, null, 'missing expectedSeason never classifies a row');
+    const bothSeasons = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation({
+        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27',
+        totalTeams: 14, strengthZone: 'mid', rankZone: 'mid'
+    });
+    assert.equal(bothSeasons.status, 'classified', 'both matching season identifiers classify');
+    assert.equal(bothSeasons.row, 1, 'mid strength with both seasons → row 1');
 
     // Missing / wrong-season / incomparable evidence is insufficient, never row 1.
     const missing = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation(null);
@@ -311,19 +350,22 @@ function canonicalLanes(priority) {
     });
     assert.equal(wrongSeason.status, 'insufficient', 'wrong-season evidence → insufficient');
     const noPopulation = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation({
-        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', strengthZone: 'mid', totalTeams: 0
+        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27',
+        strengthZone: 'mid', totalTeams: 0
     });
     assert.equal(noPopulation.status, 'insufficient', 'incomparable population → insufficient');
 
     // Unknown percentile is NOT zero: Number(null)/Number('') must never
     // classify a club as underdog (row 3).
     const nullPercentile = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation({
-        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', totalTeams: 14, strengthPercentile: null
+        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27',
+        totalTeams: 14, strengthPercentile: null
     });
     assert.equal(nullPercentile.status, 'insufficient', 'null percentile → insufficient');
     assert.equal(nullPercentile.row, null, 'null percentile never defaults to row 3');
     const emptyPercentile = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation({
-        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', totalTeams: 14, strengthPercentile: ''
+        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27',
+        totalTeams: 14, strengthPercentile: ''
     });
     assert.equal(emptyPercentile.status, 'insufficient', 'empty-string percentile → insufficient');
     assert.equal(emptyPercentile.row, null, 'empty-string percentile never defaults to row 3');
@@ -352,10 +394,11 @@ async function loadLlm() {
         active: ['Emery_BalancedBase_v11', 'Conte_WideChannels_v11'],
         labels: { Emery_BalancedBase_v11: 'Emery', Conte_WideChannels_v11: 'Conte' },
         meta: {},
-        presets: { Emery_BalancedBase_v11: EMERY, Conte_WideChannels_v11: CONTE },
+        presets: { Emery_BalancedBase_v11: EMERY, Conte_WideChannels_v11: CONTE, Guardiola_PressCooldown_v11: PRESS_COOLDOWN },
         roleContracts: {
             Emery_BalancedBase_v11: { canon: { row: 1, variant: 'default', exact: true } },
-            Conte_WideChannels_v11: { canon: { row: null, variant: null, exact: false } }
+            Conte_WideChannels_v11: { canon: { row: null, variant: null, exact: false } },
+            Guardiola_PressCooldown_v11: { canon: { row: null, variant: null, exact: false, addition: 'press_cooldown' } }
         }
     };
     const payload = LLM.buildPayload({
@@ -423,6 +466,34 @@ async function loadLlm() {
     assert.ok(eligibleSwitch.includes('id="slf-llm-apply-btn"'), 'exact canon-mapped preset switch is actionable');
     const ineligibleSwitch = LLM.renderAnswer({ available: true, mode: 'switch', preset: 'Conte_WideChannels_v11', confidence: 'medium', reason: 'row 1', model: 'm', latencyMs: 10 });
     assert.ok(!ineligibleSwitch.includes('id="slf-llm-apply-btn"'), 'unmapped preset switch is not actionable');
+
+    // NEW-P1-1 + NEW-P1-2: an actionable addition is switchable ONLY through
+    // its eligible role; an unresolved canon decision never exposes a switch.
+    const additionDecision = advise({ pressFatigue: true }).canon;
+    const additionPayload = LLM.buildPayload({
+        snapshot: { gameId: 'g477', minute: 20 },
+        ruleDecision: { action: { preset: 'Emery_BalancedBase_v11' }, moment: { context: {} }, finalTactic: { canon: additionDecision } },
+        registry
+    });
+    assert.equal(additionPayload.canonReference.status, 'addition', 'addition status travels in the reference channel');
+    const additionSwitch = LLM.renderAnswer({ available: true, mode: 'switch', preset: 'Guardiola_PressCooldown_v11', confidence: 'medium', reason: 'addition', model: 'm', latencyMs: 10 }, { payload: additionPayload });
+    assert.ok(additionSwitch.includes('id="slf-llm-apply-btn"'), 'the addition eligible role is actionable');
+    const additionOtherSwitch = LLM.renderAnswer({ available: true, mode: 'switch', preset: 'Emery_BalancedBase_v11', confidence: 'medium', reason: 'addition', model: 'm', latencyMs: 10 }, { payload: additionPayload });
+    assert.ok(!additionOtherSwitch.includes('id="slf-llm-apply-btn"'), 'a non-eligible preset is not actionable for an addition');
+    assert.ok(additionOtherSwitch.includes('Не применено'), 'a non-eligible addition switch is visibly refused');
+
+    const ambiguousSwitch = LLM.renderAnswer({ available: true, mode: 'switch', preset: 'Emery_BalancedBase_v11', confidence: 'medium', reason: 'ambiguous', model: 'm', latencyMs: 10 }, { payload: ambiguousPayload });
+    assert.ok(!ambiguousSwitch.includes('id="slf-llm-apply-btn"'), 'ambiguous canon rejects a switch');
+    assert.ok(ambiguousSwitch.includes('Не применено'), 'an ambiguous switch is visibly refused');
+    const missingDecision = advise({}).canon;
+    const missingPayload = LLM.buildPayload({
+        snapshot: { gameId: 'g477', minute: 20 },
+        ruleDecision: { action: { preset: 'Emery_BalancedBase_v11' }, moment: { context: {} }, finalTactic: { canon: missingDecision } },
+        registry
+    });
+    const missingSwitch = LLM.renderAnswer({ available: true, mode: 'switch', preset: 'Emery_BalancedBase_v11', confidence: 'medium', reason: 'missing', model: 'm', latencyMs: 10 }, { payload: missingPayload });
+    assert.ok(!missingSwitch.includes('id="slf-llm-apply-btn"'), 'missing-inputs canon rejects a switch');
+    assert.ok(missingSwitch.includes('Не применено'), 'a missing-inputs switch is visibly refused');
 
     // Row 4 right: no preset exactly realizes it, so every switch is rejected.
     const row4Right = advise({ needGoal: true, attackFlank: 'right' }).canon;

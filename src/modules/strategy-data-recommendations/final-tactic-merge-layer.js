@@ -213,6 +213,49 @@
             && canon.status === 'matched' && canon.vector && typeof canon.vector === 'object';
     }
 
+    // #477 NEW-P1-1: a resolved SLF addition is actionable but is NOT a
+    // manual row. It names an eligible role whose preset realizes it.
+    function isAdditionCanon(canon) {
+        return !!canon && canon.schema === 'slf_canon_decision_v1'
+            && canon.status === 'addition' && canon.actionable === true;
+    }
+
+    function additionEligibleRole(canon) {
+        if (!canon || canon.status !== 'addition') return null;
+        if (typeof canon.eligibleRole === 'string' && canon.eligibleRole) return canon.eligibleRole;
+        if (Array.isArray(canon.eligibleRoles)) {
+            const role = canon.eligibleRoles.find(item => typeof item === 'string' && item);
+            if (role) return role;
+        }
+        return null;
+    }
+
+    // The addition's eligible preset becomes the base vector. It is never a
+    // manual row: the six manual settings come from the preset controls.
+    function resolveAdditionBase(canon) {
+        const presetId = additionEligibleRole(canon);
+        if (!presetId) return null;
+        if (registry.presets && hasOwn(registry.presets, presetId) && registry.presets[presetId]) {
+            return {
+                base: `preset:${presetId}`,
+                presetId,
+                vector: normalizeBaseVector(registry.presets[presetId]),
+                fromCurrent: false
+            };
+        }
+        return null;
+    }
+
+    function canonAdditionReference(canon) {
+        const additions = Array.isArray(canon.additions) ? canon.additions : [];
+        const names = additions
+            .map(item => (item && (item.situation || item.id)) || '')
+            .filter(Boolean);
+        const label = names.length ? names.join(', ') : 'дополнение SLF';
+        const role = additionEligibleRole(canon);
+        return `Дополнение SLF: ${label} — пресет ${role || '—'}`;
+    }
+
     function canonSettingWord(canon, key, fallback) {
         const text = canon && canon.settingText && typeof canon.settingText === 'object' ? canon.settingText : null;
         return text && text[key] ? text[key] : fallback;
@@ -291,11 +334,13 @@
         const etalon = result?.etalon || null;
         const canon = result?.canon || null;
         const canonMatched = isMatchedCanon(canon);
+        const canonAddition = isAdditionCanon(canon);
 
-        // #477 P1-2: a canon decision that exists but did not resolve a row is
-        // authoritative in the NEGATIVE — it must never fall through to a
-        // preset/etalon vector. Only canon == null keeps the legacy path.
-        if (canon && !canonMatched) {
+        // #477 P1-2: a canon decision that exists but did not resolve a row or
+        // an actionable addition is authoritative in the NEGATIVE — it must
+        // never fall through to a preset/etalon vector. Only canon == null
+        // keeps the legacy path.
+        if (canon && !canonMatched && !canonAddition) {
             return {
                 schema: VERSION,
                 vector: null,
@@ -313,7 +358,10 @@
             };
         }
 
-        let baseInfo = resolveBase(snapshot, result);
+        // An actionable addition resolves its base to the eligible role's
+        // preset; anything else uses the preset/current resolution.
+        let baseInfo = canonAddition ? resolveAdditionBase(canon) : null;
+        if (!baseInfo) baseInfo = resolveBase(snapshot, result);
         // A resolved manual row is actionable even without a readable preset
         // or current tactic: only the six manual settings are known, the rest
         // stay absent (never invented).
@@ -355,6 +403,19 @@
             notes = [canon.situationText].concat(canonSettingNotes(canon), CANON_LEGEND);
             insufficientData = [];
             source = `canon:${canon.id}${canon.variant ? '/' + canon.variant : ''}+base:${baseInfo.base}`;
+        } else if (canonAddition) {
+            // #477 NEW-P1-1: an actionable addition resolves to its eligible
+            // preset as the base. It is NOT a manual row (no «Канон №» line)
+            // and is never overlaid by the etalon; the reference names the
+            // addition and the preset that realizes it.
+            referenceLine = canonAdditionReference(canon);
+            const additionNames = Array.isArray(canon.additions)
+                ? canon.additions.map(item => (item && item.situation) || '').filter(Boolean)
+                : [];
+            notes = additionNames;
+            insufficientData = [];
+            strong = { defense: false, buildup: false, scenario: null, canon: false };
+            source = `canon:addition+base:${baseInfo.base}`;
         } else {
             if (!isInsufficientEtalon(etalon)) {
                 const strength = computeStrength(etalon);

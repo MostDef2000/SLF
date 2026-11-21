@@ -1,5 +1,39 @@
 # Changelog
 
+## 4.4.384
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/audit/runtime-reachability-review-v1.json
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/dave56-etalon-data.js
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- src/modules/strategy-data-recommendations/final-tactic-merge-layer.js
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/test-477-canon-situation-presets.mjs
+- tools/test-final-tactic-merge.mjs
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- 531a6d5bebad0e3c1dc74744901d2b6784400359
+
+Approved commit:
+- a7f459f68ac34499b7fc67ecf8402eb0af30e177
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.383
 
 ### Automatic latest-only build

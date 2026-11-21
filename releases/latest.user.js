@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.383
+// @version      4.4.384
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.383',
-        scriptVersion: '4.4.383',
+        version: '4.4.384',
+        scriptVersion: '4.4.384',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.383',
+        scriptVersion: '4.4.384',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -11781,7 +11781,18 @@ TacticalKnowledgePack.init();
             }));
         }
         if (additions.length) {
-            return canonDecision('no_match', base);
+            // #477 NEW-P1-1: a resolved SLF addition is actionable on its own.
+            // It is NOT a manual row (id/vector stay null); the eligible role
+            // names the preset that realizes it, and both the final-tactic and
+            // advisor seams treat this status as actionable.
+            const eligibleRoles = additions
+                .map(addition => addition && typeof addition.eligibleRole === 'string' ? addition.eligibleRole : '')
+                .filter(Boolean);
+            return canonDecision('addition', Object.assign(base, {
+                eligibleRole: eligibleRoles.length ? eligibleRoles[0] : null,
+                eligibleRoles,
+                actionable: true
+            }));
         }
         return canonDecision('missing_inputs', Object.assign(base, {
             missingInputs: ['relative_xi_or_situation']
@@ -11806,7 +11817,11 @@ TacticalKnowledgePack.init();
         if (!evidence || typeof evidence !== 'object') return insufficient('missing_evidence');
         if (!evidence.club || !evidence.league) return insufficient('missing_club_or_league');
         if (!evidence.evidenceDate) return insufficient('missing_evidence_date');
-        if (evidence.season && evidence.expectedSeason && String(evidence.season) !== String(evidence.expectedSeason)) {
+        // #477 NEW-P2-1: BOTH season identifiers are required before any
+        // classification. A club/league/population/strength zone with either
+        // season absent is insufficient — never an implicit row 1.
+        if (!evidence.season || !evidence.expectedSeason) return insufficient('missing_season');
+        if (String(evidence.season) !== String(evidence.expectedSeason)) {
             return insufficient('wrong_season');
         }
         const total = Number(evidence.totalTeams);
@@ -12033,6 +12048,24 @@ TacticalKnowledgePack.init();
             result.canon = computeCanon(snapshot, context, result);
         } catch (error) {
             result.canon = CANON ? canonDecision('no_match', { evidence: ['exception'] }) : null;
+        }
+        // #477 R9: expose the club's own-league starting baseline alongside the
+        // live match decision. It never overrides a matched live situation; it
+        // is the documented starting row for this club in its own division.
+        // Resolve from the dated snapshot when the caller supplies league
+        // evidence, otherwise from the embedded, dated leagueStarts records.
+        if (result.canon) {
+            let leagueEvidence = context && context.leagueEvidence ? context.leagueEvidence : null;
+            if (!leagueEvidence && CANON && Array.isArray(CANON.leagueStarts)) {
+                const clubId = String((context && (context.myTeamId || context.clubId)) || (snapshot && snapshot.myTeam) || '');
+                const clubName = context && context.clubName ? String(context.clubName) : null;
+                const found = CANON.leagueStarts.find(item =>
+                    (clubId && String(item.clubId || '') === clubId) || (clubName && item.club === clubName));
+                if (found) leagueEvidence = found.evidence;
+            }
+            if (leagueEvidence) {
+                result.canon.leagueStart = leagueStartingRecommendation(leagueEvidence);
+            }
         }
         return result;
     };
@@ -12273,6 +12306,49 @@ TacticalKnowledgePack.init();
             && canon.status === 'matched' && canon.vector && typeof canon.vector === 'object';
     }
 
+    // #477 NEW-P1-1: a resolved SLF addition is actionable but is NOT a
+    // manual row. It names an eligible role whose preset realizes it.
+    function isAdditionCanon(canon) {
+        return !!canon && canon.schema === 'slf_canon_decision_v1'
+            && canon.status === 'addition' && canon.actionable === true;
+    }
+
+    function additionEligibleRole(canon) {
+        if (!canon || canon.status !== 'addition') return null;
+        if (typeof canon.eligibleRole === 'string' && canon.eligibleRole) return canon.eligibleRole;
+        if (Array.isArray(canon.eligibleRoles)) {
+            const role = canon.eligibleRoles.find(item => typeof item === 'string' && item);
+            if (role) return role;
+        }
+        return null;
+    }
+
+    // The addition's eligible preset becomes the base vector. It is never a
+    // manual row: the six manual settings come from the preset controls.
+    function resolveAdditionBase(canon) {
+        const presetId = additionEligibleRole(canon);
+        if (!presetId) return null;
+        if (registry.presets && hasOwn(registry.presets, presetId) && registry.presets[presetId]) {
+            return {
+                base: `preset:${presetId}`,
+                presetId,
+                vector: normalizeBaseVector(registry.presets[presetId]),
+                fromCurrent: false
+            };
+        }
+        return null;
+    }
+
+    function canonAdditionReference(canon) {
+        const additions = Array.isArray(canon.additions) ? canon.additions : [];
+        const names = additions
+            .map(item => (item && (item.situation || item.id)) || '')
+            .filter(Boolean);
+        const label = names.length ? names.join(', ') : 'дополнение SLF';
+        const role = additionEligibleRole(canon);
+        return `Дополнение SLF: ${label} — пресет ${role || '—'}`;
+    }
+
     function canonSettingWord(canon, key, fallback) {
         const text = canon && canon.settingText && typeof canon.settingText === 'object' ? canon.settingText : null;
         return text && text[key] ? text[key] : fallback;
@@ -12351,11 +12427,13 @@ TacticalKnowledgePack.init();
         const etalon = result?.etalon || null;
         const canon = result?.canon || null;
         const canonMatched = isMatchedCanon(canon);
+        const canonAddition = isAdditionCanon(canon);
 
-        // #477 P1-2: a canon decision that exists but did not resolve a row is
-        // authoritative in the NEGATIVE — it must never fall through to a
-        // preset/etalon vector. Only canon == null keeps the legacy path.
-        if (canon && !canonMatched) {
+        // #477 P1-2: a canon decision that exists but did not resolve a row or
+        // an actionable addition is authoritative in the NEGATIVE — it must
+        // never fall through to a preset/etalon vector. Only canon == null
+        // keeps the legacy path.
+        if (canon && !canonMatched && !canonAddition) {
             return {
                 schema: VERSION,
                 vector: null,
@@ -12373,7 +12451,10 @@ TacticalKnowledgePack.init();
             };
         }
 
-        let baseInfo = resolveBase(snapshot, result);
+        // An actionable addition resolves its base to the eligible role's
+        // preset; anything else uses the preset/current resolution.
+        let baseInfo = canonAddition ? resolveAdditionBase(canon) : null;
+        if (!baseInfo) baseInfo = resolveBase(snapshot, result);
         // A resolved manual row is actionable even without a readable preset
         // or current tactic: only the six manual settings are known, the rest
         // stay absent (never invented).
@@ -12415,6 +12496,19 @@ TacticalKnowledgePack.init();
             notes = [canon.situationText].concat(canonSettingNotes(canon), CANON_LEGEND);
             insufficientData = [];
             source = `canon:${canon.id}${canon.variant ? '/' + canon.variant : ''}+base:${baseInfo.base}`;
+        } else if (canonAddition) {
+            // #477 NEW-P1-1: an actionable addition resolves to its eligible
+            // preset as the base. It is NOT a manual row (no «Канон №» line)
+            // and is never overlaid by the etalon; the reference names the
+            // addition and the preset that realizes it.
+            referenceLine = canonAdditionReference(canon);
+            const additionNames = Array.isArray(canon.additions)
+                ? canon.additions.map(item => (item && item.situation) || '').filter(Boolean)
+                : [];
+            notes = additionNames;
+            insufficientData = [];
+            strong = { defense: false, buildup: false, scenario: null, canon: false };
+            source = `canon:addition+base:${baseInfo.base}`;
         } else {
             if (!isInsufficientEtalon(etalon)) {
                 const strength = computeStrength(etalon);
@@ -13952,7 +14046,13 @@ const LLMSecondOpinion = {
             evidence: Array.isArray(canon.evidence) ? canon.evidence.filter(item => typeof item === 'string').slice(0, 20) : [],
             missingInputs: Array.isArray(canon.missingInputs) ? canon.missingInputs.filter(item => typeof item === 'string').slice(0, 10) : [],
             additions: Array.isArray(canon.additions) ? canon.additions.slice(0, 5) : [],
-            candidates
+            candidates,
+            // #477 R9: the club's dated own-league starting baseline travels
+            // with the decision so the advisor can present it as a baseline,
+            // never as a live-opponent observation.
+            leagueStart: canon.leagueStart && typeof canon.leagueStart === 'object'
+                ? Object.assign({}, canon.leagueStart)
+                : null
         };
     },
 
@@ -14018,10 +14118,23 @@ const LLMSecondOpinion = {
     // offered at all.
     validateSwitchAgainstCanon(preset, canon) {
         if (!canon) return { ok: true, legacy: true };
-        // An unresolved canon decision must not disable the ordinary preset
-        // switch: R8 forbids inventing a canon match, not using the legacy
-        // switch path. Only a MATCHED row constrains which preset is eligible.
-        if (canon.status !== 'matched') return { ok: true, unresolvedCanon: true };
+        // #477 NEW-P1-1/P1-2: an actionable addition is switchable ONLY
+        // through its eligible role preset. Any other preset is refused.
+        if (canon.status === 'addition') {
+            if (typeof preset !== 'string' || !preset) return { ok: false, reason: 'нет данных о пресетах' };
+            const eligible = typeof canon.eligibleRole === 'string' && canon.eligibleRole
+                ? canon.eligibleRole
+                : (Array.isArray(canon.eligibleRoles)
+                    ? canon.eligibleRoles.find(item => typeof item === 'string' && item)
+                    : null);
+            if (eligible && preset === eligible) return { ok: true };
+            return { ok: false, reason: `пресет ${preset} не реализует дополнение канона` };
+        }
+        // Any other non-matched decision (ambiguous/missing_inputs/no_match)
+        // is authoritative in the negative: no canon switch is offered.
+        if (canon.status !== 'matched') {
+            return { ok: false, reason: `канон не сопоставлен (${canon.status}) — переключение не предлагается` };
+        }
         const registry = this.__lastRegistry
             || (typeof window !== 'undefined' && window.SLFActivePresetRegistry ? window.SLFActivePresetRegistry : null)
             || (typeof SLFActivePresetRegistry !== 'undefined' ? SLFActivePresetRegistry : null);
@@ -14147,8 +14260,9 @@ const LLMSecondOpinion = {
         // constrains a canon-less request. A decision that resolves no row
         // (ambiguous/missing_inputs) cannot constrain an answer either, so it
         // leaves the last constraining decision in place for legacy callers
-        // that do not pass the payload.
-        if (!canon || canon.status === 'matched') this.__lastCanonDecision = canon || null;
+        // that do not pass the payload. An actionable addition IS constraining
+        // (only its eligible role is switchable), so it is stored too.
+        if (!canon || canon.status === 'matched' || canon.status === 'addition') this.__lastCanonDecision = canon || null;
         this.__lastRegistry = registry;
         if (canon) payload.canonReference = this.buildCanonReference(canon);
         return payload;
@@ -30243,15 +30357,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.383',
-        scriptVersion: '4.4.383',
+        version: '4.4.384',
+        scriptVersion: '4.4.384',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.383',
+        scriptVersion: '4.4.384',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

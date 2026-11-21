@@ -399,7 +399,18 @@
             }));
         }
         if (additions.length) {
-            return canonDecision('no_match', base);
+            // #477 NEW-P1-1: a resolved SLF addition is actionable on its own.
+            // It is NOT a manual row (id/vector stay null); the eligible role
+            // names the preset that realizes it, and both the final-tactic and
+            // advisor seams treat this status as actionable.
+            const eligibleRoles = additions
+                .map(addition => addition && typeof addition.eligibleRole === 'string' ? addition.eligibleRole : '')
+                .filter(Boolean);
+            return canonDecision('addition', Object.assign(base, {
+                eligibleRole: eligibleRoles.length ? eligibleRoles[0] : null,
+                eligibleRoles,
+                actionable: true
+            }));
         }
         return canonDecision('missing_inputs', Object.assign(base, {
             missingInputs: ['relative_xi_or_situation']
@@ -424,7 +435,11 @@
         if (!evidence || typeof evidence !== 'object') return insufficient('missing_evidence');
         if (!evidence.club || !evidence.league) return insufficient('missing_club_or_league');
         if (!evidence.evidenceDate) return insufficient('missing_evidence_date');
-        if (evidence.season && evidence.expectedSeason && String(evidence.season) !== String(evidence.expectedSeason)) {
+        // #477 NEW-P2-1: BOTH season identifiers are required before any
+        // classification. A club/league/population/strength zone with either
+        // season absent is insufficient — never an implicit row 1.
+        if (!evidence.season || !evidence.expectedSeason) return insufficient('missing_season');
+        if (String(evidence.season) !== String(evidence.expectedSeason)) {
             return insufficient('wrong_season');
         }
         const total = Number(evidence.totalTeams);
@@ -651,6 +666,24 @@
             result.canon = computeCanon(snapshot, context, result);
         } catch (error) {
             result.canon = CANON ? canonDecision('no_match', { evidence: ['exception'] }) : null;
+        }
+        // #477 R9: expose the club's own-league starting baseline alongside the
+        // live match decision. It never overrides a matched live situation; it
+        // is the documented starting row for this club in its own division.
+        // Resolve from the dated snapshot when the caller supplies league
+        // evidence, otherwise from the embedded, dated leagueStarts records.
+        if (result.canon) {
+            let leagueEvidence = context && context.leagueEvidence ? context.leagueEvidence : null;
+            if (!leagueEvidence && CANON && Array.isArray(CANON.leagueStarts)) {
+                const clubId = String((context && (context.myTeamId || context.clubId)) || (snapshot && snapshot.myTeam) || '');
+                const clubName = context && context.clubName ? String(context.clubName) : null;
+                const found = CANON.leagueStarts.find(item =>
+                    (clubId && String(item.clubId || '') === clubId) || (clubName && item.club === clubName));
+                if (found) leagueEvidence = found.evidence;
+            }
+            if (leagueEvidence) {
+                result.canon.leagueStart = leagueStartingRecommendation(leagueEvidence);
+            }
         }
         return result;
     };

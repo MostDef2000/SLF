@@ -239,6 +239,27 @@ def _valid_control_value(control, value):
     return low <= int(text) <= high
 
 
+def _clean_league_start(raw):
+    """Clean the #477 R9 own-league starting baseline (bounded, fail-closed)."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise AdvisorValidationError("canonReference.leagueStart must be an object or null")
+    row = raw.get("row")
+    if row is not None and (not isinstance(row, int) or isinstance(row, bool) or not 1 <= row <= 12):
+        raise AdvisorValidationError("canonReference.leagueStart.row must be 1..12 or null")
+    return {
+        "status": _clean_str(raw.get("status"), 40) or None,
+        "row": row,
+        "class": _clean_str(raw.get("class"), 40) or None,
+        "club": _clean_str(raw.get("club"), 120) or None,
+        "league": _clean_str(raw.get("league"), 120) or None,
+        "evidenceDate": _clean_str(raw.get("evidenceDate"), 40) or None,
+        "reason": _clean_str(raw.get("reason"), 120) or None,
+        "note": _clean_str(raw.get("note"), 300) or None,
+    }
+
+
 def _clean_canon_reference(raw):
     """Clean the #477 canon reference channel or raise AdvisorValidationError.
 
@@ -400,6 +421,7 @@ def _clean_canon_reference(raw):
         "missingInputs": bounded_list("missingInputs", MAX_CANON_MISSING_ITEMS, MAX_CANON_MISSING_CHARS),
         "additions": additions,
         "candidates": candidates,
+        "leagueStart": _clean_league_start(raw.get("leagueStart")),
     }
 
 
@@ -1035,6 +1057,22 @@ def _render_canon_reference(canon):
         lines.extend("- " + line for line in canon["legend"])
     if canon.get("evidence"):
         lines.append("Доказательства сопоставления: " + "; ".join(canon["evidence"]))
+    if canon.get("leagueStart"):
+        start = canon["leagueStart"]
+        desc = "Стартовая тактика по своей лиге"
+        if start.get("club"):
+            desc += ": " + start["club"]
+        if start.get("league"):
+            desc += " (" + start["league"] + ")"
+        if start.get("evidenceDate"):
+            desc += ", данные " + start["evidenceDate"]
+        if start.get("class"):
+            desc += ", класс " + start["class"]
+        if start.get("row") is not None:
+            desc += f", строка канона №{start['row']}"
+        elif start.get("status"):
+            desc += ", статус " + start["status"]
+        lines.append(desc + " — это базовый ориентир, не наблюдение за соперником в матче.")
     if canon.get("missingInputs"):
         lines.append("Не хватает данных: " + "; ".join(canon["missingInputs"]))
     if canon.get("additions"):
