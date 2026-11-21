@@ -453,11 +453,12 @@ def assert_fm2026_compact_recommendation(page: Page):
       };
     }""")
     assert structure["answer"], "LLM answer container missing"
-    # The stub returns an available answer with a preset -> the apply button
-    # renders with its data attributes (apply fires only on an explicit click).
-    assert structure["applyBtn"], f"apply button missing for available answer: {structure}"
-    assert structure["applyPreset"] == "Emery_BalancedBase_v11", structure
-    assert structure["applyAdvice"] == "e2e-advice-123", structure
+    # #477: with a matched canon situation, a switch to a preset that does not
+    # realize that row is not actionable. The answer must explain the refusal
+    # and must not expose the legacy apply button.
+    assert "Не применено" in (structure["answerText"] or ""), structure
+    assert "канона" in (structure["answerText"] or ""), structure
+    assert not structure["applyBtn"], f"non-canon switch must not be actionable: {structure}"
 
 
 def assert_pitch_background_static():
@@ -612,12 +613,15 @@ def assert_owned_live(page: Page):
     assert record["tacticalLab"]["assignment"]["experimentId"] == experiment_id
     assert record["tacticalLab"]["populationVersion"] == "slf_tactical_lab_561_p04"
 
-    # Ф2a (#441): the available advisor answer renders the one-click apply
-    # button carrying the preset + adviceId (apply fires only on an explicit
-    # click — never auto).
-    assert page.locator("#slf-llm-apply-btn").count() == 1
-    assert page.locator("#slf-llm-apply-btn").get_attribute("data-slf-llm-apply-preset") == "Emery_BalancedBase_v11"
-    assert page.locator("#slf-llm-apply-btn").get_attribute("data-slf-llm-apply-advice-id") == "e2e-advice-123"
+    # Ф2a (#441) + #477: the advisor answer is click-only. With a matched canon
+    # situation (row 8 in this fixture), a switch to a preset that does not
+    # realize that row is NOT actionable — the deterministic canon wins. The
+    # answer must say so and must not expose the legacy apply button.
+    assert page.locator("#slf-llm-second-opinion-answer").count() == 1
+    answer_text = page.locator("#slf-llm-second-opinion-answer").text_content() or ""
+    assert "Не применено" in answer_text, answer_text
+    assert "канона" in answer_text, answer_text
+    assert page.locator("#slf-llm-apply-btn").count() == 0
 
     page.evaluate("""
       const card = document.querySelector('.control_lineup[data-player="p-lw"]');

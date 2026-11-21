@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.377
+// @version      4.4.380
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.377',
-        scriptVersion: '4.4.377',
+        version: '4.4.380',
+        scriptVersion: '4.4.380',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.377',
+        scriptVersion: '4.4.380',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -13879,7 +13879,10 @@ const LLMSecondOpinion = {
     // offered at all.
     validateSwitchAgainstCanon(preset, canon) {
         if (!canon) return { ok: true, legacy: true };
-        if (canon.status !== 'matched') return { ok: false, reason: 'канон не определён — переключение по догадке не предлагается' };
+        // An unresolved canon decision must not disable the ordinary preset
+        // switch: R8 forbids inventing a canon match, not using the legacy
+        // switch path. Only a MATCHED row constrains which preset is eligible.
+        if (canon.status !== 'matched') return { ok: true, unresolvedCanon: true };
         const registry = this.__lastRegistry
             || (typeof window !== 'undefined' && window.SLFActivePresetRegistry ? window.SLFActivePresetRegistry : null)
             || (typeof SLFActivePresetRegistry !== 'undefined' ? SLFActivePresetRegistry : null);
@@ -13998,7 +14001,9 @@ const LLMSecondOpinion = {
         // field, appended only when the local matcher produced one. Legacy
         // (no canon) requests keep the exact legacy payload bytes.
         const canon = this.canonDecisionFrom(ruleDecision);
-        this.__lastCanonDecision = canon;
+        // #477: always refresh the decision slot, including to null. A stale
+        // canon from a previous hint must never constrain a later answer.
+        this.__lastCanonDecision = canon || null;
         this.__lastRegistry = registry;
         if (canon) payload.canonReference = this.buildCanonReference(canon);
         return payload;
@@ -30077,15 +30082,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.377',
-        scriptVersion: '4.4.377',
+        version: '4.4.380',
+        scriptVersion: '4.4.380',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.377',
+        scriptVersion: '4.4.380',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

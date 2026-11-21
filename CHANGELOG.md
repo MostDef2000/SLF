@@ -1,5 +1,68 @@
 # Changelog
 
+## 4.4.380
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/runtime-reachability-review-v1.json
+
+Approved base commit:
+- b0082f38dee22657a9fcd993c877e47030157b5e
+
+Approved commit:
+- d8d31bbd3986822d7035370928c4ffb8cebc0bee
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.379
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/runtime-reachability-review-v1.json
+
+Approved base commit:
+- b0082f38dee22657a9fcd993c877e47030157b5e
+
+Approved commit:
+- d8d31bbd3986822d7035370928c4ffb8cebc0bee
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.378
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/runtime-reachability-review-v1.json
+
+Approved base commit:
+- b0082f38dee22657a9fcd993c877e47030157b5e
+
+Approved commit:
+- d8d31bbd3986822d7035370928c4ffb8cebc0bee
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.377
 
 ### Automatic latest-only build

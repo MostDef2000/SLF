@@ -168,7 +168,10 @@ const LLMSecondOpinion = {
     // offered at all.
     validateSwitchAgainstCanon(preset, canon) {
         if (!canon) return { ok: true, legacy: true };
-        if (canon.status !== 'matched') return { ok: false, reason: 'канон не определён — переключение по догадке не предлагается' };
+        // An unresolved canon decision must not disable the ordinary preset
+        // switch: R8 forbids inventing a canon match, not using the legacy
+        // switch path. Only a MATCHED row constrains which preset is eligible.
+        if (canon.status !== 'matched') return { ok: true, unresolvedCanon: true };
         const registry = this.__lastRegistry
             || (typeof window !== 'undefined' && window.SLFActivePresetRegistry ? window.SLFActivePresetRegistry : null)
             || (typeof SLFActivePresetRegistry !== 'undefined' ? SLFActivePresetRegistry : null);
@@ -287,7 +290,9 @@ const LLMSecondOpinion = {
         // field, appended only when the local matcher produced one. Legacy
         // (no canon) requests keep the exact legacy payload bytes.
         const canon = this.canonDecisionFrom(ruleDecision);
-        this.__lastCanonDecision = canon;
+        // #477: always refresh the decision slot, including to null. A stale
+        // canon from a previous hint must never constrain a later answer.
+        this.__lastCanonDecision = canon || null;
         this.__lastRegistry = registry;
         if (canon) payload.canonReference = this.buildCanonReference(canon);
         return payload;
