@@ -202,6 +202,16 @@ function canonicalLanes(priority) {
     assert.notEqual(absentPressure.canon.id, 7, 'absent pressure observation is not row 7 (low pressure)');
     assert.equal(absentPressure.canon.vector, null, 'no resolved tactic without evidence');
     assert.equal(absentPressure.finalTactic.vector, null, 'no resolved final vector without evidence');
+
+    // An explicitly supplied empty evidence bundle is authoritative: the
+    // caller asked the canon matcher, there was just nothing to observe, so
+    // fallback page tags must NOT resurrect a canon row.
+    const explicitEmpty = advise({}, { tags: ['opponent_low_block'] });
+    assert.equal(explicitEmpty.canon.status, 'missing_inputs',
+        'explicit empty canonEvidence + low-block page tag → missing inputs');
+    assert.notEqual(explicitEmpty.canon.id, 8, 'explicit empty evidence never resolves row 8 from a page tag');
+    assert.equal(explicitEmpty.canon.vector, null, 'explicit empty evidence yields no vector');
+    assert.equal(explicitEmpty.finalTactic.vector, null, 'explicit empty evidence yields no final vector');
 }
 
 // ===========================================================================

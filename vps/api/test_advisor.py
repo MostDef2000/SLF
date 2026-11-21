@@ -3509,6 +3509,80 @@ class AdvisorCanonReferenceTestCase(unittest.TestCase):
         self.assertEqual(validated["changes"],
                          [{"control": "build_type", "value": "3"}])
 
+    def addition_reference(self):
+        return {
+            "version": "canon-2026-11-21",
+            "title": "Шпаргалка: построение атаки",
+            "status": "addition",
+            "matchedId": None,
+            "situationText": None,
+            "vector": None,
+            "evidence": ["pressFatigue"],
+            "missingInputs": [],
+            "additions": [{
+                "id": "press_cooldown",
+                "situation": "Прессинг-усталость",
+                "provenance": "SLF",
+                "eligibleRole": "Guardiola_PressCooldown_v11",
+                "entryConditions": ["press_fatigue", "no_urgent_chase"],
+            }],
+            "candidates": [],
+        }
+
+    def test_addition_canon_reference_is_accepted(self):
+        # The matcher emits status "addition" for an actionable press_cooldown
+        # addition; the API must accept it instead of rejecting every such
+        # request with HTTP 400.
+        canon = self.wire_context(
+            dict(self.valid_body(), canonReference=self.addition_reference())
+        )["canonReference"]
+        self.assertEqual(canon["status"], "addition")
+        self.assertIsNone(canon["matchedId"])
+        self.assertIsNone(canon["vector"])
+        self.assertEqual(canon["additions"], [{
+            "id": "press_cooldown",
+            "situation": "Прессинг-усталость",
+            "provenance": "SLF",
+            "eligibleRole": "Guardiola_PressCooldown_v11",
+            "entryConditions": ["press_fatigue", "no_urgent_chase"],
+        }])
+
+    def test_addition_allows_switch_to_eligible_role_and_adjust(self):
+        canon = self.wire_context(
+            dict(self.valid_body(), canonReference=self.addition_reference())
+        )["canonReference"]
+        catalog_ids = {
+            "Emery_BalancedBase_v11",
+            "Pep_BoxControl_bal2",
+            "Guardiola_PressCooldown_v11",
+        }
+        # A switch to the addition's eligible role preset is actionable.
+        validated = self.advisor.validate_answer({
+            "mode": "switch",
+            "preset": "Guardiola_PressCooldown_v11",
+            "confidence": "high",
+            "reason": "реализует дополнение канона",
+        }, catalog_ids, canon=canon)
+        self.assertEqual(validated["mode"], "switch")
+        self.assertEqual(validated["preset"], "Guardiola_PressCooldown_v11")
+        # Any other preset is refused: only the eligible role realizes it.
+        with self.assertRaises(ValueError):
+            self.advisor.validate_answer({
+                "mode": "switch",
+                "preset": "Emery_BalancedBase_v11",
+                "confidence": "high",
+                "reason": "по догадке",
+            }, catalog_ids, canon=canon)
+        # An addition carries no manual vector, so a well-formed adjust passes.
+        adjusted = self.advisor.validate_answer({
+            "mode": "adjust",
+            "changes": [{"control": "press_intense", "value": "1"}],
+            "confidence": "medium",
+            "reason": "в духе дополнения",
+        }, catalog_ids, canon=canon)
+        self.assertEqual(adjusted["changes"],
+                         [{"control": "press_intense", "value": "1"}])
+
     def test_switch_is_refused_when_canon_is_unresolved(self):
         canon = self.wire_context(dict(
             self.valid_body(),

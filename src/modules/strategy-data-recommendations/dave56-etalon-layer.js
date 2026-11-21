@@ -234,8 +234,10 @@
         // When the caller supplies the structured evidence bundle it is the
         // authoritative observation set; page tags are only a fallback for
         // callers that do not (they must never add a competing canon trigger
-        // to an explicitly stated situation).
-        const explicit = rawEvidence && Object.keys(rawEvidence).length > 0;
+        // to an explicitly stated situation). An explicitly supplied empty
+        // bundle (canonEvidence: {}) is still authoritative — presence of the
+        // object, not its key count, decides.
+        const explicit = rawEvidence !== null && typeof rawEvidence === 'object';
         const ev = rawEvidence || {};
         const tag = name => !explicit && has(ctx.tags, name);
         const flag = (name, tagName) => explicit ? ev[name] === true : (tag(tagName || name) || ev[name] === true);

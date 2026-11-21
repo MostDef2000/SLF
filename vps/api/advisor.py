@@ -89,7 +89,7 @@ MAX_CANON_ADDITIONS = 5
 # advisor can weigh them without receiving the full 12-row catalog.
 MAX_CANON_CANDIDATES = 12
 MAX_CANON_CANDIDATE_CHARS = 200
-CANON_STATUSES = ("matched", "ambiguous", "missing_inputs", "no_match")
+CANON_STATUSES = ("matched", "ambiguous", "missing_inputs", "no_match", "addition")
 # The six manual settings: an adjust that touches one of these must move it TO
 # the matched row's value (client validation stays authoritative per plan §6).
 CANON_MANUAL_KEYS = ("build_type", "build_temp", "build_long", "build_fast", "style")
@@ -1429,6 +1429,28 @@ def _validate_changes(raw):
     return changes
 
 
+def _canon_eligible_roles(canon):
+    """Preset ids that can realize an actionable canon addition.
+
+    The client matcher emits an "addition" decision with the eligible role on
+    each addition (and, defensively, on the decision itself); the server
+    derives the switchable preset set from both shapes.
+    """
+    roles = []
+    for key in ("eligibleRole", "eligibleRoles"):
+        value = canon.get(key)
+        if isinstance(value, str):
+            value = [value]
+        if isinstance(value, list):
+            roles.extend(role for role in value if isinstance(role, str) and role)
+    for addition in canon.get("additions") or []:
+        if isinstance(addition, dict):
+            role = addition.get("eligibleRole")
+            if isinstance(role, str) and role:
+                roles.append(role)
+    return roles
+
+
 def validate_answer(obj, catalog_ids, canon=None):
     """Validate a model answer; return a normalized mode payload.
 
@@ -1441,8 +1463,10 @@ def validate_answer(obj, catalog_ids, canon=None):
 
     #477 defense-in-depth: when a canon reference is present, an adjust that
     touches a manual control must move it TO the matched row's value, and a
-    switch is refused unless the canon row is matched. Client validation stays
-    authoritative; the server never trusts the model more than the client.
+    switch is refused unless the canon row is matched (or, for an actionable
+    addition, unless the preset is the addition's eligible role). Client
+    validation stays authoritative; the server never trusts the model more
+    than the client.
 
     Returns {"mode","preset","changes","confidence","reason"} or raises
     ValueError with corrective feedback.
@@ -1458,14 +1482,22 @@ def validate_answer(obj, catalog_ids, canon=None):
         preset = obj.get("preset")
         if not isinstance(preset, str) or preset not in catalog_ids:
             raise ValueError(f"preset '{preset}' отсутствует в каталоге; выбери id строго из каталога")
-        if canon is not None and canon.get("status") != "matched":
-            raise ValueError(
-                "канон не определён — переключение по догадке не предлагается")
+        if canon is not None:
+            status = canon.get("status")
+            if status == "addition":
+                # #477: an actionable addition is switchable ONLY through its
+                # eligible role preset; any other preset is refused.
+                if preset not in _canon_eligible_roles(canon):
+                    raise ValueError(
+                        f"пресет {preset} не реализует дополнение канона")
+            elif status != "matched":
+                raise ValueError(
+                    "канон не определён — переключение по догадке не предлагается")
         changes = None
     else:
         preset = None
         changes = _validate_changes(obj.get("changes"))
-        if canon is not None and canon.get("status") == "matched":
+        if canon is not None and canon.get("status") in ("matched", "addition"):
             vector = canon.get("vector") or {}
             for change in changes:
                 control = change["control"]

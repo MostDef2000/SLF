@@ -1,5 +1,63 @@
 # Changelog
 
+## 4.4.386
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- src/modules/strategy-data-recommendations/final-tactic-merge-layer.js
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- tools/test-477-canon-situation-presets.mjs
+- vps/api/advisor.py
+
+Approved base commit:
+- a7f459f68ac34499b7fc67ecf8402eb0af30e177
+
+Approved commit:
+- a543a87b25aef4b37f9476301c4d1bc03b2f3dea
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.385
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- src/modules/strategy-data-recommendations/final-tactic-merge-layer.js
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- tools/test-477-canon-situation-presets.mjs
+- vps/api/advisor.py
+
+Approved base commit:
+- a7f459f68ac34499b7fc67ecf8402eb0af30e177
+
+Approved commit:
+- a543a87b25aef4b37f9476301c4d1bc03b2f3dea
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.384
 
 ### Automatic latest-only build

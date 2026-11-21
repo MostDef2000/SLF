@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.384
+// @version      4.4.386
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.384',
-        scriptVersion: '4.4.384',
+        version: '4.4.386',
+        scriptVersion: '4.4.386',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.384',
+        scriptVersion: '4.4.386',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -11616,8 +11616,10 @@ TacticalKnowledgePack.init();
         // When the caller supplies the structured evidence bundle it is the
         // authoritative observation set; page tags are only a fallback for
         // callers that do not (they must never add a competing canon trigger
-        // to an explicitly stated situation).
-        const explicit = rawEvidence && Object.keys(rawEvidence).length > 0;
+        // to an explicitly stated situation). An explicitly supplied empty
+        // bundle (canonEvidence: {}) is still authoritative — presence of the
+        // object, not its key count, decides.
+        const explicit = rawEvidence !== null && typeof rawEvidence === 'object';
         const ev = rawEvidence || {};
         const tag = name => !explicit && has(ctx.tags, name);
         const flag = (name, tagName) => explicit ? ev[name] === true : (tag(tagName || name) || ev[name] === true);
@@ -30357,15 +30359,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.384',
-        scriptVersion: '4.4.384',
+        version: '4.4.386',
+        scriptVersion: '4.4.386',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.384',
+        scriptVersion: '4.4.386',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT
