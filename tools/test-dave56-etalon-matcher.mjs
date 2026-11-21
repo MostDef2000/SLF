@@ -286,10 +286,12 @@ for (const testCase of CASES) {
   // THE hard invariant: result.action is byte-identical to the same chain
   // without the etalon trio (no mutation, no added keys, same shape).
   jeq(result.action, baseResult.action, `${testCase.name}: result.action untouched by the etalon layer`);
+  // #477: the canon matcher legitimately adds result.canon alongside etalon.
+  // Both are additive decision channels; neither may mutate the base result.
   jeq(
-    Object.keys(result).filter(key => key !== 'etalon').sort(),
+    Object.keys(result).filter(key => key !== 'etalon' && key !== 'canon').sort(),
     Object.keys(baseResult).sort(),
-    `${testCase.name}: etalon layer adds only the result.etalon key`
+    `${testCase.name}: etalon/canon layers add only additive decision keys`
   );
   // b10 is never matched anywhere; it is reported as insufficient data.
   assert.notEqual(result.etalon.situationIds.buildup, 'b10', `${testCase.name}: b10 is never matched`);
