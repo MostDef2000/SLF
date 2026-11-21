@@ -108,6 +108,113 @@
             b12: { id: 'b12', label: 'Самолёт/много атаки', lanes: 'фланги / фланг+центр', words: { build_type: ['Смешанный', 'выносы'], build_temp: ['Высокий'], build_long: ['Редко', 'умеренно'], build_fast: ['Редко'], style: ['Обычный', 'атака'] } }
         },
 
+        // Issue #477 — the developer manual («Шпаргалка: построение атаки»)
+        // is the canon authority for the hint. The 12 rows and the eight
+        // legend lines below are transcribed verbatim from
+        // shared/slf-developer-tactics-analysis.md:8-33; the concrete numeric
+        // realizations (including the row 4 flank and row 6 relative-strength
+        // variants) come from shared/slf-manual-vs-teams.md:11-26. The
+        // numbers make a row actionable; they do not turn the manual's
+        // permitted ranges into new claims. Rows 2 and 7 intentionally share
+        // a vector and stay distinct situations; rows 6-stronger and 12
+        // share a vector too. Identity is never the vector.
+        canon: {
+            schema: 'slf_canon_manual_v1',
+            version: 'slf_canon_manual_v1_2026_11_21',
+            title: 'Шпаргалка: построение атаки',
+            subtitle: 'Быстрые настройки перед матчем',
+            source: [
+                'shared/slf-developer-tactics-analysis.md:8-33',
+                'shared/slf-manual-vs-teams.md:11-26',
+                'shared/slf-canon-hints-integration.md'
+            ],
+            controlOrder: ['priority', 'build_type', 'build_temp', 'build_long', 'build_fast', 'style'],
+            settingsTextOrder: ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'],
+            legend: [
+                'Фланги — надёжнее и проще',
+                'Центр — опаснее, но рискованнее',
+                'Позиционный выход — сильнее, но опаснее',
+                'Выносы — проще, но тупее',
+                'Высокий темп — быстрее к воротам, больше брака',
+                'Диагонали / в касание — хороши против пассивного соперника',
+                'Стиль атака — для дожима',
+                'Стиль защита — для выживания и удержания'
+            ],
+            // settingText repeats the manual's verbatim Russian words for the
+            // six manual columns (build_type = «Выход из обороны», build_temp =
+            // «Темп», build_long = «Диагонали», build_fast = «В касание»,
+            // style = «Стиль»). A slash pair is ONE column's permitted range and
+            // is rendered as ' / ' exactly as transcribed from
+            // shared/slf-developer-tactics-analysis.md:10-23. The numbers above
+            // make a row actionable; these words keep the hint honest.
+            rows: [
+                { id: 1, situation: 'Равный матч', priority: '000', vector: { build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Умеренно', build_fast: 'Умеренно', style: 'Обычный' } },
+                { id: 2, situation: 'Ты фаворит', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Средний', build_long: 'Умеренно', build_fast: 'Умеренно / часто', style: 'Обычный / атака' } },
+                { id: 3, situation: 'Ты андердог', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '2' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Редко', build_fast: 'Редко', style: 'Защита / обычный' } },
+                {
+                    id: 4, situation: 'Нужно забить',
+                    settingText: { build_type: 'Позиционный', build_temp: 'Средний / высокий', build_long: 'Умеренно', build_fast: 'Умеренно / часто', style: 'Атака / атака+' },
+                    variants: [
+                        { id: 'left', label: 'левая сторона', priority: '110', vector: { build_type: '3', build_temp: '3', build_long: '2', build_fast: '2', style: '4' } },
+                        { id: 'right', label: 'правая сторона', priority: '011', vector: { build_type: '3', build_temp: '3', build_long: '2', build_fast: '2', style: '4' } }
+                    ]
+                },
+                { id: 5, situation: 'Нужно удержать', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '1' }, settingText: { build_type: 'Смешанный / выносы', build_temp: 'Низкий / средний', build_long: 'Редко', build_fast: 'Редко / умеренно', style: 'Защита / защита+' } },
+                {
+                    id: 6, situation: 'Соперник сильно прессингует',
+                    settingText: { build_type: 'Смешанный', build_temp: 'Средний / высокий', build_long: 'Редко', build_fast: 'Редко', style: 'По силе команд' },
+                    variants: [
+                        { id: 'weaker', label: 'наша XI слабее', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '2' } },
+                        { id: 'equal', label: 'XI равны', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '3' } },
+                        { id: 'stronger', label: 'наша XI сильнее', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '4' } }
+                    ]
+                },
+                { id: 7, situation: 'Соперник почти не прессингует', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Низкий / средний', build_long: 'Умеренно / часто', build_fast: 'Умеренно / часто', style: 'Обычный / атака' } },
+                { id: 8, situation: 'Взлом автобуса', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '3', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Низкий / средний', build_long: 'Умеренно / часто', build_fast: 'Умеренно / часто', style: 'Обычный / атака' } },
+                { id: 9, situation: 'Хаотичный матч', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '3' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Редко', build_fast: 'Редко', style: 'Обычный' } },
+                { id: 10, situation: 'Игра через «столба»', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '3' }, settingText: { build_type: 'Выносы', build_temp: 'Средний', build_long: 'Редко', build_fast: 'Редко', style: 'Обычный / защита' } },
+                { id: 11, situation: 'Схема контроля', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Низкий', build_long: 'Умеренно', build_fast: 'Умеренно / часто', style: 'Обычный' } },
+                { id: 12, situation: 'Самолёт / много атаки', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '4' }, settingText: { build_type: 'Смешанный / выносы', build_temp: 'Высокий', build_long: 'Редко / умеренно', build_fast: 'Редко', style: 'Обычный / атака' } }
+            ],
+            // Data-backed SLF additions live in their own namespace: they are
+            // NOT screenshot rows and may never displace a resolved manual row.
+            additions: [
+                {
+                    id: 'press_cooldown', situation: 'Прессинг-усталость',
+                    provenance: 'SLF data-backed addition (not a screenshot row)',
+                    entryConditions: ['press_fatigue', 'no_urgent_chase'],
+                    eligibleRole: 'Guardiola_PressCooldown_v11'
+                }
+            ],
+            // Issue #477 R9. One documented own-league rule (owner decision
+            // #477 comment 7057658763): the STRENGTH zone decides a mixed
+            // club; the points-rank zone is confirmation only. Thresholds:
+            // favourite >= 75th strength percentile, underdog <= 25th,
+            // otherwise middle. Missing/incomparable/wrong-season evidence is
+            // insufficient — never row 1. Owner-internal rank is irrelevant.
+            leagueRule: {
+                primarySignal: 'strength_zone',
+                confirmationSignal: 'rank_zone',
+                favouriteMinPercentile: 75,
+                underdogMaxPercentile: 25,
+                mixedResolution: 'strength_zone',
+                note: 'Эйрбас last among the owner seven is not underdog evidence (#477 R9).'
+            },
+            // Dated snapshot validated 2026-11-21 from the read-only standings
+            // intake (source: slf.fm champ.php standings, GET-only). Only the
+            // classification-relevant fields are retained; the full league
+            // dump stays in the delivery evidence, not the userscript.
+            leagueStarts: [
+                { club: 'Эйрбас', league: 'Уэльса (Лига Севера)', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Эйрбас', league: 'Уэльса (Лига Севера)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 14, rank: 8, strengthRank: 5, strengthPercentile: 69.2, strengthZone: 'mid', rankZone: 'mid' } },
+                { club: 'Луч', league: 'России (Вторая Лига Б (Группа 4))', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Луч', league: 'России (Вторая Лига Б (Группа 4))', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 18, rank: 9, strengthRank: 6, strengthPercentile: 70.6, strengthZone: 'mid', rankZone: 'mid' } },
+                { club: 'Норт Дистрикт', league: 'Гонконга (Премьер-Лига)', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Норт Дистрикт', league: 'Гонконга (Премьер-Лига)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 10, rank: 5, strengthRank: 7, strengthPercentile: 33.3, strengthZone: 'mid', rankZone: 'mid' } },
+                { club: 'Пршибрам', league: 'Чехии (Фортуна лига)', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Пршибрам', league: 'Чехии (Фортуна лига)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 18, rank: 14, strengthRank: 13, strengthPercentile: 29.4, strengthZone: 'mid', rankZone: 'underdog' } },
+                { club: 'Честер', league: 'Англии (2-ая лига)', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Честер', league: 'Англии (2-ая лига)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 24, rank: 2, strengthRank: 8, strengthPercentile: 69.6, strengthZone: 'mid', rankZone: 'favourite' } },
+                { club: 'Каррарезе', league: 'Италии (Серия С1Б)', evidenceDate: '2026-11-21', row: 2, evidence: { club: 'Каррарезе', league: 'Италии (Серия С1Б)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 18, rank: 7, strengthRank: 4, strengthPercentile: 82.4, strengthZone: 'favourite', rankZone: 'mid' } },
+                { club: 'Боа', league: 'Бразилии (Серия Б)', evidenceDate: '2026-11-21', row: 2, evidence: { club: 'Боа', league: 'Бразилии (Серия Б)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 20, rank: 6, strengthRank: 4, strengthPercentile: 84.2, strengthZone: 'favourite', rankZone: 'mid' } }
+            ]
+        },
+
         // Score-play scenarios: deltas applied over the matched base
         // situations when the conditions hold. Deltas are numeric shifts
         // clamped to the domain of each control; override scenarios replace
