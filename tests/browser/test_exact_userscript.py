@@ -436,6 +436,24 @@ def assert_fm2026_compact_recommendation(page: Page):
     # the new primary entry — runs the fresh pipeline and renders the answer
     # container, which for an available advisor answer carrying a preset carries
     # the one-click apply button with its data attributes.
+    # #479 R1/NFR: the dedicated parse status must stay readable in the dark
+    # design — a long confirmation message must not be clipped or squeezed by
+    # the flex panel.
+    page.wait_for_selector("#slf-parser-status")
+    status_readability = page.locator("#slf-parser-status").evaluate(
+        """el => {
+            el.textContent = 'Результат отправлен ✓';
+            const style = getComputedStyle(el);
+            return {
+                height: el.getBoundingClientRect().height,
+                overflow: style.overflow,
+                clipped: el.scrollWidth > el.clientWidth + 1,
+            };
+        }"""
+    )
+    assert status_readability["height"] > 0, status_readability
+    assert status_readability["overflow"] != "hidden", status_readability
+    assert not status_readability["clipped"], status_readability
     page.locator("#slf-llm-second-opinion-btn").click()
     page.wait_for_function(
         "() => !!document.getElementById('slf-llm-second-opinion-answer')"
@@ -849,8 +867,16 @@ def assert_foreign_live(page: Page):
     assert not any("/api/match_snapshots_v2?mode=append" in row["url"] for row in rows), rows
 
 
+def tactic_state(page: Page):
+    return page.evaluate(
+        """() => Array.from(document.querySelectorAll('input[type="radio"]'))
+             .map(el => [el.name, el.value, el.checked])"""
+    )
+
+
 def assert_finished_match(page: Page):
     page.wait_for_selector("#slf-match-parser-panel")
+    tactics_before = tactic_state(page)
     page.get_by_role("button", name="Спарсить завершённый").click()
     page.wait_for_function(
         "() => window.__slfRequests.some(item => item.url.includes('/api/match_results_v2?mode=append'))"
@@ -866,6 +892,46 @@ def assert_finished_match(page: Page):
     assert "|2:1|" in records[0]["resultKey"]
     assert not any("/api/match_snapshots_v2?mode=append" in row["url"] for row in rows), rows
 
+    # #479 R1: the dedicated status element must confirm the finished-match
+    # parse. The shared #slf-parser-log is a single-line, often-overwritten
+    # channel, so a success line there is not a visible confirmation.
+    page.wait_for_function(
+        "() => (document.getElementById('slf-parser-status')?.textContent || '').includes('отправлен')",
+        timeout=5000,
+    )
+    status_text = page.locator("#slf-parser-status").text_content() or ""
+    assert "отправлен" in status_text, status_text
+    status_style = page.locator("#slf-parser-status").evaluate(
+        """el => {
+            const style = getComputedStyle(el);
+            return {
+                height: el.getBoundingClientRect().height,
+                overflow: style.overflow,
+                clipped: el.scrollWidth > el.clientWidth + 1,
+            };
+        }"""
+    )
+    assert status_style["height"] > 0, status_style
+    assert status_style["overflow"] != "hidden", status_style
+    assert not status_style["clipped"], status_style
+
+    # #479 R3: other writers own #slf-parser-log; they must not clobber the
+    # confirmation in the dedicated status element.
+    page.evaluate(
+        "() => { document.getElementById('slf-parser-log').textContent = '[00:00:00] другое событие'; }"
+    )
+    status_after_log_write = page.locator("#slf-parser-status").text_content() or ""
+    assert "отправлен" in status_after_log_write, status_after_log_write
+
+    # #479 R4: displaying the confirmation issues no extra request and does not
+    # mutate the tactic state.
+    request_count = len(request_rows(page))
+    page.wait_for_timeout(250)
+    assert len(request_rows(page)) == request_count, (
+        "status confirmation must not issue extra requests"
+    )
+    assert tactic_state(page) == tactics_before, "status confirmation must not mutate tactics"
+
 
 def assert_finished_ambiguous(page: Page):
     page.wait_for_selector("#slf-match-parser-panel")
@@ -880,6 +946,15 @@ def assert_finished_ambiguous(page: Page):
     log_text = page.locator("#slf-parser-log").text_content()
     assert "Ошибка отправки результата: missing_score" in log_text, log_text
     assert "Финальный результат отправлен" not in log_text, log_text
+    # #479 R2: a rejected send must also surface in the dedicated status
+    # element and name the error kind, with no success message.
+    page.wait_for_function(
+        "() => (document.getElementById('slf-parser-status')?.textContent || '').includes('missing_score')",
+        timeout=5000,
+    )
+    status_text = page.locator("#slf-parser-status").text_content() or ""
+    assert "missing_score" in status_text, status_text
+    assert "отправлен" not in status_text, status_text
     rows = request_rows(page)
     assert not any("/api/match_results_v2?mode=append" in row["url"] for row in rows), rows
 
