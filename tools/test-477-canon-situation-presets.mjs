@@ -379,6 +379,24 @@ function canonicalLanes(priority) {
     });
     assert.equal(emptyPercentile.status, 'insufficient', 'empty-string percentile → insufficient');
     assert.equal(emptyPercentile.row, null, 'empty-string percentile never defaults to row 3');
+
+    // Codex P2 (4652310201): when BOTH strengthZone and strengthPercentile are
+    // supplied they must agree. A declared zone contradicted by the percentile
+    // is conflicting evidence → insufficient, never a silent pick of the zone.
+    const conflicting = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation({
+        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27',
+        totalTeams: 14, strengthZone: 'favourite', strengthPercentile: 10
+    });
+    assert.equal(conflicting.status, 'insufficient', 'conflicting zone/percentile → insufficient');
+    assert.equal(conflicting.row, null, 'conflicting strength evidence never classifies a row');
+    assert.equal(conflicting.reason, 'conflicting_strength_evidence', 'conflict is named in the reason');
+    // Agreement still classifies.
+    const agreeing = sandbox.window.SLFDave56EtalonLayer.leagueStartingRecommendation({
+        club: 'Эйрбас', league: 'x', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27',
+        totalTeams: 14, strengthZone: 'favourite', strengthPercentile: 82
+    });
+    assert.equal(agreeing.status, 'classified', 'agreeing zone/percentile → classified');
+    assert.equal(agreeing.row, 2, 'agreeing favourite → row 2');
 }
 
 // ===========================================================================

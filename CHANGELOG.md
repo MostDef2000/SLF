@@ -1,5 +1,61 @@
 # Changelog
 
+## 4.4.388
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- tools/test-477-canon-situation-presets.mjs
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- a543a87b25aef4b37f9476301c4d1bc03b2f3dea
+
+Approved commit:
+- d3f4b6a19cd5ad783ad88cab2bc9f22d7d7ca18e
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.387
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- tools/test-477-canon-situation-presets.mjs
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- a543a87b25aef4b37f9476301c4d1bc03b2f3dea
+
+Approved commit:
+- d3f4b6a19cd5ad783ad88cab2bc9f22d7d7ca18e
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.386
 
 ### Automatic latest-only build

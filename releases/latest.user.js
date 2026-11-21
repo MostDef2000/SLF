@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.386
+// @version      4.4.388
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.386',
-        scriptVersion: '4.4.386',
+        version: '4.4.388',
+        scriptVersion: '4.4.388',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.386',
+        scriptVersion: '4.4.388',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -11050,23 +11050,22 @@ TacticalKnowledgePack.init();
 
         // Issue #477 — the developer manual («Шпаргалка: построение атаки»)
         // is the canon authority for the hint. The 12 rows and the eight
-        // legend lines below are transcribed verbatim from
-        // shared/slf-developer-tactics-analysis.md:8-33; the concrete numeric
+        // legend lines below are transcribed verbatim from the in-repo canon
+        // source specs/477-canon-situation-presets/canon-source.md (itself
+        // transcribed from the owner-provided screenshot). The concrete numeric
         // realizations (including the row 4 flank and row 6 relative-strength
-        // variants) come from shared/slf-manual-vs-teams.md:11-26. The
-        // numbers make a row actionable; they do not turn the manual's
-        // permitted ranges into new claims. Rows 2 and 7 intentionally share
-        // a vector and stay distinct situations; rows 6-stronger and 12
-        // share a vector too. Identity is never the vector.
+        // variants) are the selected settings recorded here; they make a row
+        // actionable without turning the manual's permitted ranges into new
+        // claims. Rows 2 and 7 intentionally share a vector and stay distinct
+        // situations; rows 6-stronger and 12 share a vector too. Identity is
+        // never the vector.
         canon: {
             schema: 'slf_canon_manual_v1',
             version: 'slf_canon_manual_v1_2026_11_21',
             title: 'Шпаргалка: построение атаки',
             subtitle: 'Быстрые настройки перед матчем',
             source: [
-                'shared/slf-developer-tactics-analysis.md:8-33',
-                'shared/slf-manual-vs-teams.md:11-26',
-                'shared/slf-canon-hints-integration.md'
+                'specs/477-canon-situation-presets/canon-source.md'
             ],
             controlOrder: ['priority', 'build_type', 'build_temp', 'build_long', 'build_fast', 'style'],
             settingsTextOrder: ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'],
@@ -11085,7 +11084,7 @@ TacticalKnowledgePack.init();
             // «Темп», build_long = «Диагонали», build_fast = «В касание»,
             // style = «Стиль»). A slash pair is ONE column's permitted range and
             // is rendered as ' / ' exactly as transcribed from
-            // shared/slf-developer-tactics-analysis.md:10-23. The numbers above
+            // specs/477-canon-situation-presets/canon-source.md. The numbers above
             // make a row actionable; these words keep the hint honest.
             rows: [
                 { id: 1, situation: 'Равный матч', priority: '000', vector: { build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Умеренно', build_fast: 'Умеренно', style: 'Обычный' } },
@@ -11836,6 +11835,17 @@ TacticalKnowledgePack.init();
         const percentile = (rawPercentile === null || rawPercentile === undefined || rawPercentile === '')
             ? null
             : Number(rawPercentile);
+        // #477 codex P2 (4652310201): when BOTH signals are supplied they must
+        // agree. A declared zone contradicted by the percentile is ambiguous
+        // evidence — derive the zone from the percentile and require it to
+        // match; a disagreement is insufficient, never a silent pick of one.
+        // When only one signal is present it is used as before.
+        if (strengthZone && Number.isFinite(percentile)) {
+            const derivedZone = leagueZoneFromPercentile(percentile, rule);
+            if (derivedZone && derivedZone !== strengthZone) {
+                return insufficient('conflicting_strength_evidence');
+            }
+        }
         if (!strengthZone) strengthZone = leagueZoneFromPercentile(percentile, rule);
         if (!strengthZone) return insufficient('missing_strength');
         const rankZone = LEAGUE_ZONES.includes(evidence.rankZone) ? evidence.rankZone : null;
@@ -30359,15 +30369,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.386',
-        scriptVersion: '4.4.386',
+        version: '4.4.388',
+        scriptVersion: '4.4.388',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.386',
+        scriptVersion: '4.4.388',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

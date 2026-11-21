@@ -454,6 +454,17 @@
         const percentile = (rawPercentile === null || rawPercentile === undefined || rawPercentile === '')
             ? null
             : Number(rawPercentile);
+        // #477 codex P2 (4652310201): when BOTH signals are supplied they must
+        // agree. A declared zone contradicted by the percentile is ambiguous
+        // evidence — derive the zone from the percentile and require it to
+        // match; a disagreement is insufficient, never a silent pick of one.
+        // When only one signal is present it is used as before.
+        if (strengthZone && Number.isFinite(percentile)) {
+            const derivedZone = leagueZoneFromPercentile(percentile, rule);
+            if (derivedZone && derivedZone !== strengthZone) {
+                return insufficient('conflicting_strength_evidence');
+            }
+        }
         if (!strengthZone) strengthZone = leagueZoneFromPercentile(percentile, rule);
         if (!strengthZone) return insufficient('missing_strength');
         const rankZone = LEAGUE_ZONES.includes(evidence.rankZone) ? evidence.rankZone : null;
