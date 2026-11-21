@@ -143,13 +143,16 @@ const BUTTON_RE = /<button id="slf-final-tactic-apply-btn" type="button" data-to
   const titleMatch = html.match(/Рекомендация:<\/b> ([^<]*)/);
   assert.ok(titleMatch, 'preset title present');
   assert.equal(titleMatch[1], 'Emery_BalancedBase_v11.', 'preset title = engine action preset');
-  assert.ok(html.includes('<div>Вектор: оборона линия/прессинг/ширина/интенс: 1/1/1/2 · построение выход/темп/диаг/касание: 1/1/1/1 · стиль: 1 · атака риск/дриблинг/навесы верхом/угловые/удары: 2/2/2/1/2 · фланги: Л+П</div>'),
-    'grouped vector line (оборона/построение/стиль/атака + фланги) — #405 F1: cross label = навесы верхом (C323)');
-  assert.ok(html.includes('<div>Δ: линия 3→1 · прессинг 3→1 · ширина 3→1 · интенс 4→2 · выход 3→1 · темп 3→1 · диаг 3→1 · касание 3→1 · стиль 4→1 · риск 3→2 · навесы верхом 3→2 · угловые 2→1 · фланги →left+right</div>'),
-    'Δ line over changed controls + priority vs current (dribble/shot equal under v12 → omitted by the renderer)');
-  assert.ok(html.includes('оборона/построение/стиль ← эталон d5+b5+s1'), 'provenance line: etalon blocks');
+  // #477: canon row 5 owns buildup/style/priority; defense and attack stay
+  // at the Emery base values (the manual prescribes only six settings).
+  assert.ok(html.includes('<div>Вектор: оборона линия/прессинг/ширина/интенс: 2/2/2/2 · построение выход/темп/диаг/касание: 1/2/1/1 · стиль: 1 · атака риск/дриблинг/навесы верхом/угловые/удары: 2/2/2/1/2 · фланги: Л+П</div>'),
+    'grouped vector line — #477 canon row 5 buildup/style + base defense/attack');
+  assert.ok(html.includes('<div>Δ: линия 3→2 · прессинг 3→2 · ширина 3→2 · интенс 4→2 · выход 3→1 · темп 3→2 · диаг 3→1 · касание 3→1 · стиль 4→1 · риск 3→2 · навесы верхом 3→2 · угловые 2→1 · фланги →left+right</div>'),
+    'Δ line over changed controls + priority vs current (#477 canon row 5 + base defense/attack)');
+  assert.ok(html.includes('построение/стиль ← канон row5'), 'provenance line: canon row 5 owns buildup/style');
   assert.ok(html.includes('атака ← пресет Emery_BalancedBase_v11'), 'provenance line: attack from preset');
-  assert.ok(html.includes('<div style="opacity:.9;">Совет: атаковать фланг, где соперник не играет</div>'), 'scenario advice note rendered');
+  // #477: a matched canon row owns the recommendation; etalon scenario notes
+  // are not mixed into it. The canon situation text rides in referenceLine.
   const button = html.match(BUTTON_RE);
   assert.ok(button, '#slf-final-tactic-apply-btn present with data-token');
   assert.ok(button[1].length > 0, 'data-token is non-empty');
@@ -160,15 +163,15 @@ const BUTTON_RE = /<button id="slf-final-tactic-apply-btn" type="button" data-to
   jeq(STATE.finalTacticRecommendation.ids, ['d5', 'b5', 's1']);
   const recVector = STATE.finalTacticRecommendation.vector;
   jeq(recVector, {
-    def_line: '1', press_line: '1', def_width: '1', press_intense: '2',
-    build_type: '1', build_temp: '1', build_long: '1', build_fast: '1', style: '1',
+    def_line: '2', press_line: '2', def_width: '2', press_intense: '2',
+    build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '1',
     pass_risk: '2', dribble: '2', cross: '2', corner: '1', shot: '2',
     priority: ['left', 'right']
-  }, 'remembered vector is the full MERGED string vector');
-  assert.equal(recVector.def_line, '1', 'merged vector: etalon defense value as STRING');
+  }, 'remembered vector is the full canon-first MERGED string vector');
+  assert.equal(recVector.def_line, '2', 'merged vector: base defense value as STRING');
   assert.equal(recVector.pass_risk, '2', 'merged vector: attack from the preset');
   jeq(recVector.priority, ['left', 'right'], 'merged vector carries etalon priority lanes');
-  assert.equal(STATE.finalTacticRecommendation.source, 'merged:etalon:d5+b5+s1+presets:Emery_BalancedBase_v11', 'rec.source names etalon ids + preset');
+  assert.equal(STATE.finalTacticRecommendation.source, 'canon:5+base:preset:Emery_BalancedBase_v11', 'rec.source names canon row + preset');
   assert.equal(html.includes('<b style="color:#75ff75;">Действие:</b>'), false, 'legacy «Действие» row replaced by the merged block');
   assert.equal(html.includes('Эталон (Dave 5.6)'), false, 'legacy etalon-only block markup is gone');
   assert.equal(html.includes('slf-etalon-apply-btn'), false, 'legacy #slf-etalon-apply-btn is gone');
@@ -198,8 +201,8 @@ const BUTTON_RE = /<button id="slf-final-tactic-apply-btn" type="button" data-to
 // --- (3) already-applied on the merged vector ---------------------------------
 {
   currentTactic = {
-    def_line: '1', press_line: '1', def_width: '1', press_intense: '2',
-    build_type: '1', build_temp: '1', build_long: '1', build_fast: '1', style: '1',
+    def_line: '2', press_line: '2', def_width: '2', press_intense: '2',
+    build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '1',
     pass_risk: '2', dribble: '2', cross: '2', corner: '1', shot: '2',
     priority: ['left', 'right']
   };

@@ -1,5 +1,36 @@
 # Changelog
 
+## 4.4.381
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- tests/browser/artifacts/fm2026-compact-recommendation.png
+- tests/browser/artifacts/fm2026-compact-recommendation.zip
+- tests/browser/artifacts/owned-live.png
+- tests/browser/artifacts/owned-live.zip
+- tests/browser/test_exact_userscript.py
+- tools/test-dave56-etalon-matcher.mjs
+
+Approved base commit:
+- d8d31bbd3986822d7035370928c4ffb8cebc0bee
+
+Approved commit:
+- 45ed943ddbd7e87acbd7fc45540f4c180b7bbb8d
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.380
 
 ### Automatic latest-only build
