@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.389
+// @version      4.4.388
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.389',
-        scriptVersion: '4.4.389',
+        version: '4.4.388',
+        scriptVersion: '4.4.388',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.389',
+        scriptVersion: '4.4.388',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -12671,12 +12671,8 @@ TacticalKnowledgePack.init();
             parseBtn.onclick = () => {
                 const snapshot = SnapshotEngine.build();
                 void SnapshotEngine.sendMatchResult(snapshot)
-                    .then(() => {
-                        this.updateParserStatus('Результат отправлен ✓');
-                        this.addParserLog('Финальный результат отправлен');
-                    })
+                    .then(() => this.addParserLog('Финальный результат отправлен'))
                     .catch(error => {
-                        this.updateParserStatus(`Ошибка: ${error?.kind || 'unknown'}`);
                         this.addParserLog(`Ошибка отправки результата: ${error?.kind || 'unknown'}`);
                         console.warn('[SLF API] final result send error', error);
                     });
@@ -12725,7 +12721,7 @@ TacticalKnowledgePack.init();
             const statusBox = document.createElement('div');
             statusBox.id = 'slf-parser-status';
             statusBox.textContent = 'ожидание';
-            statusBox.style.cssText = 'color:#9f9;font-size:12px;white-space:nowrap;flex:0 0 auto;overflow:visible;';
+            statusBox.style.cssText = 'color:#9f9;font-size:12px;';
 
             const recBox = document.createElement('div');
 recBox.id = 'slf-parser-recommendation';
@@ -30373,15 +30369,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.389',
-        scriptVersion: '4.4.389',
+        version: '4.4.388',
+        scriptVersion: '4.4.388',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.389',
+        scriptVersion: '4.4.388',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

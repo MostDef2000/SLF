@@ -1,53 +1,5 @@
 # Changelog
 
-## 4.4.389
-
-### Automatic latest-only build
-- Built deterministic latest-only artifacts from the approved source commit.
-
-Changed files:
-- CHANGELOG.md
-- data/audit/runtime-reachability-review-v1.json
-- data/tactics/active-preset-inventory-v3.json
-- data/version.json
-- releases/latest.meta.js
-- releases/latest.user.js
-- specs/477-canon-situation-presets/canon-source.md
-- specs/477-canon-situation-presets/plan.md
-- specs/477-canon-situation-presets/spec.md
-- specs/477-canon-situation-presets/tasks.md
-- src/modules/strategy-data-recommendations/dave56-etalon-data.js
-- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
-- src/modules/strategy-data-recommendations/final-tactic-merge-layer.js
-- src/modules/strategy-data-recommendations/llm-second-opinion.js
-- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
-- src/modules/tactics-presets/active-preset-registry.js
-- tests/browser/artifacts/fm2026-compact-recommendation.png
-- tests/browser/artifacts/fm2026-compact-recommendation.zip
-- tests/browser/artifacts/owned-live.png
-- tests/browser/artifacts/owned-live.zip
-- tests/browser/test_exact_userscript.py
-- tools/test-477-canon-situation-presets.mjs
-- tools/test-dave56-etalon-apply-contract.mjs
-- tools/test-dave56-etalon-matcher.mjs
-- tools/test-dave56-etalon-panel.mjs
-- tools/test-final-tactic-merge.mjs
-- vps/api/advisor.py
-- vps/api/test_advisor.py
-
-Approved base commit:
-- 78bda2bf54eb59157f78c7bdfa4632cab9cb1323
-
-Approved commit:
-- 1ff8489a3d8c057a885f30e2660330009b412e78
-
-Compatibility / storage:
-- Cache/schema/storage keys changed: NO
-- Bundle-order changes needed: NO
-
-Safety notes:
-- Generated artifacts are workflow outputs and must not be edited manually.
-
 ## 4.4.388
 
 ### Automatic latest-only build
