@@ -30,13 +30,21 @@ const SLFTeam4FormSavedChoiceNotice = (() => {
         document.head.appendChild(style);
     }
 
-    function parseSavedChoiceState(html) {
-        const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    function readChoiceDocument(doc) {
         const expireBox = doc.querySelector('#player_form #coach_set .coach_expire');
         const expireNode = expireBox?.querySelector('span[data-expire]') || expireBox?.querySelector('span');
         const checked = [...doc.querySelectorAll('#player_form input.coachd:checked')];
         const sourceText = expireNode?.textContent?.replace(/\s+/g, ' ').trim() || expireBox?.textContent?.replace(/\s+/g, ' ').trim() || '';
-        return { savedUntil: sourceText.match(/\b\d{2}[-./]\d{2}[-./]\d{4}\b/)?.[0] || '', checkedCount: checked.length };
+        return {
+            savedUntil: sourceText.match(/\b\d{2}[-./]\d{2}[-./]\d{4}\b/)?.[0] || '',
+            checkedPids: checked.map(input => String(input.value || '').trim()).filter(Boolean)
+        };
+    }
+
+    function parseSavedChoiceState(html) {
+        const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+        const state = readChoiceDocument(doc);
+        return { savedUntil: state.savedUntil, checkedCount: state.checkedPids.length };
     }
 
     function render(state) {
@@ -63,7 +71,7 @@ const SLFTeam4FormSavedChoiceNotice = (() => {
         }
     }
 
-    const api = { FORM_URL, FETCH_URL, getMountTarget, parseSavedChoiceState, render, start };
+    const api = { FORM_URL, FETCH_URL, getMountTarget, readChoiceDocument, parseSavedChoiceState, render, start };
     window.SLFTeam4FormSavedChoiceNotice = api;
     return api;
 })();

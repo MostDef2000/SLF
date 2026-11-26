@@ -2,7 +2,9 @@
 
 import json
 import threading
+import time
 from contextlib import contextmanager
+from email.utils import formatdate
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -1072,6 +1074,450 @@ def assert_hybrid_lab_ready_priority_free_genome(page: Page):
         )
 
 
+# ── weekly form training: cross-tab browser e2e ──────────────────────────────
+# ONE bounded case for src/modules/team-management/weekly-form-training.js,
+# executed through the EXACT releases/latest.user.js artifact (repo oracle: this
+# suite never reconstructs the userscript from source). The coordinator only
+# arms on a top-level https://slf.fm page, so this case does not use the local
+# fixture server: every https://slf.fm/** request is routed to the in-Python
+# synthetic site below, every other route is aborted, and service workers are
+# blocked. Two tabs share ONE browser context to exercise the cross-tab
+# navigator.locks writer election; the two no-write controls run in their own
+# contexts so they start from fresh storage.
+
+WFT_STATE_KEY = "slf_weekly_form_training_v1:6945"
+WFT_HOME = "18280"   # active team captured at cycle start (restore target)
+WFT_AWAY = "20001"   # second club: base level 2, capacity 1 -> ineligible, no save
+WFT_GAME_ID = "9001" # synthetic gamelist row -> gamestat request
+# Exact application/x-www-form-urlencoded body the coordinator must POST:
+# three coach[] picks (form top-5 -> ТТД top-3) + the observed submit label.
+WFT_FORM_POST_BODY = (
+    "coach%5B%5D=101&coach%5B%5D=102&coach%5B%5D=103&coach_set="
+    "%D1%81%D0%BE%D1%85%D1%80%D0%B0%D0%BD%D0%B8%D1%82%D1%8C+"
+    "%D0%B4%D0%BE%D0%BF%D0%BE%D0%BB%D0%BD%D0%B8%D1%82%D0%B5%D0%BB%D1%8C%D0%BD%D1%8B%D0%B5+"
+    "%D1%82%D1%80%D0%B5%D0%BD%D0%B8%D1%80%D0%BE%D0%B2%D0%BA%D0%B8"
+)
+WFT_GAMESTAT_POST_BODY = f"gamechoice%5B%5D={WFT_GAME_ID}"
+# row[0] pid -> row[63] «ТТД всего» of the 68-element gamestat row.
+WFT_TTD = {
+    "101": 50, "102": 40, "103": 30, "104": 20, "105": 10, "106": 9,
+    "107": 8, "108": 7, "109": 6, "110": 5, "111": 4, "199": 9999,
+}
+WFT_STATE_JS = """key => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) { return null; }
+}"""
+WFT_PHASE_JS = """key => {
+  try {
+    const state = JSON.parse(localStorage.getItem(key));
+    return !!state && (state.phase === 'complete' || state.phase === 'partial');
+  } catch (error) { return false; }
+}"""
+
+
+def wft_stat_payload():
+    rows = []
+    for pid, ttd in WFT_TTD.items():
+        row = [pid] + [0] * 62 + [ttd] + [0] * 4
+        assert len(row) == 68, (pid, len(row))
+        rows.append(row)
+    return {"stat": rows, "summary": [], "show": 1}
+
+
+class WeeklyFormSyntheticSite:
+    """In-Python https://slf.fm stand-in for the weekly form-training case.
+
+    Modes:
+      'sweep'        two clubs — home (base level 2, capacity 3 -> one save)
+                     and away (capacity 1 -> ineligible, no save);
+      'unknown-base' the train.php table has no is-current column -> both clubs
+                     block before any save (no-write control);
+      'identity'     serves only the foreign-identity page (foot_login_id != 6945)
+                     -> the coordinator must not issue a single request.
+    """
+
+    TEMPLATES = {
+        "home": FIXTURES / "weekly-form-team4-home.html",
+        "club": FIXTURES / "weekly-form-team4-club.html",
+        "form_empty": FIXTURES / "weekly-form-form-empty.html",
+        "form_saved": FIXTURES / "weekly-form-form-saved.html",
+        "train_eligible": FIXTURES / "weekly-form-train-eligible.html",
+        "train_ineligible": FIXTURES / "weekly-form-train-ineligible.html",
+        "train_unknown_base": FIXTURES / "weekly-form-train-unknown-base.html",
+        "playerstats": FIXTURES / "weekly-form-playerstats.html",
+    }
+
+    def __init__(self, mode: str, identity: str = "6945"):
+        if mode not in {"sweep", "unknown-base", "identity"}:
+            raise ValueError(mode)
+        self.mode = mode
+        self.identity = identity
+        self.current = WFT_HOME
+        self.posted = False
+
+    def attach(self, context):
+        # Playwright inspects routes newest-first: the slf.fm site answers
+        # first, the abort-everything route catches only non-slf.fm traffic.
+        context.route("**/*", lambda route: route.abort())
+        context.route("https://slf.fm/**", self.serve)
+
+    def _headers(self, content_type: str):
+        # The coordinator reads Date off every response as its server clock;
+        # a missing Date fails discovery with server-clock.
+        return {
+            "Content-Type": content_type,
+            "Date": formatdate(time.time(), usegmt=True),
+            "Cache-Control": "no-store",
+        }
+
+    def _page(self, route, template: str):
+        html = self.TEMPLATES[template].read_text(encoding="utf-8")
+        route.fulfill(
+            status=200,
+            headers=self._headers("text/html; charset=utf-8"),
+            body=html.replace("__LOGIN_ID__", self.identity),
+        )
+
+    def _json(self, route, payload):
+        route.fulfill(
+            status=200,
+            headers=self._headers("application/json; charset=utf-8"),
+            body=json.dumps(payload),
+        )
+
+    def serve(self, route):
+        request = route.request
+        parsed = urlparse(request.url)
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        method, path = request.method, parsed.path
+
+        if path == "/ajax/userset.php" and (query.get("action") or [None])[0] == "goto":
+            team = (query.get("idteam") or [""])[0]
+            if team.isdigit() and team != "0":
+                self.current = team
+            return self._json(route, {"result": "ok"})
+
+        if path == "/train.php":
+            if self.mode == "unknown-base":
+                return self._page(route, "train_unknown_base")
+            return self._page(
+                route,
+                "train_ineligible" if self.current == WFT_AWAY else "train_eligible",
+            )
+
+        if path == "/roster.php":
+            # The unknown-identity control navigates here: no other artifact
+            # module fetches from this path, so "zero requests" stays literal
+            # (the team4 saved-choice notice is gated to team4.php main).
+            return self._page(route, "home")
+
+        if path == "/team4.php":
+            action = (query.get("action") or [""])[0]
+            if action == "lineup":
+                return self._page(route, "club" if self.current == WFT_AWAY else "home")
+            if action == "form":
+                if method == "POST":
+                    self.posted = True
+                    return route.fulfill(
+                        status=200,
+                        headers=self._headers("text/html; charset=utf-8"),
+                        body="<!doctype html><title>ok</title>ok",
+                    )
+                return self._page(route, "form_saved" if self.posted else "form_empty")
+            if action == "playerstats":
+                if method == "POST" and "gamestat" in query:
+                    return self._json(route, wft_stat_payload())
+                if "gamelist" in query:
+                    return self._json(
+                        route,
+                        {"list": [[WFT_GAME_ID, f"/game.php?id={WFT_GAME_ID}", "Синтетическая игра"]]},
+                    )
+                return self._page(route, "playerstats")
+            # team4.php main — the non-Form start page of the sweep.
+            return self._page(route, "home")
+
+        # Anything else on slf.fm is answered by the site itself (404); only
+        # non-slf.fm traffic is aborted by the fallback route.
+        route.fulfill(
+            status=404,
+            headers=self._headers("text/plain; charset=utf-8"),
+            body="not found",
+        )
+
+
+def wft_track_requests(page: Page):
+    """Snapshot of every https://slf.fm request the page issues after this
+    call — register AFTER navigation and BEFORE injecting the artifact, so the
+    rows contain only traffic the artifact itself produced."""
+    rows = []
+
+    def record(request):
+        if request.url.startswith("https://slf.fm"):
+            rows.append({
+                "method": request.method,
+                "url": request.url,
+                "post": request.post_data,
+                "headers": {name.lower(): value for name, value in request.headers.items()},
+            })
+
+    page.on("request", record)
+    return rows
+
+
+def wft_weekly_rows(rows):
+    """Traffic of weekly-form-training.js: every cache-busted GET (its
+    appendCacheBuster is the only `_=timestamp` producer in the bundle) plus
+    its POSTs. Document loads, the team4 saved-choice notice fetch and other
+    unbusted reads are not coordinator traffic and are excluded."""
+    weekly = []
+    for row in rows:
+        parsed = urlparse(row["url"])
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        if row["method"] == "POST" or "_" in query:
+            weekly.append({**row, "path": parsed.path, "query": query})
+    return weekly
+
+
+def wft_run_two_tab_sweep(browser: Browser):
+    site = WeeklyFormSyntheticSite("sweep")
+    context = browser.new_context(locale="ru-RU", service_workers="block")
+    context.tracing.start(screenshots=True, snapshots=True, sources=True)
+    site.attach(context)
+    context.add_init_script(browser_init_script("success"))
+    page_a = context.new_page()
+    page_b = context.new_page()
+    errors_a, errors_b = [], []
+    page_a.on("pageerror", lambda error: errors_a.append(str(error)))
+    page_b.on("pageerror", lambda error: errors_b.append(str(error)))
+    try:
+        # Start on a NON-Form page (team4.php main, synthetic new-dark markup):
+        # the sweep must arm from any top-level slf.fm page, not a form page.
+        page_a.goto("https://slf.fm/team4.php", wait_until="domcontentloaded")
+        page_b.goto("https://slf.fm/team4.php", wait_until="domcontentloaded")
+        rows_a = wft_track_requests(page_a)
+        rows_b = wft_track_requests(page_b)
+        inject_exact_artifact(page_a)
+        inject_exact_artifact(page_b)
+        # Both tabs race the exclusive navigator.locks probe on their wake.
+        wft_assert_two_tab_sweep(site, page_a, page_b, rows_a, rows_b)
+        assert_clean_runtime(page_a, errors_a)
+        assert_clean_runtime(page_b, errors_b)
+        context.tracing.stop()
+    except Exception:
+        page_a.screenshot(
+            path=str(ARTIFACTS / "weekly-form-training-cross-tab.png"), full_page=True
+        )
+        context.tracing.stop(path=str(ARTIFACTS / "weekly-form-training-cross-tab.zip"))
+        raise
+    finally:
+        context.close()
+
+
+def wft_assert_two_tab_sweep(site, page_a, page_b, rows_a, rows_b):
+    # The sweep closes 'complete' only after every club reached a terminal
+    # status AND the cycle-start team was restored; with the pre-rebuild
+    # artifact no state ever appears and this wait times out (the RED signal).
+    page_a.wait_for_function(WFT_PHASE_JS, arg=WFT_STATE_KEY, timeout=30000)
+    page_a.wait_for_timeout(300)  # let the trailing request events land
+    state = page_a.evaluate(WFT_STATE_JS, WFT_STATE_KEY)
+    assert state and state.get("phase") == "complete", (
+        "the weekly sweep must close complete after verified saves + restore, "
+        f"state={state!r}"
+    )
+
+    weekly_a = wft_weekly_rows(rows_a)
+    weekly_b = wft_weekly_rows(rows_b)
+    writers = [(tab, rows) for tab, rows in (("A", weekly_a), ("B", weekly_b)) if rows]
+    assert len(writers) == 1, (
+        "the cross-tab navigator.locks election must elect exactly one writer; "
+        f"tab A rows={len(weekly_a)}, tab B rows={len(weekly_b)}"
+    )
+    writer, rows = writers[0]
+    loser = weekly_b if writer == "A" else weekly_a
+    assert loser == [], f"the losing tab must not issue any coordinator request: {loser}"
+
+    # One team switch at a time: visit HOME, switch to AWAY, restore HOME —
+    # and every switch is followed by the lineup read that proves it landed.
+    gotos = [row for row in rows if row["path"] == "/ajax/userset.php"]
+    teams = [(row["query"].get("idteam") or [""])[0] for row in gotos]
+    assert teams == [WFT_HOME, WFT_AWAY, WFT_HOME], (
+        "switch sequence must be visit-then-restore of the cycle-start team, "
+        f"got {teams} (tab {writer})"
+    )
+    for row in gotos:
+        assert row["query"].get("action") == ["goto"] and row["query"].get("todo") == ["0"], row["query"]
+        assert row["headers"].get("x-requested-with") == "XMLHttpRequest", row["headers"]
+    for index, row in enumerate(rows):
+        if row["path"] != "/ajax/userset.php":
+            continue
+        follower = rows[index + 1] if index + 1 < len(rows) else None
+        assert (
+            follower is not None
+            and follower["path"] == "/team4.php"
+            and follower["query"].get("action") == ["lineup"]
+        ), (
+            "each switch must be observed (lineup read) before the next one; "
+            f"row {index}={row['url']} followed by {follower and follower['url']}"
+        )
+
+    # Exactly one training POST with the exact encoded body.
+    posts = [
+        row for row in rows
+        if row["method"] == "POST" and row["url"] == "https://slf.fm/team4.php?action=form&date=1"
+    ]
+    assert len(posts) == 1, f"exactly one training POST in the whole election, got {len(posts)}"
+    post = posts[0]
+    assert post["post"] == WFT_FORM_POST_BODY, (
+        "exact urlencoded body (three coach[] + observed coach_set label): "
+        f"expected {WFT_FORM_POST_BODY!r}, got {post['post']!r}"
+    )
+    assert post["headers"].get("content-type", "").startswith("application/x-www-form-urlencoded"), (
+        post["headers"]
+    )
+
+    gamestat_posts = [row for row in rows if row["method"] == "POST" and "gamestat" in row["query"]]
+    assert len(gamestat_posts) == 1 and gamestat_posts[0]["post"] == WFT_GAMESTAT_POST_BODY, [
+        (row["url"], row["post"]) for row in gamestat_posts
+    ]
+
+    # Form reads are pinned: initial read + pre-save recheck BEFORE the POST,
+    # and exactly one fresh verification read AFTER it.
+    form_gets = [
+        (index, row) for index, row in enumerate(rows)
+        if row["method"] == "GET" and row["path"] == "/team4.php"
+        and row["query"].get("action") == ["form"]
+    ]
+    post_index = next(index for index, row in enumerate(rows) if row is post)
+    before = [item for item in form_gets if item[0] < post_index]
+    after = [item for item in form_gets if item[0] > post_index]
+    assert len(before) == 2, [row["url"] for _, row in before]
+    assert len(after) == 1, [row["url"] for _, row in after]
+
+    # Restoration to the cycle-start team + the persisted sweep record.
+    assert teams[-1] == WFT_HOME and site.current == WFT_HOME, (
+        f"the site session must end on the cycle-start team, current={site.current}"
+    )
+    assert state.get("homeTeamId") == WFT_HOME and state.get("restorePending") is False, state
+    assert state.get("lastCompletedAt", 0) > 0, state
+    home = (state.get("clubs") or {}).get(WFT_HOME) or {}
+    away = (state.get("clubs") or {}).get(WFT_AWAY) or {}
+    assert home.get("status") == "verified" and home.get("reason") == "state-verified", home
+    assert home.get("intendedPids") == ["101", "102", "103"], home
+    assert home.get("observedExpiry") == "01/01/2099" and home.get("extensionProven") is True, home
+    assert away.get("status") == "ineligible" and away.get("reason") == "capacity", away
+
+    # Forced focus/visibility wakes after completion must not re-arm a save:
+    # the due gate keeps the weekly cadence and the election stays decided.
+    before_counts = (len(wft_weekly_rows(rows_a)), len(wft_weekly_rows(rows_b)))
+    for page in (page_a, page_b):
+        page.evaluate("window.dispatchEvent(new Event('focus'))")
+        page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    page_a.wait_for_timeout(1500)
+    after_counts = (len(wft_weekly_rows(rows_a)), len(wft_weekly_rows(rows_b)))
+    assert after_counts == before_counts, (
+        f"no coordinator traffic after forced wakes: {before_counts} -> {after_counts}"
+    )
+    all_posts = [
+        row for row in wft_weekly_rows(rows_a) + wft_weekly_rows(rows_b)
+        if row["method"] == "POST" and row["url"] == "https://slf.fm/team4.php?action=form&date=1"
+    ]
+    assert len(all_posts) == 1, "no duplicate training POST after forced focus/visibility wakes"
+
+
+def wft_run_identity_control(browser: Browser):
+    # Unknown identity -> zero requests. Same new-dark admission markup as the
+    # sweep page; only foot_login_id differs (77777 != 6945).
+    site = WeeklyFormSyntheticSite("identity", identity="77777")
+    context = browser.new_context(locale="ru-RU", service_workers="block")
+    site.attach(context)
+    context.add_init_script(browser_init_script("success"))
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.goto("https://slf.fm/roster.php?id=18280", wait_until="domcontentloaded")
+        rows = wft_track_requests(page)
+        inject_exact_artifact(page)  # version check: the artifact really ran
+        page.wait_for_timeout(1500)
+        traffic = [row for row in rows if not row["url"].endswith("/favicon.ico")]
+        assert traffic == [], (
+            "a foreign-identity page must not issue a single request after "
+            f"injection (zero-write control): {traffic}"
+        )
+        assert page.evaluate(WFT_STATE_JS, WFT_STATE_KEY) is None, (
+            "a foreign-identity page must not write weekly state"
+        )
+        assert_clean_runtime(page, errors)
+    except Exception:
+        page.screenshot(
+            path=str(ARTIFACTS / "weekly-form-training-identity-control.png"), full_page=True
+        )
+        raise
+    finally:
+        context.close()
+
+
+def wft_run_unknown_base_control(browser: Browser):
+    # Unknown base level -> blocked with zero POST. The sweep still switches to
+    # each club (that is how it reads the page) and restores home in finally.
+    site = WeeklyFormSyntheticSite("unknown-base")
+    context = browser.new_context(locale="ru-RU", service_workers="block")
+    site.attach(context)
+    context.add_init_script(browser_init_script("success"))
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.goto("https://slf.fm/team4.php", wait_until="domcontentloaded")
+        rows = wft_track_requests(page)
+        inject_exact_artifact(page)
+        page.wait_for_function(WFT_PHASE_JS, arg=WFT_STATE_KEY, timeout=30000)
+        state = page.evaluate(WFT_STATE_JS, WFT_STATE_KEY)
+        assert state, f"the blocked sweep must persist state, got {state!r}"
+        weekly = wft_weekly_rows(rows)
+        posts = [row for row in weekly if row["method"] == "POST"]
+        assert posts == [], f"an unknown training-base schema must produce zero POSTs: {posts}"
+        for club in (WFT_HOME, WFT_AWAY):
+            record = (state.get("clubs") or {}).get(club) or {}
+            assert record.get("status") == "blocked", (club, state)
+            assert record.get("reason") == "current-column-missing", (club, state)
+        assert state.get("phase") == "partial" and state.get("lastCompletedAt") == 0, state
+        teams = [
+            (row["query"].get("idteam") or [""])[0]
+            for row in weekly if row["path"] == "/ajax/userset.php"
+        ]
+        assert teams and teams[-1] == WFT_HOME, (
+            f"home must be restored even when every club blocks, got {teams}"
+        )
+        assert site.current == WFT_HOME, site.current
+        assert_clean_runtime(page, errors)
+    except Exception:
+        page.screenshot(
+            path=str(ARTIFACTS / "weekly-form-training-unknown-base-control.png"), full_page=True
+        )
+        raise
+    finally:
+        context.close()
+
+
+def run_weekly_form_training_case(browser: Browser):
+    """ONE bounded case: cross-tab writer election + exact save contract, plus
+    the unknown-identity and unknown-base no-write controls. Requires the
+    generated releases/latest.user.js to contain weekly-form-training.js (the
+    orchestrator rebuilds the artifact from this branch before the suite)."""
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
+    wft_run_two_tab_sweep(browser)
+    wft_run_identity_control(browser)
+    wft_run_unknown_base_control(browser)
+    print(
+        "[browser-e2e] passed: weekly-form-training-cross-tab "
+        "(one writer, exact POST, verification read, restore, wake re-check; "
+        "identity and unknown-base controls write nothing)"
+    )
+
+
 def main():
     cases = [
         ("owned-live", "/game.php?id=e2e-owned&fixture=owned", "success", assert_owned_live),
@@ -1102,6 +1548,7 @@ def main():
         try:
             for name, path, api_mode, assertions in cases:
                 run_case(browser, base_url, name, path, api_mode, assertions)
+            run_weekly_form_training_case(browser)
         finally:
             browser.close()
 
