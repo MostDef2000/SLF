@@ -291,6 +291,9 @@ function makeBootstrapEnv({ pathname = '/team4.php', search = '' } = {}) {
     addDropdown: () => calls.push('tactics-dropdown')
   };
   sandbox.TacticPresetLibraryPanel = {};
+  // Production registers this module before bootstrap; stub it so the harness
+  // mirrors the real bundle (its guarded start() must not throw a TypeError).
+  sandbox.SLFWeeklyFormTraining = { start() {} };
   sandbox.TrainingGuidePanel = { mount: () => calls.push('training-guide-mount') };
   sandbox.LoanLimitPanel = { mount: () => calls.push('loan-limit-panel') };
   sandbox.TransferMarketAnalyzer = { start: () => calls.push('transfer-analyzer') };

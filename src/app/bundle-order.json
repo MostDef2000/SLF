@@ -95,6 +95,7 @@
     "src/modules/team-management/team4-alter-current-season-minutes-fix.js",
     "src/modules/team-management/team4-championship-table-swap.js",
     "src/modules/team-management/team4-form-saved-choice-notice.js",
+    "src/modules/team-management/weekly-form-training.js",
     "src/modules/team-management/team4-leadership-upgrade-indicator.js",
     "src/app/header-matches-layout-compatibility.js",
     "src/app/match-rendering-compatibility.js",
@@ -103,7 +104,7 @@
   "dependencyAudit": {
     "schema": "slf_module_dependency_audit_v1",
     "status": "complete",
-    "expectedModuleCount": 95,
+    "expectedModuleCount": 96,
     "modules": [
       {
         "file": "src/core/domain.js",
@@ -2766,6 +2767,35 @@
         ]
       },
       {
+        "file": "src/modules/team-management/weekly-form-training.js",
+        "declares": [
+          "SLFWeeklyFormTraining"
+        ],
+        "public": [
+          "SLFWeeklyFormTraining"
+        ],
+        "requires": [],
+        "hostCapabilities": [
+          "document",
+          "window",
+          "unsafeWindow",
+          "location",
+          "fetch",
+          "navigator",
+          "localStorage",
+          "BroadcastChannel",
+          "URLSearchParams",
+          "DOMParser",
+          "Date",
+          "setTimeout",
+          "clearTimeout",
+          "setInterval",
+          "console",
+          "GM_getValue",
+          "GM_setValue"
+        ]
+      },
+      {
         "file": "src/modules/team-management/team4-leadership-upgrade-indicator.js",
         "declares": [
           "SLFTeam4LeadershipUpgradeIndicator"
@@ -2883,6 +2913,13 @@
             "file": "src/modules/team-management/team-loan-limit-helper.js",
             "symbols": [
               "LoanLimitPanel"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/team-management/weekly-form-training.js",
+            "symbols": [
+              "SLFWeeklyFormTraining"
             ],
             "phase": "runtime"
           },

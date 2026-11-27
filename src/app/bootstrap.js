@@ -155,6 +155,15 @@ const App = {
         // поэтому панель на transfers.php не монтировалась.
         TransferMarketAnalyzer.start();
 
+        // Weekly background form training: installs listeners and schedules a
+        // locked coordinator run, then returns immediately. It must not be
+        // called from mountUI() — the body observer would re-run it.
+        try {
+            SLFWeeklyFormTraining.start();
+        } catch (error) {
+            console.warn('[SLF] weekly-form-training failed; continuing startup', error);
+        }
+
         PresetStorage.loadFromServerAndMerge(() => {
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', () => {
