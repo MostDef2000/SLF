@@ -3224,5 +3224,395 @@ class AdvisorModesTestCase(unittest.TestCase):
         self.assertIn("ТОЛЬКО валидный JSON без markdown-обёртки", prompt)
 
 
+class AdvisorCanonReferenceTestCase(unittest.TestCase):
+    """#477: the canon manual is its own structured channel.
+
+    Validated fail-closed (400), bounded, rendered as a distinct prompt section
+    that never touches «Подсказки тренеров», and enforced server-side as
+    defense-in-depth (adjust must match the selected row; a switch is refused
+    when the canon is unresolved). Client validation stays authoritative.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        os.environ["SLF_API_TOKEN"] = "test-token"
+        os.environ["SLF_DATA_DIR"] = cls.temp_dir.name
+        os.environ["SLF_FORUM_FAQ_DIR"] = os.path.join(cls.temp_dir.name, "forum")
+        os.environ["OPENROUTER_API_KEY"] = "test-key"
+        cls.server = _load_server()
+        cls.advisor = cls.server.advisor
+        cls.client = cls.server.app.test_client()
+        cls.auth = {"Authorization": "Bearer test-token"}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
+
+    def setUp(self):
+        for path in pathlib.Path(self.temp_dir.name).glob("*.json"):
+            path.unlink()
+
+    def valid_body(self):
+        return {
+            "gameId": "g-477",
+            "minute": 30,
+            "bucket": "16-30",
+            "score": {"home": 0, "away": 0},
+            "currentPreset": "Emery_BalancedBase_v11",
+            "developerHints": ["[Клопп] Отключите атаку по центру"],
+            "ruleDecision": {
+                "preset": "Emery_BalancedBase_v11",
+                "gameMode": "active_control",
+                "confidence": "medium",
+                "topCandidates": [
+                    {"id": "Emery_BalancedBase_v11", "score": 35.7},
+                    {"id": "Pep_BoxControl_bal2", "score": 23.5}
+                ]
+            },
+            "signals": {"strengthGap": -12, "pressureRisk": 41.4, "underPressure": True},
+            "presetCatalog": [
+                {"id": "Emery_BalancedBase_v11", "label": "Emery Balanced Base", "idea": "баланс", "use": "база", "risk": "низкий"},
+                {"id": "Pep_BoxControl_bal2", "label": "Pep Box Control", "idea": "контроль", "use": "при контроле", "risk": "средний"}
+            ]
+        }
+
+    def matched_reference(self):
+        return {
+            "version": "canon-2026-11-21",
+            "title": "Шпаргалка: построение атаки",
+            "status": "matched",
+            "matchedId": 4,
+            "variant": "right",
+            "situationText": "Нужен гол, атака справа",
+            "vector": {
+                "priority": "011",
+                "build_type": "3",
+                "build_temp": "3",
+                "build_long": "2",
+                "build_fast": "2",
+                "style": "4",
+            },
+            "legend": ["Л — приоритет левой стороны", "Ц — центр", "П — правая"],
+            "evidence": ["flank:right", "need_goal"],
+            "missingInputs": [],
+            "additions": [],
+            "candidates": [
+                {"id": 4, "variant": "right", "situationText": "Нужен гол, атака справа"},
+            ],
+        }
+
+    def wire_context(self, body):
+        wire_body = json.loads(self.server.app.json.dumps(body))
+        return self.advisor.validate_context(wire_body)
+
+    @staticmethod
+    def user_content(messages):
+        return next(m["content"] for m in messages if m.get("role") == "user")
+
+    def base_user_content(self, context):
+        """Pre-canon payload, built independently as the byte-identity oracle."""
+        catalog_lines = "\n".join(
+            f"- {entry['id']} | {entry['label']}"
+            + (f" | идея: {entry['idea']}" if entry["idea"] else "")
+            + (f" | когда: {entry['use']}" if entry["use"] else "")
+            + (f" | риск: {entry['risk']}" if entry["risk"] else "")
+            for entry in context["presetCatalog"]
+        )
+        decision = context["ruleDecision"]
+        candidates_text = ", ".join(
+            f"{c['id']}={c['score']}" for c in decision["topCandidates"]
+        ) or "нет"
+        hints_text = "; ".join(context["developerHints"]) or "нет"
+        situation = {
+            k: context[k]
+            for k in ("gameId", "minute", "bucket", "score", "currentPreset", "signals")
+        }
+        return (
+            "Ситуация (JSON): " + json.dumps(situation, ensure_ascii=False) + "\n"
+            "Подсказки тренеров: " + hints_text + "\n"
+            "Решение правилого движка: пресет " + str(decision["preset"])
+            + ", режим " + str(decision["gameMode"])
+            + ", уверенность " + str(decision["confidence"])
+            + "; кандидаты: " + candidates_text + "\n"
+            "Каталог пресетов:\n" + catalog_lines + "\n"
+            "Дай JSON-ответ."
+        )
+
+    # -- validation ----------------------------------------------------------
+
+    def test_absent_canon_reference_is_none_and_legacy_prompt_unchanged(self):
+        context = self.wire_context(self.valid_body())
+        self.assertIsNone(context["canonReference"])
+        self.assertEqual(
+            self.advisor.build_messages(context),
+            [
+                {"role": "system", "content": self.advisor.SYSTEM_PROMPT},
+                {"role": "user", "content": self.base_user_content(context)},
+            ],
+        )
+
+    def test_canon_reference_is_cleaned_and_stored(self):
+        body = self.valid_body()
+        reference = self.matched_reference()
+        reference["situationText"] = "  " + ("x" * 400) + "  "
+        reference["evidence"] = ["e" * 200]
+        reference["legend"] = ["l" * 400]
+        reference["candidates"] = [
+            {"id": 4, "variant": "right", "situationText": "  " + ("c" * 400) + "  "},
+        ]
+        body["canonReference"] = reference
+        context = self.wire_context(body)
+        canon = context["canonReference"]
+        self.assertEqual(canon["version"], "canon-2026-11-21")
+        self.assertEqual(canon["title"], "Шпаргалка: построение атаки")
+        self.assertEqual(canon["status"], "matched")
+        self.assertEqual(canon["matchedId"], 4)
+        self.assertEqual(canon["variant"], "right")
+        # Bounded scalars/lists are truncated to their documented caps.
+        self.assertEqual(len(canon["situationText"]),
+                         self.advisor.MAX_CANON_SITUATION_CHARS)
+        self.assertEqual(canon["evidence"], ["e" * self.advisor.MAX_CANON_EVIDENCE_CHARS])
+        self.assertEqual(canon["legend"], ["l" * self.advisor.MAX_CANON_LEGEND_CHARS])
+        self.assertEqual(canon["missingInputs"], [])
+        self.assertEqual(canon["additions"], [])
+        self.assertEqual(canon["candidates"], [
+            {"id": 4, "variant": "right", "situationText": "c" * self.advisor.MAX_CANON_CANDIDATE_CHARS},
+        ])
+        self.assertEqual(canon["vector"], {
+            "build_type": "3",
+            "build_temp": "3",
+            "build_long": "2",
+            "build_fast": "2",
+            "style": "4",
+            "priority": "011",
+        })
+
+    def test_malformed_and_oversized_canon_reference_is_rejected_with_400(self):
+        vector = self.matched_reference()["vector"]
+        cases = {
+            "non_object": "не объект",
+            "bad_status": {"status": "almost"},
+            "bad_matched_id": {"status": "no_match", "matchedId": "4"},
+            "matched_without_vector": {"status": "matched", "matchedId": 4},
+            "vector_missing_key": {
+                "status": "matched", "matchedId": 4,
+                "vector": {k: v for k, v in vector.items() if k != "style"},
+            },
+            "vector_out_of_range": {
+                "status": "matched", "matchedId": 4,
+                "vector": dict(vector, build_type="9"),
+            },
+            "legend_too_many": {
+                "status": "no_match",
+                "legend": ["x"] * (self.advisor.MAX_CANON_LEGEND_LINES + 1),
+            },
+            "evidence_too_many": {
+                "status": "no_match",
+                "evidence": ["x"] * (self.advisor.MAX_CANON_EVIDENCE_ITEMS + 1),
+            },
+            "missing_too_many": {
+                "status": "no_match",
+                "missingInputs": ["x"] * (self.advisor.MAX_CANON_MISSING_ITEMS + 1),
+            },
+            "additions_too_many": {
+                "status": "no_match",
+                "additions": [{"id": "a"}] * (self.advisor.MAX_CANON_ADDITIONS + 1),
+            },
+            "addition_not_object": {"status": "no_match", "additions": ["a"]},
+            "candidates_too_many": {
+                "status": "no_match",
+                "candidates": [{"id": 1}] * (self.advisor.MAX_CANON_CANDIDATES + 1),
+            },
+            "candidate_not_object": {"status": "no_match", "candidates": ["a"]},
+            "candidate_bad_id": {"status": "no_match", "candidates": [{"id": 13}]},
+            "candidate_bad_variant": {
+                "status": "no_match",
+                "candidates": [{"id": 4, "variant": 4}],
+            },
+            "candidate_bad_situation": {
+                "status": "no_match",
+                "candidates": [{"id": 4, "situationText": 4}],
+            },
+        }
+        for name, reference in cases.items():
+            with self.subTest(case=name):
+                body = self.valid_body()
+                body["canonReference"] = reference
+                with mock.patch.object(
+                        self.advisor, "call_openrouter",
+                        side_effect=AssertionError("provider must not be called")):
+                    response = self.client.post(
+                        "/api/advisor", json=body, headers=self.auth)
+                self.assertEqual(response.status_code, 400)
+                payload = response.get_json()
+                self.assertFalse(payload["available"])
+                self.assertEqual(payload["errorKind"], "invalid_request")
+
+    # -- prompt --------------------------------------------------------------
+
+    def test_prompt_section_is_present_and_separate_from_coach_hints(self):
+        body = self.valid_body()
+        body["canonReference"] = self.matched_reference()
+        user = self.user_content(self.advisor.build_messages(self.wire_context(body)))
+        self.assertIn("Канон «Шпаргалка: построение атаки»", user)
+        self.assertIn("Статус сопоставления: matched", user)
+        self.assertIn("Строка канона: №4", user)
+        self.assertIn("вариант right", user)
+        self.assertIn("приоритет 011", user)
+        self.assertIn("Легенда канона:", user)
+        self.assertIn("Доказательства сопоставления: flank:right; need_goal", user)
+        self.assertIn("для сопоставленной ситуации строка канона авторитетна", user)
+        # Distinct channel: after the coach-hints line and before the catalog,
+        # never folded into the «Подсказки тренеров:» line itself.
+        hints_index = user.index("Подсказки тренеров:")
+        canon_index = user.index("Канон «")
+        catalog_index = user.index("Каталог пресетов:")
+        self.assertLess(hints_index, canon_index)
+        self.assertLess(canon_index, catalog_index)
+        hints_line = user[hints_index:user.index("\n", hints_index)]
+        self.assertNotIn("Канон", hints_line)
+
+    def test_unresolved_canon_prompt_states_missing_inputs(self):
+        body = self.valid_body()
+        body["canonReference"] = {
+            "status": "missing_inputs",
+            "situationText": None,
+            "missingInputs": ["relative_xi_or_situation"],
+        }
+        user = self.user_content(self.advisor.build_messages(self.wire_context(body)))
+        self.assertIn("Статус сопоставления: missing_inputs", user)
+        self.assertIn("Не хватает данных: relative_xi_or_situation", user)
+        self.assertNotIn("Строка канона:", user)
+
+    # -- answer validation ---------------------------------------------------
+
+    def test_adjust_contradicting_the_matched_row_is_rejected(self):
+        canon = self.wire_context(
+            dict(self.valid_body(), canonReference=self.matched_reference())
+        )["canonReference"]
+        catalog_ids = {"Emery_BalancedBase_v11", "Pep_BoxControl_bal2"}
+        with self.assertRaises(ValueError):
+            self.advisor.validate_answer({
+                "mode": "adjust",
+                "changes": [{"control": "build_type", "value": "1"}],
+                "confidence": "high",
+                "reason": "пробуем иначе",
+            }, catalog_ids, canon=canon)
+        # Moving the same control TO the row's value is accepted.
+        validated = self.advisor.validate_answer({
+            "mode": "adjust",
+            "changes": [{"control": "build_type", "value": "3"}],
+            "confidence": "high",
+            "reason": "к строке канона",
+        }, catalog_ids, canon=canon)
+        self.assertEqual(validated["changes"],
+                         [{"control": "build_type", "value": "3"}])
+
+    def addition_reference(self):
+        return {
+            "version": "canon-2026-11-21",
+            "title": "Шпаргалка: построение атаки",
+            "status": "addition",
+            "matchedId": None,
+            "situationText": None,
+            "vector": None,
+            "evidence": ["pressFatigue"],
+            "missingInputs": [],
+            "additions": [{
+                "id": "press_cooldown",
+                "situation": "Прессинг-усталость",
+                "provenance": "SLF",
+                "eligibleRole": "Guardiola_PressCooldown_v11",
+                "entryConditions": ["press_fatigue", "no_urgent_chase"],
+            }],
+            "candidates": [],
+        }
+
+    def test_addition_canon_reference_is_accepted(self):
+        # The matcher emits status "addition" for an actionable press_cooldown
+        # addition; the API must accept it instead of rejecting every such
+        # request with HTTP 400.
+        canon = self.wire_context(
+            dict(self.valid_body(), canonReference=self.addition_reference())
+        )["canonReference"]
+        self.assertEqual(canon["status"], "addition")
+        self.assertIsNone(canon["matchedId"])
+        self.assertIsNone(canon["vector"])
+        self.assertEqual(canon["additions"], [{
+            "id": "press_cooldown",
+            "situation": "Прессинг-усталость",
+            "provenance": "SLF",
+            "eligibleRole": "Guardiola_PressCooldown_v11",
+            "entryConditions": ["press_fatigue", "no_urgent_chase"],
+        }])
+
+    def test_addition_allows_switch_to_eligible_role_and_adjust(self):
+        canon = self.wire_context(
+            dict(self.valid_body(), canonReference=self.addition_reference())
+        )["canonReference"]
+        catalog_ids = {
+            "Emery_BalancedBase_v11",
+            "Pep_BoxControl_bal2",
+            "Guardiola_PressCooldown_v11",
+        }
+        # A switch to the addition's eligible role preset is actionable.
+        validated = self.advisor.validate_answer({
+            "mode": "switch",
+            "preset": "Guardiola_PressCooldown_v11",
+            "confidence": "high",
+            "reason": "реализует дополнение канона",
+        }, catalog_ids, canon=canon)
+        self.assertEqual(validated["mode"], "switch")
+        self.assertEqual(validated["preset"], "Guardiola_PressCooldown_v11")
+        # Any other preset is refused: only the eligible role realizes it.
+        with self.assertRaises(ValueError):
+            self.advisor.validate_answer({
+                "mode": "switch",
+                "preset": "Emery_BalancedBase_v11",
+                "confidence": "high",
+                "reason": "по догадке",
+            }, catalog_ids, canon=canon)
+        # An addition carries no manual vector, so a well-formed adjust passes.
+        adjusted = self.advisor.validate_answer({
+            "mode": "adjust",
+            "changes": [{"control": "press_intense", "value": "1"}],
+            "confidence": "medium",
+            "reason": "в духе дополнения",
+        }, catalog_ids, canon=canon)
+        self.assertEqual(adjusted["changes"],
+                         [{"control": "press_intense", "value": "1"}])
+
+    def test_switch_is_refused_when_canon_is_unresolved(self):
+        canon = self.wire_context(dict(
+            self.valid_body(),
+            canonReference={"status": "ambiguous", "missingInputs": ["intended_approach"]},
+        ))["canonReference"]
+        catalog_ids = {"Emery_BalancedBase_v11", "Pep_BoxControl_bal2"}
+        with self.assertRaises(ValueError):
+            self.advisor.validate_answer({
+                "mode": "switch",
+                "preset": "Pep_BoxControl_bal2",
+                "confidence": "high",
+                "reason": "по догадке",
+            }, catalog_ids, canon=canon)
+
+    def test_endpoint_rejects_contradictory_adjust_after_retry(self):
+        body = self.valid_body()
+        body["canonReference"] = self.matched_reference()
+        contradictory = json.dumps({
+            "mode": "adjust",
+            "changes": [{"control": "style", "value": "1"}],
+            "confidence": "high",
+            "reason": "против строки",
+        }, ensure_ascii=False)
+        with mock.patch.object(
+                self.advisor, "call_openrouter",
+                return_value=(contradictory, 5)):
+            response = self.client.post("/api/advisor", json=body, headers=self.auth)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.get_json()["errorKind"], "invalid_answer")
+
+
 if __name__ == "__main__":
     unittest.main()

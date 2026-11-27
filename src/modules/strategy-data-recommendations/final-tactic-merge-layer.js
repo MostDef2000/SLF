@@ -201,9 +201,173 @@
         return `Эталон: ${defenseId}/${buildupId} — равный матч, ${tail}`;
     }
 
+    // Issue #477 — canon-first final selection. When the manual matcher
+    // resolved a situation, its row id, variant and all six manual settings
+    // are authoritative. The unrelated controls (defense block, attack keys)
+    // keep the preset/current contract; the six manual fields are never
+    // overlaid again by a preset, etalon, scenario delta or LLM reply.
+    const CANON_MANUAL_KEYS = ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'];
+
+    function isMatchedCanon(canon) {
+        return !!canon && canon.schema === 'slf_canon_decision_v1'
+            && canon.status === 'matched' && canon.vector && typeof canon.vector === 'object';
+    }
+
+    // #477 NEW-P1-1: a resolved SLF addition is actionable but is NOT a
+    // manual row. It names an eligible role whose preset realizes it.
+    function isAdditionCanon(canon) {
+        return !!canon && canon.schema === 'slf_canon_decision_v1'
+            && canon.status === 'addition' && canon.actionable === true;
+    }
+
+    function additionEligibleRole(canon) {
+        if (!canon || canon.status !== 'addition') return null;
+        if (typeof canon.eligibleRole === 'string' && canon.eligibleRole) return canon.eligibleRole;
+        if (Array.isArray(canon.eligibleRoles)) {
+            const role = canon.eligibleRoles.find(item => typeof item === 'string' && item);
+            if (role) return role;
+        }
+        return null;
+    }
+
+    // The addition's eligible preset becomes the base vector. It is never a
+    // manual row: the six manual settings come from the preset controls.
+    function resolveAdditionBase(canon) {
+        const presetId = additionEligibleRole(canon);
+        if (!presetId) return null;
+        if (registry.presets && hasOwn(registry.presets, presetId) && registry.presets[presetId]) {
+            return {
+                base: `preset:${presetId}`,
+                presetId,
+                vector: normalizeBaseVector(registry.presets[presetId]),
+                fromCurrent: false
+            };
+        }
+        return null;
+    }
+
+    function canonAdditionReference(canon) {
+        const additions = Array.isArray(canon.additions) ? canon.additions : [];
+        const names = additions
+            .map(item => (item && (item.situation || item.id)) || '')
+            .filter(Boolean);
+        const label = names.length ? names.join(', ') : 'дополнение SLF';
+        const role = additionEligibleRole(canon);
+        return `Дополнение SLF: ${label} — пресет ${role || '—'}`;
+    }
+
+    function canonSettingWord(canon, key, fallback) {
+        const text = canon && canon.settingText && typeof canon.settingText === 'object' ? canon.settingText : null;
+        return text && text[key] ? text[key] : fallback;
+    }
+
+    function canonReferenceText(canon) {
+        const vector = canon.vector || {};
+        const lanes = String(vector.priority || '000');
+        // #477: the manual's verbatim words are shown alongside the ordinals so
+        // the hint explains itself ("Позиционный", "Низкий / средний", ...),
+        // never just bare numbers.
+        return `Канон №${canon.id} «${canon.situationText}»`
+            + (canon.variant ? ` (${canon.variant})` : '')
+            + `: направление ${lanes} · выход ${canonSettingWord(canon, 'build_type', vector.build_type)}`
+            + ` · темп ${canonSettingWord(canon, 'build_temp', vector.build_temp)}`
+            + ` · диагонали ${canonSettingWord(canon, 'build_long', vector.build_long)}`
+            + ` · в касание ${canonSettingWord(canon, 'build_fast', vector.build_fast)}`
+            + ` · стиль ${canonSettingWord(canon, 'style', vector.style)}`;
+    }
+
+    // #477 P1-2: a canon decision that exists but did not resolve a row must
+    // never be papered over with a preset/etalon vector. It is surfaced as a
+    // non-actionable reference explaining why (status/candidates/missing).
+    function canonUnresolvedReference(canon) {
+        const parts = [];
+        if (canon.status === 'ambiguous') {
+            parts.push('Канон: выбор неоднозначно определён — нужно уточнить ситуацию');
+        } else if (canon.status === 'missing_inputs') {
+            parts.push('Канон: недостаточно данных для выбора строки');
+        } else {
+            parts.push(`Канон: строка не сопоставлена (${canon.status})`);
+        }
+        const candidates = Array.isArray(canon.candidates) ? canon.candidates.filter(item => item && item.id != null) : [];
+        if (candidates.length) {
+            parts.push('кандидаты: ' + candidates
+                .map(item => `№${item.id}${item.variant ? '/' + item.variant : ''}`)
+                .join(', '));
+        }
+        const missing = Array.isArray(canon.missingInputs) ? canon.missingInputs.filter(Boolean) : [];
+        if (missing.length) parts.push('не хватает: ' + missing.join(', '));
+        return parts.join(' · ');
+    }
+
+    function canonSettingNotes(canon) {
+        const text = canon && canon.settingText && typeof canon.settingText === 'object' ? canon.settingText : null;
+        if (!text) return [];
+        const notes = [];
+        if (text.build_type) notes.push(`Выход из обороны: ${text.build_type}`);
+        if (text.build_temp) notes.push(`Темп: ${text.build_temp}`);
+        if (text.build_long || text.build_fast) {
+            notes.push(`Диагонали: ${text.build_long || '—'} · в касание: ${text.build_fast || '—'}`);
+        }
+        if (text.style) notes.push(`Стиль: ${text.style}`);
+        return notes;
+    }
+
+    function applyCanon(vector, canon, overrides) {
+        for (const key of CANON_MANUAL_KEYS) {
+            if (canon.vector[key] !== undefined && canon.vector[key] !== null) {
+                vector[key] = String(canon.vector[key]);
+            }
+        }
+        const priorities = Array.isArray(canon.priorityLanes)
+            ? canon.priorityLanes.map(String)
+            : (String(canon.vector.priority || '000').split('').map((flag, index) => (
+                flag === '1' ? ['left', 'center', 'right'][index] : null
+            )).filter(Boolean));
+        vector.priority = priorities;
+        overrides.buildup = `canon:row${canon.id}`;
+        overrides.style = `canon:row${canon.id}`;
+        overrides.priority = `canon:row${canon.id}`;
+        return vector;
+    }
+
     function computeFinalTactic(snapshot, context, result) {
         const etalon = result?.etalon || null;
-        const baseInfo = resolveBase(snapshot, result);
+        const canon = result?.canon || null;
+        const canonMatched = isMatchedCanon(canon);
+        const canonAddition = isAdditionCanon(canon);
+
+        // #477 P1-2: a canon decision that exists but did not resolve a row or
+        // an actionable addition is authoritative in the NEGATIVE — it must
+        // never fall through to a preset/etalon vector. Only canon == null
+        // keeps the legacy path.
+        if (canon && !canonMatched && !canonAddition) {
+            return {
+                schema: VERSION,
+                vector: null,
+                base: null,
+                overrides: null,
+                source: `canon:${canon.status}`,
+                strong: { defense: false, buildup: false, scenario: null, canon: false },
+                deltaVsCurrent: null,
+                presetId: null,
+                etalonIds: Array.isArray(etalon?.ids) ? etalon.ids.filter(Boolean).map(String) : [],
+                insufficientData: Array.isArray(canon.missingInputs) ? canon.missingInputs.map(String) : [],
+                notes: [],
+                referenceLine: canonUnresolvedReference(canon),
+                canon
+            };
+        }
+
+        // An actionable addition resolves its base to the eligible role's
+        // preset; anything else uses the preset/current resolution.
+        let baseInfo = canonAddition ? resolveAdditionBase(canon) : null;
+        if (!baseInfo) baseInfo = resolveBase(snapshot, result);
+        // A resolved manual row is actionable even without a readable preset
+        // or current tactic: only the six manual settings are known, the rest
+        // stay absent (never invented).
+        if (!baseInfo && canonMatched) {
+            baseInfo = { base: 'canon_only', presetId: null, vector: normalizeBaseVector({}), fromCurrent: false, stalePreset: false };
+        }
         if (!baseInfo) return null; // no preset and no readable current tactic
 
         const overrides = {
@@ -216,37 +380,62 @@
 
         const vector = Object.assign({}, baseInfo.vector);
         const etalonIds = Array.isArray(etalon?.ids) ? etalon.ids.filter(Boolean).map(String) : [];
-        const insufficientData = Array.isArray(etalon?.insufficientData)
+        let insufficientData = Array.isArray(etalon?.insufficientData)
             ? etalon.insufficientData.map(String)
             : ['etalon_layer_absent'];
-        const notes = Array.isArray(etalon?.notes) ? etalon.notes.filter(Boolean).map(String) : [];
+        const CANON_LEGEND = Array.isArray(canon?.legend) ? canon.legend.filter(Boolean).map(String) : [];
+        let notes = Array.isArray(etalon?.notes) ? etalon.notes.filter(Boolean).map(String) : [];
 
         let referenceLine = null;
         let strong = { defense: false, buildup: false, scenario: null };
+        let source = null;
 
         if (baseInfo.stalePreset) {
             insufficientData.push('stale_preset_name');
         }
 
-        if (!isInsufficientEtalon(etalon)) {
-            const strength = computeStrength(etalon);
-            strong = { defense: strength.defenseBlock || strength.defenseKeys.length > 0,
-                buildup: strength.buildupBlock || strength.buildupKeys.length > 0,
-                scenario: strength.scenario };
+        if (canonMatched) {
+            // Canon wins: no etalon overlay, no scenario delta, no preset
+            // mutation of the six manual settings.
+            applyCanon(vector, canon, overrides);
+            strong = { defense: false, buildup: true, scenario: null, canon: true };
+            referenceLine = canonReferenceText(canon);
+            notes = [canon.situationText].concat(canonSettingNotes(canon), CANON_LEGEND);
+            insufficientData = [];
+            source = `canon:${canon.id}${canon.variant ? '/' + canon.variant : ''}+base:${baseInfo.base}`;
+        } else if (canonAddition) {
+            // #477 NEW-P1-1: an actionable addition resolves to its eligible
+            // preset as the base. It is NOT a manual row (no «Канон №» line)
+            // and is never overlaid by the etalon; the reference names the
+            // addition and the preset that realizes it.
+            referenceLine = canonAdditionReference(canon);
+            const additionNames = Array.isArray(canon.additions)
+                ? canon.additions.map(item => (item && item.situation) || '').filter(Boolean)
+                : [];
+            notes = additionNames;
+            insufficientData = [];
+            strong = { defense: false, buildup: false, scenario: null, canon: false };
+            source = `canon:addition+base:${baseInfo.base}`;
+        } else {
+            if (!isInsufficientEtalon(etalon)) {
+                const strength = computeStrength(etalon);
+                strong = { defense: strength.defenseBlock || strength.defenseKeys.length > 0,
+                    buildup: strength.buildupBlock || strength.buildupKeys.length > 0,
+                    scenario: strength.scenario };
 
-            if (strong.defense || strong.buildup) {
-                applyEtalonOverrides(vector, etalon, strength, overrides);
-            } else {
-                // T2 generic-only: preset/current base, etalon as a reference line.
-                referenceLine = buildReferenceLine(baseInfo.base, etalon);
+                if (strong.defense || strong.buildup) {
+                    applyEtalonOverrides(vector, etalon, strength, overrides);
+                } else {
+                    // T2 generic-only: preset/current base, etalon as a reference line.
+                    referenceLine = buildReferenceLine(baseInfo.base, etalon);
+                }
             }
+            // Provenance of the merged recommendation: etalon ids + base preset,
+            // or the etalon ids over the current tactic (hold_current).
+            source = baseInfo.fromCurrent
+                ? `merged:current:${etalonIds.join('+')}`
+                : `merged:etalon:${etalonIds.join('+')}+presets:${baseInfo.presetId}`;
         }
-
-        // Provenance of the merged recommendation: etalon ids + base preset,
-        // or the etalon ids over the current tactic (hold_current).
-        const source = baseInfo.fromCurrent
-            ? `merged:current:${etalonIds.join('+')}`
-            : `merged:etalon:${etalonIds.join('+')}+presets:${baseInfo.presetId}`;
 
         return {
             schema: VERSION,
@@ -260,7 +449,8 @@
             etalonIds,
             insufficientData,
             notes,
-            referenceLine
+            referenceLine,
+            canon: canon || null
         };
     }
 
@@ -279,7 +469,8 @@
             etalonIds: [],
             insufficientData: ['exception'],
             notes: [],
-            referenceLine: null
+            referenceLine: null,
+            canon: null
         };
     }
 

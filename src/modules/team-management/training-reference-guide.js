@@ -178,6 +178,40 @@ const TrainingGuidePanel = {
         return {ok:true,footer,controls};
     },
 
+    inspectBulkPanel() {
+        const panel=document.querySelector('.train-bulk');
+        if (!panel) return {present:false};
+        const chips=[...panel.querySelectorAll('.train-bulk__sk')].map(chip=>({
+            chip,
+            index:Number(chip.dataset.i),
+            name:chip.querySelector('.train-bulk__name'),
+            input:chip.querySelector('.train-bulk__up')
+        }));
+        const indexes=new Set(chips.map(item=>item.index));
+        const malformed=chips.length!==11 || indexes.size!==11 || chips.some(item=>!Number.isInteger(item.index) || item.index<1 || item.index>11 || !item.name || !item.input);
+        if (malformed) return {present:true,ok:false,reason:'Не распознана групповая панель тренировок.'};
+        return {present:true,ok:true,chips:chips.sort((a,b)=>a.index-b.index)};
+    },
+
+    prepareBulkPanel(chips, targets) {
+        chips.forEach(item=>{
+            const input=item.input;
+            if (item.index<=10) {
+                item.chip.classList.add('is-on');
+                item.chip.dataset.order=String(item.index);
+                input.disabled=false;
+                input.value=String(targets[item.index-1].target);
+            } else {
+                item.chip.classList.remove('is-on');
+                item.chip.dataset.order='0';
+                input.disabled=true;
+                input.value='';
+            }
+            input.dispatchEvent(new Event('input',{bubbles:true}));
+            input.dispatchEvent(new Event('change',{bubbles:true}));
+        });
+    },
+
     restoreFooters(snapshots) {
         snapshots.forEach(snapshot=>{
             snapshot.controls.forEach(item=>{
@@ -203,6 +237,15 @@ const TrainingGuidePanel = {
         const selectedType=[...selectedTypes][0];
         const profileType=role==='GK'?'GK':'FIELD';
         if (selectedType!==profileType) return this.setStatus(role==='GK'?'Профиль GK можно применить только к выбранным вратарям.':'Полевой профиль нельзя применить к выбранным вратарям.','error');
+        const bulk=this.inspectBulkPanel();
+        if (bulk.present) {
+            if (!bulk.ok) return this.setStatus(`Профиль ${role} не применён. ${bulk.reason}`,'error');
+            const targets=this.skillOrderForRole(role).map(skill=>({skill,target:Math.round(Number(profile.skills?.[skill]?.value))}));
+            if (targets.length!==10 || targets.some(target=>!Number.isFinite(target.target))) return this.setStatus(`Профиль ${role} содержит неполный набор навыков.`,'error');
+            this.prepareBulkPanel(bulk.chips,targets);
+            this.setStatus(`Профиль ${role} подготовлен для ${selected.length} выбранных игроков. Нажмите штатную кнопку «Сохранить».`,'ok');
+            return;
+        }
         const inspected=groups.map(group=>({...this.inspectGroupFooter(group.table),selected:group.selected}));
         const failed=inspected.find(item=>!item.ok);
         if (failed) return this.setStatus(`Профиль ${role} не применён. ${failed.reason}`,'error');

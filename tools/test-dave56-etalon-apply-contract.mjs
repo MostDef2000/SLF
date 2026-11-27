@@ -184,16 +184,15 @@ const h = panelHarness();
   await h.click(btn);
   assert.equal(h.calls.length - callsBefore, 1, 'exactly ONE applyTacticObject call per click');
   const call = h.calls[h.calls.length - 1];
-  // Emery_BalancedBase_v11 base (v12 dribble guard: protect_lead no longer
-  // picks Simeone_CompactLead_v11) + etalon d5/b5/s1 overrides (defense+
-  // buildup+style+lanes from the etalon, attack from the preset) — all 14
-  // STRING ordinals + priority.
+  // #477: with a matched canon situation (row 5 «Нужно удержать» in this
+  // LEAD fixture), the canon six settings + priority are authoritative and
+  // replace the etalon overrides. Non-manual controls keep the preset base.
   jeq(call.vector, {
-    def_line: '1', press_line: '1', def_width: '1', press_intense: '2',
-    build_type: '1', build_temp: '1', build_long: '1', build_fast: '1', style: '1',
+    def_line: '2', press_line: '2', def_width: '2', press_intense: '2',
+    build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '1',
     pass_risk: '2', dribble: '2', cross: '2', corner: '1', shot: '2',
     priority: ['left', 'right']
-  }, 'called with the exact merged vector (14 strings + priority)');
+  }, 'called with the exact canon-first merged vector (14 strings + priority)');
   jeq(Object.keys(call.vector).sort(), [
     'build_fast', 'build_long', 'build_temp', 'build_type', 'corner', 'cross',
     'def_line', 'def_width', 'dribble', 'pass_risk', 'press_intense', 'press_line',
@@ -204,8 +203,10 @@ const h = panelHarness();
     assert.equal(typeof call.vector[key], 'string', `merged vector.${key} is a STRING`);
   }
   assert.equal(call.opts.strict, true, 'strict apply (preflight + rollback)');
-  assert.ok(String(call.opts.source).startsWith('merged:'), 'source starts with merged:');
-  assert.equal(call.opts.source, 'merged:etalon:d5+b5+s1+presets:Emery_BalancedBase_v11', 'source names the etalon ids and the base preset');
+  // #477: a matched canon row owns the six manual settings, so the source
+  // attributes them to canon and the remaining controls to the base preset.
+  assert.ok(String(call.opts.source).startsWith('canon:'), 'source starts with canon:');
+  assert.equal(call.opts.source, 'canon:5+base:preset:Emery_BalancedBase_v11', 'source names the canon row and the base preset');
   assert.equal(call.opts.source, h.STATE.finalTacticRecommendation.source, 'bridge source equals the remembered recommendation source');
   assert.equal(h.STATE.finalTacticApplyStatus, 'applied', 'success → applied');
   assert.equal(btn.textContent, 'Применено ✓');
@@ -329,13 +330,13 @@ await scenario(
 // --- (7) already-applied is detected on the MERGED vector --------------------
 {
   h.setCurrentTactic({
-    def_line: '1', press_line: '1', def_width: '1', press_intense: '2',
-    build_type: '1', build_temp: '1', build_long: '1', build_fast: '1', style: '1',
+    def_line: '2', press_line: '2', def_width: '2', press_intense: '2',
+    build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '1',
     pass_risk: '2', dribble: '2', cross: '2', corner: '1', shot: '2',
     priority: ['left', 'right']
   });
   const html = h.render(h.LEAD.snapshot(), JSON.parse(JSON.stringify(h.LEAD.context)));
-  assert.ok(html.includes('>Уже применено</button>'), 'current tactic equals the MERGED vector → «Уже применено»');
+  assert.ok(html.includes('>Уже применено</button>'), 'current tactic equals the canon-first MERGED vector → «Уже применено»');
   assert.ok(html.includes(' disabled'), 'already-applied button is disabled');
   assert.equal(h.STATE.finalTacticApplyStatus, 'already_applied');
   assert.equal(html.includes('<div>Δ:'), false, 'no Δ line when the merged vector equals the current tactic');

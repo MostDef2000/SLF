@@ -14,6 +14,11 @@
     .fm-topbar{height:42px;background:#111522}.fm-deck{padding:10px 18px;background:#141827}.fm-card--manager{display:inline-block;padding:6px 10px;background:#1a2030;border-radius:10px}
     .fm-stage{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;padding:16px}.fm-slots{min-height:560px;background:#121624;border-radius:12px;padding:10px}.content-ui__wrapper{min-width:0;background:#101522;border-radius:14px;padding:16px;overflow:hidden}
     .pad2{min-width:0;background:#151a28;border:1px solid #303850;border-radius:12px;padding:12px}table{width:100%;border-collapse:collapse}th,td{padding:6px;border-bottom:1px solid #303850;text-align:left}
+    .train-bulk{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding:8px;background:#1c2132;border:1px solid #38415f;border-radius:10px}
+    .train-bulk__sk{display:flex;flex-direction:column;gap:3px;padding:4px;border:1px solid #303850;border-radius:8px}
+    .train-bulk__sk.is-on{border-color:#2bd97c}
+    .train-bulk__name,.train-bulk__save{padding:3px 6px}
+    .train-bulk__up{width:52px}
   </style>
 </head>
 <body>
@@ -26,12 +31,76 @@
         <section id="train">
           <h1>Тренировки</h1>
           <table>
-            <thead><tr><th>Выбор</th><th>Игрок</th><th>Позиция</th></tr></thead>
-            <tbody data-type="1"><tr><td><input type="checkbox" name="pl_arr[]" value="4001"></td><td>Тренируемый игрок</td><td>CM</td></tr></tbody>
+            <thead><tr><th>Выбор</th><th>Игрок</th><th>Позиция</th><th>ПС</th><th>СУ</th><th>ТУ</th><th>СК</th><th>УС</th><th>ОТ</th><th>ВП</th><th>ТХ</th><th>БВ</th><th>КР</th></tr></thead>
+            <tbody data-type="1">
+              <tr><td><input type="checkbox" name="pl_arr[]" value="4001"></td><td>Полевой один</td><td>CM</td><td data-sk="1"><span class="wide_format">20</span></td><td data-sk="2"><span class="wide_format">21</span></td><td data-sk="3"><span class="wide_format">22</span></td><td data-sk="4"><span class="wide_format">23</span></td><td data-sk="5"><span class="wide_format">24</span></td><td data-sk="6"><span class="wide_format">25</span></td><td data-sk="7"><span class="wide_format">26</span></td><td data-sk="8"><span class="wide_format">27</span></td><td data-sk="9"><span class="wide_format">28</span></td><td data-sk="10"><span class="wide_format">29</span></td></tr>
+              <tr><td><input type="checkbox" name="pl_arr[]" value="4002"></td><td>Полевой два</td><td>CM</td><td data-sk="1"><span class="wide_format">30</span></td><td data-sk="2"><span class="wide_format">31</span></td><td data-sk="3"><span class="wide_format">32</span></td><td data-sk="4"><span class="wide_format">33</span></td><td data-sk="5"><span class="wide_format">34</span></td><td data-sk="6"><span class="wide_format">35</span></td><td data-sk="7"><span class="wide_format">36</span></td><td data-sk="8"><span class="wide_format">37</span></td><td data-sk="9"><span class="wide_format">38</span></td><td data-sk="10"><span class="wide_format">39</span></td></tr>
+            </tbody>
+            <tbody data-type="0">
+              <tr><td><input type="checkbox" name="pl_arr[]" value="3001"></td><td>Вратарь один</td><td>GK</td><td data-sk="1"><span class="wide_format">25</span></td><td data-sk="2"><span class="wide_format">26</span></td><td data-sk="3"><span class="wide_format">27</span></td><td data-sk="4"><span class="wide_format">28</span></td><td data-sk="5"><span class="wide_format">29</span></td><td data-sk="6"><span class="wide_format">30</span></td><td data-sk="7"><span class="wide_format">31</span></td><td data-sk="8"><span class="wide_format">32</span></td><td data-sk="9"><span class="wide_format">33</span></td><td data-sk="10"><span class="wide_format">34</span></td></tr>
+            </tbody>
           </table>
+          <div class="train-bulk">
+            <div class="train-bulk__sk" data-i="1" data-order="0"><span class="train-bulk__badge">1</span><button type="button" class="train-bulk__name" data-f="ПС" data-gk="ПС" data-tip="ПС">ПС</button><input type="text" class="mint-input mint-input--sm train-bulk__up" inputmode="decimal" placeholder="цель" aria-label="Цель прокачки" disabled></div>
+            <div class="train-bulk__sk" data-i="2" data-order="0"><span class="train-bulk__badge">2</span><button type="button" class="train-bulk__name" data-f="СУ" data-gk="СВ" data-tip="СУ">СУ</button><input type="text" class="mint-input mint-input--sm train-bulk__up" inputmode="decimal" placeholder="цель" aria-label="Цель прокачки" disabled></div>
+            <div class="train-bulk__sk" data-i="3" data-order="0"><span class="train-bulk__badge">3</span><button type="button" class="train-bulk__name" data-f="ТУ" data-gk="ТВ" data-tip="ТУ">ТУ</button><input type="text" class="mint-input mint-input--sm train-bulk__up" inputmode="decimal" placeholder="цель" aria-label="Цель прокачки" disabled></div>
+            <div class="train-bulk__sk" data-i="4" data-order="0"><span class="train-bulk__badge">4</span><button type="button" class="train-bulk__name" data-f="СК" data-gk="СК" data-tip="СК">СК</button><input type="text" class="mint-input mint-input--sm train-bulk__up" inputmode="decimal" placeholder="цель" aria-label="Цель прокачки" disabled></div>
+            <div class="train-bulk__sk" data-i="5" data-order="0"><span class="train-bulk__badge">5</span><button type="button" class="train-bulk__name" data-f="УС" data-gk="РЕ" data-tip="УС">УС</button><input type="text" class="mint-input mint-input--sm train-bulk__up" inputmode="decimal" placeholder="цель" aria-label="Цель прокачки" disabled></div>
+            <div class="train-bulk__sk" data-i="6" data-order="0"><span class="train-bulk__badge">6</span><button type="button" class="train-bulk__name" data-f="ОТ" data-gk="ИВ" data-tip="ОТ">ОТ</button><input type="text" class="mint-input mint-input--sm train-bulk__up" inputmode="decimal" placeholder="цель" aria-label="Цель прокачки" disabled></div>
+            <div class="train-bulk__sk" data-i="7" data-order="0"><span class="train-bulk__badge">7</span><button type="button" class="train-bulk__name" data-f="ВП" data-gk="ВП" data-tip="ВП">ВП</button><input type="text" class="mint-input mint-input--sm train-bulk__up" inputmode="decimal" placeholder="цель" aria-label="Цель прокачки" disabled></div>
+            <div class="train-bulk__sk" data-i="8" data-order="0"><span class="train-bulk__badge">8</span><button type="button" class="train-bulk__name" data-f="ТХ" data-gk="РМ" data-tip="ТХ">ТХ</button><input type="text" class="mint-input mint-input--sm train-bulk__up" inputmode="decimal" placeholder="цель" aria-label="Цель прокачки" disabled></div>
+            <div class="train-bulk__sk" data-i="9" data-order="0"><span class="train-bulk__badge">9</span><button type="button" class="train-bulk__name" data-f="БВ" data-gk="ПИ" data-tip="БВ">БВ</button><input type="text" class="mint-input mint-input--sm train-bulk__up" inputmode="decimal" placeholder="цель" aria-label="Цель прокачки" disabled></div>
+            <div class="train-bulk__sk" data-i="10" data-order="0"><span class="train-bulk__badge">10</span><button type="button" class="train-bulk__name" data-f="КР" data-gk="ВВ" data-tip="КР">КР</button><input type="text" class="mint-input mint-input--sm train-bulk__up" inputmode="decimal" placeholder="цель" aria-label="Цель прокачки" disabled></div>
+            <div class="train-bulk__sk" data-i="11" data-order="0"><span class="train-bulk__badge">11</span><button type="button" class="train-bulk__name" data-f="ВЫН" data-gk="ВЫН" data-tip="ВЫН">ВЫН</button><input type="text" class="mint-input mint-input--sm train-bulk__up" inputmode="decimal" placeholder="цель" aria-label="Цель прокачки" disabled></div>
+            <button type="button" class="train-bulk__save">Сохранить</button>
+          </div>
         </section>
       </div>
     </section>
   </main>
+  <script>
+    (() => {
+      window.__trainSaveClicks = 0;
+      window.__trainSubmits = 0;
+      window.__trainBulkEvents = [];
+      const panel = document.querySelector('.train-bulk');
+      if (panel) {
+        panel.querySelectorAll('.train-bulk__name').forEach(button => {
+          button.addEventListener('click', () => {
+            const chip = button.closest('.train-bulk__sk');
+            const input = chip.querySelector('.train-bulk__up');
+            const active = chip.classList.toggle('is-on');
+            input.disabled = !active;
+            if (!active) input.value = '';
+            let order = 0;
+            panel.querySelectorAll('.train-bulk__sk.is-on').forEach(node => {
+              node.dataset.order = String(++order);
+            });
+          });
+        });
+        panel.addEventListener('input', event => {
+          if (event.target.classList?.contains('train-bulk__up')) {
+            window.__trainBulkEvents.push({ type: 'input', i: event.target.closest('.train-bulk__sk')?.dataset.i || '', value: event.target.value });
+          }
+        });
+        panel.addEventListener('change', event => {
+          if (event.target.classList?.contains('train-bulk__up')) {
+            window.__trainBulkEvents.push({ type: 'change', i: event.target.closest('.train-bulk__sk')?.dataset.i || '', value: event.target.value });
+          }
+        });
+      }
+      const save = document.querySelector('.train-bulk__save');
+      if (save) {
+        save.addEventListener('click', () => {
+          window.__trainSaveClicks += 1;
+          fetch('/ajax/team3.9.php?a=train&ia=plan', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: '' }).catch(() => {});
+        });
+      }
+      document.addEventListener('submit', event => {
+        window.__trainSubmits += 1;
+        event.preventDefault();
+      });
+    })();
+  </script>
 </body>
 </html>

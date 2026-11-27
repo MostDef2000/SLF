@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.372
+// @version      4.4.388
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.372',
-        scriptVersion: '4.4.372',
+        version: '4.4.388',
+        scriptVersion: '4.4.388',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.372',
+        scriptVersion: '4.4.388',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -792,7 +792,27 @@ const DomUtils = {
             error.status = metadata.status;
             error.statusText = metadata.statusText;
             error.response = metadata;
-    
+
+            // Carry the server's own failure classification from a non-2xx JSON
+            // body so the UI can report the honest cause (e.g. empty_answer)
+            // instead of a generic status guess. Non-JSON or fieldless bodies
+            // leave the fields absent; the raw body is never logged or echoed.
+            if (kind === 'http') {
+                try {
+                    const body = JSON.parse(response && response.responseText);
+                    if (body && typeof body === 'object') {
+                        if (typeof body.errorKind === 'string') error.errorKind = body.errorKind;
+                        if (typeof body.error === 'string') error.serverError = redactApiText(body.error);
+                        // #471: the only finish reason carried to the UI is the
+                        // server's own allowlisted 'length' (truncated-empty
+                        // answer); arbitrary provider strings are never echoed.
+                        if (body.finishReason === 'length') error.finishReason = 'length';
+                    }
+                } catch (_) {
+                    // non-JSON error body: keep the status-based fallbacks
+                }
+            }
+
             return error;
         }
     
@@ -989,6 +1009,7 @@ const DomUtils = {
                     schema: 'slf_canonical_api_status_v2',
                     status: (data && data.status) ? data.status : (degraded ? 'degraded' : 'ok'),
                     games: (data && Number.isFinite(data.games)) ? data.games : 0,
+                    advisor: data && data.advisor,
                     collections
                 };
             })
@@ -2925,6 +2946,20 @@ const DomUtils = {
     }
 
     async function applyPresetAsync(name) {
+        // A failed preset apply that may have left the native controls in an
+        // unconfirmed state must not look like a resumable active lab experiment.
+        // Preflight failures and verified rollbacks leave the page untouched and
+        // the lab activation stays active; only an unverified rollback or a
+        // lineup mutation is recorded as an honest indeterminate activation.
+        function markLabIndeterminateIfUnverified(applied) {
+            if (applied?.reason !== 'rollback_unverified' && applied?.reason !== 'unexpected_lineup_mutation') return;
+            try {
+                STATE.tacticalLabRuntime?.markIndeterminate?.(applied.reason, STATE.lastTacticApplyFailure || null);
+            } catch (error) {
+                debugWarn('[SLF] Tactical Lab indeterminate state not recorded', error);
+            }
+        }
+
         // Allow an old persisted v10 selection without reintroducing the old
         // ID into active preset controls or recording it as a new source ID.
         name = PresetStorage.resolvePresetId?.(name) || name;
@@ -2939,17 +2974,6 @@ const DomUtils = {
         const beforeSnapshot = location.pathname.includes('/game.php')
             ? SnapshotEngine.build()
             : null;
-
-        if (location.pathname.includes('/game.php') && STATE.tacticalLabRuntime?.isActive?.()) {
-            try {
-                await STATE.tacticalLabRuntime.closeActive('user_selected_production', beforeSnapshot, {
-                    nextPresetId: name,
-                    nextTacticSource: 'production'
-                });
-            } catch (error) {
-                debugWarn('[SLF] Tactical Lab exit telemetry failed before production preset', error);
-            }
-        }
 
         const formationBefore = STATE.tacticControlBridge.inspectFixedLineup?.() || null;
         if (formationBefore?.available && !formationBefore.ok) {
@@ -2971,6 +2995,7 @@ const DomUtils = {
                 rolledBack:applied.rolledBack === true, ts:Date.now()
             };
             debugWarn('[SLF] Не подтверждена установка тактики в интерфейсе:', name, applied.failures, applied.mismatches);
+            markLabIndeterminateIfUnverified(applied);
             return false;
         }
 
@@ -2982,7 +3007,27 @@ const DomUtils = {
                 reason:'unexpected_lineup_mutation', ts:Date.now()
             };
             debugWarn('[SLF v11] Нативная страница неожиданно изменила позиции игроков:', name);
+            markLabIndeterminateIfUnverified({ reason:'unexpected_lineup_mutation' });
             return false;
+        }
+
+        // Variant A: the lab experiment survives a failed apply — it is closed
+        // only here, after the UI readback (and lineup) are confirmed.
+        const nextFingerprint = applied.tactic && typeof SnapshotEngine !== 'undefined'
+            ? SnapshotEngine.telemetryV2?.tacticFingerprint?.(applied.tactic) || null
+            : null;
+        const labExit = {
+            nextPresetId: name,
+            nextTacticSource: 'production'
+        };
+        if (nextFingerprint) labExit.nextTacticFingerprint = nextFingerprint;
+
+        if (location.pathname.includes('/game.php') && STATE.tacticalLabRuntime?.isActive?.()) {
+            try {
+                await STATE.tacticalLabRuntime.closeActive('user_selected_production', beforeSnapshot, labExit);
+            } catch (error) {
+                debugWarn('[SLF] Tactical Lab exit telemetry failed after production preset', error);
+            }
         }
 
         const labels = PresetStorage.getAllLabels ? PresetStorage.getAllLabels() : {};
@@ -4044,7 +4089,7 @@ const DomUtils = {
         async function closeActive(reason, snapshot = null, next = {}) {
             snapshot = snapshot || SnapshotEngine.build();
             const state = loadState(getGameId(snapshot));
-            if (!state?.activation || state.activation.status !== 'active') return null;
+            if (!state?.activation || (state.activation.status !== 'active' && state.activation.status !== 'indeterminate')) return null;
             const experiment = experimentFor(state);
             if (!experiment) return null;
             const activation = clone(state.activation);
@@ -4083,13 +4128,44 @@ const DomUtils = {
 
         function isActive() {
             const state = loadState(String(MatchStateParser.getGameId() || ''));
-            return state?.activation?.status === 'active';
+            // An indeterminate activation is still in progress (never reusable
+            // and never completed): the shared apply path must be able to
+            // resolve it with a later confirmed production preset.
+            return state?.activation?.status === 'active' || state?.activation?.status === 'indeterminate';
+        }
+        // A failed production preset apply that may have left the native
+        // controls unconfirmed: keep the activation (it must never be silently
+        // reusable or reported as a completed experiment) and record the honest
+        // indeterminate status. Never writes `completed`.
+        function markIndeterminate(reason, failure = null) {
+            const state = loadState(String(MatchStateParser.getGameId() || ''));
+            if (!state?.activation || state.activation.status !== 'active') return null;
+            state.activation.status = 'indeterminate';
+            state.activation.indeterminateReason = reason || 'apply_unverified';
+            state.activation.indeterminateAtTs = Date.now();
+            state.activation.failure = clone(failure || null);
+            persistState(state);
+            renderUI();
+            return clone(state.activation);
         }
         async function checkpoint(source = 'explicit_checkpoint', snapshot = null) {
             snapshot = snapshot || SnapshotEngine.build();
             const state = loadState(getGameId(snapshot));
             if (!state?.assignment) return {active:false,completed:null};
             if (state.outbox?.length) void flushOutbox(state);
+            if (state?.activation?.status === 'indeterminate') {
+                // An unconfirmed apply stays indeterminate: record the observed
+                // fingerprint honestly instead of fabricating a tactic_changed
+                // completion the exit telemetry could not confirm.
+                const actual = tacticFingerprint(getCurrentTactic());
+                if (state.activation.lastObservedFingerprint !== actual) {
+                    state.activation.lastObservedFingerprint = actual;
+                    state.activation.lastObservedAtTs = Date.now();
+                    persistState(state);
+                }
+                renderUI();
+                return {active:false,indeterminate:true,completed:clone(state.completed || null)};
+            }
             if (!state?.activation || state.activation.status !== 'active') {
                 renderUI();
                 return {active:false,completed:clone(state.completed || null)};
@@ -4166,7 +4242,13 @@ const DomUtils = {
             const shortId = experiment.experimentId.replace(/^EXP-561-P\d+-/,'EXP-');
             panel.dataset.experimentId = experiment.experimentId;
             panel.dataset.populationVersion = populationVersion;
-            if (state.activation?.status === 'active') {
+            if (state.activation?.status === 'indeterminate') {
+                status.textContent = `● ${shortId} ПРЕРВАН · состояние тактики не подтверждено`;
+                status.style.color = '#ff9f43';
+                detail.textContent = `Применение пресета не подтвердилось (${state.activation.indeterminateReason || 'apply_unverified'}). Тест не завершён и не будет засчитан как обычный.`;
+                button.disabled = true;
+                button.textContent = 'Тест прерван';
+            } else if (state.activation?.status === 'active') {
                 status.textContent = `● ${shortId} ACTIVE${state.activation.startedAtMinute!=null?` · применён на ${state.activation.startedAtMinute}'`:''}`;
                 status.style.color = '#43f58c';
                 detail.textContent = 'Эксперимент применён. Следующая проверка — только по ↻ Подсказка, выбору production preset или финальному парсингу.';
@@ -4247,7 +4329,7 @@ const DomUtils = {
                 getPopulation(){return clone(population);},
                 getAssignment(gameId){return clone(loadState(String(gameId||MatchStateParser.getGameId()||''))?.assignment||null);},
                 assignForGame(gameId){const experiment=selectExperiment(String(gameId||''));return {experimentId:experiment.experimentId,genomeFingerprint:experiment.genomeFingerprint,parentExperimentId:experiment.parentExperimentId,selectionWeightPct:experiment.selectionWeightPct};},
-                activate,closeActive,checkpoint,isActive,mountUI,
+                activate,closeActive,checkpoint,isActive,markIndeterminate,mountUI,
                 flushOutbox(){return flushOutbox(loadState(String(MatchStateParser.getGameId()||'')));}
             };
             void mountUI();
@@ -5347,9 +5429,21 @@ const SnapshotEngine = {
             return Promise.resolve({ status: 208, deduplicated: true, resultKey: key });
         }
 
+        // #469: the finished-match POST body was the stall offender (~23 KB).
+        // These four verbose fields are transport-dead for the results endpoint
+        // (server.py reads only status/score/gameId/parsedAt/resultKey/teams/
+        // myTeam) — the same field set compactOutboxPayload strips for snapshot
+        // outbox storage. Compact a copy: snapshot.lineupRows must survive for
+        // sendPlayerObservations below, and tacticTelemetry stays verbatim.
+        const transportResult = Object.assign({}, result);
+        delete transportResult.lineupRows;
+        delete transportResult.shotsTable;
+        delete transportResult.eventsText;
+        delete transportResult.developerHints;
+
         const request = Promise.resolve(Api.postAppend(
             CONFIG.COLLECTIONS.MATCH_RESULTS,
-            result,
+            transportResult,
             'match result history'
         )).then(response => {
             this._sentMatchResultKeys.add(key);
@@ -9781,6 +9875,29 @@ TacticalKnowledgePack.init();
     Object.entries(PRESETS).forEach(([name,preset])=>{if(Number(preset.press_intense)>=3&&META[name])META[name]=Object.assign({},META[name],{use:`${META[name].use}. ${HIGH_PRESS_ROLE_NOTE}`});});
     const TRAITS={"Emery_BalancedBase_v11":{"requires":[],"avoids":["late_emergency_chase","transition_crisis"],"attackLanes":["center","left","right"],"build":"fixed_lineup_patient_progression","tempo":"medium","press":"low","risk":"low"},"Mourinho_CleanCounter_v11":{"requires":["confirmed_counter_exit"],"avoids":["counter_exit_blocked","press_fatigue","high_bad_actions"],"attackLanes":["left","right","center"],"build":"confirmed_counter_outlet","tempo":"medium_high","press":"low","risk":"medium"},"Guardiola_PressEscape_v11":{"requires":["pressure_without_counter_exit"],"avoids":["urgent_chase"],"attackLanes":["center"],"build":"press_resistant_control","tempo":"low","press":"low","risk":"low"},"Arteta_SafePossession_v11":{"requires":["manual_selection_only"],"avoids":["late_emergency_chase"],"attackLanes":["center","left","right"],"build":"structural_control","tempo":"medium","press":"medium","risk":"medium"},"Guardiola_PressCooldown_v11":{"requires":["press_fatigue"],"avoids":["late_emergency_chase"],"attackLanes":["center","right"],"build":"cooldown_outlet","tempo":"low","press":"very_low","risk":"low"},"Guardiola_ControlledPush_v11":{"requires":["need_goal_or_attack_need"],"avoids":["very_high_bad_actions"],"attackLanes":["center","left","right"],"build":"controlled_push","tempo":"high","press":"medium","risk":"medium_high"},"Guardiola_PositionalSiege_v11":{"requires":["attacking_momentum","transition_control"],"avoids":["transition_threat","press_fatigue"],"attackLanes":["center","left","right"],"build":"fixed_back_four_positional_siege","tempo":"high","press":"high","risk":"very_high"},"Conte_WideChannels_v11":{"requires":["wide_quality","center_closed"],"avoids":["own_crosses_bad","opponent_crosses_dangerous"],"attackLanes":["left","right"],"build":"fixed_lineup_wide_channels","tempo":"medium_high","press":"medium","risk":"high"},"Klopp_LateGegenpress_v11":{"requires":["late_need_goal","fitness"],"avoids":["press_fatigue","high_bad_actions","transition_threat"],"attackLanes":["center","left","right"],"build":"gegenpress_424","tempo":"very_high","press":"very_high","risk":"very_high"},"Simeone_CompactLead_v11":{"requires":["protect_lead"],"avoids":["urgent_chase"],"attackLanes":["left","right"],"build":"compact442","tempo":"low","press":"low","risk":"low"},"Simeone_EmergencyBlock_v11":{"requires":["mandatory_reassessment_next_window"],"avoids":["permanent_losing_state"],"attackLanes":[],"build":"temporary_emergency_lock","tempo":"very_low","press":"very_low","risk":"very_low"},"Allegri_LeadOutlet_v11":{"requires":["protect_lead","safe_first_pass"],"avoids":["urgent_chase"],"attackLanes":["left","right","center"],"build":"safe_lead_outlet","tempo":"low","press":"very_low","risk":"low"},"Flick_LeadPressHold_v12":{"requires":["lead_one_goal","opponent_press_vector_high"],"avoids":["transition_threat","high_bad_actions"],"attackLanes":["center","left","right"],"build":"lead_press_hold_4231","tempo":"high","press":"high","risk":"medium_high"}};
     const ROLE_CONTRACTS={"Emery_BalancedBase_v11":{"presetId":"Emery_BalancedBase_v11","role":"default_start","primarySituation":"default_start","allowedSituations":["default_start"],"entryConditions":["balanced_opposition","same_fixed_lineup"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Mourinho_CleanCounter_v11":{"presetId":"Mourinho_CleanCounter_v11","role":"pressure_counter","primarySituation":"pressure_counter","allowedSituations":["pressure_counter","pressure_escape"],"entryConditions":["confirmed_counter_exit","только подтверждённый чистый контрвыход"],"exitConditions":[],"hardVetoes":["подтверждённый чистый выход","нет блокировки первого паса"],"riskClass":"medium","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PressEscape_v11":{"presetId":"Guardiola_PressEscape_v11","role":"pressure_escape","primarySituation":"pressure_escape","allowedSituations":["pressure_escape"],"entryConditions":["pressure_without_counter_exit","давление без открытого контрвыхода"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Arteta_SafePossession_v11":{"presetId":"Arteta_SafePossession_v11","role":"possession_control","primarySituation":"possession_control","allowedSituations":["possession_control"],"entryConditions":["manual_only","underperforming_in_three_user_matches"],"exitConditions":[],"hardVetoes":["manual_only_diagnostic"],"riskClass":"low","fallbackEligible":false,"manualOnly":true,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PressCooldown_v11":{"presetId":"Guardiola_PressCooldown_v11","role":"press_cooldown","primarySituation":"press_cooldown","allowedSituations":["press_cooldown","pressure_escape","default_start"],"entryConditions":["press_fatigue","усталость/рост брака"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_ControlledPush_v11":{"presetId":"Guardiola_ControlledPush_v11","role":"controlled_chase","primarySituation":"controlled_chase","allowedSituations":["controlled_chase","positional_siege","default_start"],"entryConditions":["need_goal_or_attack_need","нужен гол без экстренного all-in"],"exitConditions":[],"hardVetoes":[],"riskClass":"medium_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Guardiola_PositionalSiege_v11":{"presetId":"Guardiola_PositionalSiege_v11","role":"positional_siege","primarySituation":"positional_siege","allowedSituations":["positional_siege","controlled_chase","late_high_pressure"],"entryConditions":["attacking_momentum","transition_control","моментум при контроле переходов"],"exitConditions":[],"hardVetoes":["запрещено при угрозе переходов и усталости"],"riskClass":"very_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Conte_WideChannels_v11":{"presetId":"Conte_WideChannels_v11","role":"width_attack","primarySituation":"width_attack","allowedSituations":["width_attack","positional_siege"],"entryConditions":["wide_quality","center_closed","закрытый центр, качественные фланги"],"exitConditions":[],"hardVetoes":[],"riskClass":"high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Klopp_LateGegenpress_v11":{"presetId":"Klopp_LateGegenpress_v11","role":"late_high_pressure","primarySituation":"late_high_pressure","allowedSituations":["late_high_pressure","positional_siege"],"entryConditions":["late_need_goal","fitness","позднее отставание и хорошая физика"],"exitConditions":[],"hardVetoes":["только поздняя погоня","физика должна быть достаточна"],"riskClass":"very_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Simeone_CompactLead_v11":{"presetId":"Simeone_CompactLead_v11","role":"protect_lead","primarySituation":"protect_lead","allowedSituations":["protect_lead","emergency_lock","default_start"],"entryConditions":["protect_lead","небольшое преимущество без осады"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Simeone_EmergencyBlock_v11":{"presetId":"Simeone_EmergencyBlock_v11","role":"emergency_lock","primarySituation":"emergency_lock","allowedSituations":["emergency_lock","protect_lead"],"entryConditions":["mandatory_reassessment_next_window","экстренная осада при отсутствии выхода"],"exitConditions":[],"hardVetoes":["только временная экстренная оборона"],"riskClass":"very_low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Allegri_LeadOutlet_v11":{"presetId":"Allegri_LeadOutlet_v11","role":"protect_lead_with_outlet","primarySituation":"protect_lead_with_outlet","allowedSituations":["protect_lead_with_outlet","protect_lead","default_start"],"entryConditions":["protect_lead","safe_first_pass","преимущество и доступен первый пас"],"exitConditions":[],"hardVetoes":[],"riskClass":"low","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"},"Flick_LeadPressHold_v12":{"presetId":"Flick_LeadPressHold_v12","role":"lead_press_hold","primarySituation":"lead_press_hold","allowedSituations":["lead_press_hold","protect_lead"],"entryConditions":["lead_one_goal","opponent_press_vector_high","преимущество в один гол против прессинга выше плана"],"exitConditions":[],"hardVetoes":["вне окна 60–85 минут при преимуществе","вектор прессинга соперника ниже +20%"],"riskClass":"medium_high","fallbackEligible":false,"manualOnly":false,"fixedLineupProfileId":"fixed_4231_cd1_cd3_rw_or_rm"}};
+    // Issue #477 — documented canon crosswalk between the 13 active coach
+    // presets and the 12 manual rows. Identity is never vector proximity:
+    // only an entry with exact:true realizes the row's six attack settings
+    // for its declared variant and may therefore back an actionable switch.
+    // Emery realizes row 1 exactly (controls 2 2 2 2 3, priority []); every
+    // other entry is an explicitly non-exact association (or an SLF addition)
+    // and can never authorize a switch. Rows with no association (2, 3, 9,
+    // 10) and row 4/6 variants have no exact preset realization at all.
+    const CANON_MAPPINGS={
+        Emery_BalancedBase_v11:{row:1,variant:'default',exact:true,note:'Контроли 2 2 2 2 3 и приоритет [] совпадают со строкой 1 точно.'},
+        Mourinho_CleanCounter_v11:{row:7,variant:null,exact:false,note:'Контрвыход через свободный первый пас — ассоциация со строкой 7; вектор не совпадает.'},
+        Guardiola_PressEscape_v11:{row:6,variant:null,exact:false,note:'Выход из прессинга — ассоциация со строкой 6; вариант зависит от относительной силы XI.'},
+        Arteta_SafePossession_v11:{row:11,variant:null,exact:false,note:'Схема контроля — ассоциация со строкой 11; manual-only, автоматический switch запрещён.'},
+        Guardiola_PressCooldown_v11:{row:null,variant:null,exact:false,addition:'press_cooldown',note:'SLF-дополнение press_cooldown, не строка шпаргалки (R4).'},
+        Guardiola_ControlledPush_v11:{row:4,variant:null,exact:false,note:'Дожим при потребности в голе — ассоциация со строкой 4; фланг не выбран.'},
+        Guardiola_PositionalSiege_v11:{row:8,variant:null,exact:false,note:'Позиционный дожим против автобуса — ассоциация со строкой 8.'},
+        Conte_WideChannels_v11:{row:4,variant:null,exact:false,note:'Широкие каналы — ассоциация со строкой 4; включает оба фланга, ни один вариант не реализован точно.'},
+        Klopp_LateGegenpress_v11:{row:12,variant:null,exact:false,note:'Поздний навал — ассоциация со строкой 12; приоритеты и вектор не совпадают.'},
+        Simeone_CompactLead_v11:{row:5,variant:null,exact:false,note:'Удержание счёта — ассоциация со строкой 5.'},
+        Simeone_EmergencyBlock_v11:{row:5,variant:null,exact:false,note:'Аварийная блокировка — ассоциация со строкой 5.'},
+        Allegri_LeadOutlet_v11:{row:5,variant:null,exact:false,note:'Удержание через outlet — ассоциация со строкой 5; outlet не входит в мануальные контроли.'},
+        Flick_LeadPressHold_v12:{row:5,variant:null,exact:false,note:'Удержание с прессингом — ассоциация со строкой 5.'}
+    };
     const SCHEME_STATES={"midblock_control_4231":"Fixed 4-2-3-1 RW/RM — Unai Emery — Balanced Base","midblock_counter_4411":"Fixed 4-2-3-1 RW/RM — José Mourinho — Clean Counter","box_control":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Press Escape","arteta_control":"Fixed 4-2-3-1 RW/RM — Mikel Arteta — Safe Possession","press_cooldown":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Press Cooldown","controlled_push":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Controlled Push","positional_325":"Fixed 4-2-3-1 RW/RM — Pep Guardiola — Positional Siege","wingback_width":"Fixed 4-2-3-1 RW/RM — Antonio Conte — Wide Channels","gegenpress_424":"Fixed 4-2-3-1 RW/RM — Jürgen Klopp — Late Gegenpress","compact_442":"Fixed 4-2-3-1 RW/RM — Diego Simeone — Compact Lead","low_block_541":"Fixed 4-2-3-1 RW/RM — Diego Simeone — Emergency Block","lead_outlet_4141":"Fixed 4-2-3-1 RW/RM — Massimiliano Allegri — Lead Outlet","lead_press_hold_4231":"Fixed 4-2-3-1 RW/RM — Hansi Flick — Lead Press Hold"};
     const PRESET_SCHEME_STATE={"Emery_BalancedBase_v11":"midblock_control_4231","Mourinho_CleanCounter_v11":"midblock_counter_4411","Guardiola_PressEscape_v11":"box_control","Arteta_SafePossession_v11":"arteta_control","Guardiola_PressCooldown_v11":"press_cooldown","Guardiola_ControlledPush_v11":"controlled_push","Guardiola_PositionalSiege_v11":"positional_325","Conte_WideChannels_v11":"wingback_width","Klopp_LateGegenpress_v11":"gegenpress_424","Simeone_CompactLead_v11":"compact_442","Simeone_EmergencyBlock_v11":"low_block_541","Allegri_LeadOutlet_v11":"lead_outlet_4141","Flick_LeadPressHold_v12":"lead_press_hold_4231"};
     const LADDERS={"defensive":["Emery_BalancedBase_v11","Allegri_LeadOutlet_v11","Flick_LeadPressHold_v12","Simeone_CompactLead_v11","Simeone_EmergencyBlock_v11","Guardiola_PressCooldown_v11"],"balance":["Emery_BalancedBase_v11","Guardiola_PressEscape_v11","Mourinho_CleanCounter_v11","Conte_WideChannels_v11"],"attack":["Guardiola_ControlledPush_v11","Guardiola_PositionalSiege_v11","Klopp_LateGegenpress_v11"]};
@@ -9882,7 +9999,7 @@ TacticalKnowledgePack.init();
         // {delta, source:'seed'|'none', ruleIds, n, packVersion}. No I/O, no
         // mutation; the pack itself is read synchronously from the loader.
         knowledgeAssessment:function(args){return knowledgeAssessment(args);},
-        roleContracts:Object.fromEntries(Object.entries(ROLE_CONTRACTS).map(([id,c])=>[id,Object.assign({},c,{allowedSituations:c.allowedSituations.slice(),entryConditions:c.entryConditions.slice(),exitConditions:c.exitConditions.slice(),hardVetoes:c.hardVetoes.slice(),formation:(FORMATIONS[id]||[]).slice(),controls:Object.assign({},PRESETS[id],{priority:(PRESETS[id]?.priority||[]).slice()})})]))
+        roleContracts:Object.fromEntries(Object.entries(ROLE_CONTRACTS).map(([id,c])=>[id,Object.assign({},c,{allowedSituations:c.allowedSituations.slice(),entryConditions:c.entryConditions.slice(),exitConditions:c.exitConditions.slice(),hardVetoes:c.hardVetoes.slice(),formation:(FORMATIONS[id]||[]).slice(),controls:Object.assign({},PRESETS[id],{priority:(PRESETS[id]?.priority||[]).slice()}),canon:CANON_MAPPINGS[id]?Object.assign({},CANON_MAPPINGS[id]):null})]))
     };
 })();
 // <<< src/modules/tactics-presets/active-preset-registry.js
@@ -10931,6 +11048,112 @@ TacticalKnowledgePack.init();
             b12: { id: 'b12', label: 'Самолёт/много атаки', lanes: 'фланги / фланг+центр', words: { build_type: ['Смешанный', 'выносы'], build_temp: ['Высокий'], build_long: ['Редко', 'умеренно'], build_fast: ['Редко'], style: ['Обычный', 'атака'] } }
         },
 
+        // Issue #477 — the developer manual («Шпаргалка: построение атаки»)
+        // is the canon authority for the hint. The 12 rows and the eight
+        // legend lines below are transcribed verbatim from the in-repo canon
+        // source specs/477-canon-situation-presets/canon-source.md (itself
+        // transcribed from the owner-provided screenshot). The concrete numeric
+        // realizations (including the row 4 flank and row 6 relative-strength
+        // variants) are the selected settings recorded here; they make a row
+        // actionable without turning the manual's permitted ranges into new
+        // claims. Rows 2 and 7 intentionally share a vector and stay distinct
+        // situations; rows 6-stronger and 12 share a vector too. Identity is
+        // never the vector.
+        canon: {
+            schema: 'slf_canon_manual_v1',
+            version: 'slf_canon_manual_v1_2026_11_21',
+            title: 'Шпаргалка: построение атаки',
+            subtitle: 'Быстрые настройки перед матчем',
+            source: [
+                'specs/477-canon-situation-presets/canon-source.md'
+            ],
+            controlOrder: ['priority', 'build_type', 'build_temp', 'build_long', 'build_fast', 'style'],
+            settingsTextOrder: ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'],
+            legend: [
+                'Фланги — надёжнее и проще',
+                'Центр — опаснее, но рискованнее',
+                'Позиционный выход — сильнее, но опаснее',
+                'Выносы — проще, но тупее',
+                'Высокий темп — быстрее к воротам, больше брака',
+                'Диагонали / в касание — хороши против пассивного соперника',
+                'Стиль атака — для дожима',
+                'Стиль защита — для выживания и удержания'
+            ],
+            // settingText repeats the manual's verbatim Russian words for the
+            // six manual columns (build_type = «Выход из обороны», build_temp =
+            // «Темп», build_long = «Диагонали», build_fast = «В касание»,
+            // style = «Стиль»). A slash pair is ONE column's permitted range and
+            // is rendered as ' / ' exactly as transcribed from
+            // specs/477-canon-situation-presets/canon-source.md. The numbers above
+            // make a row actionable; these words keep the hint honest.
+            rows: [
+                { id: 1, situation: 'Равный матч', priority: '000', vector: { build_type: '2', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Умеренно', build_fast: 'Умеренно', style: 'Обычный' } },
+                { id: 2, situation: 'Ты фаворит', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Средний', build_long: 'Умеренно', build_fast: 'Умеренно / часто', style: 'Обычный / атака' } },
+                { id: 3, situation: 'Ты андердог', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '2' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Редко', build_fast: 'Редко', style: 'Защита / обычный' } },
+                {
+                    id: 4, situation: 'Нужно забить',
+                    settingText: { build_type: 'Позиционный', build_temp: 'Средний / высокий', build_long: 'Умеренно', build_fast: 'Умеренно / часто', style: 'Атака / атака+' },
+                    variants: [
+                        { id: 'left', label: 'левая сторона', priority: '110', vector: { build_type: '3', build_temp: '3', build_long: '2', build_fast: '2', style: '4' } },
+                        { id: 'right', label: 'правая сторона', priority: '011', vector: { build_type: '3', build_temp: '3', build_long: '2', build_fast: '2', style: '4' } }
+                    ]
+                },
+                { id: 5, situation: 'Нужно удержать', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '1' }, settingText: { build_type: 'Смешанный / выносы', build_temp: 'Низкий / средний', build_long: 'Редко', build_fast: 'Редко / умеренно', style: 'Защита / защита+' } },
+                {
+                    id: 6, situation: 'Соперник сильно прессингует',
+                    settingText: { build_type: 'Смешанный', build_temp: 'Средний / высокий', build_long: 'Редко', build_fast: 'Редко', style: 'По силе команд' },
+                    variants: [
+                        { id: 'weaker', label: 'наша XI слабее', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '2' } },
+                        { id: 'equal', label: 'XI равны', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '3' } },
+                        { id: 'stronger', label: 'наша XI сильнее', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '4' } }
+                    ]
+                },
+                { id: 7, situation: 'Соперник почти не прессингует', priority: '000', vector: { build_type: '3', build_temp: '2', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Низкий / средний', build_long: 'Умеренно / часто', build_fast: 'Умеренно / часто', style: 'Обычный / атака' } },
+                { id: 8, situation: 'Взлом автобуса', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '3', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Низкий / средний', build_long: 'Умеренно / часто', build_fast: 'Умеренно / часто', style: 'Обычный / атака' } },
+                { id: 9, situation: 'Хаотичный матч', priority: '101', vector: { build_type: '2', build_temp: '2', build_long: '1', build_fast: '1', style: '3' }, settingText: { build_type: 'Смешанный', build_temp: 'Средний', build_long: 'Редко', build_fast: 'Редко', style: 'Обычный' } },
+                { id: 10, situation: 'Игра через «столба»', priority: '101', vector: { build_type: '1', build_temp: '2', build_long: '1', build_fast: '1', style: '3' }, settingText: { build_type: 'Выносы', build_temp: 'Средний', build_long: 'Редко', build_fast: 'Редко', style: 'Обычный / защита' } },
+                { id: 11, situation: 'Схема контроля', priority: '000', vector: { build_type: '3', build_temp: '1', build_long: '2', build_fast: '2', style: '3' }, settingText: { build_type: 'Позиционный', build_temp: 'Низкий', build_long: 'Умеренно', build_fast: 'Умеренно / часто', style: 'Обычный' } },
+                { id: 12, situation: 'Самолёт / много атаки', priority: '101', vector: { build_type: '2', build_temp: '3', build_long: '1', build_fast: '1', style: '4' }, settingText: { build_type: 'Смешанный / выносы', build_temp: 'Высокий', build_long: 'Редко / умеренно', build_fast: 'Редко', style: 'Обычный / атака' } }
+            ],
+            // Data-backed SLF additions live in their own namespace: they are
+            // NOT screenshot rows and may never displace a resolved manual row.
+            additions: [
+                {
+                    id: 'press_cooldown', situation: 'Прессинг-усталость',
+                    provenance: 'SLF data-backed addition (not a screenshot row)',
+                    entryConditions: ['press_fatigue', 'no_urgent_chase'],
+                    eligibleRole: 'Guardiola_PressCooldown_v11'
+                }
+            ],
+            // Issue #477 R9. One documented own-league rule (owner decision
+            // #477 comment 7057658763): the STRENGTH zone decides a mixed
+            // club; the points-rank zone is confirmation only. Thresholds:
+            // favourite >= 75th strength percentile, underdog <= 25th,
+            // otherwise middle. Missing/incomparable/wrong-season evidence is
+            // insufficient — never row 1. Owner-internal rank is irrelevant.
+            leagueRule: {
+                primarySignal: 'strength_zone',
+                confirmationSignal: 'rank_zone',
+                favouriteMinPercentile: 75,
+                underdogMaxPercentile: 25,
+                mixedResolution: 'strength_zone',
+                note: 'Эйрбас last among the owner seven is not underdog evidence (#477 R9).'
+            },
+            // Dated snapshot validated 2026-11-21 from the read-only standings
+            // intake (source: slf.fm champ.php standings, GET-only). Only the
+            // classification-relevant fields are retained; the full league
+            // dump stays in the delivery evidence, not the userscript.
+            leagueStarts: [
+                { club: 'Эйрбас', league: 'Уэльса (Лига Севера)', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Эйрбас', league: 'Уэльса (Лига Севера)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 14, rank: 8, strengthRank: 5, strengthPercentile: 69.2, strengthZone: 'mid', rankZone: 'mid' } },
+                { club: 'Луч', league: 'России (Вторая Лига Б (Группа 4))', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Луч', league: 'России (Вторая Лига Б (Группа 4))', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 18, rank: 9, strengthRank: 6, strengthPercentile: 70.6, strengthZone: 'mid', rankZone: 'mid' } },
+                { club: 'Норт Дистрикт', league: 'Гонконга (Премьер-Лига)', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Норт Дистрикт', league: 'Гонконга (Премьер-Лига)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 10, rank: 5, strengthRank: 7, strengthPercentile: 33.3, strengthZone: 'mid', rankZone: 'mid' } },
+                { club: 'Пршибрам', league: 'Чехии (Фортуна лига)', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Пршибрам', league: 'Чехии (Фортуна лига)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 18, rank: 14, strengthRank: 13, strengthPercentile: 29.4, strengthZone: 'mid', rankZone: 'underdog' } },
+                { club: 'Честер', league: 'Англии (2-ая лига)', evidenceDate: '2026-11-21', row: 1, evidence: { club: 'Честер', league: 'Англии (2-ая лига)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 24, rank: 2, strengthRank: 8, strengthPercentile: 69.6, strengthZone: 'mid', rankZone: 'favourite' } },
+                { club: 'Каррарезе', league: 'Италии (Серия С1Б)', evidenceDate: '2026-11-21', row: 2, evidence: { club: 'Каррарезе', league: 'Италии (Серия С1Б)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 18, rank: 7, strengthRank: 4, strengthPercentile: 82.4, strengthZone: 'favourite', rankZone: 'mid' } },
+                { club: 'Боа', league: 'Бразилии (Серия Б)', evidenceDate: '2026-11-21', row: 2, evidence: { club: 'Боа', league: 'Бразилии (Серия Б)', evidenceDate: '2026-11-21', season: '2026/27', expectedSeason: '2026/27', totalTeams: 20, rank: 6, strengthRank: 4, strengthPercentile: 84.2, strengthZone: 'favourite', rankZone: 'mid' } }
+            ]
+        },
+
         // Score-play scenarios: deltas applied over the matched base
         // situations when the conditions hold. Deltas are numeric shifts
         // clamped to the domain of each control; override scenarios replace
@@ -11316,6 +11539,334 @@ TacticalKnowledgePack.init();
         return false;
     }
 
+    // =====================================================================
+    // Issue #477 — canon manual matcher.
+    // The 12 rows live in dave56-etalon-data.js (`canon`). This seam turns
+    // observed evidence into {status,id,variant,vector,missingInputs}; it
+    // never invents a match and never writes a tactic. A vector is NOT an
+    // identity: rows 2/7 (and 6-stronger/12) share one and stay distinct.
+    // =====================================================================
+    const CANON = data.canon && data.canon.schema === 'slf_canon_manual_v1' ? data.canon : null;
+    const CANON_STRENGTH = ['advantage', 'equal', 'disadvantage'];
+    const CANON_MANUAL_KEYS = ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'];
+
+    function canonRow(id) {
+        return CANON ? (CANON.rows.find(row => Number(row.id) === Number(id)) || null) : null;
+    }
+
+    function canonVariant(row, variantId) {
+        if (!row || !Array.isArray(row.variants) || !row.variants.length) return row;
+        return row.variants.find(variant => variant.id === variantId) || null;
+    }
+
+    function canonLanes(priority) {
+        const text = String(priority || '000');
+        const lanes = [];
+        if (text[0] === '1') lanes.push('left');
+        if (text[1] === '1') lanes.push('center');
+        if (text[2] === '1') lanes.push('right');
+        return lanes;
+    }
+
+    function canonVector(row, variant) {
+        const source = variant && variant.vector ? variant : row;
+        if (!source || !source.vector) return null;
+        const vector = { priority: String(source.priority || row.priority || '000') };
+        for (const key of CANON_MANUAL_KEYS) vector[key] = String(source.vector[key]);
+        return vector;
+    }
+
+    function canonCandidate(row, variant) {
+        return {
+            id: Number(row.id),
+            variant: variant && variant.id ? variant.id : 'default',
+            situationText: row.situation
+        };
+    }
+
+    function canonDecision(status, fields) {
+        return Object.assign({
+            schema: 'slf_canon_decision_v1',
+            version: CANON ? CANON.version : null,
+            source: 'canon_manual',
+            status,
+            id: null,
+            variant: null,
+            situationText: null,
+            settingText: null,
+            legend: CANON ? CANON.legend.slice() : [],
+            vector: null,
+            priorityLanes: null,
+            evidence: [],
+            missingInputs: [],
+            candidates: [],
+            additions: []
+        }, fields || {});
+    }
+
+    // Derive the observation bundle. `context.canonEvidence` is the rich
+    // structured channel; a few specific page signals can corroborate it.
+    // Generic strength tags alone never resolve a canon row here (the legacy
+    // etalon path keeps owning those, preserving #350 behavior).
+    function canonObservations(ctx, context) {
+        const rawEvidence = context && context.canonEvidence && typeof context.canonEvidence === 'object'
+            ? context.canonEvidence
+            : null;
+        // When the caller supplies the structured evidence bundle it is the
+        // authoritative observation set; page tags are only a fallback for
+        // callers that do not (they must never add a competing canon trigger
+        // to an explicitly stated situation). An explicitly supplied empty
+        // bundle (canonEvidence: {}) is still authoritative — presence of the
+        // object, not its key count, decides.
+        const explicit = rawEvidence !== null && typeof rawEvidence === 'object';
+        const ev = rawEvidence || {};
+        const tag = name => !explicit && has(ctx.tags, name);
+        const flag = (name, tagName) => explicit ? ev[name] === true : (tag(tagName || name) || ev[name] === true);
+        const strength = CANON_STRENGTH.includes(ev.strength) ? ev.strength : null;
+        const flank = ev.attackFlank === 'left' || ev.attackFlank === 'right'
+            ? ev.attackFlank
+            : (!explicit && (context.attackFlank === 'left' || context.attackFlank === 'right') ? context.attackFlank : null);
+        return {
+            strength,
+            needGoal: flag('needGoal', 'need_goal'),
+            attackFlank: flank,
+            protectLead: explicit
+                ? ev.protectLead === true
+                : ((tag('protect_lead') || tag('late_protect_lead')) && ctx.scoreState === 'winning') || ev.protectLead === true,
+            firstPassPressure: flag('firstPassPressure', 'opponent_high_press'),
+            firstPassFree: flag('firstPassFree', 'opponent_first_pass_free')
+                || (!explicit && context.opponentFirstPassFree === true),
+            deepBlock: flag('deepBlock', 'opponent_low_block'),
+            transitionChaos: flag('transitionChaos', 'chaotic_match'),
+            targetForward: flag('targetForward', 'target_forward_aerial'),
+            controlIntent: flag('controlIntent', 'control_intent'),
+            fastWideIntent: flag('fastWideIntent', 'fast_wide_intent'),
+            pressFatigue: flag('pressFatigue', 'press_fatigue')
+        };
+    }
+
+    function canonStrengthVariant(strength) {
+        if (strength === 'disadvantage') return 'weaker';
+        if (strength === 'advantage') return 'stronger';
+        if (strength === 'equal') return 'equal';
+        return null;
+    }
+
+    const CANON_OBSERVATION_FLAGS = ['needGoal', 'protectLead', 'firstPassPressure', 'firstPassFree', 'deepBlock',
+        'transitionChaos', 'targetForward', 'controlIntent', 'fastWideIntent', 'pressFatigue'];
+
+    function hasCanonRequest(context) {
+        // The rich evidence bundle is the explicit "canon is in play" signal:
+        // an empty {} still counts (the caller asked, there was just nothing).
+        return !!(context && Object.prototype.hasOwnProperty.call(context, 'canonEvidence')
+            && context.canonEvidence && typeof context.canonEvidence === 'object');
+    }
+
+    function computeCanon(snapshot, context, result) {
+        if (!CANON) return null;
+        const ctx = collectContext(snapshot, context, result);
+        const obs = canonObservations(ctx, context);
+        const evidence = [];
+        const additions = [];
+        if (obs.strength) evidence.push(`strength:${obs.strength}`);
+        for (const key of CANON_OBSERVATION_FLAGS) {
+            if (obs[key]) evidence.push(key);
+        }
+        if (obs.attackFlank) evidence.push(`attackFlank:${obs.attackFlank}`);
+
+        // #477: the canon matcher only produces a decision when the situation
+        // actually asks for it — either the caller supplied the structured
+        // canonEvidence bundle, or a canon-relevant page signal resolved an
+        // observation. With neither, the legacy etalon/preset merge owns the
+        // hint (canon == null keeps the pre-#477 final-tactic path).
+        const observed = !!obs.strength || !!obs.attackFlank
+            || CANON_OBSERVATION_FLAGS.some(key => obs[key]);
+        if (!observed && !hasCanonRequest(context)) return null;
+
+        // The press_cooldown addition declares ['press_fatigue','no_urgent_chase']:
+        // fatigue alone is not enough while an urgent chase context is present.
+        const noUrgentChase = !obs.needGoal && !obs.protectLead;
+        if (obs.pressFatigue && noUrgentChase) {
+            for (const addition of (CANON.additions || [])) {
+                if (addition.id === 'press_cooldown') additions.push(Object.assign({}, addition, { entryConditions: (addition.entryConditions || []).slice() }));
+            }
+        }
+
+        const specific = [];
+        const unresolved = [];
+        const resolvedAdds = (id, variant) => {
+            const row = canonRow(id);
+            const picked = canonVariant(row, variant);
+            if (!row || !picked) return;
+            specific.push({ row, variant: picked });
+        };
+
+        if (obs.needGoal) {
+            if (obs.attackFlank) resolvedAdds(4, obs.attackFlank);
+            else unresolved.push({ id: 4, need: 'attacking_flank' });
+        }
+        if (obs.firstPassPressure) {
+            const variant = canonStrengthVariant(obs.strength);
+            if (variant) resolvedAdds(6, variant);
+            else unresolved.push({ id: 6, need: 'relative_strength' });
+        }
+        if (obs.firstPassFree) resolvedAdds(7, null);
+        if (obs.deepBlock) resolvedAdds(8, null);
+        if (obs.transitionChaos) resolvedAdds(9, null);
+        if (obs.targetForward) resolvedAdds(10, null);
+        if (obs.controlIntent) resolvedAdds(11, null);
+        if (obs.fastWideIntent) resolvedAdds(12, null);
+        if (obs.protectLead) {
+            if (ctx.scoreState === 'winning') resolvedAdds(5, null);
+            else unresolved.push({ id: 5, need: 'score_state' });
+        }
+
+        const base = { evidence, additions };
+        const candidates = specific.map(item => canonCandidate(item.row, item.variant));
+        for (const item of unresolved) {
+            if (!candidates.some(candidate => candidate.id === item.id)) {
+                const row = canonRow(item.id);
+                if (row) candidates.push(canonCandidate(row, null));
+            }
+        }
+
+        if (specific.length > 1) {
+            const ids = [...new Set(specific.map(item => Number(item.row.id)))];
+            return canonDecision('ambiguous', Object.assign(base, {
+                candidates,
+                missingInputs: ['intended_approach'],
+                evidence: evidence.concat([`ambiguous:${ids.join('+')}`])
+            }));
+        }
+        if (specific.length === 1) {
+            if (unresolved.length) {
+                return canonDecision('ambiguous', Object.assign(base, {
+                    candidates,
+                    missingInputs: ['intended_approach', ...new Set(unresolved.map(item => item.need))],
+                    evidence
+                }));
+            }
+            const pickedRow = specific[0].row;
+            const pickedVariant = specific[0].variant;
+            const variantId = pickedRow.variants ? pickedVariant.id : null;
+            const vector = canonVector(pickedRow, pickedVariant);
+            return canonDecision('matched', Object.assign(base, {
+                id: Number(pickedRow.id),
+                variant: variantId,
+                situationText: pickedRow.situation,
+                settingText: pickedRow.settingText || null,
+                vector,
+                priorityLanes: canonLanes(vector.priority),
+                candidates: [canonCandidate(pickedRow, pickedVariant)]
+            }));
+        }
+        if (unresolved.length) {
+            return canonDecision('missing_inputs', Object.assign(base, {
+                candidates,
+                missingInputs: [...new Set(unresolved.map(item => item.need))]
+            }));
+        }
+        // No specific observation: a generic XI comparison can resolve 1/2/3.
+        if (obs.strength) {
+            const id = obs.strength === 'advantage' ? 2 : (obs.strength === 'disadvantage' ? 3 : 1);
+            const row = canonRow(id);
+            const vector = canonVector(row, row);
+            return canonDecision('matched', Object.assign(base, {
+                id,
+                variant: null,
+                situationText: row.situation,
+                settingText: row.settingText || null,
+                vector,
+                priorityLanes: canonLanes(vector.priority),
+                candidates: [canonCandidate(row, null)]
+            }));
+        }
+        if (additions.length) {
+            // #477 NEW-P1-1: a resolved SLF addition is actionable on its own.
+            // It is NOT a manual row (id/vector stay null); the eligible role
+            // names the preset that realizes it, and both the final-tactic and
+            // advisor seams treat this status as actionable.
+            const eligibleRoles = additions
+                .map(addition => addition && typeof addition.eligibleRole === 'string' ? addition.eligibleRole : '')
+                .filter(Boolean);
+            return canonDecision('addition', Object.assign(base, {
+                eligibleRole: eligibleRoles.length ? eligibleRoles[0] : null,
+                eligibleRoles,
+                actionable: true
+            }));
+        }
+        return canonDecision('missing_inputs', Object.assign(base, {
+            missingInputs: ['relative_xi_or_situation']
+        }));
+    }
+
+    // League-relative starting recommendation (#477 R9). The classification
+    // rule is documented in data.canon.leagueRule: the strength zone decides,
+    // the points-rank zone only confirms. Missing/incomparable/wrong-season
+    // evidence is insufficient — never an implicit row 1.
+    const LEAGUE_ZONES = ['favourite', 'mid', 'underdog'];
+    function leagueZoneFromPercentile(percentile, rule) {
+        if (!Number.isFinite(percentile)) return null;
+        if (percentile >= Number(rule.favouriteMinPercentile)) return 'favourite';
+        if (percentile <= Number(rule.underdogMaxPercentile)) return 'underdog';
+        return 'mid';
+    }
+
+    function leagueStartingRecommendation(evidence) {
+        const rule = CANON && CANON.leagueRule ? CANON.leagueRule : { favouriteMinPercentile: 75, underdogMaxPercentile: 25 };
+        const insufficient = reason => ({ status: 'insufficient', row: null, reason, class: null, league: evidence && evidence.league ? evidence.league : null, evidenceDate: evidence && evidence.evidenceDate ? evidence.evidenceDate : null });
+        if (!evidence || typeof evidence !== 'object') return insufficient('missing_evidence');
+        if (!evidence.club || !evidence.league) return insufficient('missing_club_or_league');
+        if (!evidence.evidenceDate) return insufficient('missing_evidence_date');
+        // #477 NEW-P2-1: BOTH season identifiers are required before any
+        // classification. A club/league/population/strength zone with either
+        // season absent is insufficient — never an implicit row 1.
+        if (!evidence.season || !evidence.expectedSeason) return insufficient('missing_season');
+        if (String(evidence.season) !== String(evidence.expectedSeason)) {
+            return insufficient('wrong_season');
+        }
+        const total = Number(evidence.totalTeams);
+        if (!Number.isFinite(total) || total < 2) return insufficient('incomparable_population');
+        let strengthZone = LEAGUE_ZONES.includes(evidence.strengthZone) ? evidence.strengthZone : null;
+        // Unknown percentile is NOT zero: null/undefined/'' must never classify
+        // a club as underdog (Number(null) === 0, Number('') === 0). Treat them
+        // as missing so the result is 'insufficient', never an implicit row 3.
+        const rawPercentile = evidence.strengthPercentile;
+        const percentile = (rawPercentile === null || rawPercentile === undefined || rawPercentile === '')
+            ? null
+            : Number(rawPercentile);
+        // #477 codex P2 (4652310201): when BOTH signals are supplied they must
+        // agree. A declared zone contradicted by the percentile is ambiguous
+        // evidence — derive the zone from the percentile and require it to
+        // match; a disagreement is insufficient, never a silent pick of one.
+        // When only one signal is present it is used as before.
+        if (strengthZone && Number.isFinite(percentile)) {
+            const derivedZone = leagueZoneFromPercentile(percentile, rule);
+            if (derivedZone && derivedZone !== strengthZone) {
+                return insufficient('conflicting_strength_evidence');
+            }
+        }
+        if (!strengthZone) strengthZone = leagueZoneFromPercentile(percentile, rule);
+        if (!strengthZone) return insufficient('missing_strength');
+        const rankZone = LEAGUE_ZONES.includes(evidence.rankZone) ? evidence.rankZone : null;
+        // Mixed clubs are decided by the strength zone (owner decision #477
+        // comment 7057658763); the rank zone is confirmation only.
+        const recognised = strengthZone === 'favourite' ? 'favourite'
+            : (strengthZone === 'underdog' ? 'underdog' : 'middle');
+        const row = recognised === 'favourite' ? 2 : (recognised === 'underdog' ? 3 : 1);
+        return {
+            status: 'classified',
+            row,
+            class: recognised,
+            strengthZone,
+            rankZone,
+            league: evidence.league,
+            club: evidence.club,
+            evidenceDate: evidence.evidenceDate,
+            note: 'starting baseline from own-league evidence; not a live-opponent observation'
+        };
+    }
+
     function applyDelta(vector, delta) {
         const out = Object.assign({}, vector);
         for (const [key, shift] of Object.entries(delta || {})) {
@@ -11505,6 +12056,29 @@ TacticalKnowledgePack.init();
                 notes: []
             };
         }
+        try {
+            result.canon = computeCanon(snapshot, context, result);
+        } catch (error) {
+            result.canon = CANON ? canonDecision('no_match', { evidence: ['exception'] }) : null;
+        }
+        // #477 R9: expose the club's own-league starting baseline alongside the
+        // live match decision. It never overrides a matched live situation; it
+        // is the documented starting row for this club in its own division.
+        // Resolve from the dated snapshot when the caller supplies league
+        // evidence, otherwise from the embedded, dated leagueStarts records.
+        if (result.canon) {
+            let leagueEvidence = context && context.leagueEvidence ? context.leagueEvidence : null;
+            if (!leagueEvidence && CANON && Array.isArray(CANON.leagueStarts)) {
+                const clubId = String((context && (context.myTeamId || context.clubId)) || (snapshot && snapshot.myTeam) || '');
+                const clubName = context && context.clubName ? String(context.clubName) : null;
+                const found = CANON.leagueStarts.find(item =>
+                    (clubId && String(item.clubId || '') === clubId) || (clubName && item.club === clubName));
+                if (found) leagueEvidence = found.evidence;
+            }
+            if (leagueEvidence) {
+                result.canon.leagueStart = leagueStartingRecommendation(leagueEvidence);
+            }
+        }
         return result;
     };
 
@@ -11516,7 +12090,10 @@ TacticalKnowledgePack.init();
             suiteVersion: registry.suiteVersion,
             source: 'dave56_etalon',
             autoApply: false,
-            computeEtalon
+            computeEtalon,
+            computeCanon,
+            leagueStartingRecommendation,
+            canonVersion: CANON ? CANON.version : null
         };
     }
 })();
@@ -11729,9 +12306,173 @@ TacticalKnowledgePack.init();
         return `Эталон: ${defenseId}/${buildupId} — равный матч, ${tail}`;
     }
 
+    // Issue #477 — canon-first final selection. When the manual matcher
+    // resolved a situation, its row id, variant and all six manual settings
+    // are authoritative. The unrelated controls (defense block, attack keys)
+    // keep the preset/current contract; the six manual fields are never
+    // overlaid again by a preset, etalon, scenario delta or LLM reply.
+    const CANON_MANUAL_KEYS = ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'];
+
+    function isMatchedCanon(canon) {
+        return !!canon && canon.schema === 'slf_canon_decision_v1'
+            && canon.status === 'matched' && canon.vector && typeof canon.vector === 'object';
+    }
+
+    // #477 NEW-P1-1: a resolved SLF addition is actionable but is NOT a
+    // manual row. It names an eligible role whose preset realizes it.
+    function isAdditionCanon(canon) {
+        return !!canon && canon.schema === 'slf_canon_decision_v1'
+            && canon.status === 'addition' && canon.actionable === true;
+    }
+
+    function additionEligibleRole(canon) {
+        if (!canon || canon.status !== 'addition') return null;
+        if (typeof canon.eligibleRole === 'string' && canon.eligibleRole) return canon.eligibleRole;
+        if (Array.isArray(canon.eligibleRoles)) {
+            const role = canon.eligibleRoles.find(item => typeof item === 'string' && item);
+            if (role) return role;
+        }
+        return null;
+    }
+
+    // The addition's eligible preset becomes the base vector. It is never a
+    // manual row: the six manual settings come from the preset controls.
+    function resolveAdditionBase(canon) {
+        const presetId = additionEligibleRole(canon);
+        if (!presetId) return null;
+        if (registry.presets && hasOwn(registry.presets, presetId) && registry.presets[presetId]) {
+            return {
+                base: `preset:${presetId}`,
+                presetId,
+                vector: normalizeBaseVector(registry.presets[presetId]),
+                fromCurrent: false
+            };
+        }
+        return null;
+    }
+
+    function canonAdditionReference(canon) {
+        const additions = Array.isArray(canon.additions) ? canon.additions : [];
+        const names = additions
+            .map(item => (item && (item.situation || item.id)) || '')
+            .filter(Boolean);
+        const label = names.length ? names.join(', ') : 'дополнение SLF';
+        const role = additionEligibleRole(canon);
+        return `Дополнение SLF: ${label} — пресет ${role || '—'}`;
+    }
+
+    function canonSettingWord(canon, key, fallback) {
+        const text = canon && canon.settingText && typeof canon.settingText === 'object' ? canon.settingText : null;
+        return text && text[key] ? text[key] : fallback;
+    }
+
+    function canonReferenceText(canon) {
+        const vector = canon.vector || {};
+        const lanes = String(vector.priority || '000');
+        // #477: the manual's verbatim words are shown alongside the ordinals so
+        // the hint explains itself ("Позиционный", "Низкий / средний", ...),
+        // never just bare numbers.
+        return `Канон №${canon.id} «${canon.situationText}»`
+            + (canon.variant ? ` (${canon.variant})` : '')
+            + `: направление ${lanes} · выход ${canonSettingWord(canon, 'build_type', vector.build_type)}`
+            + ` · темп ${canonSettingWord(canon, 'build_temp', vector.build_temp)}`
+            + ` · диагонали ${canonSettingWord(canon, 'build_long', vector.build_long)}`
+            + ` · в касание ${canonSettingWord(canon, 'build_fast', vector.build_fast)}`
+            + ` · стиль ${canonSettingWord(canon, 'style', vector.style)}`;
+    }
+
+    // #477 P1-2: a canon decision that exists but did not resolve a row must
+    // never be papered over with a preset/etalon vector. It is surfaced as a
+    // non-actionable reference explaining why (status/candidates/missing).
+    function canonUnresolvedReference(canon) {
+        const parts = [];
+        if (canon.status === 'ambiguous') {
+            parts.push('Канон: выбор неоднозначно определён — нужно уточнить ситуацию');
+        } else if (canon.status === 'missing_inputs') {
+            parts.push('Канон: недостаточно данных для выбора строки');
+        } else {
+            parts.push(`Канон: строка не сопоставлена (${canon.status})`);
+        }
+        const candidates = Array.isArray(canon.candidates) ? canon.candidates.filter(item => item && item.id != null) : [];
+        if (candidates.length) {
+            parts.push('кандидаты: ' + candidates
+                .map(item => `№${item.id}${item.variant ? '/' + item.variant : ''}`)
+                .join(', '));
+        }
+        const missing = Array.isArray(canon.missingInputs) ? canon.missingInputs.filter(Boolean) : [];
+        if (missing.length) parts.push('не хватает: ' + missing.join(', '));
+        return parts.join(' · ');
+    }
+
+    function canonSettingNotes(canon) {
+        const text = canon && canon.settingText && typeof canon.settingText === 'object' ? canon.settingText : null;
+        if (!text) return [];
+        const notes = [];
+        if (text.build_type) notes.push(`Выход из обороны: ${text.build_type}`);
+        if (text.build_temp) notes.push(`Темп: ${text.build_temp}`);
+        if (text.build_long || text.build_fast) {
+            notes.push(`Диагонали: ${text.build_long || '—'} · в касание: ${text.build_fast || '—'}`);
+        }
+        if (text.style) notes.push(`Стиль: ${text.style}`);
+        return notes;
+    }
+
+    function applyCanon(vector, canon, overrides) {
+        for (const key of CANON_MANUAL_KEYS) {
+            if (canon.vector[key] !== undefined && canon.vector[key] !== null) {
+                vector[key] = String(canon.vector[key]);
+            }
+        }
+        const priorities = Array.isArray(canon.priorityLanes)
+            ? canon.priorityLanes.map(String)
+            : (String(canon.vector.priority || '000').split('').map((flag, index) => (
+                flag === '1' ? ['left', 'center', 'right'][index] : null
+            )).filter(Boolean));
+        vector.priority = priorities;
+        overrides.buildup = `canon:row${canon.id}`;
+        overrides.style = `canon:row${canon.id}`;
+        overrides.priority = `canon:row${canon.id}`;
+        return vector;
+    }
+
     function computeFinalTactic(snapshot, context, result) {
         const etalon = result?.etalon || null;
-        const baseInfo = resolveBase(snapshot, result);
+        const canon = result?.canon || null;
+        const canonMatched = isMatchedCanon(canon);
+        const canonAddition = isAdditionCanon(canon);
+
+        // #477 P1-2: a canon decision that exists but did not resolve a row or
+        // an actionable addition is authoritative in the NEGATIVE — it must
+        // never fall through to a preset/etalon vector. Only canon == null
+        // keeps the legacy path.
+        if (canon && !canonMatched && !canonAddition) {
+            return {
+                schema: VERSION,
+                vector: null,
+                base: null,
+                overrides: null,
+                source: `canon:${canon.status}`,
+                strong: { defense: false, buildup: false, scenario: null, canon: false },
+                deltaVsCurrent: null,
+                presetId: null,
+                etalonIds: Array.isArray(etalon?.ids) ? etalon.ids.filter(Boolean).map(String) : [],
+                insufficientData: Array.isArray(canon.missingInputs) ? canon.missingInputs.map(String) : [],
+                notes: [],
+                referenceLine: canonUnresolvedReference(canon),
+                canon
+            };
+        }
+
+        // An actionable addition resolves its base to the eligible role's
+        // preset; anything else uses the preset/current resolution.
+        let baseInfo = canonAddition ? resolveAdditionBase(canon) : null;
+        if (!baseInfo) baseInfo = resolveBase(snapshot, result);
+        // A resolved manual row is actionable even without a readable preset
+        // or current tactic: only the six manual settings are known, the rest
+        // stay absent (never invented).
+        if (!baseInfo && canonMatched) {
+            baseInfo = { base: 'canon_only', presetId: null, vector: normalizeBaseVector({}), fromCurrent: false, stalePreset: false };
+        }
         if (!baseInfo) return null; // no preset and no readable current tactic
 
         const overrides = {
@@ -11744,37 +12485,62 @@ TacticalKnowledgePack.init();
 
         const vector = Object.assign({}, baseInfo.vector);
         const etalonIds = Array.isArray(etalon?.ids) ? etalon.ids.filter(Boolean).map(String) : [];
-        const insufficientData = Array.isArray(etalon?.insufficientData)
+        let insufficientData = Array.isArray(etalon?.insufficientData)
             ? etalon.insufficientData.map(String)
             : ['etalon_layer_absent'];
-        const notes = Array.isArray(etalon?.notes) ? etalon.notes.filter(Boolean).map(String) : [];
+        const CANON_LEGEND = Array.isArray(canon?.legend) ? canon.legend.filter(Boolean).map(String) : [];
+        let notes = Array.isArray(etalon?.notes) ? etalon.notes.filter(Boolean).map(String) : [];
 
         let referenceLine = null;
         let strong = { defense: false, buildup: false, scenario: null };
+        let source = null;
 
         if (baseInfo.stalePreset) {
             insufficientData.push('stale_preset_name');
         }
 
-        if (!isInsufficientEtalon(etalon)) {
-            const strength = computeStrength(etalon);
-            strong = { defense: strength.defenseBlock || strength.defenseKeys.length > 0,
-                buildup: strength.buildupBlock || strength.buildupKeys.length > 0,
-                scenario: strength.scenario };
+        if (canonMatched) {
+            // Canon wins: no etalon overlay, no scenario delta, no preset
+            // mutation of the six manual settings.
+            applyCanon(vector, canon, overrides);
+            strong = { defense: false, buildup: true, scenario: null, canon: true };
+            referenceLine = canonReferenceText(canon);
+            notes = [canon.situationText].concat(canonSettingNotes(canon), CANON_LEGEND);
+            insufficientData = [];
+            source = `canon:${canon.id}${canon.variant ? '/' + canon.variant : ''}+base:${baseInfo.base}`;
+        } else if (canonAddition) {
+            // #477 NEW-P1-1: an actionable addition resolves to its eligible
+            // preset as the base. It is NOT a manual row (no «Канон №» line)
+            // and is never overlaid by the etalon; the reference names the
+            // addition and the preset that realizes it.
+            referenceLine = canonAdditionReference(canon);
+            const additionNames = Array.isArray(canon.additions)
+                ? canon.additions.map(item => (item && item.situation) || '').filter(Boolean)
+                : [];
+            notes = additionNames;
+            insufficientData = [];
+            strong = { defense: false, buildup: false, scenario: null, canon: false };
+            source = `canon:addition+base:${baseInfo.base}`;
+        } else {
+            if (!isInsufficientEtalon(etalon)) {
+                const strength = computeStrength(etalon);
+                strong = { defense: strength.defenseBlock || strength.defenseKeys.length > 0,
+                    buildup: strength.buildupBlock || strength.buildupKeys.length > 0,
+                    scenario: strength.scenario };
 
-            if (strong.defense || strong.buildup) {
-                applyEtalonOverrides(vector, etalon, strength, overrides);
-            } else {
-                // T2 generic-only: preset/current base, etalon as a reference line.
-                referenceLine = buildReferenceLine(baseInfo.base, etalon);
+                if (strong.defense || strong.buildup) {
+                    applyEtalonOverrides(vector, etalon, strength, overrides);
+                } else {
+                    // T2 generic-only: preset/current base, etalon as a reference line.
+                    referenceLine = buildReferenceLine(baseInfo.base, etalon);
+                }
             }
+            // Provenance of the merged recommendation: etalon ids + base preset,
+            // or the etalon ids over the current tactic (hold_current).
+            source = baseInfo.fromCurrent
+                ? `merged:current:${etalonIds.join('+')}`
+                : `merged:etalon:${etalonIds.join('+')}+presets:${baseInfo.presetId}`;
         }
-
-        // Provenance of the merged recommendation: etalon ids + base preset,
-        // or the etalon ids over the current tactic (hold_current).
-        const source = baseInfo.fromCurrent
-            ? `merged:current:${etalonIds.join('+')}`
-            : `merged:etalon:${etalonIds.join('+')}+presets:${baseInfo.presetId}`;
 
         return {
             schema: VERSION,
@@ -11788,7 +12554,8 @@ TacticalKnowledgePack.init();
             etalonIds,
             insufficientData,
             notes,
-            referenceLine
+            referenceLine,
+            canon: canon || null
         };
     }
 
@@ -11807,7 +12574,8 @@ TacticalKnowledgePack.init();
             etalonIds: [],
             insufficientData: ['exception'],
             notes: [],
-            referenceLine: null
+            referenceLine: null,
+            canon: null
         };
     }
 
@@ -11932,6 +12700,15 @@ TacticalKnowledgePack.init();
                         this.addParserLog(
                             `${prefix} | games:${status.games} snapshots:${fmt('snapshots')} results:${fmt('results')} events:${fmt('events')} effects:${fmt('effects')} players:${fmt('players')} transfers:${fmt('transfers')} tactics:${fmt('tactics')}`
                         );
+                        // #441: the configured LLM model/service goes on its own
+                        // short line so the API status line keeps fitting the log.
+                        // Older servers omit the advisor block -> no second line.
+                        // addParserLog() assigns textContent, so the model string
+                        // is never parsed as HTML.
+                        const advisor = status.advisor;
+                        if (advisor && advisor.model) {
+                            this.addParserLog(`LLM: ${advisor.model} @ ${advisor.service || 'OpenRouter'}`);
+                        }
 
                         debugLog('[SLF API v2 canonical]', status);
                     })
@@ -12959,7 +13736,7 @@ html[data-slf-design="fm2026"] #slf-parser-recommendation{width:100%!important;m
 html[data-slf-design="fm2026"] #slf-parser-recommendation>div,html[data-slf-design="fm2026"] [data-slf-rec-priority]{color:var(--slf-text)!important;background:var(--slf-bg2)!important;border:1px solid var(--slf-border)!important;border-radius:10px!important}
 html[data-slf-design="fm2026"] #slf-match-parser-panel button,html[data-slf-design="fm2026"] #slf-tactics-dropdown button,html[data-slf-design="fm2026"] #slf-save-dialog button,html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar button,html[data-slf-design="fm2026"] #slf-transfer-candidate-panel button,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel button{min-height:30px!important;padding:6px 10px!important;color:var(--slf-text)!important;background:var(--slf-bg3)!important;border:1px solid var(--slf-border)!important;border-radius:8px!important;font:600 12px var(--slf-font)!important;cursor:pointer!important}
 html[data-slf-design="fm2026"] #slf-match-parser-panel button:hover,html[data-slf-design="fm2026"] #slf-tactics-dropdown button:hover,html[data-slf-design="fm2026"] #slf-save-dialog button:hover,html[data-slf-design="fm2026"] #slf-transfer-analyzer-toolbar button:hover,html[data-slf-design="fm2026"] #slf-transfer-candidate-panel button:hover,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel button:hover{color:var(--slf-accent2)!important;border-color:var(--slf-accent)!important;background:rgba(43,217,124,.10)!important}
-html[data-slf-design="fm2026"] #slf-manual-recommendation-btn,html[data-slf-design="fm2026"] #slf-transfer-analyze-visible,html[data-slf-design="fm2026"] #slf-candidate-scan,html[data-slf-design="fm2026"] #slf-purchase-forecast-calc{color:#07130c!important;background:linear-gradient(180deg,var(--slf-accent2),#1fb863)!important;border-color:transparent!important}
+html[data-slf-design="fm2026"] #slf-transfer-analyze-visible,html[data-slf-design="fm2026"] #slf-candidate-scan,html[data-slf-design="fm2026"] #slf-purchase-forecast-calc{color:#07130c!important;background:linear-gradient(180deg,var(--slf-accent2),#1fb863)!important;border-color:transparent!important}
 html[data-slf-design="fm2026"] #slf-tactics-dropdown.slf-panel{width:100%!important;max-width:100%!important;margin:4px 0 12px!important;padding:10px 12px!important;color:var(--slf-text)!important;font-size:12.5px!important}
 html[data-slf-design="fm2026"] #slf-tactics-dropdown select,html[data-slf-design="fm2026"] #slf-foreign-match-target,html[data-slf-design="fm2026"] #slf-save-dialog select,html[data-slf-design="fm2026"] #slf-save-dialog input,html[data-slf-design="fm2026"] #slf-transfer-candidate-panel input,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel input,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel select{min-height:32px!important;padding:6px 9px!important;color:var(--slf-text)!important;background:var(--slf-bg2)!important;border:1px solid var(--slf-border)!important;border-radius:8px!important;font:500 12px var(--slf-font)!important;outline:none!important}
 html[data-slf-design="fm2026"] #slf-tactics-dropdown select:focus,html[data-slf-design="fm2026"] #slf-foreign-match-target:focus,html[data-slf-design="fm2026"] #slf-save-dialog select:focus,html[data-slf-design="fm2026"] #slf-save-dialog input:focus,html[data-slf-design="fm2026"] #slf-transfer-candidate-panel input:focus,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel input:focus,html[data-slf-design="fm2026"] #slf-purchase-forecast-panel select:focus{border-color:var(--slf-accent)!important;box-shadow:0 0 0 3px rgba(43,217,124,.14)!important}
@@ -13160,6 +13937,25 @@ const LLMSecondOpinion = {
     MAX_HINTS: 20,
     MAX_HINT_CHARS: 300,
     MAX_CATALOG_ENTRIES: 40,
+    // #465: the 14 slider controls + priority read from getCurrentTactic()
+    // and sent as the current vector so the advisor can propose fine-grained
+    // «adjust» changes. Mirrors the server control names.
+    CONTROL_KEYS: [
+        'def_line', 'press_line', 'def_width', 'press_intense',
+        'build_type', 'build_temp', 'build_long', 'build_fast',
+        'style', 'pass_risk', 'dribble', 'cross', 'corner', 'shot'
+    ],
+    PRIORITY_DIRECTIONS: ['left', 'center', 'right'],
+    // Phase 1 (#459): optional per-match dialogue. Mirrors the server caps.
+    MAX_DIALOG_TURNS: 20,
+    MAX_DIALOG_TURN_CHARS: 500,
+    // #461: partial-data mode. On an early match the rules engine has no
+    // decision yet; the payload then says so honestly instead of refusing.
+    PARTIAL_DATA_NOTE: 'Правила не дали решения на текущих данных матча',
+    // #477 P1-3: the canon that constrains a rendered answer belongs to the
+    // exact payload that produced it. WeakMap keeps the payloads collectable
+    // and lets a late answer validate against ITS request, not a mutable slot.
+    __payloadCanon: new WeakMap(),
 
     // Compact whitelist of decision-context signals sent to the advisor.
     // Everything else in the moment context stays local (payload budget).
@@ -13182,11 +13978,218 @@ const LLMSecondOpinion = {
             .replace(/"/g, '&quot;');
     },
 
-    // Fail-closed: null unless a rules decision AND a preset catalog exist.
-    buildPayload({ snapshot, ruleDecision, registry }) {
-        if (!ruleDecision || typeof ruleDecision !== 'object' || !registry || typeof registry !== 'object') return null;
+    // Client-side cleaning for the dialogue: only {role: user|assistant,
+    // text: string} turns survive, text is trimmed/capped, ts is kept only
+    // when numeric, and the list is capped at MAX_DIALOG_TURNS.
+    cleanDialog(dialog) {
+        if (!Array.isArray(dialog)) return [];
+        return dialog
+            .map(turn => {
+                if (!turn || typeof turn !== 'object') return null;
+                const role = turn.role === 'user' || turn.role === 'assistant' ? turn.role : '';
+                const text = typeof turn.text === 'string'
+                    ? turn.text.trim().slice(0, this.MAX_DIALOG_TURN_CHARS)
+                    : '';
+                if (!role || !text) return null;
+                const cleaned = { role, text };
+                if (typeof turn.ts === 'number' && Number.isFinite(turn.ts)) cleaned.ts = turn.ts;
+                return cleaned;
+            })
+            .filter(Boolean)
+            .slice(0, this.MAX_DIALOG_TURNS);
+    },
+
+    // #465: client-side cleaning for the current slider vector. Only known
+    // control keys with non-empty string values survive; priority keeps a
+    // de-duplicated subset of left/center/right. Anything else is dropped and
+    // an empty vector is omitted entirely (the server handles absence).
+    cleanCurrentControls(currentControls) {
+        if (!currentControls || typeof currentControls !== 'object' || Array.isArray(currentControls)) return null;
+        const cleaned = {};
+        for (const key of this.CONTROL_KEYS) {
+            const value = currentControls[key];
+            if (typeof value === 'string' && value.trim()) cleaned[key] = value.trim();
+        }
+        const priority = Array.isArray(currentControls.priority)
+            ? currentControls.priority.filter((direction, index, list) =>
+                this.PRIORITY_DIRECTIONS.includes(direction) && list.indexOf(direction) === index)
+            : [];
+        if (priority.length) cleaned.priority = priority;
+        return Object.keys(cleaned).length ? cleaned : null;
+    },
+
+    // #477: canon manual channel. The decision comes from the local matcher
+    // (finalTactic.canon); it is sent to the advisor as its own structured
+    // field and is NEVER mixed into developerHints (page coach hints keep
+    // their full 20-line budget).
+    canonDecisionFrom(ruleDecision) {
+        const canon = ruleDecision && ruleDecision.finalTactic ? ruleDecision.finalTactic.canon : null;
+        if (!canon || typeof canon !== 'object' || canon.schema !== 'slf_canon_decision_v1') return null;
+        if (typeof canon.status !== 'string') return null;
+        return canon;
+    },
+
+    buildCanonReference(canon) {
+        if (!canon) return null;
+        const vector = canon.vector && typeof canon.vector === 'object' ? canon.vector : null;
+        // #477 P1-5: the bounded alternatives travel in the reference channel so
+        // the advisor can weigh them without receiving the full 12-row catalog.
+        // The matched row + candidates + legend are the decision; the catalog
+        // itself stays out of the prompt.
+        const candidates = Array.isArray(canon.candidates) ? canon.candidates
+            .filter(item => item && typeof item === 'object' && item.id != null)
+            .slice(0, 12)
+            .map(item => ({
+                id: Number(item.id),
+                variant: item.variant == null ? null : String(item.variant),
+                situationText: typeof item.situationText === 'string'
+                    ? item.situationText.slice(0, 200)
+                    : null
+            })) : [];
+        return {
+            version: typeof canon.version === 'string' ? canon.version : null,
+            title: 'Шпаргалка: построение атаки',
+            status: canon.status,
+            matchedId: canon.id == null ? null : canon.id,
+            variant: canon.variant == null ? null : canon.variant,
+            situationText: typeof canon.situationText === 'string' ? canon.situationText : null,
+            vector: vector ? Object.assign({}, vector) : null,
+            legend: Array.isArray(canon.legend) ? canon.legend.filter(line => typeof line === 'string').slice(0, 8) : [],
+            evidence: Array.isArray(canon.evidence) ? canon.evidence.filter(item => typeof item === 'string').slice(0, 20) : [],
+            missingInputs: Array.isArray(canon.missingInputs) ? canon.missingInputs.filter(item => typeof item === 'string').slice(0, 10) : [],
+            additions: Array.isArray(canon.additions) ? canon.additions.slice(0, 5) : [],
+            candidates,
+            // #477 R9: the club's dated own-league starting baseline travels
+            // with the decision so the advisor can present it as a baseline,
+            // never as a live-opponent observation.
+            leagueStart: canon.leagueStart && typeof canon.leagueStart === 'object'
+                ? Object.assign({}, canon.leagueStart)
+                : null
+        };
+    },
+
+    // #477 P1-3: the canon that constrains a rendered answer belongs to the
+    // REQUEST that produced it, not to a mutable slot that a later request can
+    // overwrite. options.payload binding wins; the legacy single slot is the
+    // fallback for callers that do not pass the payload.
+    resolveCanonFor(options) {
+        const payload = options && options.payload;
+        if (payload && this.__payloadCanon && this.__payloadCanon.has(payload)) {
+            return this.__payloadCanon.get(payload) || null;
+        }
+        return this.__lastCanonDecision || null;
+    },
+
+    // Client-boundary validation for «adjust» (#477 R8/R10). A matched row
+    // makes its six manual settings authoritative: a change to one of those
+    // fields must move TO the selected value. Valid changes on other
+    // controls are allowed; any contradiction rejects the whole proposal
+    // (never apply the valid half of a mixed answer).
+    CONTROL_DOMAINS: {
+        def_line: [1, 3], press_line: [1, 3], def_width: [1, 3], press_intense: [1, 5],
+        build_type: [1, 3], build_temp: [1, 3], build_long: [1, 3], build_fast: [1, 3],
+        style: [1, 5], pass_risk: [1, 5], dribble: [1, 5], cross: [1, 3], corner: [1, 2], shot: [1, 3]
+    },
+
+    validateAdjustAgainstCanon(changes, canon) {
+        // Legacy path (no canon decision): preserve the pre-#477 rendering contract.
+        if (!canon) return { ok: true, legacy: true, changes };
+        if (!Array.isArray(changes) || !changes.length) return { ok: false, reason: 'пустой список изменений' };
+        if (changes.length > 3) return { ok: false, reason: 'больше 3 изменений за раз' };
+        const matched = canon && canon.status === 'matched' && canon.vector && typeof canon.vector === 'object' ? canon : null;
+        const manualKeys = ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'];
+        const seen = new Set();
+        for (const change of changes) {
+            if (!change || typeof change !== 'object') return { ok: false, reason: 'изменение не объект' };
+            const control = change.control;
+            const value = change.value;
+            if (typeof control !== 'string' || !Object.prototype.hasOwnProperty.call(this.CONTROL_DOMAINS, control)) {
+                return { ok: false, reason: `неизвестный ползунок ${String(control)}` };
+            }
+            if (seen.has(control)) return { ok: false, reason: `ползунок ${control} повторяется` };
+            seen.add(control);
+            const text = typeof value === 'string' ? value.trim() : '';
+            if (!/^\d{1,2}$/.test(text)) return { ok: false, reason: `значение ${control} вне диапазона` };
+            const [low, high] = this.CONTROL_DOMAINS[control];
+            if (Number(text) < low || Number(text) > high) return { ok: false, reason: `значение ${control} вне диапазона` };
+            if (matched && manualKeys.includes(control) && String(text) !== String(matched.vector[control])) {
+                return {
+                    ok: false,
+                    reason: `противоречит строке ${matched.id} канона: ${control} должно быть ${matched.vector[control]}, предложено ${text}`
+                };
+            }
+        }
+        return { ok: true, changes };
+    },
+
+    // Client-boundary validation for «switch» (#477 R8/R10). When a manual
+    // row is matched, only an eligible preset mapped to that exact row AND
+    // variant may be offered. A coach name, catalog id or a different
+    // variant is never enough. Without a canon decision the legacy behaviour
+    // is preserved; with an unresolved canon decision no canon switch is
+    // offered at all.
+    validateSwitchAgainstCanon(preset, canon) {
+        if (!canon) return { ok: true, legacy: true };
+        // #477 NEW-P1-1/P1-2: an actionable addition is switchable ONLY
+        // through its eligible role preset. Any other preset is refused.
+        if (canon.status === 'addition') {
+            if (typeof preset !== 'string' || !preset) return { ok: false, reason: 'нет данных о пресетах' };
+            const eligible = typeof canon.eligibleRole === 'string' && canon.eligibleRole
+                ? canon.eligibleRole
+                : (Array.isArray(canon.eligibleRoles)
+                    ? canon.eligibleRoles.find(item => typeof item === 'string' && item)
+                    : null);
+            if (eligible && preset === eligible) return { ok: true };
+            return { ok: false, reason: `пресет ${preset} не реализует дополнение канона` };
+        }
+        // Any other non-matched decision (ambiguous/missing_inputs/no_match)
+        // is authoritative in the negative: no canon switch is offered.
+        if (canon.status !== 'matched') {
+            return { ok: false, reason: `канон не сопоставлен (${canon.status}) — переключение не предлагается` };
+        }
+        const registry = this.__lastRegistry
+            || (typeof window !== 'undefined' && window.SLFActivePresetRegistry ? window.SLFActivePresetRegistry : null)
+            || (typeof SLFActivePresetRegistry !== 'undefined' ? SLFActivePresetRegistry : null);
+        if (!registry || typeof preset !== 'string' || !preset) return { ok: false, reason: 'нет данных о пресетах' };
+        const contract = registry.roleContracts && registry.roleContracts[preset];
+        const mapping = contract && contract.canon;
+        if (!mapping || mapping.exact !== true || Number(mapping.row) !== Number(canon.id)) {
+            return { ok: false, reason: `пресет ${preset} не реализует строку ${canon.id} канона точно` };
+        }
+        const expectedVariant = canon.variant == null ? 'default' : String(canon.variant);
+        if (String(mapping.variant == null ? 'default' : mapping.variant) !== expectedVariant) {
+            return { ok: false, reason: `пресет ${preset} реализует другой вариант строки ${canon.id}` };
+        }
+        // Guard against a stale mapping: the declared preset controls must
+        // still equal the selected manual vector.
+        const controls = registry.presets && registry.presets[preset];
+        if (!controls) return { ok: false, reason: `нет настроек пресета ${preset}` };
+        for (const key of ['build_type', 'build_temp', 'build_long', 'build_fast', 'style']) {
+            if (String(controls[key]) !== String(canon.vector[key])) {
+                return { ok: false, reason: `настройки пресета ${preset} не совпадают со строкой ${canon.id}` };
+            }
+        }
+        const lanes = canon.priorityLanes || [];
+        const presetPriority = Array.isArray(controls.priority) ? controls.priority.map(String) : [];
+        if (presetPriority.slice().sort().join(',') !== lanes.slice().map(String).sort().join(',')) {
+            return { ok: false, reason: `приоритеты пресета ${preset} не совпадают со строкой ${canon.id}` };
+        }
+        return { ok: true };
+    },
+
+    // Fail-closed on "nothing to advise with": no registry or an empty catalog
+    // still yields null (partial mode additionally needs the snapshot). #461: a
+    // missing rules decision (early match, phase collect) no longer refuses the
+    // request — it becomes an explicitly marked partial payload.
+    buildPayload({ snapshot, ruleDecision, registry, dialog, currentControls }) {
+        if (!registry || typeof registry !== 'object') return null;
         const active = Array.isArray(registry.active) ? registry.active : [];
         if (!active.length) return null;
+        const partial = !ruleDecision || typeof ruleDecision !== 'object';
+        // #461: only partial mode requires the snapshot's own situation to be
+        // meaningful; full mode keeps the pre-existing contract untouched.
+        if (partial && (!snapshot || typeof snapshot !== 'object')) return null;
+        const decision = partial ? null : ruleDecision;
 
         const catalog = active.slice(0, this.MAX_CATALOG_ENTRIES).map(id => {
             const meta = (registry.meta && registry.meta[id]) || {};
@@ -13199,62 +14202,177 @@ const LLMSecondOpinion = {
             };
         }).filter(entry => entry.id);
 
-        const context = (ruleDecision.moment && ruleDecision.moment.context) || {};
+        // The decision's moment context is the only signal source; in partial
+        // mode there is none, and the situation (score/minute) still rides in
+        // the top-level fields below.
+        const context = partial ? {} : ((decision.moment && decision.moment.context) || {});
         const signals = {};
         for (const key of this.SIGNAL_KEYS) {
             if (context[key] !== undefined && context[key] !== null) signals[key] = context[key];
         }
 
         const hints = (Array.isArray(snapshot && snapshot.developerHints) ? snapshot.developerHints : [])
-            .map(hint => String(hint || '').trim().slice(0, this.MAX_HINT_CHARS))
+            .map(hint => {
+                // Hints may be plain strings or {text} objects; never
+                // stringify the object itself ('[object Object]').
+                const text = (hint && typeof hint === 'object') ? hint.text : hint;
+                return String(text || '').trim().slice(0, this.MAX_HINT_CHARS);
+            })
             .filter(Boolean)
             .slice(0, this.MAX_HINTS);
 
-        const candidates = (Array.isArray(ruleDecision.candidates) ? ruleDecision.candidates : [])
+        const candidates = (Array.isArray(decision && decision.candidates) ? decision.candidates : [])
             .filter(item => item && !item.vetoed && (item.preset || item.id))
             .slice(0, 5)
             .map(item => ({ id: item.preset || item.id, score: typeof item.score === 'number' ? item.score : null }));
 
-        return {
+        const payload = {
             schema: 'slf_llm_advisor_request_v1',
             gameId: (snapshot && snapshot.gameId) || null,
             minute: (snapshot && snapshot.minute != null) ? snapshot.minute : (context.minute ?? null),
             bucket: (snapshot && snapshot.bucket) || '',
             score: (snapshot && snapshot.score) || null,
             currentPreset: context.currentPreset
-                || (ruleDecision.telemetry && ruleDecision.telemetry.currentPreset)
+                || (decision && decision.telemetry && decision.telemetry.currentPreset)
                 || (snapshot && snapshot.presetName)
                 || null,
             developerHints: hints,
-            ruleDecision: {
-                preset: (ruleDecision.action && ruleDecision.action.preset) || null,
-                gameMode: context.gameMode || (ruleDecision.action && ruleDecision.action.decision) || null,
+            ruleDecision: partial ? null : {
+                preset: (decision.action && decision.action.preset) || null,
+                gameMode: context.gameMode || (decision.action && decision.action.decision) || null,
                 // confidence is {level, gap, ...} from the scorer; accept a bare string too.
-                confidence: (ruleDecision.confidence && ruleDecision.confidence.level) || ruleDecision.confidence || null,
+                confidence: (decision.confidence && decision.confidence.level) || decision.confidence || null,
                 topCandidates: candidates
             },
             signals,
             presetCatalog: catalog
         };
+        // #461: the partial marker is appended only in partial mode, so a
+        // full-data payload keeps the exact legacy shape/bytes.
+        if (partial) {
+            payload.dataCompleteness = 'partial';
+            payload.dataNote = this.PARTIAL_DATA_NOTE;
+        }
+        // Phase 1 (#459): the dialogue key is appended only when turns survive
+        // cleaning, so a no-dialog payload keeps the exact legacy shape/bytes.
+        const dialogTurns = this.cleanDialog(dialog);
+        if (dialogTurns.length) payload.dialog = dialogTurns;
+        // #465: the current slider vector is appended only when it survives
+        // cleaning, so a caller without it keeps the exact legacy bytes.
+        const controls = this.cleanCurrentControls(currentControls);
+        if (controls) payload.currentControls = controls;
+        // #477: the canon reference + deterministic decision ride in their own
+        // field, appended only when the local matcher produced one. Legacy
+        // (no canon) requests keep the exact legacy payload bytes.
+        const canon = this.canonDecisionFrom(ruleDecision);
+        // #477 P1-3: bind the decision to the payload that carries it, so the
+        // render validates against its OWN request instead of a shared slot.
+        this.__payloadCanon.set(payload, canon || null);
+        // #477: an absent canon clears the legacy slot so a stale row never
+        // constrains a canon-less request. A decision that resolves no row
+        // (ambiguous/missing_inputs) cannot constrain an answer either, so it
+        // leaves the last constraining decision in place for legacy callers
+        // that do not pass the payload. An actionable addition IS constraining
+        // (only its eligible role is switchable), so it is stored too.
+        if (!canon || canon.status === 'matched' || canon.status === 'addition') this.__lastCanonDecision = canon || null;
+        this.__lastRegistry = registry;
+        if (canon) payload.canonReference = this.buildCanonReference(canon);
+        return payload;
     },
 
     requestSecondOpinion(payload) {
         return Api.postJson(this.ENDPOINT_COLLECTION, payload, 'llm-advisor', this.REQUEST_TIMEOUT_MS);
     },
 
-    renderAnswer(answer) {
+    renderAnswer(answer, options = {}) {
         if (!answer || answer.available !== true) {
             const message = this.escapeHtml((answer && answer.error) || 'LLM недоступен');
             return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#181818;border:1px dashed #555;border-radius:5px;color:#999;padding:7px 9px;font-size:12px;">🤖 LLM недоступен: ${message}</div>`;
         }
+        // #461: the advisor answered without a rules decision (early match).
+        // Mark the advice as preliminary; the answer itself is unchanged.
+        const partial = !!(options && options.partial === true);
+        const partialHtml = partial
+            ? '<div style="opacity:.75;margin-bottom:4px;color:#e8c87a;">Предварительный совет на неполных данных (правила не дали решения)</div>'
+            : '';
         const label = this.escapeHtml(answer.presetLabel || answer.preset || '');
         const confidence = this.escapeHtml(answer.confidence || '');
         const reason = this.escapeHtml(answer.reason || '');
-        const meta = this.escapeHtml(`${answer.model || ''} · ${(Number(answer.latencyMs) / 1000).toFixed(1)}s`);
+        // Show which model served the answer AND (when the server reports it)
+        // the upstream provider. The provider is optional — an older server or
+        // an upstream payload without it must keep the pre-existing
+        // `<model> · <latency>` line, never a dangling separator.
+        const provider = typeof answer.provider === 'string' ? answer.provider.trim() : '';
+        const metaParts = [answer.model || ''];
+        if (provider) metaParts.push(provider);
+        metaParts.push(`${(Number(answer.latencyMs) / 1000).toFixed(1)}s`);
+        const meta = this.escapeHtml(metaParts.join(' · '));
+        // #465: «adjust» answers change individual sliders, not the preset.
+        // They render a compact change list plus their own click-only apply
+        // button; the preset apply button belongs to «switch»/legacy answers
+        // only. Model-derived values are escaped in both the text and the
+        // JSON data attribute.
+        const adjustChanges = Array.isArray(answer.changes) ? answer.changes : [];
+        if (answer.mode === 'adjust' || adjustChanges.length) {
+            const check = this.validateAdjustAgainstCanon(adjustChanges, this.resolveCanonFor(options));
+            if (!check.ok) {
+                const blocked = this.escapeHtml(check.reason || 'предложение не соответствует канону');
+                return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#1a1414;border:1px solid #5a3a3a;border-radius:5px;color:#dcc;padding:7px 9px;font-size:12px;line-height:1.45;">` +
+                    partialHtml +
+                    `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>Точечная подстройка</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
+                    `<span style="color:#e8c87a;">Не применено: ${blocked}</span><br>` +
+                    `${reason}<br>` +
+                    `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span></div>`;
+            }
+            const changeRows = adjustChanges
+                .filter(change => change && typeof change === 'object' && change.control != null)
+                .map(change => `${this.escapeHtml(change.control)}: ${this.escapeHtml(change.value)}`)
+                .join(', ');
+            const adjustAdviceId = typeof answer.adviceId === 'string' ? answer.adviceId : '';
+            const adjustApplyHtml = adjustChanges.length
+                ? `<div style="margin-top:6px;"><button id="slf-llm-apply-adjust" type="button"` +
+                  ` data-slf-llm-apply-changes="${this.escapeHtml(JSON.stringify(adjustChanges))}"` +
+                  ` data-slf-llm-apply-advice-id="${this.escapeHtml(adjustAdviceId)}"` +
+                  ` style="padding:4px 10px;background:#2a4a2a;color:#cfc;border:1px solid #4a7;border-radius:3px;cursor:pointer;font-size:12px;">Применить изменения</button>` +
+                  `<span style="opacity:.55;margin-left:6px;">применение только по клику</span></div>`
+                : '';
+            return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#141a14;border:1px solid #3a5a3a;border-radius:5px;color:#cde;padding:7px 9px;font-size:12px;line-height:1.45;">` +
+                partialHtml +
+                `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>Точечная подстройка</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
+                `${changeRows ? `${changeRows}<br>` : ''}` +
+                `${reason}<br>` +
+                `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span>${adjustApplyHtml}</div>`;
+        }
+        // Ф2a (#441): one-click apply. The button only carries data; the
+        // click handler lives in the ui-extension (event delegation) and
+        // applies strictly on explicit click — never auto.
+        const presetId = typeof answer.preset === 'string' ? answer.preset : '';
+        const adviceId = typeof answer.adviceId === 'string' ? answer.adviceId : '';
+        // #477 R8: a «switch» is actionable only for an eligible preset that
+        // exactly realizes the matched canon row AND variant. Without a canon
+        // decision (legacy/old API) the pre-existing switch path is preserved.
+        const switchCheck = presetId ? this.validateSwitchAgainstCanon(presetId, this.resolveCanonFor(options)) : { ok: true };
+        if (presetId && !switchCheck.ok) {
+            const blocked = this.escapeHtml(switchCheck.reason || 'предложение не соответствует канону');
+            return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#1a1414;border:1px solid #5a3a3a;border-radius:5px;color:#dcc;padding:7px 9px;font-size:12px;line-height:1.45;">` +
+                partialHtml +
+                `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>${label}</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
+                `<span style="color:#e8c87a;">Не применено: ${blocked}</span><br>` +
+                `${reason}<br>` +
+                `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span></div>`;
+        }
+        const applyHtml = presetId
+            ? `<div style="margin-top:6px;"><button id="slf-llm-apply-btn" type="button"` +
+              ` data-slf-llm-apply-preset="${this.escapeHtml(presetId)}"` +
+              ` data-slf-llm-apply-advice-id="${this.escapeHtml(adviceId)}"` +
+              ` style="padding:4px 10px;background:#2a4a2a;color:#cfc;border:1px solid #4a7;border-radius:3px;cursor:pointer;font-size:12px;">Применить пресет</button>` +
+              `<span style="opacity:.55;margin-left:6px;">применение только по клику</span></div>`
+            : '';
         return `<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#141a14;border:1px solid #3a5a3a;border-radius:5px;color:#cde;padding:7px 9px;font-size:12px;line-height:1.45;">` +
+            partialHtml +
             `<b style="color:#8fd3ff;">🤖 Второе мнение (LLM):</b> <b>${label}</b> <span style="opacity:.7;">(уверенность: ${confidence})</span><br>` +
             `${reason}<br>` +
-            `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span></div>`;
+            `<span style="opacity:.55;">${meta} · только совет, тактика не применена</span>${applyHtml}</div>`;
     },
 
     // Mount the answer inside the recommendation panel; a fresh hint render
@@ -13267,6 +14385,52 @@ const LLMSecondOpinion = {
         if (existing) existing.remove();
         const holder = document.createElement('div');
         holder.innerHTML = answerHtml;
+        const node = holder.firstElementChild;
+        if (!node) return false;
+        panel.appendChild(node);
+        return true;
+    },
+
+    // Phase 1 (#459): compact chat window for the current match. Turns are
+    // user/assistant remarks about tactics; every text is escaped and the
+    // send control is disabled while a request is in flight. The window never
+    // applies anything — the answer's «Применить пресет» button stays the only
+    // trigger.
+    renderChat({ turns, busy } = {}) {
+        const safeTurns = this.cleanDialog(turns);
+        const rows = safeTurns.map(turn =>
+            `<div data-slf-llm-chat-turn="${turn.role}" style="margin:2px 0;line-height:1.4;">` +
+            `<span style="opacity:.6;">${turn.role === 'assistant' ? 'LLM' : 'Вы'}:</span> ` +
+            `${this.escapeHtml(turn.text)}</div>`
+        ).join('');
+        const placeholder = safeTurns.length
+            ? ''
+            : '<div style="opacity:.55;margin:2px 0;">Пока нет реплик — напишите замечание по тактике.</div>';
+        const disabled = busy ? ' disabled' : '';
+        const busyStyle = busy ? 'opacity:.55;cursor:not-allowed;' : 'cursor:pointer;';
+        return '<div id="slf-llm-chat" style="margin:5px 0;background:#141414;border:1px solid #444;border-radius:5px;color:#ddd;padding:7px 9px;font-size:12px;">' +
+            '<b style="color:#8fd3ff;">💬 Диалог с тренером:</b>' +
+            `<div id="slf-llm-chat-turns" style="max-height:150px;overflow-y:auto;margin:5px 0;">${rows || placeholder}</div>` +
+            '<div style="display:flex;gap:5px;align-items:flex-start;">' +
+            `<input id="slf-llm-chat-input" type="text" maxlength="${this.MAX_DIALOG_TURN_CHARS}"` +
+            ' placeholder="Замечание по тактике…"' +
+            `${disabled} style="flex:1;min-width:0;padding:4px 6px;background:#222;color:#eee;border:1px solid #555;border-radius:3px;font-size:12px;" />` +
+            `<button id="slf-llm-chat-send" type="button"${disabled}` +
+            ` style="padding:4px 10px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;${busyStyle}font-size:12px;">Отправить</button>` +
+            '</div>' +
+            '<span style="opacity:.55;">Реплики уходят в LLM вместе с ситуацией; пресет применяется только кнопкой.</span>' +
+            '</div>';
+    },
+
+    // Mount the chat window inside the recommendation panel, replacing any
+    // previous chat node (distinct id, never collides with the answer node).
+    mountChat(chatHtml) {
+        const panel = document.getElementById('slf-parser-recommendation');
+        if (!panel) return false;
+        const existing = document.getElementById('slf-llm-chat');
+        if (existing) existing.remove();
+        const holder = document.createElement('div');
+        holder.innerHTML = chatHtml;
         const node = holder.firstElementChild;
         if (!node) return false;
         panel.appendChild(node);
@@ -13590,6 +14754,7 @@ if (typeof window !== 'undefined') {
         const presetText = `пресет ${rec?.presetId || '?'}`;
         const render = value => {
             if (typeof value === 'string' && value.startsWith('etalon')) return etalonText;
+            if (typeof value === 'string' && value.startsWith('canon:')) return `канон ${value.slice(6)}`;
             if (value === 'current') return 'текущая тактика';
             return presetText;
         };
@@ -13981,36 +15146,52 @@ if (typeof window !== 'undefined') {
 
     function buildKnowledgeProvenanceHtml(snapshot, primaryPresetName) {
         let matched = false;
+        let canonLabel = '';
         try {
             const decision = snapshot?.ruleDecision || null;
-            const preset = resolveDisplayedKnowledgePreset(snapshot, primaryPresetName);
-            // Prefer the decision's OWN computed adjustment (same-decision data):
-            // the candidate parts carry the boundedEvidenceAdjustment the policy
-            // actually applied. This never diverges from the decision, unlike a
-            // live re-evaluation on the raw moment.context (whose normalized
-            // fields — e.g. signal-derived underPressure — can differ). Fall back
-            // to a live assessment only when the candidate parts are unavailable.
-            const candidate = Array.isArray(decision?.candidates)
-                ? decision.candidates.find(item => item && item.preset === preset)
-                : null;
-            if (candidate && candidate.parts && typeof candidate.parts.boundedEvidenceAdjustment === 'number') {
-                matched = candidate.parts.boundedEvidenceAdjustment !== 0;
-            } else {
-                const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
-                const assessment = registry && typeof registry.knowledgeAssessment === 'function'
-                    ? registry.knowledgeAssessment({
-                        preset,
-                        situation: decision?.situation || decision?.moment?.context?.gameMode || '',
-                        context: decision?.moment?.context || null
-                    })
+            // #477: a matched canon row is the authority the hint displays, so
+            // the knowledge attribution follows that row — not the preset that
+            // only supplied the base/defense/attack controls. base/presetId
+            // stay untouched; this is display attribution only.
+            const canon = decision?.finalTactic?.canon;
+            if (canon && canon.status === 'matched') {
+                const variant = canon.variant == null ? '' : ` · вариант ${canon.variant}`;
+                const situation = typeof canon.situationText === 'string' && canon.situationText
+                    ? ` · ${canon.situationText}`
+                    : '';
+                canonLabel = `База: канон №${canon.id}${variant}${situation}`;
+            }
+            if (!canonLabel) {
+                const preset = resolveDisplayedKnowledgePreset(snapshot, primaryPresetName);
+                // Prefer the decision's OWN computed adjustment (same-decision data):
+                // the candidate parts carry the boundedEvidenceAdjustment the policy
+                // actually applied. This never diverges from the decision, unlike a
+                // live re-evaluation on the raw moment.context (whose normalized
+                // fields — e.g. signal-derived underPressure — can differ). Fall back
+                // to a live assessment only when the candidate parts are unavailable.
+                const candidate = Array.isArray(decision?.candidates)
+                    ? decision.candidates.find(item => item && item.preset === preset)
                     : null;
-                matched = Boolean(assessment && assessment.source === 'seed'
-                    && Array.isArray(assessment.ruleIds) && assessment.ruleIds.length > 0);
+                if (candidate && candidate.parts && typeof candidate.parts.boundedEvidenceAdjustment === 'number') {
+                    matched = candidate.parts.boundedEvidenceAdjustment !== 0;
+                } else {
+                    const registry = typeof window !== 'undefined' ? window.SLFActivePresetRegistry : null;
+                    const assessment = registry && typeof registry.knowledgeAssessment === 'function'
+                        ? registry.knowledgeAssessment({
+                            preset,
+                            situation: decision?.situation || decision?.moment?.context?.gameMode || '',
+                            context: decision?.moment?.context || null
+                        })
+                        : null;
+                    matched = Boolean(assessment && assessment.source === 'seed'
+                        && Array.isArray(assessment.ruleIds) && assessment.ruleIds.length > 0);
+                }
             }
         } catch (_) {
             matched = false; // attribution unavailable → none-variant
+            canonLabel = '';
         }
-        const label = matched ? 'База: seed (гипотеза)' : 'База: нет совпавших данных';
+        const label = canonLabel || (matched ? 'База: seed (гипотеза)' : 'База: нет совпавших данных');
         return `<div style="line-height:1.4;opacity:.85;">${etalonEscape(label)}</div>`;
     }
 
@@ -14119,6 +15300,9 @@ if (typeof window !== 'undefined') {
         // contains candidate scores, veto reasons, vectors and confidence.
         const html = buildManualRecommendationHtml(snapshot);
         if (el) el.innerHTML = html;
+        // The panel redraw wipes the chat node with the rest of the content;
+        // re-mount it from STATE so the dialogue survives the refresh.
+        mountLlmChatWindow();
         rememberManualRecommendation(html, snapshot);
         submitManualTelemetry(snapshot);
 
@@ -14133,50 +15317,63 @@ if (typeof window !== 'undefined') {
     function mountManualButton() {
         if (!location.pathname.includes('/game.php')) return;
         const panel = document.getElementById('slf-match-parser-panel');
-        if (!panel || document.getElementById('slf-manual-recommendation-btn')) return;
+        if (!panel || document.getElementById('slf-llm-second-opinion-btn')) return;
 
-        const btn = document.createElement('button');
-        btn.id = 'slf-manual-recommendation-btn';
-        btn.type = 'button';
-        btn.textContent = '↻ Подсказка';
-        btn.title = 'Собрать текущий snapshot и показать rule-based подсказку по текущему состоянию';
-        btn.style.cssText = 'padding:5px 8px;background:#345;color:#fff;border:1px solid #79a;border-radius:3px;cursor:pointer;';
-        btn.onclick = async () => {
-            btn.disabled = true;
-            try {
-                await renderManualRecommendation();
-            } catch (error) {
-                console.error('[SLF] Manual recommendation refresh failed', error);
-                UI.addParserLog('Подсказка: ошибка, см. console');
-            } finally {
-                btn.disabled = false;
-            }
-        };
-
-        const status = document.getElementById('slf-parser-status');
-        panel.insertBefore(btn, status || null);
-
+        // Ф2a (#441): the manual hint button is hidden from the UI; the rule
+        // ladder stays internal as the LLM's structured input. The LLM button
+        // is the single primary entry and mounts on its own — its presence no
+        // longer depends on the manual button being rendered.
         const llmBtn = document.createElement('button');
         llmBtn.id = 'slf-llm-second-opinion-btn';
         llmBtn.type = 'button';
         llmBtn.textContent = '🤖 LLM';
-        llmBtn.title = 'Второе мнение от LLM по текущей подсказке. Только совет — тактика не применяется.';
-        llmBtn.style.cssText = 'padding:5px 8px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;cursor:pointer;margin-left:5px;';
+        llmBtn.title = 'Второе мнение от LLM по текущему состоянию матча. Только совет — тактика применяется только по явному клику.';
+        llmBtn.style.cssText = 'padding:5px 8px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;cursor:pointer;';
         llmBtn.onclick = async () => {
             llmBtn.disabled = true;
             try {
-                await requestLlmSecondOpinion();
+                await requestLlmSecondOpinionFresh();
             } catch (error) {
                 console.error('[SLF] LLM second opinion failed', error);
             } finally {
                 llmBtn.disabled = false;
             }
         };
-        panel.insertBefore(llmBtn, btn.nextSibling);
+
+        const status = document.getElementById('slf-parser-status');
+        panel.insertBefore(llmBtn, status || null);
     }
+
+    // Server-side advisor failure kinds (vps/api/advisor.py messages_by_kind).
+    // The API layer carries the body's errorKind on the error object; the UI
+    // must surface the real cause instead of guessing from the HTTP status.
+    const LLM_ADVISOR_ERROR_KIND_TEXT = {
+        rate_limited: 'LLM перегружен (лимит провайдера), попробуйте позже',
+        network: 'LLM-провайдер недоступен (сеть), попробуйте позже',
+        upstream_error: 'LLM-провайдер временно ошибается, попробуйте позже',
+        upstream_rejected: 'запрос отклонён LLM-провайдером',
+        invalid_answer: 'LLM вернул невалидный ответ, попробуйте ещё раз',
+        empty_answer: 'модель вернула пустой ответ, попробуйте ещё раз',
+        misconfigured: 'advisor сконфигурирован неверно (SLF_ADVISOR_PROXY), обратитесь к администратору'
+    };
+
+    // #471: a truncated-empty reply (finishReason=length) is its own honest
+    // cause — the generic empty_answer text would hide the exhausted limit.
+    const LLM_EMPTY_ANSWER_LENGTH_TEXT = 'Модель исчерпала лимит ответа и ничего не вернула. Попробуйте ещё раз.';
 
     function llmSecondOpinionErrorText(error) {
         const status = error && error.status;
+        const serverKind = error && error.errorKind;
+        if (serverKind === 'empty_answer' && error && error.finishReason === 'length') {
+            return LLM_EMPTY_ANSWER_LENGTH_TEXT;
+        }
+        if (typeof serverKind === 'string'
+            && Object.prototype.hasOwnProperty.call(LLM_ADVISOR_ERROR_KIND_TEXT, serverKind)) {
+            return LLM_ADVISOR_ERROR_KIND_TEXT[serverKind];
+        }
+        if (error && typeof error.serverError === 'string' && error.serverError.trim()) {
+            return error.serverError;
+        }
         if (error && error.kind === 'timeout') return 'Таймаут запроса к LLM (35 с)';
         if (error && error.kind === 'network') return 'Сервер недоступен';
         if (status === 503) return 'LLM-советник не настроен на сервере или перегружен';
@@ -14185,32 +15382,404 @@ if (typeof window !== 'undefined') {
         return `Ошибка советника${status ? ` (HTTP ${status})` : ''}`;
     }
 
-    async function requestLlmSecondOpinion() {
-        if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined') return;
-        const snapshot = (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot) || null;
-        const ruleDecision = (snapshot && snapshot.ruleDecision)
-            || (typeof STATE !== 'undefined' ? STATE.lastRuleDecision : null)
+    // #471: «Повторить» for the chat answer area — appended to the chat-path
+    // failure answer only. While a request is in flight the whole answer node
+    // is replaced by «Думает…» (the control disappears); on the next failure
+    // the node is mounted again with a fresh, enabled button.
+    function llmChatRetryHtml(answerHtml) {
+        const btn = '<button id="slf-llm-chat-retry" type="button"'
+            + ' style="margin-left:6px;padding:2px 8px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;cursor:pointer;font-size:12px;">Повторить</button>';
+        const close = answerHtml.lastIndexOf('</div>');
+        if (close === -1) return answerHtml + btn;
+        return answerHtml.slice(0, close) + btn + answerHtml.slice(close);
+    }
+
+    async function requestLlmSecondOpinion(freshSnapshot, dialog, options = {}) {
+        if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined') return null;
+        const settings = options && typeof options === 'object' ? options : {};
+        // #461: in partial mode a stale STATE.lastRuleDecision must never stand
+        // in for the current state — the request goes out with ruleDecision:null.
+        const partial = settings.partial === true;
+        // #471: the chat path marks its failures with a «Повторить» control.
+        const chat = settings.chat === true;
+        const snapshot = freshSnapshot
+            || (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot)
             || null;
+        const ruleDecision = partial
+            ? null
+            : ((snapshot && snapshot.ruleDecision)
+                || (typeof STATE !== 'undefined' ? STATE.lastRuleDecision : null)
+                || null);
         const registry = (typeof window !== 'undefined' && window.SLFActivePresetRegistry) || null;
-        const payload = LLMSecondOpinion.buildPayload({ snapshot, ruleDecision, registry });
+        // #465: the current slider vector (14 controls + priority) lets the
+        // advisor propose fine-grained «adjust» changes. Absence is honest:
+        // buildPayload omits the key and the prompt then allows switch only.
+        const currentControls = safeGetCurrentTactic();
+        const payload = LLMSecondOpinion.buildPayload({ snapshot, ruleDecision, registry, dialog, currentControls });
         if (!payload) {
             LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
                 available: false,
-                error: 'Нет сохранённой подсказки — сначала нажмите «↻ Подсказка»'
-            }));
-            return;
+                error: 'Недостаточно данных: правило не дало решения или каталог пресетов пуст'
+            }, { partial }));
+            return null;
         }
         LLMSecondOpinion.mountAnswer('<div id="slf-llm-second-opinion-answer" style="margin:5px 0;background:#181818;border:1px dashed #555;border-radius:5px;color:#999;padding:7px 9px;font-size:12px;">🤖 Думает…</div>');
         try {
             const answer = await LLMSecondOpinion.requestSecondOpinion(payload);
-            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer(answer));
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer(answer, { partial, payload }));
+            return answer || null;
         } catch (error) {
             console.error('[SLF] LLM second opinion request failed', error);
-            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+            const errorHtml = LLMSecondOpinion.renderAnswer({
                 available: false,
                 error: llmSecondOpinionErrorText(error)
-            }));
+            }, { partial, payload });
+            // #471: only the chat path gets «Повторить» — the one-shot button
+            // has no dialogue to resend.
+            LLMSecondOpinion.mountAnswer(chat ? llmChatRetryHtml(errorHtml) : errorHtml);
+            return null;
         }
+    }
+
+    // Phase 1 (#459): per-match dialogue kept in STATE so it survives panel
+    // redraws. Mirrors the server caps (≤20 turns, ≤500 chars per turn).
+    let llmChatBusy = false;
+
+    function llmDialogTurnCap() {
+        return (typeof LLMSecondOpinion !== 'undefined' && LLMSecondOpinion.MAX_DIALOG_TURNS) || 20;
+    }
+
+    function llmDialogForGame(gameId) {
+        if (typeof STATE === 'undefined' || !STATE) return [];
+        // No gameId -> no dialogue: a shared placeholder key would mix
+        // different matches together and send dialogue with gameId:null.
+        const key = gameId ? String(gameId) : '';
+        if (!key) return [];
+        if (!STATE.llmDialogByGame || typeof STATE.llmDialogByGame !== 'object') {
+            STATE.llmDialogByGame = {};
+        }
+        const turns = Array.isArray(STATE.llmDialogByGame[key]) ? STATE.llmDialogByGame[key] : [];
+        STATE.llmDialogByGame[key] = turns;
+        return turns;
+    }
+
+    function rememberLlmDialogTurn(gameId, role, text, ts) {
+        if (!gameId) return []; // nothing is stored without a real gameId
+        const turns = llmDialogForGame(gameId);
+        const turnCap = llmDialogTurnCap();
+        const charCap = (typeof LLMSecondOpinion !== 'undefined' && LLMSecondOpinion.MAX_DIALOG_TURN_CHARS) || 500;
+        turns.push({
+            role: role === 'assistant' ? 'assistant' : 'user',
+            text: String(text || '').trim().slice(0, charCap),
+            ts: typeof ts === 'number' ? ts : Date.now()
+        });
+        while (turns.length > turnCap) turns.shift();
+        return turns.slice();
+    }
+
+    function currentLlmGameId() {
+        const last = (typeof STATE !== 'undefined' && STATE.lastRecommendationSnapshot) || null;
+        if (last && last.gameId) return String(last.gameId);
+        try {
+            if (typeof SnapshotEngine !== 'undefined' && typeof SnapshotEngine.build === 'function') {
+                const snapshot = SnapshotEngine.build();
+                if (snapshot && snapshot.gameId) return String(snapshot.gameId);
+            }
+        } catch (_) {
+            // No snapshot: the chat renders empty and sending is refused.
+        }
+        return '';
+    }
+
+    function wireLlmChatControls() {
+        const send = document.getElementById('slf-llm-chat-send');
+        // Direct handler (the node is freshly mounted) — same delegation-free
+        // pattern as the LLM button; the promise is returned for testability.
+        if (send) send.onclick = () => sendLlmChatTurn();
+    }
+
+    function renderLlmChatWindow(gameId) {
+        if (typeof LLMSecondOpinion === 'undefined' || typeof LLMSecondOpinion.renderChat !== 'function') return;
+        const turns = llmDialogForGame(gameId || currentLlmGameId());
+        LLMSecondOpinion.mountChat(LLMSecondOpinion.renderChat({ turns, busy: llmChatBusy }));
+        wireLlmChatControls();
+    }
+
+    function mountLlmChatWindow() {
+        if (typeof document === 'undefined') return;
+        if (typeof location !== 'undefined' && !location.pathname.includes('/game.php')) return;
+        if (!document.getElementById('slf-parser-recommendation')) return;
+        renderLlmChatWindow();
+    }
+
+    // One chat turn = one advisor request carrying the WHOLE accumulated
+    // dialogue. The answer still renders through the unchanged renderAnswer
+    // (with the «Применить пресет» button) — nothing is applied automatically.
+    async function sendLlmChatTurn() {
+        if (llmChatBusy) return null;
+        if (typeof LLMSecondOpinion === 'undefined' || typeof SnapshotEngine === 'undefined') return null;
+        const input = document.getElementById('slf-llm-chat-input');
+        const text = input && typeof input.value === 'string' ? input.value.trim() : '';
+        if (!text) return null; // blank input is ignored
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) return null;
+        const gameId = snapshot.gameId ? String(snapshot.gameId) : '';
+        if (!gameId) {
+            // Without a match id the dialogue would be shared across matches
+            // and sent with gameId:null — refuse honestly, store nothing.
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+                available: false,
+                error: 'Диалог доступен только на странице матча'
+            }));
+            return null;
+        }
+        const dialog = rememberLlmDialogTurn(gameId, 'user', text, Date.now());
+        if (input) input.value = '';
+        return runLlmChatRequest(gameId, snapshot, dialog);
+    }
+
+    // #471: explicit retry of the LAST dialogue — the stored turns go out
+    // as-is, no new user turn is appended (a retry never duplicates the
+    // user's words). Same busy gating and render path as a normal send.
+    async function retryLlmChatTurn() {
+        if (llmChatBusy) return null;
+        if (typeof LLMSecondOpinion === 'undefined' || typeof SnapshotEngine === 'undefined') return null;
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) return null;
+        const gameId = snapshot.gameId ? String(snapshot.gameId) : '';
+        if (!gameId) return null; // no match id -> nothing to resend
+        const dialog = llmDialogForGame(gameId).slice();
+        if (!dialog.length || dialog[dialog.length - 1].role !== 'user') {
+            // Retry only makes sense after a failed send: the last stored
+            // turn must be the unanswered user remark.
+            return null;
+        }
+        return runLlmChatRequest(gameId, snapshot, dialog);
+    }
+
+    // Request+render part shared by Send and «Повторить»: one busy-gated
+    // advisor request with the given dialogue; an assistant turn is recorded
+    // only on available:true, a failure adds no fake turn.
+    async function runLlmChatRequest(gameId, snapshot, dialog) {
+        llmChatBusy = true;
+        renderLlmChatWindow(gameId);
+        let answer = null;
+        try {
+            answer = await requestLlmSecondOpinionFresh({ snapshot, dialog, chat: true });
+        } catch (error) {
+            console.error('[SLF] LLM chat request failed', error);
+        } finally {
+            llmChatBusy = false;
+        }
+        if (answer && answer.available === true) {
+            // Honest assistant turn: the model's own reason (or a compact
+            // preset/confidence summary). A failed request adds no fake turn.
+            const summary = typeof answer.reason === 'string' && answer.reason.trim()
+                ? answer.reason
+                : `${answer.presetLabel || answer.preset || 'совет'} (уверенность: ${answer.confidence || '?'})`;
+            rememberLlmDialogTurn(gameId, 'assistant', summary, Date.now());
+        }
+        renderLlmChatWindow(gameId);
+        return answer;
+    }
+
+    // Ф2a (#441): self-sufficient entry — the LLM button no longer depends on
+    // a manual hint click. Builds a fresh snapshot, runs the SAME rule ladder
+    // the manual hint runs (RecommendationEngine.make stamps
+    // snapshot.ruleDecision) and feeds it straight into the advisor flow.
+    // Phase 1 (#459): accepts an optional prebuilt snapshot and dialogue so the
+    // chat reuses this exact path instead of duplicating snapshot logic.
+    async function requestLlmSecondOpinionFresh(options = {}) {
+        const settings = options && typeof options === 'object' ? options : {};
+        const dialog = Array.isArray(settings.dialog) ? settings.dialog : [];
+        if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined'
+            || typeof SnapshotEngine === 'undefined') return null;
+        const snapshot = settings.snapshot || normalizeForeignSnapshot(SnapshotEngine.build());
+        if (!snapshot) {
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+                available: false,
+                error: 'Snapshot матча недоступен'
+            }));
+            return null;
+        }
+        snapshot.recommendationSource = 'llm_second_opinion';
+        snapshot.generatorVersion = GENERATOR_VERSION;
+        // Ф2c recovery (#441): the retired manual hint was the only lab
+        // checkpoint on the live path; without it the lab activation never
+        // records lastSeenMinute and the exit loses exposure (toMinute /
+        // durationMinutes null). Record presence from the LLM entry, under the
+        // same guard as the manual path — BEFORE the advisor request, so a
+        // failed LLM call still records that the user was present.
+        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.checkpoint && snapshot.matchOwnership !== 'foreign') {
+            await STATE.tacticalLabRuntime.checkpoint('llm_second_opinion', snapshot);
+        }
+        // Same pipeline the manual hint runs; make() stamps ruleDecision when
+        // the data supports one.
+        buildManualRecommendationHtml(snapshot);
+        // #461: an early match (phase collect) may have no rules decision yet.
+        // The advisor still gets a marked partial payload instead of a refusal;
+        // its answer is shown with the honest preliminary marker and is never
+        // auto-applied.
+        const partial = !snapshot.ruleDecision;
+        return requestLlmSecondOpinion(snapshot, dialog, { partial, chat: settings.chat === true });
+    }
+
+    // Ф2a (#441): one-click apply of the suggested preset. Runs ONLY on an
+    // explicit click (event delegation below) — no timers, no auto-apply,
+    // no auto-retry. Success = UI readback confirmed by applyPresetAsync;
+    // no game-server acknowledgement is claimed anywhere.
+    async function applyLlmSuggestedPreset(btn) {
+        const presetId = (btn && btn.dataset && btn.dataset.slfLlmApplyPreset) || '';
+        if (!presetId || typeof applyPresetAsync !== 'function') return;
+        if (btn.dataset.slfApplyInFlight === '1') return;
+        btn.dataset.slfApplyInFlight = '1';
+        btn.disabled = true;
+        btn.textContent = 'Применяю…';
+        let applied = false;
+        try {
+            // applyPresetAsync returns false on the early "preset not found"
+            // path without writing lastTacticApplyFailure — clear stale
+            // diagnostics from an unrelated earlier failure so the failure
+            // branch below reports honestly.
+            if (typeof STATE !== 'undefined') STATE.lastTacticApplyFailure = null;
+            applied = (await applyPresetAsync(presetId)) === true;
+        } catch (error) {
+            console.error('[SLF] LLM suggested preset apply failed', error);
+            applied = false;
+        }
+        btn.dataset.slfApplyInFlight = '';
+        const adviceId = (btn.dataset && btn.dataset.slfLlmApplyAdviceId) || '';
+        if (applied) {
+            btn.disabled = true;
+            btn.textContent = 'Применено ✓ (подтверждено в интерфейсе)';
+            UI.addParserLog('Пресет из совета LLM применён (readback подтверждён)');
+            if (adviceId) void reportLlmApplyEvent(adviceId, true);
+            return;
+        }
+        // Honest failure: surface the bridge diagnostics, keep the button
+        // enabled for a manual retry, never report success.
+        btn.disabled = false;
+        btn.textContent = 'Применить';
+        const failure = (typeof STATE !== 'undefined' && STATE.lastTacticApplyFailure) || null;
+        const reason = failure && failure.reason ? String(failure.reason) : 'не диагностирована';
+        UI.addParserLog(`Не удалось применить пресет (${reason}) — можно повторить`);
+        UI.updateParserStatus('Применение пресета не подтверждено');
+        if (adviceId) void reportLlmApplyEvent(adviceId, false);
+    }
+
+    async function reportLlmApplyEvent(adviceId, ok) {
+        if (typeof Api === 'undefined' || !adviceId) return;
+        try {
+            await Api.postJson('advisor_apply', { adviceId: String(adviceId), ok: ok === true }, 'llm-advisor-apply', 10000);
+        } catch (error) {
+            console.error('[SLF] LLM apply event report failed', error);
+            UI.addParserLog('Событие применения не доставлено на сервер');
+        }
+    }
+
+    // #465: build the PARTIAL tactic object for an «adjust» answer. Only the
+    // changed controls are requested, but the CURRENT priority is included
+    // explicitly: the bridge's normalizePresets() turns an absent priority
+    // into [] and the apply would silently clear the direction priorities.
+    function llmAdjustTactic(changes, current) {
+        if (!Array.isArray(changes)) return null;
+        const tactic = {};
+        for (const change of changes) {
+            if (!change || typeof change !== 'object') continue;
+            const control = typeof change.control === 'string' ? change.control : '';
+            if (!control || change.value === undefined || change.value === null) continue;
+            tactic[control] = String(change.value);
+        }
+        if (!Object.keys(tactic).length) return null;
+        tactic.priority = Array.isArray(current?.priority) ? current.priority.slice() : [];
+        return tactic;
+    }
+
+    function parseLlmAdjustChanges(btn) {
+        const raw = btn?.dataset?.slfLlmApplyChanges;
+        if (typeof raw !== 'string' || !raw) return null;
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    // #465: one-click apply of an «adjust» answer. Runs ONLY on the explicit
+    // click (delegation below); the bridge is the same readback path the preset
+    // and final-tactic applies use. Honest failure reporting, never success.
+    async function applyLlmSuggestedAdjust(btn) {
+        if (!btn || btn.dataset?.slfApplyInFlight === '1') return;
+        const changes = parseLlmAdjustChanges(btn);
+        if (!changes || !changes.length) {
+            UI.addParserLog('Совет LLM: список изменений не прочитан — ничего не применено');
+            return;
+        }
+        const current = safeGetCurrentTactic();
+        if (!current || typeof STATE === 'undefined' || !STATE?.tacticControlBridge
+            || typeof STATE.tacticControlBridge.applyTacticObject !== 'function') {
+            UI.addParserLog('Совет LLM: мост управления тактикой недоступен — изменения не применены');
+            return;
+        }
+        const tactic = llmAdjustTactic(changes, current);
+        if (!tactic) {
+            UI.addParserLog('Совет LLM: пустой список изменений — ничего не применено');
+            return;
+        }
+        btn.dataset.slfApplyInFlight = '1';
+        btn.disabled = true;
+        btn.textContent = 'Применяю…';
+        let result = null;
+        try {
+            result = await STATE.tacticControlBridge.applyTacticObject(tactic, {
+                strict: true,
+                source: 'llm_adjust'
+            });
+        } catch (error) {
+            console.error('[SLF] LLM adjust apply failed', error);
+            result = { ok: false, reason: 'exception', failures: [], mismatches: [], rolledBack: false };
+        }
+        const adviceId = (btn.dataset && btn.dataset.slfLlmApplyAdviceId) || '';
+        if (result?.ok && !result.failures?.length && !result.mismatches?.length) {
+            btn.disabled = true;
+            btn.textContent = 'Применено ✓ (подтверждено в интерфейсе)';
+            UI.addParserLog('Точечная подстройка из совета LLM применена (readback подтверждён)');
+            if (adviceId) void reportLlmApplyEvent(adviceId, true);
+            return;
+        }
+        // Honest failure: keep the diagnostics visible and the button usable.
+        btn.dataset.slfApplyInFlight = '';
+        btn.disabled = false;
+        btn.textContent = 'Применить изменения';
+        const reason = String(result?.reason || 'не диагностирована');
+        const failureKeys = (Array.isArray(result?.failures) ? result.failures : []).join(', ');
+        UI.addParserLog(`Не удалось применить изменения (${reason}${failureKeys ? `: ${failureKeys}` : ''}) — можно повторить`);
+        UI.updateParserStatus('Точечная подстройка не подтверждена');
+        if (adviceId) void reportLlmApplyEvent(adviceId, false);
+    }
+
+    function bindLlmApplyDelegation() {
+        if (typeof document === 'undefined' || document.__slfLlmApplyDelegation) return;
+        document.__slfLlmApplyDelegation = true;
+        document.addEventListener('click', event => {
+            const btn = event?.target?.closest ? event.target.closest('#slf-llm-apply-btn') : null;
+            if (!btn) return;
+            void applyLlmSuggestedPreset(btn);
+        });
+        document.addEventListener('click', event => {
+            const btn = event?.target?.closest ? event.target.closest('#slf-llm-apply-adjust') : null;
+            if (!btn) return;
+            void applyLlmSuggestedAdjust(btn);
+        });
+        // #471: chat «Повторить» — resends the existing dialogue without a
+        // new user turn. Disabled on click; a failure re-mounts it enabled.
+        document.addEventListener('click', event => {
+            const btn = event?.target?.closest ? event.target.closest('#slf-llm-chat-retry') : null;
+            if (!btn) return;
+            btn.disabled = true;
+            void retryLlmChatTurn();
+        });
     }
 
     function mountForeignSelector() {
@@ -14239,7 +15808,9 @@ if (typeof window !== 'undefined') {
         patchCompactCoachMode();
         mountManualButton();
         mountForeignSelector();
+        mountLlmChatWindow();
         bindFinalTacticApplyDelegation();
+        bindLlmApplyDelegation();
     }
 
     const originalAddMatchParserPanel = UI.addMatchParserPanel;
@@ -26356,6 +27927,40 @@ const TrainingGuidePanel = {
         return {ok:true,footer,controls};
     },
 
+    inspectBulkPanel() {
+        const panel=document.querySelector('.train-bulk');
+        if (!panel) return {present:false};
+        const chips=[...panel.querySelectorAll('.train-bulk__sk')].map(chip=>({
+            chip,
+            index:Number(chip.dataset.i),
+            name:chip.querySelector('.train-bulk__name'),
+            input:chip.querySelector('.train-bulk__up')
+        }));
+        const indexes=new Set(chips.map(item=>item.index));
+        const malformed=chips.length!==11 || indexes.size!==11 || chips.some(item=>!Number.isInteger(item.index) || item.index<1 || item.index>11 || !item.name || !item.input);
+        if (malformed) return {present:true,ok:false,reason:'Не распознана групповая панель тренировок.'};
+        return {present:true,ok:true,chips:chips.sort((a,b)=>a.index-b.index)};
+    },
+
+    prepareBulkPanel(chips, targets) {
+        chips.forEach(item=>{
+            const input=item.input;
+            if (item.index<=10) {
+                item.chip.classList.add('is-on');
+                item.chip.dataset.order=String(item.index);
+                input.disabled=false;
+                input.value=String(targets[item.index-1].target);
+            } else {
+                item.chip.classList.remove('is-on');
+                item.chip.dataset.order='0';
+                input.disabled=true;
+                input.value='';
+            }
+            input.dispatchEvent(new Event('input',{bubbles:true}));
+            input.dispatchEvent(new Event('change',{bubbles:true}));
+        });
+    },
+
     restoreFooters(snapshots) {
         snapshots.forEach(snapshot=>{
             snapshot.controls.forEach(item=>{
@@ -26381,6 +27986,15 @@ const TrainingGuidePanel = {
         const selectedType=[...selectedTypes][0];
         const profileType=role==='GK'?'GK':'FIELD';
         if (selectedType!==profileType) return this.setStatus(role==='GK'?'Профиль GK можно применить только к выбранным вратарям.':'Полевой профиль нельзя применить к выбранным вратарям.','error');
+        const bulk=this.inspectBulkPanel();
+        if (bulk.present) {
+            if (!bulk.ok) return this.setStatus(`Профиль ${role} не применён. ${bulk.reason}`,'error');
+            const targets=this.skillOrderForRole(role).map(skill=>({skill,target:Math.round(Number(profile.skills?.[skill]?.value))}));
+            if (targets.length!==10 || targets.some(target=>!Number.isFinite(target.target))) return this.setStatus(`Профиль ${role} содержит неполный набор навыков.`,'error');
+            this.prepareBulkPanel(bulk.chips,targets);
+            this.setStatus(`Профиль ${role} подготовлен для ${selected.length} выбранных игроков. Нажмите штатную кнопку «Сохранить».`,'ok');
+            return;
+        }
         const inspected=groups.map(group=>({...this.inspectGroupFooter(group.table),selected:group.selected}));
         const failed=inspected.find(item=>!item.ok);
         if (failed) return this.setStatus(`Профиль ${role} не применён. ${failed.reason}`,'error');
@@ -28755,15 +30369,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.372',
-        scriptVersion: '4.4.372',
+        version: '4.4.388',
+        scriptVersion: '4.4.388',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.372',
+        scriptVersion: '4.4.388',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

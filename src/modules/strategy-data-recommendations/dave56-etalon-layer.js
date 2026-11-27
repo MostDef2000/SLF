@@ -158,6 +158,334 @@
         return false;
     }
 
+    // =====================================================================
+    // Issue #477 — canon manual matcher.
+    // The 12 rows live in dave56-etalon-data.js (`canon`). This seam turns
+    // observed evidence into {status,id,variant,vector,missingInputs}; it
+    // never invents a match and never writes a tactic. A vector is NOT an
+    // identity: rows 2/7 (and 6-stronger/12) share one and stay distinct.
+    // =====================================================================
+    const CANON = data.canon && data.canon.schema === 'slf_canon_manual_v1' ? data.canon : null;
+    const CANON_STRENGTH = ['advantage', 'equal', 'disadvantage'];
+    const CANON_MANUAL_KEYS = ['build_type', 'build_temp', 'build_long', 'build_fast', 'style'];
+
+    function canonRow(id) {
+        return CANON ? (CANON.rows.find(row => Number(row.id) === Number(id)) || null) : null;
+    }
+
+    function canonVariant(row, variantId) {
+        if (!row || !Array.isArray(row.variants) || !row.variants.length) return row;
+        return row.variants.find(variant => variant.id === variantId) || null;
+    }
+
+    function canonLanes(priority) {
+        const text = String(priority || '000');
+        const lanes = [];
+        if (text[0] === '1') lanes.push('left');
+        if (text[1] === '1') lanes.push('center');
+        if (text[2] === '1') lanes.push('right');
+        return lanes;
+    }
+
+    function canonVector(row, variant) {
+        const source = variant && variant.vector ? variant : row;
+        if (!source || !source.vector) return null;
+        const vector = { priority: String(source.priority || row.priority || '000') };
+        for (const key of CANON_MANUAL_KEYS) vector[key] = String(source.vector[key]);
+        return vector;
+    }
+
+    function canonCandidate(row, variant) {
+        return {
+            id: Number(row.id),
+            variant: variant && variant.id ? variant.id : 'default',
+            situationText: row.situation
+        };
+    }
+
+    function canonDecision(status, fields) {
+        return Object.assign({
+            schema: 'slf_canon_decision_v1',
+            version: CANON ? CANON.version : null,
+            source: 'canon_manual',
+            status,
+            id: null,
+            variant: null,
+            situationText: null,
+            settingText: null,
+            legend: CANON ? CANON.legend.slice() : [],
+            vector: null,
+            priorityLanes: null,
+            evidence: [],
+            missingInputs: [],
+            candidates: [],
+            additions: []
+        }, fields || {});
+    }
+
+    // Derive the observation bundle. `context.canonEvidence` is the rich
+    // structured channel; a few specific page signals can corroborate it.
+    // Generic strength tags alone never resolve a canon row here (the legacy
+    // etalon path keeps owning those, preserving #350 behavior).
+    function canonObservations(ctx, context) {
+        const rawEvidence = context && context.canonEvidence && typeof context.canonEvidence === 'object'
+            ? context.canonEvidence
+            : null;
+        // When the caller supplies the structured evidence bundle it is the
+        // authoritative observation set; page tags are only a fallback for
+        // callers that do not (they must never add a competing canon trigger
+        // to an explicitly stated situation). An explicitly supplied empty
+        // bundle (canonEvidence: {}) is still authoritative — presence of the
+        // object, not its key count, decides.
+        const explicit = rawEvidence !== null && typeof rawEvidence === 'object';
+        const ev = rawEvidence || {};
+        const tag = name => !explicit && has(ctx.tags, name);
+        const flag = (name, tagName) => explicit ? ev[name] === true : (tag(tagName || name) || ev[name] === true);
+        const strength = CANON_STRENGTH.includes(ev.strength) ? ev.strength : null;
+        const flank = ev.attackFlank === 'left' || ev.attackFlank === 'right'
+            ? ev.attackFlank
+            : (!explicit && (context.attackFlank === 'left' || context.attackFlank === 'right') ? context.attackFlank : null);
+        return {
+            strength,
+            needGoal: flag('needGoal', 'need_goal'),
+            attackFlank: flank,
+            protectLead: explicit
+                ? ev.protectLead === true
+                : ((tag('protect_lead') || tag('late_protect_lead')) && ctx.scoreState === 'winning') || ev.protectLead === true,
+            firstPassPressure: flag('firstPassPressure', 'opponent_high_press'),
+            firstPassFree: flag('firstPassFree', 'opponent_first_pass_free')
+                || (!explicit && context.opponentFirstPassFree === true),
+            deepBlock: flag('deepBlock', 'opponent_low_block'),
+            transitionChaos: flag('transitionChaos', 'chaotic_match'),
+            targetForward: flag('targetForward', 'target_forward_aerial'),
+            controlIntent: flag('controlIntent', 'control_intent'),
+            fastWideIntent: flag('fastWideIntent', 'fast_wide_intent'),
+            pressFatigue: flag('pressFatigue', 'press_fatigue')
+        };
+    }
+
+    function canonStrengthVariant(strength) {
+        if (strength === 'disadvantage') return 'weaker';
+        if (strength === 'advantage') return 'stronger';
+        if (strength === 'equal') return 'equal';
+        return null;
+    }
+
+    const CANON_OBSERVATION_FLAGS = ['needGoal', 'protectLead', 'firstPassPressure', 'firstPassFree', 'deepBlock',
+        'transitionChaos', 'targetForward', 'controlIntent', 'fastWideIntent', 'pressFatigue'];
+
+    function hasCanonRequest(context) {
+        // The rich evidence bundle is the explicit "canon is in play" signal:
+        // an empty {} still counts (the caller asked, there was just nothing).
+        return !!(context && Object.prototype.hasOwnProperty.call(context, 'canonEvidence')
+            && context.canonEvidence && typeof context.canonEvidence === 'object');
+    }
+
+    function computeCanon(snapshot, context, result) {
+        if (!CANON) return null;
+        const ctx = collectContext(snapshot, context, result);
+        const obs = canonObservations(ctx, context);
+        const evidence = [];
+        const additions = [];
+        if (obs.strength) evidence.push(`strength:${obs.strength}`);
+        for (const key of CANON_OBSERVATION_FLAGS) {
+            if (obs[key]) evidence.push(key);
+        }
+        if (obs.attackFlank) evidence.push(`attackFlank:${obs.attackFlank}`);
+
+        // #477: the canon matcher only produces a decision when the situation
+        // actually asks for it — either the caller supplied the structured
+        // canonEvidence bundle, or a canon-relevant page signal resolved an
+        // observation. With neither, the legacy etalon/preset merge owns the
+        // hint (canon == null keeps the pre-#477 final-tactic path).
+        const observed = !!obs.strength || !!obs.attackFlank
+            || CANON_OBSERVATION_FLAGS.some(key => obs[key]);
+        if (!observed && !hasCanonRequest(context)) return null;
+
+        // The press_cooldown addition declares ['press_fatigue','no_urgent_chase']:
+        // fatigue alone is not enough while an urgent chase context is present.
+        const noUrgentChase = !obs.needGoal && !obs.protectLead;
+        if (obs.pressFatigue && noUrgentChase) {
+            for (const addition of (CANON.additions || [])) {
+                if (addition.id === 'press_cooldown') additions.push(Object.assign({}, addition, { entryConditions: (addition.entryConditions || []).slice() }));
+            }
+        }
+
+        const specific = [];
+        const unresolved = [];
+        const resolvedAdds = (id, variant) => {
+            const row = canonRow(id);
+            const picked = canonVariant(row, variant);
+            if (!row || !picked) return;
+            specific.push({ row, variant: picked });
+        };
+
+        if (obs.needGoal) {
+            if (obs.attackFlank) resolvedAdds(4, obs.attackFlank);
+            else unresolved.push({ id: 4, need: 'attacking_flank' });
+        }
+        if (obs.firstPassPressure) {
+            const variant = canonStrengthVariant(obs.strength);
+            if (variant) resolvedAdds(6, variant);
+            else unresolved.push({ id: 6, need: 'relative_strength' });
+        }
+        if (obs.firstPassFree) resolvedAdds(7, null);
+        if (obs.deepBlock) resolvedAdds(8, null);
+        if (obs.transitionChaos) resolvedAdds(9, null);
+        if (obs.targetForward) resolvedAdds(10, null);
+        if (obs.controlIntent) resolvedAdds(11, null);
+        if (obs.fastWideIntent) resolvedAdds(12, null);
+        if (obs.protectLead) {
+            if (ctx.scoreState === 'winning') resolvedAdds(5, null);
+            else unresolved.push({ id: 5, need: 'score_state' });
+        }
+
+        const base = { evidence, additions };
+        const candidates = specific.map(item => canonCandidate(item.row, item.variant));
+        for (const item of unresolved) {
+            if (!candidates.some(candidate => candidate.id === item.id)) {
+                const row = canonRow(item.id);
+                if (row) candidates.push(canonCandidate(row, null));
+            }
+        }
+
+        if (specific.length > 1) {
+            const ids = [...new Set(specific.map(item => Number(item.row.id)))];
+            return canonDecision('ambiguous', Object.assign(base, {
+                candidates,
+                missingInputs: ['intended_approach'],
+                evidence: evidence.concat([`ambiguous:${ids.join('+')}`])
+            }));
+        }
+        if (specific.length === 1) {
+            if (unresolved.length) {
+                return canonDecision('ambiguous', Object.assign(base, {
+                    candidates,
+                    missingInputs: ['intended_approach', ...new Set(unresolved.map(item => item.need))],
+                    evidence
+                }));
+            }
+            const pickedRow = specific[0].row;
+            const pickedVariant = specific[0].variant;
+            const variantId = pickedRow.variants ? pickedVariant.id : null;
+            const vector = canonVector(pickedRow, pickedVariant);
+            return canonDecision('matched', Object.assign(base, {
+                id: Number(pickedRow.id),
+                variant: variantId,
+                situationText: pickedRow.situation,
+                settingText: pickedRow.settingText || null,
+                vector,
+                priorityLanes: canonLanes(vector.priority),
+                candidates: [canonCandidate(pickedRow, pickedVariant)]
+            }));
+        }
+        if (unresolved.length) {
+            return canonDecision('missing_inputs', Object.assign(base, {
+                candidates,
+                missingInputs: [...new Set(unresolved.map(item => item.need))]
+            }));
+        }
+        // No specific observation: a generic XI comparison can resolve 1/2/3.
+        if (obs.strength) {
+            const id = obs.strength === 'advantage' ? 2 : (obs.strength === 'disadvantage' ? 3 : 1);
+            const row = canonRow(id);
+            const vector = canonVector(row, row);
+            return canonDecision('matched', Object.assign(base, {
+                id,
+                variant: null,
+                situationText: row.situation,
+                settingText: row.settingText || null,
+                vector,
+                priorityLanes: canonLanes(vector.priority),
+                candidates: [canonCandidate(row, null)]
+            }));
+        }
+        if (additions.length) {
+            // #477 NEW-P1-1: a resolved SLF addition is actionable on its own.
+            // It is NOT a manual row (id/vector stay null); the eligible role
+            // names the preset that realizes it, and both the final-tactic and
+            // advisor seams treat this status as actionable.
+            const eligibleRoles = additions
+                .map(addition => addition && typeof addition.eligibleRole === 'string' ? addition.eligibleRole : '')
+                .filter(Boolean);
+            return canonDecision('addition', Object.assign(base, {
+                eligibleRole: eligibleRoles.length ? eligibleRoles[0] : null,
+                eligibleRoles,
+                actionable: true
+            }));
+        }
+        return canonDecision('missing_inputs', Object.assign(base, {
+            missingInputs: ['relative_xi_or_situation']
+        }));
+    }
+
+    // League-relative starting recommendation (#477 R9). The classification
+    // rule is documented in data.canon.leagueRule: the strength zone decides,
+    // the points-rank zone only confirms. Missing/incomparable/wrong-season
+    // evidence is insufficient — never an implicit row 1.
+    const LEAGUE_ZONES = ['favourite', 'mid', 'underdog'];
+    function leagueZoneFromPercentile(percentile, rule) {
+        if (!Number.isFinite(percentile)) return null;
+        if (percentile >= Number(rule.favouriteMinPercentile)) return 'favourite';
+        if (percentile <= Number(rule.underdogMaxPercentile)) return 'underdog';
+        return 'mid';
+    }
+
+    function leagueStartingRecommendation(evidence) {
+        const rule = CANON && CANON.leagueRule ? CANON.leagueRule : { favouriteMinPercentile: 75, underdogMaxPercentile: 25 };
+        const insufficient = reason => ({ status: 'insufficient', row: null, reason, class: null, league: evidence && evidence.league ? evidence.league : null, evidenceDate: evidence && evidence.evidenceDate ? evidence.evidenceDate : null });
+        if (!evidence || typeof evidence !== 'object') return insufficient('missing_evidence');
+        if (!evidence.club || !evidence.league) return insufficient('missing_club_or_league');
+        if (!evidence.evidenceDate) return insufficient('missing_evidence_date');
+        // #477 NEW-P2-1: BOTH season identifiers are required before any
+        // classification. A club/league/population/strength zone with either
+        // season absent is insufficient — never an implicit row 1.
+        if (!evidence.season || !evidence.expectedSeason) return insufficient('missing_season');
+        if (String(evidence.season) !== String(evidence.expectedSeason)) {
+            return insufficient('wrong_season');
+        }
+        const total = Number(evidence.totalTeams);
+        if (!Number.isFinite(total) || total < 2) return insufficient('incomparable_population');
+        let strengthZone = LEAGUE_ZONES.includes(evidence.strengthZone) ? evidence.strengthZone : null;
+        // Unknown percentile is NOT zero: null/undefined/'' must never classify
+        // a club as underdog (Number(null) === 0, Number('') === 0). Treat them
+        // as missing so the result is 'insufficient', never an implicit row 3.
+        const rawPercentile = evidence.strengthPercentile;
+        const percentile = (rawPercentile === null || rawPercentile === undefined || rawPercentile === '')
+            ? null
+            : Number(rawPercentile);
+        // #477 codex P2 (4652310201): when BOTH signals are supplied they must
+        // agree. A declared zone contradicted by the percentile is ambiguous
+        // evidence — derive the zone from the percentile and require it to
+        // match; a disagreement is insufficient, never a silent pick of one.
+        // When only one signal is present it is used as before.
+        if (strengthZone && Number.isFinite(percentile)) {
+            const derivedZone = leagueZoneFromPercentile(percentile, rule);
+            if (derivedZone && derivedZone !== strengthZone) {
+                return insufficient('conflicting_strength_evidence');
+            }
+        }
+        if (!strengthZone) strengthZone = leagueZoneFromPercentile(percentile, rule);
+        if (!strengthZone) return insufficient('missing_strength');
+        const rankZone = LEAGUE_ZONES.includes(evidence.rankZone) ? evidence.rankZone : null;
+        // Mixed clubs are decided by the strength zone (owner decision #477
+        // comment 7057658763); the rank zone is confirmation only.
+        const recognised = strengthZone === 'favourite' ? 'favourite'
+            : (strengthZone === 'underdog' ? 'underdog' : 'middle');
+        const row = recognised === 'favourite' ? 2 : (recognised === 'underdog' ? 3 : 1);
+        return {
+            status: 'classified',
+            row,
+            class: recognised,
+            strengthZone,
+            rankZone,
+            league: evidence.league,
+            club: evidence.club,
+            evidenceDate: evidence.evidenceDate,
+            note: 'starting baseline from own-league evidence; not a live-opponent observation'
+        };
+    }
+
     function applyDelta(vector, delta) {
         const out = Object.assign({}, vector);
         for (const [key, shift] of Object.entries(delta || {})) {
@@ -347,6 +675,29 @@
                 notes: []
             };
         }
+        try {
+            result.canon = computeCanon(snapshot, context, result);
+        } catch (error) {
+            result.canon = CANON ? canonDecision('no_match', { evidence: ['exception'] }) : null;
+        }
+        // #477 R9: expose the club's own-league starting baseline alongside the
+        // live match decision. It never overrides a matched live situation; it
+        // is the documented starting row for this club in its own division.
+        // Resolve from the dated snapshot when the caller supplies league
+        // evidence, otherwise from the embedded, dated leagueStarts records.
+        if (result.canon) {
+            let leagueEvidence = context && context.leagueEvidence ? context.leagueEvidence : null;
+            if (!leagueEvidence && CANON && Array.isArray(CANON.leagueStarts)) {
+                const clubId = String((context && (context.myTeamId || context.clubId)) || (snapshot && snapshot.myTeam) || '');
+                const clubName = context && context.clubName ? String(context.clubName) : null;
+                const found = CANON.leagueStarts.find(item =>
+                    (clubId && String(item.clubId || '') === clubId) || (clubName && item.club === clubName));
+                if (found) leagueEvidence = found.evidence;
+            }
+            if (leagueEvidence) {
+                result.canon.leagueStart = leagueStartingRecommendation(leagueEvidence);
+            }
+        }
         return result;
     };
 
@@ -358,7 +709,10 @@
             suiteVersion: registry.suiteVersion,
             source: 'dave56_etalon',
             autoApply: false,
-            computeEtalon
+            computeEtalon,
+            computeCanon,
+            leagueStartingRecommendation,
+            canonVersion: CANON ? CANON.version : null
         };
     }
 })();

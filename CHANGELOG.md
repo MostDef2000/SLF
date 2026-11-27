@@ -1,5 +1,433 @@
 # Changelog
 
+## 4.4.388
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- tools/test-477-canon-situation-presets.mjs
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- a543a87b25aef4b37f9476301c4d1bc03b2f3dea
+
+Approved commit:
+- d3f4b6a19cd5ad783ad88cab2bc9f22d7d7ca18e
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.387
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- tools/test-477-canon-situation-presets.mjs
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- a543a87b25aef4b37f9476301c4d1bc03b2f3dea
+
+Approved commit:
+- d3f4b6a19cd5ad783ad88cab2bc9f22d7d7ca18e
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.386
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- src/modules/strategy-data-recommendations/final-tactic-merge-layer.js
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- tools/test-477-canon-situation-presets.mjs
+- vps/api/advisor.py
+
+Approved base commit:
+- a7f459f68ac34499b7fc67ecf8402eb0af30e177
+
+Approved commit:
+- a543a87b25aef4b37f9476301c4d1bc03b2f3dea
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.385
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- src/modules/strategy-data-recommendations/final-tactic-merge-layer.js
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- tools/test-477-canon-situation-presets.mjs
+- vps/api/advisor.py
+
+Approved base commit:
+- a7f459f68ac34499b7fc67ecf8402eb0af30e177
+
+Approved commit:
+- a543a87b25aef4b37f9476301c4d1bc03b2f3dea
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.384
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/audit/runtime-reachability-review-v1.json
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/dave56-etalon-data.js
+- src/modules/strategy-data-recommendations/dave56-etalon-layer.js
+- src/modules/strategy-data-recommendations/final-tactic-merge-layer.js
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js
+- tools/test-477-canon-situation-presets.mjs
+- tools/test-final-tactic-merge.mjs
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- 531a6d5bebad0e3c1dc74744901d2b6784400359
+
+Approved commit:
+- a7f459f68ac34499b7fc67ecf8402eb0af30e177
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.383
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- tools/test-dave56-etalon-apply-contract.mjs
+- tools/test-dave56-etalon-panel.mjs
+
+Approved base commit:
+- 45ed943ddbd7e87acbd7fc45540f4c180b7bbb8d
+
+Approved commit:
+- 531a6d5bebad0e3c1dc74744901d2b6784400359
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.382
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- tools/test-dave56-etalon-apply-contract.mjs
+- tools/test-dave56-etalon-panel.mjs
+
+Approved base commit:
+- 45ed943ddbd7e87acbd7fc45540f4c180b7bbb8d
+
+Approved commit:
+- 531a6d5bebad0e3c1dc74744901d2b6784400359
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.381
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- src/modules/strategy-data-recommendations/llm-second-opinion.js
+- tests/browser/artifacts/fm2026-compact-recommendation.png
+- tests/browser/artifacts/fm2026-compact-recommendation.zip
+- tests/browser/artifacts/owned-live.png
+- tests/browser/artifacts/owned-live.zip
+- tests/browser/test_exact_userscript.py
+- tools/test-dave56-etalon-matcher.mjs
+
+Approved base commit:
+- d8d31bbd3986822d7035370928c4ffb8cebc0bee
+
+Approved commit:
+- 45ed943ddbd7e87acbd7fc45540f4c180b7bbb8d
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.380
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/runtime-reachability-review-v1.json
+
+Approved base commit:
+- b0082f38dee22657a9fcd993c877e47030157b5e
+
+Approved commit:
+- d8d31bbd3986822d7035370928c4ffb8cebc0bee
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.379
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/runtime-reachability-review-v1.json
+
+Approved base commit:
+- b0082f38dee22657a9fcd993c877e47030157b5e
+
+Approved commit:
+- d8d31bbd3986822d7035370928c4ffb8cebc0bee
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.378
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- data/audit/runtime-reachability-review-v1.json
+
+Approved base commit:
+- b0082f38dee22657a9fcd993c877e47030157b5e
+
+Approved commit:
+- d8d31bbd3986822d7035370928c4ffb8cebc0bee
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.377
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- specs/475-train-apply-selected-new-design/plan.md
+- specs/475-train-apply-selected-new-design/spec.md
+- specs/475-train-apply-selected-new-design/tasks.md
+- src/modules/team-management/training-reference-guide.js
+- tests/browser/fixtures/fm2026-training.html
+- tests/browser/test_fm2026_design_adapter.py
+
+Approved base commit:
+- 23cf5a8022a69633efccc5ac85f7865963cf2144
+
+Approved commit:
+- 78bda2bf54eb59157f78c7bdfa4632cab9cb1323
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.376
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- specs/475-train-apply-selected-new-design/plan.md
+- specs/475-train-apply-selected-new-design/spec.md
+- specs/475-train-apply-selected-new-design/tasks.md
+- src/modules/team-management/training-reference-guide.js
+- tests/browser/fixtures/fm2026-training.html
+- tests/browser/test_fm2026_design_adapter.py
+
+Approved base commit:
+- 23cf5a8022a69633efccc5ac85f7865963cf2144
+
+Approved commit:
+- 78bda2bf54eb59157f78c7bdfa4632cab9cb1323
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.375
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- CHANGELOG.md
+- data/version.json
+- releases/latest.meta.js
+- releases/latest.user.js
+- specs/475-train-apply-selected-new-design/plan.md
+- specs/475-train-apply-selected-new-design/spec.md
+- specs/475-train-apply-selected-new-design/tasks.md
+- src/modules/team-management/training-reference-guide.js
+- tests/browser/fixtures/fm2026-training.html
+- tests/browser/test_fm2026_design_adapter.py
+
+Approved base commit:
+- 23cf5a8022a69633efccc5ac85f7865963cf2144
+
+Approved commit:
+- 78bda2bf54eb59157f78c7bdfa4632cab9cb1323
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.374
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- c07903dbb72ff53292bb7428cc8f7bc08179e8cc
+
+Approved commit:
+- 23cf5a8022a69633efccc5ac85f7865963cf2144
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
+## 4.4.373
+
+### Automatic latest-only build
+- Built deterministic latest-only artifacts from the approved source commit.
+
+Changed files:
+- vps/api/advisor.py
+- vps/api/test_advisor.py
+
+Approved base commit:
+- c07903dbb72ff53292bb7428cc8f7bc08179e8cc
+
+Approved commit:
+- 23cf5a8022a69633efccc5ac85f7865963cf2144
+
+Compatibility / storage:
+- Cache/schema/storage keys changed: NO
+- Bundle-order changes needed: NO
+
+Safety notes:
+- Generated artifacts are workflow outputs and must not be edited manually.
+
 ## 4.4.372
 
 ### Automatic latest-only build

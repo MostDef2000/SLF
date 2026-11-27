@@ -78,6 +78,35 @@ TRAINING_CACHE = {
     "calculatedAt": "2026-08-02T10:00:28.000Z",
 }
 
+BULK_TARGETS = [51 + index for index in range(10)]
+
+
+def training_cache_with_targets(start: int = 51) -> dict:
+    return {
+        "schema": "slf_training_league_benchmarks_v1",
+        "championshipIds": list(TRAINING_CACHE["championshipIds"]),
+        "sources": [dict(source) for source in TRAINING_CACHE["sources"]],
+        "profiles": [
+            {
+                "role": role,
+                "skills": {
+                    skill: {"value": start + skill_index, "sample": 5, "values": []}
+                    for skill_index, skill in enumerate(TRAINING_GK_SKILLS if role == "GK" else TRAINING_FIELD_SKILLS)
+                },
+            }
+            for role in TRAINING_ROLES
+        ],
+        "calculatedAt": TRAINING_CACHE["calculatedAt"],
+    }
+
+
+def training_cache_missing_skill(role: str, skill: str) -> dict:
+    cache = training_cache_with_targets()
+    for profile in cache["profiles"]:
+        if profile["role"] == role:
+            profile["skills"].pop(skill, None)
+    return cache
+
 
 class Handler(BaseHTTPRequestHandler):
     def send_html(self, text: str):
@@ -131,9 +160,9 @@ def server():
         thread.join(timeout=5)
 
 
-def init_script(api_mode: str) -> str:
+def init_script(api_mode: str, training_cache=None) -> str:
     malicious_json = json.dumps(MALICIOUS_TRANSFER_ROWS, ensure_ascii=False)
-    training_cache_json = json.dumps(TRAINING_CACHE, ensure_ascii=False)
+    training_cache_json = json.dumps(training_cache or TRAINING_CACHE, ensure_ascii=False)
     return f"""
 (() => {{
   'use strict';
@@ -547,6 +576,213 @@ def run_case(browser: Browser, base_url: str, name: str, path: str, assertions, 
         context.close()
 
 
+def run_apply_scenario(browser: Browser, base_url: str, name: str, setup, assertions, training_cache=None):
+    context = browser.new_context(locale="ru-RU", viewport={"width": 1440, "height": 1000}, reduced_motion="no-preference")
+    page = context.new_page()
+    page_errors = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.add_init_script(init_script("normal", training_cache))
+    try:
+        page.goto(base_url + "/train.php", wait_until="domcontentloaded")
+        prepare_training_champ_fixture(page)
+        inject(page)
+        wait_training(page)
+        setup(page)
+        assertions(page)
+        assert_clean(page, page_errors)
+        print(f"[fm2026-design-e2e] passed: {name} viewport=1440x1000 version={VERSION}")
+    finally:
+        context.close()
+
+
+def bulk_state(page: Page) -> dict:
+    return page.evaluate(
+        """() => {
+          const panel = document.querySelector('.train-bulk');
+          return {
+            chips: panel ? [...panel.querySelectorAll('.train-bulk__sk')].map(chip => {
+              const input = chip.querySelector('.train-bulk__up');
+              return {
+                i: chip.dataset.i,
+                order: chip.dataset.order,
+                on: chip.classList.contains('is-on'),
+                disabled: input ? input.disabled : null,
+                value: input ? input.value : null,
+                field: chip.querySelector('.train-bulk__name')?.dataset.f || '',
+                gk: chip.querySelector('.train-bulk__name')?.dataset.gk || ''
+              };
+            }) : null,
+            checked: [...document.querySelectorAll('#train input[name="pl_arr[]"]:checked')].map(box => box.value),
+            status: document.getElementById('slf-status')?.textContent || '',
+            events: (window.__trainBulkEvents || []).slice(),
+            saveClicks: window.__trainSaveClicks || 0,
+            submits: window.__trainSubmits || 0,
+            nativeFetches: (window.__slfNativeFetches || []).slice(),
+            requests: (window.__slfRequests || []).slice()
+          };
+        }"""
+    )
+
+
+def assert_no_native_save(state: dict):
+    assert state["saveClicks"] == 0, state
+    assert state["submits"] == 0, state
+    assert not [url for url in state["nativeFetches"] if "/ajax/team3.9.php" in url], state
+    assert not [row for row in state["requests"] if "team3.9.php" in row.get("url", "")], state
+
+
+def assert_bulk_targets(state: dict, targets, expected_checked):
+    chips = sorted(state["chips"] or [], key=lambda chip: int(chip["i"]))
+    assert len(chips) == 11, state
+    for index, target in enumerate(targets, start=1):
+        chip = chips[index - 1]
+        assert chip["i"] == str(index), state
+        assert chip["on"] is True, (index, chip, state["status"])
+        assert chip["order"] == str(index), (index, chip)
+        assert chip["disabled"] is False, (index, chip)
+        assert chip["value"] == str(target), (index, chip)
+    endurance = chips[10]
+    assert endurance["on"] is False, endurance
+    assert endurance["order"] == "0", endurance
+    assert endurance["disabled"] is True, endurance
+    assert endurance["value"] == "", endurance
+    assert state["checked"] == expected_checked, state
+    assert "Сохранить" in state["status"], state["status"]
+    assert_no_native_save(state)
+
+
+def assert_bulk_events(state: dict, targets):
+    for index, target in enumerate(targets, start=1):
+        inputs = [event for event in state["events"] if event["type"] == "input" and event["i"] == str(index)]
+        changes = [event for event in state["events"] if event["type"] == "change" and event["i"] == str(index)]
+        assert inputs and inputs[-1]["value"] == str(target), (index, inputs)
+        assert changes and changes[-1]["value"] == str(target), (index, changes)
+
+
+def assert_draft_unchanged(before: dict, after: dict):
+    assert before["chips"] == after["chips"], (before["chips"], after["chips"])
+    assert before["checked"] == after["checked"], (before["checked"], after["checked"])
+    assert_no_native_save(after)
+
+
+def setup_field_selection(page: Page):
+    page.check('#train input[name="pl_arr[]"][value="4001"]')
+    page.check('#train input[name="pl_arr[]"][value="4002"]')
+
+
+def assert_training_bulk_field(page: Page):
+    page.locator('#slf-result .slf-apply-profile[data-role="CM"]').click()
+    state = bulk_state(page)
+    assert_bulk_targets(state, BULK_TARGETS, ["4001", "4002"])
+    assert_bulk_events(state, BULK_TARGETS)
+
+
+def setup_gk_selection(page: Page):
+    page.check('#train input[name="pl_arr[]"][value="3001"]')
+
+
+def assert_training_bulk_gk(page: Page):
+    page.locator('#slf-result .slf-apply-profile[data-role="GK"]').click()
+    state = bulk_state(page)
+    assert_bulk_targets(state, BULK_TARGETS, ["3001"])
+    assert_bulk_events(state, BULK_TARGETS)
+    chips = sorted(state["chips"], key=lambda chip: int(chip["i"]))
+    assert chips[1]["gk"] == "СВ" and chips[4]["gk"] == "РЕ", chips
+
+
+def setup_dirty_draft(page: Page):
+    setup_field_selection(page)
+    page.evaluate(
+        """() => {
+          const chips = [...document.querySelectorAll('.train-bulk .train-bulk__sk')];
+          const set = (index, order, value) => {
+            const chip = chips.find(node => node.dataset.i === String(index));
+            const input = chip.querySelector('.train-bulk__up');
+            chip.classList.add('is-on');
+            chip.dataset.order = String(order);
+            input.disabled = false;
+            input.value = String(value);
+          };
+          set(11, 1, 9);
+          set(1, 2, 3);
+          set(4, 3, 7);
+        }"""
+    )
+
+
+def assert_training_bulk_repeat(page: Page):
+    button = page.locator('#slf-result .slf-apply-profile[data-role="CM"]')
+    button.click()
+    first = bulk_state(page)
+    assert_bulk_targets(first, BULK_TARGETS, ["4001", "4002"])
+    button.click()
+    second = bulk_state(page)
+    assert_bulk_targets(second, BULK_TARGETS, ["4001", "4002"])
+    assert first["chips"] == second["chips"], (first["chips"], second["chips"])
+
+
+def setup_no_selection(page: Page):
+    pass
+
+
+def assert_reject_no_selection(page: Page):
+    before = bulk_state(page)
+    page.locator('#slf-result .slf-apply-profile[data-role="CM"]').click()
+    after = bulk_state(page)
+    assert "Сначала отметьте" in after["status"], after["status"]
+    assert_draft_unchanged(before, after)
+
+
+def setup_mixed_selection(page: Page):
+    page.check('#train input[name="pl_arr[]"][value="4001"]')
+    page.check('#train input[name="pl_arr[]"][value="3001"]')
+
+
+def assert_reject_mixed_selection(page: Page):
+    before = bulk_state(page)
+    page.locator('#slf-result .slf-apply-profile[data-role="CM"]').click()
+    after = bulk_state(page)
+    assert "одновременно" in after["status"], after["status"]
+    assert_draft_unchanged(before, after)
+
+
+def setup_gk_only_for_field(page: Page):
+    page.check('#train input[name="pl_arr[]"][value="3001"]')
+
+
+def assert_reject_gk_only_for_field(page: Page):
+    before = bulk_state(page)
+    page.locator('#slf-result .slf-apply-profile[data-role="CM"]').click()
+    after = bulk_state(page)
+    assert "Полевой профиль нельзя применить" in after["status"], after["status"]
+    assert_draft_unchanged(before, after)
+
+
+def assert_reject_missing_target(page: Page):
+    before = bulk_state(page)
+    page.locator('#slf-result .slf-apply-profile[data-role="CM"]').click()
+    after = bulk_state(page)
+    assert "неполный набор навыков" in after["status"], after["status"]
+    assert_draft_unchanged(before, after)
+
+
+def setup_malformed_panel(page: Page):
+    setup_field_selection(page)
+    page.evaluate(
+        """() => {
+          document.querySelector('.train-bulk .train-bulk__sk[data-i="5"] .train-bulk__up')?.remove();
+        }"""
+    )
+
+
+def assert_reject_malformed_panel(page: Page):
+    before = bulk_state(page)
+    page.locator('#slf-result .slf-apply-profile[data-role="CM"]').click()
+    after = bulk_state(page)
+    assert "не применён" in after["status"] and "панель" in after["status"], after["status"]
+    assert_draft_unchanged(before, after)
+
+
 def validate_audit_manifest():
     audit = json.loads(AUDIT_MANIFEST.read_text(encoding="utf-8"))
     assert audit["schema"] == "slf_fm2026_ui_migration_v1"
@@ -591,6 +827,18 @@ def main():
         try:
             for name, path, assertions, viewport, reduced_motion, api_mode in cases:
                 run_case(browser, base_url, name, path, assertions, viewport, reduced_motion, api_mode)
+            apply_cases = [
+                ("training-apply-field", setup_field_selection, assert_training_bulk_field, training_cache_with_targets()),
+                ("training-apply-gk", setup_gk_selection, assert_training_bulk_gk, training_cache_with_targets()),
+                ("training-apply-repeat", setup_dirty_draft, assert_training_bulk_repeat, training_cache_with_targets()),
+                ("training-apply-reject-no-selection", setup_no_selection, assert_reject_no_selection, training_cache_with_targets()),
+                ("training-apply-reject-mixed", setup_mixed_selection, assert_reject_mixed_selection, training_cache_with_targets()),
+                ("training-apply-reject-gk-for-field", setup_gk_only_for_field, assert_reject_gk_only_for_field, training_cache_with_targets()),
+                ("training-apply-reject-missing-target", setup_field_selection, assert_reject_missing_target, training_cache_missing_skill("CM", "КР")),
+                ("training-apply-reject-malformed-panel", setup_malformed_panel, assert_reject_malformed_panel, training_cache_with_targets()),
+            ]
+            for name, setup, assertions, cache in apply_cases:
+                run_apply_scenario(browser, base_url, name, setup, assertions, cache)
         finally:
             browser.close()
 

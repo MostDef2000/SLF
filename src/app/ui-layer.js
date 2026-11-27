@@ -61,8 +61,12 @@
             parseBtn.onclick = () => {
                 const snapshot = SnapshotEngine.build();
                 void SnapshotEngine.sendMatchResult(snapshot)
-                    .then(() => this.addParserLog('Финальный результат отправлен'))
+                    .then(() => {
+                        this.updateParserStatus('Результат отправлен ✓');
+                        this.addParserLog('Финальный результат отправлен');
+                    })
                     .catch(error => {
+                        this.updateParserStatus(`Ошибка: ${error?.kind || 'unknown'}`);
                         this.addParserLog(`Ошибка отправки результата: ${error?.kind || 'unknown'}`);
                         console.warn('[SLF API] final result send error', error);
                     });
@@ -111,7 +115,7 @@
             const statusBox = document.createElement('div');
             statusBox.id = 'slf-parser-status';
             statusBox.textContent = 'ожидание';
-            statusBox.style.cssText = 'color:#9f9;font-size:12px;';
+            statusBox.style.cssText = 'color:#9f9;font-size:12px;white-space:nowrap;flex:0 0 auto;overflow:visible;';
 
             const recBox = document.createElement('div');
 recBox.id = 'slf-parser-recommendation';
