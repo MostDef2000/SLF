@@ -1098,6 +1098,12 @@ WFT_FORM_POST_BODY = (
     "%D1%82%D1%80%D0%B5%D0%BD%D0%B8%D1%80%D0%BE%D0%B2%D0%BA%D0%B8"
 )
 WFT_GAMESTAT_POST_BODY = f"gamechoice%5B%5D={WFT_GAME_ID}"
+# weekly-form-training.js stamps fresh-load activity BEFORE its first wake
+# (QUIET_MS = 120_000), so the idle guard holds the very first sweep until that
+# much quiet time has really elapsed. The synthetic case models the elapsed
+# time with the Playwright clock instead of bypassing the guard: jump the
+# context clock past the quiet window and wake with focus.
+WFT_QUIET_MS = 121_000  # strictly greater than the module's 120_000 window
 # row[0] pid -> row[63] «ТТД всего» of the 68-element gamestat row.
 WFT_TTD = {
     "101": 50, "102": 40, "103": 30, "104": 20, "105": 10, "106": 9,
@@ -1292,14 +1298,37 @@ def wft_run_two_tab_sweep(browser: Browser):
     page_a.on("pageerror", lambda error: errors_a.append(str(error)))
     page_b.on("pageerror", lambda error: errors_b.append(str(error)))
     try:
+        # This case owns the clock of the whole context: install() before
+        # navigation puts every page script and the artifact on it, and
+        # pause_at() then FREEZES both tabs so the fresh-load wake start()
+        # schedules stays pending instead of firing at load time (a running
+        # fake clock still fires timers in real time).
+        page_a.clock.install()
         # Start on a NON-Form page (team4.php main, synthetic new-dark markup):
         # the sweep must arm from any top-level slf.fm page, not a form page.
         page_a.goto("https://slf.fm/team4.php", wait_until="domcontentloaded")
         page_b.goto("https://slf.fm/team4.php", wait_until="domcontentloaded")
+        # pause_at() takes an absolute time in SECONDS (parse_time multiplies
+        # by 1000), hence the /1000; +1 s margin keeps tab B's slightly newer
+        # fake clock from going past the target. The freeze happens AFTER the
+        # fixture load, so the page itself still loads on a normal clock.
+        page_a.clock.pause_at(page_a.evaluate("Date.now()") / 1000 + 1)
         rows_a = wft_track_requests(page_a)
         rows_b = wft_track_requests(page_b)
         inject_exact_artifact(page_a)
         inject_exact_artifact(page_b)
+        # start() records the load as recent activity BEFORE waking, so the
+        # 120 s quiet guard holds the very first sweep. Model real elapsed
+        # time instead of bypassing the guard: the jump fires both tabs'
+        # pending load wakes on a clock 121 s past the recorded stamp (the
+        # guard sees 121 s of quiet and lets the sweep run), resume() puts
+        # time back in motion for the polls below, and a focus wake — focus
+        # never re-stamps activity, unlike visibilitychange — re-arms both
+        # tabs at the advanced clock. The guard itself is untouched.
+        page_a.clock.fast_forward(WFT_QUIET_MS)
+        page_a.clock.resume()
+        for page in (page_a, page_b):
+            page.evaluate("window.dispatchEvent(new Event('focus'))")
         # Both tabs race the exclusive navigator.locks probe on their wake.
         wft_assert_two_tab_sweep(site, page_a, page_b, rows_a, rows_b)
         assert_clean_runtime(page_a, errors_a)
@@ -1470,9 +1499,17 @@ def wft_run_unknown_base_control(browser: Browser):
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     try:
+        # Same clock treatment as the sweep: the fresh-load wake stays pending
+        # while the clock is frozen, so the 120 s quiet guard is modelled
+        # (not bypassed) and the blocked sweep runs at the advanced clock.
+        page.clock.install()
         page.goto("https://slf.fm/team4.php", wait_until="domcontentloaded")
+        page.clock.pause_at(page.evaluate("Date.now()") / 1000 + 1)
         rows = wft_track_requests(page)
         inject_exact_artifact(page)
+        page.clock.fast_forward(WFT_QUIET_MS)
+        page.clock.resume()
+        page.evaluate("window.dispatchEvent(new Event('focus'))")
         page.wait_for_function(WFT_PHASE_JS, arg=WFT_STATE_KEY, timeout=30000)
         state = page.evaluate(WFT_STATE_JS, WFT_STATE_KEY)
         assert state, f"the blocked sweep must persist state, got {state!r}"

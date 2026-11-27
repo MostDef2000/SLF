@@ -1,7 +1,7 @@
 {
   "schema": "slf_runtime_reachability_manual_review_v1",
   "reviewedAt": "2026-11-11",
-  "reviewCandidateCount": 60,
+  "reviewCandidateCount": 61,
   "scope": "Runtime review after introducing the FM 2026 design adapters for match, transfer, team and training surfaces. Active manual telemetry remains separated; the UI adapters preserve classic-DOM fallbacks and one read-only storage migration key remains. Issue #333 extension: direct symbol-level review of two active Tactical Suite v10 modules containing exact read-only old preset aliases; no deletion or new runtime behavior authorized by this evidence.",
   "classificationDefinitions": {
     "ACTIVE": "Directly used by the current production workflow.",
@@ -586,6 +586,16 @@
         "Issue #409 wave 2 (2026-11-11): new migration coordinator importing pre-migration presets onto native site templates; registered in src/app/bundle-order.json (94 modules, check-bundle-order green) and covered by 14 standalone node scenarios (tests/test-preset-migration.mjs).",
         "The literal legacy/deprecated markers are semantic, not stale: readLegacyLocalRaw() and the legacy_local source label name the REAL pre-migration localStorage store (CONFIG.STORAGE_KEY) the migration reads once; the word deprecated marks the defense-in-depth guard that EXCLUDES retired preset names from import (PresetStorage.isRetiredBuiltInPreset).",
         "No legacy code paths exist to extract: the module is new, issues only NativeTemplateApi.saveTemplate (never delete/rename — verified by two independent adversarial reviews), and its only localStorage writes are the migration receipt and the scoped cache via the recordMigratedTemplate seam."
+      ]
+    },
+    {
+      "file": "src/modules/team-management/weekly-form-training.js",
+      "auditStatus": "ACTIVE_WITH_LEGACY_MARKERS",
+      "classification": "MIXED_ACTIVE_LEGACY",
+      "evidence": [
+        "Issue #481: registered in src/app/bundle-order.json and started once from App.start() in src/app/bootstrap.js (SLFWeeklyFormTraining.start() inside a try/catch); start() installs listeners and schedules a locked coordinator run, then returns immediately.",
+        "The module performs weekly background form-training reads/writes against https://slf.fm only (top-level origin check), once per week, inside one cross-tab navigator.locks election (LOCK_NAME slf:weekly-form-training:v1), with dynamic active-team capture/restore and multiple guards; no page-global save function and no debug export are provided.",
+        "The only legacy-shaped marker is the source comment \"(legacy/seeded state)\" in the local-anchor precheck (isDueCheap); it documents a deliberate compatibility fallback — probe when no local anchor exists — and is not new legacy API or dead code. This entry records static/source-level review only; no live runtime verification was performed."
       ]
     }
   ],
