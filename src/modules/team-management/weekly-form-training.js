@@ -16,7 +16,6 @@ const SLFWeeklyFormTraining = (() => {
     const ACTIVITY_CHANNEL = 'slf:weekly-form-training:activity';
     const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
     const RESUME_WINDOW_MS = 24 * 60 * 60 * 1000;
-    const DUE_SLACK_MS = 6 * 60 * 60 * 1000;
     const QUIET_MS = 120 * 1000;
     const RETRY_MS = 15 * 60 * 1000;
     const MAX_RETRIES = 2;
@@ -131,7 +130,11 @@ const SLFWeeklyFormTraining = (() => {
         const gc = doc.querySelector('#globalcontent');
         const ids = [...String(gc && gc.className || '').matchAll(/user-custom__team-(\d+)/g)]
             .map(match => match[1]).filter(id => id !== '0');
-        const classId = ids.length ? ids[ids.length - 1] : '';
+        // Exactly one unique non-zero team marker is required: two different
+        // active-team IDs are ambiguous and must abort, never "last wins".
+        const unique = [...new Set(ids)];
+        if (unique.length !== 1) return '';
+        const classId = unique[0];
         const nav = doc.querySelector('.fmc-navclub[href*="/roster.php?id="]');
         const navId = extractPidFromHref(nav && nav.getAttribute('href'));
         if (!classId || !navId || classId !== navId) return '';
@@ -402,7 +405,25 @@ const SLFWeeklyFormTraining = (() => {
     }
 
     function defaultState(userId) {
-        return { v: 1, userId, startedAt: 0, lastCompletedAt: 0, retryAfter: 0, retryCount: 0, restorePending: false, phase: 'idle', homeTeamId: '', clubs: {} };
+        return { v: 1, userId, startedAt: 0, lastCompletedAt: 0, completedLocalAt: 0, retryAfter: 0, retryCount: 0, restorePending: false, phase: 'idle', homeTeamId: '', clubs: {} };
+    }
+
+    const CLUB_STATUSES = new Set(['verified', 'ineligible', 'blocked', 'uncertain', 'posting']);
+
+    function isValidClubRecord(record) {
+        if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
+        if (typeof record.status !== 'string' || !CLUB_STATUSES.has(record.status)) return false;
+        if (record.reason !== undefined && typeof record.reason !== 'string') return false;
+        if (record.intendedPids !== undefined) {
+            if (!Array.isArray(record.intendedPids)) return false;
+            if (!record.intendedPids.every(pid => typeof pid === 'string' && /^\d+$/.test(pid))) return false;
+        }
+        if (record.attemptAt !== undefined && (!Number.isFinite(Number(record.attemptAt)) || Number(record.attemptAt) < 0)) return false;
+        for (const key of ['priorExpiry', 'observedExpiry']) {
+            if (record[key] !== undefined && typeof record[key] !== 'string') return false;
+        }
+        if (record.extensionProven !== undefined && typeof record.extensionProven !== 'boolean') return false;
+        return true;
     }
 
     function isValidState(value, userId) {
@@ -412,10 +433,16 @@ const SLFWeeklyFormTraining = (() => {
             if (!Number.isFinite(Number(value[key])) || Number(value[key]) < 0) return false;
         }
         if (value.retryCount !== undefined && (!Number.isFinite(Number(value.retryCount)) || Number(value.retryCount) < 0)) return false;
+        if (value.completedLocalAt !== undefined && (!Number.isFinite(Number(value.completedLocalAt)) || Number(value.completedLocalAt) < 0)) return false;
         if (typeof value.restorePending !== 'boolean') return false;
         if (typeof value.phase !== 'string') return false;
         if (typeof value.homeTeamId !== 'string') return false;
         if (!value.clubs || typeof value.clubs !== 'object' || Array.isArray(value.clubs)) return false;
+        // Fail closed: a single malformed per-club record makes the whole state
+        // untrustworthy (it could drive an unwanted switch/POST), so reject it.
+        for (const record of Object.values(value.clubs)) {
+            if (!isValidClubRecord(record)) return false;
+        }
         return true;
     }
 
@@ -459,8 +486,15 @@ const SLFWeeklyFormTraining = (() => {
         if (!state) return true;
         if (state.lastCompletedAt > now || state.startedAt > now) return false;
         if (state.retryAfter && now < state.retryAfter) return false;
-        if (!state.lastCompletedAt) return true;
-        return now - state.lastCompletedAt >= WEEK_MS - DUE_SLACK_MS;
+        // Advisory precheck only. The weekly cadence is decided by the
+        // authoritative server clock in isDue(state, discovery.serverNow). This
+        // precheck may skip an unnecessary discovery probe, but it compares a
+        // LOCAL completion stamp against the LOCAL clock, so an absolute clock
+        // offset (lag) can never hide a server-due cycle. Without a local anchor
+        // (legacy/seeded state) always probe and let the server decide.
+        const anchor = Number(state.completedLocalAt) || 0;
+        if (!state.lastCompletedAt || !anchor) return true;
+        return now - anchor >= WEEK_MS;
     }
 
     function appendCacheBuster(url) {
@@ -700,7 +734,9 @@ const SLFWeeklyFormTraining = (() => {
         try { formResponse = await httpGet(FORM_URL, { cacheBust: true }); } catch (_) { return { stop: true, serverNow, matchDay }; }
         serverNow = formResponse.serverNow || serverNow;
         if (!formResponse.ok) return { stop: true, serverNow, matchDay };
+        if (!identityOkFromHtml(formResponse.text)) return { stop: true, serverNow, matchDay };
         const formDoc = new DOMParser().parseFromString(formResponse.text, 'text/html');
+        if (readActiveTeam(formDoc) !== clubId) return { stop: true, serverNow, matchDay };
         const form = parseFormDocument(formDoc);
         const intended = (record.intendedPids || []).map(String);
         const checkedOk = intended.length === 3 && form.checkedPids.length === 3 && intended.every(pid => form.checkedPids.includes(pid));
@@ -739,7 +775,7 @@ const SLFWeeklyFormTraining = (() => {
         const xi = parseLineupPids(lineupDoc);
         if (!xi.ok) {
             setClub(state, clubId, 'blocked', xi.reason);
-            safePersist(state);
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
             return { serverNow, matchDay, stop: false };
         }
 
@@ -748,18 +784,18 @@ const SLFWeeklyFormTraining = (() => {
         serverNow = (train && train.serverNow) || serverNow;
         if (!train || !train.ok) {
             setClub(state, clubId, 'blocked', 'train-http');
-            safePersist(state);
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
             return { serverNow, matchDay, stop: false };
         }
         const eligibility = parseEligibility(new DOMParser().parseFromString(train.text, 'text/html'));
         if (eligibility.blocked) {
             setClub(state, clubId, 'blocked', eligibility.reason);
-            safePersist(state);
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
             return { serverNow, matchDay, stop: false };
         }
         if (!eligibility.eligible) {
             setClub(state, clubId, 'ineligible', 'capacity');
-            safePersist(state);
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
             return { serverNow, matchDay, stop: false };
         }
 
@@ -768,31 +804,31 @@ const SLFWeeklyFormTraining = (() => {
         serverNow = (formResponse && formResponse.serverNow) || serverNow;
         if (!formResponse || !formResponse.ok) {
             setClub(state, clubId, 'blocked', 'form-http');
-            safePersist(state);
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
             return { serverNow, matchDay, stop: false };
         }
         const form = parseFormDocument(new DOMParser().parseFromString(formResponse.text, 'text/html'));
-        if (!form.needBase) { setClub(state, clubId, 'blocked', 'need-base-missing'); safePersist(state); return { serverNow, matchDay, stop: false }; }
-        if (form.controls.length < 3) { setClub(state, clubId, 'blocked', 'coach-controls'); safePersist(state); return { serverNow, matchDay, stop: false }; }
-        if (!form.submitValue) { setClub(state, clubId, 'blocked', 'submit-label'); safePersist(state); return { serverNow, matchDay, stop: false }; }
-        if (!form.formMap || form.formReason) { setClub(state, clubId, 'blocked', form.formReason || 'form-map'); safePersist(state); return { serverNow, matchDay, stop: false }; }
+        if (!form.needBase) { setClub(state, clubId, 'blocked', 'need-base-missing'); if (!safePersist(state)) return { serverNow, matchDay, stop: true }; return { serverNow, matchDay, stop: false }; }
+        if (form.controls.length < 3) { setClub(state, clubId, 'blocked', 'coach-controls'); if (!safePersist(state)) return { serverNow, matchDay, stop: true }; return { serverNow, matchDay, stop: false }; }
+        if (!form.submitValue) { setClub(state, clubId, 'blocked', 'submit-label'); if (!safePersist(state)) return { serverNow, matchDay, stop: true }; return { serverNow, matchDay, stop: false }; }
+        if (!form.formMap || form.formReason) { setClub(state, clubId, 'blocked', form.formReason || 'form-map'); if (!safePersist(state)) return { serverNow, matchDay, stop: true }; return { serverNow, matchDay, stop: false }; }
 
         const ttd = await fetchTtd();
         serverNow = ttd.serverNow || serverNow;
         if (!ttd.ok) {
             setClub(state, clubId, 'blocked', ttd.reason);
-            safePersist(state);
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
             return { serverNow, matchDay, stop: false };
         }
         const ranked = rankCandidates(xi.pids, form.formMap, ttd.rows);
         if (!ranked.ok) {
             setClub(state, clubId, 'blocked', ranked.reason);
-            safePersist(state);
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
             return { serverNow, matchDay, stop: false };
         }
         if (!ranked.three.every(pid => form.usablePids.has(pid))) {
             setClub(state, clubId, 'blocked', 'winner-checkbox');
-            safePersist(state);
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
             return { serverNow, matchDay, stop: false };
         }
 
@@ -882,6 +918,7 @@ const SLFWeeklyFormTraining = (() => {
             state.startedAt = now;
             state.phase = 'sweeping';
             state.retryCount = 0;
+            state.completedLocalAt = 0;
         }
         if (!resume) state.homeTeamId = discovery.home;
         state.restorePending = true;
@@ -924,8 +961,13 @@ const SLFWeeklyFormTraining = (() => {
             const statuses = discovery.clubs.map(id => state.clubs[id] && state.clubs[id].status || 'missing');
             const allTerminal = statuses.length > 0 && statuses.every(status => status === 'verified' || status === 'ineligible');
             const hasBlocked = statuses.some(status => status === 'blocked' || status === 'missing');
+            // An uncertain/posting club is transient, not a permanent block: it
+            // must be re-inspected read-only inside the 24 h resume window, so it
+            // arms the bounded transient retry instead of a full week.
+            const hasTransient = statuses.some(status => status === 'uncertain' || status === 'posting');
             if (allTerminal && homeOk) {
                 state.lastCompletedAt = serverNow;
+                state.completedLocalAt = Date.now();
                 state.phase = 'complete';
                 state.retryAfter = 0;
                 state.retryCount = 0;
@@ -934,7 +976,7 @@ const SLFWeeklyFormTraining = (() => {
                 state.phase = 'partial';
                 if (homeOk) {
                     state.restorePending = false;
-                    if (hasBlocked) {
+                    if (hasBlocked || hasTransient) {
                         // Bounded transient retries: after MAX_RETRIES a permanent
                         // block backs off to a full week instead of churning every
                         // 15 minutes forever.
@@ -1020,14 +1062,18 @@ const SLFWeeklyFormTraining = (() => {
             if (!isTopLevel() || !isWriterOrigin()) return;
             installActivityTracking();
             const wake = () => scheduleRun(0);
+            // A page load / bfcache page-show is itself recent human activity:
+            // stamp it BEFORE scheduling the wake so the 120 s quiet guard does
+            // not let a sweep fire the instant the owner opens the site.
+            const wakeAfterLoadActivity = () => { recordActivity(Date.now()); wake(); };
             if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', wake, { once: true });
+                document.addEventListener('DOMContentLoaded', wakeAfterLoadActivity, { once: true });
             } else {
-                wake();
+                wakeAfterLoadActivity();
             }
             document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
             window.addEventListener('focus', wake);
-            window.addEventListener('pageshow', wake);
+            window.addEventListener('pageshow', wakeAfterLoadActivity);
             setInterval(wake, WAKE_MS);
         } catch (error) {
             report('start-failed', errorCode(error));

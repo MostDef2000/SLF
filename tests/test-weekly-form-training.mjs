@@ -50,6 +50,16 @@ const ENCODED_LABEL = '%D1%81%D0%BE%D1%85%D1%80%D0%B0%D0%BD%D0%B8%D1%82%D1%8C+'
 const XI = ['101', '102', '103', '104', '105', '106', '107', '108', '109', '110', '111'];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const RETRY_MS = 15 * 60 * 1000;
+// Mirrors the module’s activity quiet window (QUIET_MS): a fresh start()
+// stamps load activity, so sweep-expecting scenarios advance the injected
+// clock past this window after start() and before settle().
+const QUIET_MS = 120 * 1000;
+// Exact amount runCycle advances BOTH injected clocks (local + server) after
+// start() when a scenario opts into pastQuiet. Cadence-boundary scenarios
+// seed timestamps relative to the POST-advance server clock so the elapsed
+// time the coordinator measures at discover() is exact — not WEEK_MS + 121 s
+// loose (which would let a >= -> > mutation in isDue survive).
+const POST_START_ADVANCE_MS = QUIET_MS + 1000;
 const POST_BODY_PREFIX = 'coach%5B%5D=';
 // Exact captured gamelist endpoint contract (cache-buster stripped by the
 // fake site handler before comparison).
@@ -757,7 +767,7 @@ function channelClassFor(shared) {
     };
 }
 
-function createSandbox({ site, shared = makeShared(), pageHtml = DEFAULT_PAGE_HTML, pageLocation = null, frame = false } = {}) {
+function createSandbox({ site, shared = makeShared(), pageHtml = DEFAULT_PAGE_HTML, pageLocation = null, frame = false, readyState = 'complete' } = {}) {
     const warns = [];
     const fetchLog = [];
     const timers = [];
@@ -790,7 +800,7 @@ function createSandbox({ site, shared = makeShared(), pageHtml = DEFAULT_PAGE_HT
     win.self = win;
 
     const document = parseHtml(pageHtml);
-    document.readyState = 'complete';
+    document.readyState = readyState;
     document.hidden = false;
     document.activeElement = document.body;
 
@@ -895,8 +905,14 @@ function createSandbox({ site, shared = makeShared(), pageHtml = DEFAULT_PAGE_HT
     };
 }
 
-async function runCycle(sandbox) {
+// start() records load activity (wakeAfterLoadActivity) before waking, and
+// setInterval is stubbed to a no-op, so the module’s 120 s quiet guard holds
+// the first wake forever. Sweep-expecting scenarios opt in with
+// { pastQuiet: true }: the injected clock moves past QUIET_MS after start()
+// and before settle(), so the load stamp reads as old and the sweep runs.
+async function runCycle(sandbox, { pastQuiet = false } = {}) {
     sandbox.start();
+    if (pastQuiet) advance(sandbox, POST_START_ADVANCE_MS);
     await sandbox.settle();
 }
 
@@ -971,7 +987,7 @@ const test = (name, fn) => tests.push({ name, fn });
 test('ranking: top five by form then top three by ТТД posts the exact trio', async () => {
     const site = singleClubSite();
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     const posts = formPostsOf(sandbox.fetchLog);
@@ -1010,7 +1026,7 @@ test('ranking: sixth player by form is never promoted (fifth-form tie broken by 
         }
     });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     const posts = formPostsOf(sandbox.fetchLog);
@@ -1039,7 +1055,7 @@ test('ranking: third-ТТД tie inside the top five is broken by form then PID',
         }
     });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     const posts = formPostsOf(sandbox.fetchLog);
@@ -1054,7 +1070,7 @@ test('ranking: reserve outside the XI with the best form and ТТД is never sel
     // / substitute promotion.
     const site = singleClubSite();
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     const posts = formPostsOf(sandbox.fetchLog);
@@ -1076,7 +1092,7 @@ test('ranking: a legitimate zero ТТД inside the top five still posts', async 
         }
     });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     const posts = formPostsOf(sandbox.fetchLog);
@@ -1089,7 +1105,7 @@ test('ranking: a legitimate zero ТТД inside the top five still posts', async 
 test('ranking: missing ТТД row for a top-five starter posts nothing', async () => {
     const site = singleClubSite({ omitTtdPids: ['103'] });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     assertNoPosts(sandbox);
     const state = readState(sandbox.shared);
@@ -1103,7 +1119,7 @@ test('ranking: missing ТТД row for a top-five starter posts nothing', async (
 test('ranking: duplicate ТТД PID for a top-five starter posts nothing', async () => {
     const site = singleClubSite({ duplicateTtdPid: '103' });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     assertNoPosts(sandbox);
     const state = readState(sandbox.shared);
@@ -1121,7 +1137,7 @@ test('ranking: missing form for a starter posts nothing', async () => {
     delete form['111'];
     const site = singleClubSite({ clubData: { '18280': defaultClub({ form }) } });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     assertNoPosts(sandbox);
     const state = readState(sandbox.shared);
@@ -1140,7 +1156,7 @@ test('ranking: fewer than five starters with form posts nothing', async () => {
         }
     });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     assertNoPosts(sandbox);
     const state = readState(sandbox.shared);
@@ -1154,7 +1170,7 @@ test('ranking: XI without eleven unique player links posts nothing', async () =>
         clubData: { '18280': defaultClub({ xi: XI.slice(0, 10) }) }
     });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     assertNoPosts(sandbox);
     const state = readState(sandbox.shared);
@@ -1168,7 +1184,7 @@ test('ranking: XI without eleven unique player links posts nothing', async () =>
 test('state: a missing record is due and exactly one sweep starts', async () => {
     const site = makeSite();
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     // one goto per discovered club + one restore goto in finally
@@ -1203,23 +1219,39 @@ test('state: a future-inconsistent record issues no request', async () => {
 });
 
 test('state: exactly seven days since completion runs; one hour short discovers but does not sweep', async () => {
-    // Boundary run: completion exactly WEEK_MS before the server clock.
+    // Boundary run: runCycle(pastQuiet) advances the injected clocks by
+    // POST_START_ADVANCE_MS after start(), so seeding completion relative to
+    // the PRE-advance clock would leave WEEK_MS + 121 s actually elapsed at
+    // discover() — not exact, and a >= -> > mutation in isDue would survive.
+    // Seed relative to the POST-advance server clock (the Date header that
+    // discover() measures against): exactly WEEK_MS elapses at the due check.
     const dueSite = makeSite();
     const dueShared = makeShared();
-    seedState(dueShared, { lastCompletedAt: dueSite.serverNow - WEEK_MS, phase: 'complete' });
+    seedState(dueShared, {
+        lastCompletedAt: dueSite.serverNow + POST_START_ADVANCE_MS - WEEK_MS,
+        phase: 'complete'
+    });
     const dueSandbox = createSandbox({ site: dueSite, shared: dueShared });
-    await runCycle(dueSandbox);
+    await runCycle(dueSandbox, { pastQuiet: true });
     assert.ok(gotosOf(dueSandbox.fetchLog).length > 0,
         'exactly 7 elapsed days must be due (>= boundary)');
 
-    // Not-due run: one hour inside the week — discovery may happen, the sweep may not.
+    // Not-due run: one hour inside the week at the moment the due check runs
+    // — discovery may happen, the sweep may not. pastQuiet: true so the
+    // activity guard PASSES and the week gate alone decides; without it the
+    // guard would block a broken cadence check and mask it.
     const notDueSite = makeSite();
     const notDueShared = makeShared();
-    seedState(notDueShared, { lastCompletedAt: notDueSite.serverNow - WEEK_MS + 60 * 60 * 1000, phase: 'complete' });
+    seedState(notDueShared, {
+        lastCompletedAt: notDueSite.serverNow + POST_START_ADVANCE_MS - WEEK_MS + 60 * 60 * 1000,
+        phase: 'complete'
+    });
     const notDueSandbox = createSandbox({ site: notDueSite, shared: notDueShared });
-    await runCycle(notDueSandbox);
+    await runCycle(notDueSandbox, { pastQuiet: true });
     assert.ok(lineupGetsOf(notDueSandbox.fetchLog).length >= 1, 'the due check runs after discovery');
     assertNoWrites(notDueSandbox);
+    assert.ok(!notDueSandbox.warns.some(line => line.includes('activity-guard')),
+        `the week gate, not the activity guard, must be the decider: ${notDueSandbox.warns.join(' | ')}`);
 });
 
 test('state: retryAfter in the future blocks before any request', async () => {
@@ -1237,7 +1269,7 @@ test('state: a three-week-old completion triggers exactly one catch-up sweep', a
     const shared = makeShared();
     seedState(shared, { lastCompletedAt: site.serverNow - 3 * WEEK_MS, phase: 'complete' });
     const sandbox = createSandbox({ site, shared });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     const afterFirst = sandbox.fetchLog.length;
@@ -1253,7 +1285,7 @@ test('state: a three-week-old completion triggers exactly one catch-up sweep', a
 test('state: a read-back mismatch aborts before the first switch', async () => {
     const site = singleClubSite({ corruptPersistKeys: new Set([STATE_KEY]) });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     assertNoWrites(sandbox);
     assert.ok(sandbox.warns.some(line => line.includes('storage')), sandbox.warns.join(' | '));
@@ -1264,7 +1296,7 @@ test('state: a blocked club closes partial without advancing lastCompletedAt', a
         clubData: { '20001': defaultClub({ levelUnknown: true }) }
     });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     const state = readState(sandbox.shared);
     assert.equal(state.clubs['18280'].status, 'verified');
@@ -1280,7 +1312,7 @@ test('state: a blocked club closes partial without advancing lastCompletedAt', a
 test('state: all-terminal clubs with a verified home close complete from the server clock', async () => {
     const site = makeSite();
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     const state = readState(sandbox.shared);
     assert.equal(state.phase, 'complete');
@@ -1295,7 +1327,7 @@ test('state: lastCompletedAt does not advance when home restoration fails', asyn
     // without the home gate this cycle would close complete.
     const site = makeSite({ failGoto: { id: '18280', failOnCall: 2 } });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     const state = readState(sandbox.shared);
     assert.equal(state.clubs['18280'].status, 'verified');
@@ -1320,7 +1352,9 @@ test('coordination: an unavailable lock performs no work and writes no lease', a
     assert.equal(shared.lockLog[0].name, LOCK_NAME);
     assert.equal(shared.lockLog[0].mode, 'exclusive');
     assert.equal(shared.lockLog[0].ifAvailable, true);
-    assert.deepEqual([...shared.storage.keys()], [],
+    // start() stamps load activity into localStorage — that key is expected;
+    // any additional key (a lease fallback) must not exist.
+    assert.deepEqual([...shared.storage.keys()], [ACTIVITY_KEY],
         'no localStorage lease fallback may be written');
 });
 
@@ -1331,6 +1365,10 @@ test('coordination: two concurrent probes produce exactly one sweep', async () =
     const tabB = createSandbox({ site, shared });
     tabA.start();
     tabB.start();
+    // Both tabs stamp load activity inside start(); move each injected clock
+    // past QUIET_MS so the quiet guard lets exactly one tab sweep.
+    advance(tabA, QUIET_MS + 1000);
+    advance(tabB, QUIET_MS + 1000);
     await Promise.all([tabA.settle(), tabB.settle()]);
 
     const combined = [...tabA.fetchLog, ...tabB.fetchLog];
@@ -1345,8 +1383,10 @@ test('coordination: two concurrent probes produce exactly one sweep', async () =
         assert.equal(probe.mode, 'exclusive');
         assert.equal(probe.ifAvailable, true);
     }
-    assert.deepEqual([...shared.storage.keys()], [STATE_KEY],
-        'only the state key is written — no lease key');
+    // start() stamps load activity into localStorage; the state key plus that
+    // stamp are the only permitted entries — any further key would be a lease.
+    assert.deepEqual([...shared.storage.keys()].sort(), [ACTIVITY_KEY, STATE_KEY].sort(),
+        'only the load-activity stamp and the state key are written — no lease key');
     const state = readState(shared);
     assert.equal(state.phase, 'complete');
 });
@@ -1363,6 +1403,52 @@ test('coordination: recent activity blocks before the first switch', async () =>
     assert.ok(sandbox.warns.some(line => line.includes('activity-guard')), sandbox.warns.join(' | '));
 });
 
+test('coordination: a fresh page with no seeded activity is blocked by the start() load stamp before the first switch', async () => {
+    // P1 pin: on a brand-new sandbox (no seeded ACTIVITY_KEY, no pastQuiet)
+    // start() must record load activity via wakeAfterLoadActivity BEFORE the
+    // wake it schedules, so the very first coordinator run is held by the
+    // quiet guard: discovery runs, zero writes, one activity-guard
+    // diagnostic, and the load stamp is the only localStorage write. If the
+    // recordActivity call is dropped, the guard passes and the sweep writes.
+    const site = makeSite();
+    const shared = makeShared();
+    const sandbox = createSandbox({ site, shared });
+    await runCycle(sandbox);
+
+    assert.ok(lineupGetsOf(sandbox.fetchLog).length >= 1, 'discovery still runs');
+    assertNoWrites(sandbox);
+    assert.ok(sandbox.warns.some(line => line.includes('activity-guard')), sandbox.warns.join(' | '));
+    assert.deepEqual([...shared.storage.keys()], [ACTIVITY_KEY],
+        'the load stamp from wakeAfterLoadActivity is the only localStorage write');
+});
+
+test('coordination: a loading page defers the wake to DOMContentLoaded and the load stamp blocks before the first switch', async () => {
+    // Same P1 pin through the DOMContentLoaded branch: with readyState
+    // 'loading' start() registers the listener instead of waking eagerly, so
+    // a settle before the event must see zero requests (the wake really is
+    // deferred), and the dispatch must stamp activity before the wake it
+    // triggers — same no-write + activity-guard outcome as the eager branch.
+    const site = makeSite();
+    const shared = makeShared();
+    const sandbox = createSandbox({ site, shared, readyState: 'loading' });
+    sandbox.start();
+    await sandbox.settle();
+    assert.deepEqual(sandbox.fetchLog, [],
+        'a loading page must not wake before DOMContentLoaded');
+
+    // A real browser flips readyState to 'interactive' before firing
+    // DOMContentLoaded; admissionOk() would reject a still-loading document.
+    sandbox.document.readyState = 'interactive';
+    sandbox.document.dispatch('DOMContentLoaded');
+    await sandbox.settle();
+
+    assert.ok(lineupGetsOf(sandbox.fetchLog).length >= 1, 'the DOMContentLoaded wake runs discovery');
+    assertNoWrites(sandbox);
+    assert.ok(sandbox.warns.some(line => line.includes('activity-guard')), sandbox.warns.join(' | '));
+    assert.deepEqual([...shared.storage.keys()], [ACTIVITY_KEY],
+        'the DOMContentLoaded branch stamps activity before the wake it schedules');
+});
+
 test('coordination: activity arriving before the save blocks the POST', async () => {
     const site = makeSite({ clubs: ['18280'], home: '18280' });
     const sandbox = createSandbox({ site });
@@ -1373,7 +1459,7 @@ test('coordination: activity arriving before the save blocks the POST', async ()
             sandbox.fireActivity('pointerdown');
         }
     };
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     assert.ok(fired, 'the activity seam must have fired during the sweep');
     assert.deepEqual(formPostsOf(sandbox.fetchLog), [],
@@ -1408,7 +1494,7 @@ test('coordination: a match becoming unsafe blocks the save before POST', async 
             };
         }
     };
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     assert.ok(mutated, 'the match-day seam must have fired');
     assert.deepEqual(formPostsOf(sandbox.fetchLog), [],
@@ -1448,7 +1534,7 @@ test('failure: restorePending is persisted before the first goto', async () => {
             captured = readState(sandbox.shared);
         }
     };
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     assert.ok(captured, 'the state was observed at the first switch');
     assert.equal(captured.restorePending, true,
@@ -1461,7 +1547,7 @@ test('failure: restorePending is persisted before the first goto', async () => {
 test('failure: the captured home team is restored after a successful sweep', async () => {
     const site = makeSite();
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     const gotos = gotosOf(sandbox.fetchLog);
@@ -1474,7 +1560,7 @@ test('failure: the captured home team is restored after a successful sweep', asy
 test('failure: the captured home team is restored after a mid-sweep failure', async () => {
     const site = makeSite({ failLineupFor: ['20001'] });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     const gotos = gotosOf(sandbox.fetchLog);
     assert.equal(gotoId(gotos[gotos.length - 1]), '18280',
@@ -1493,7 +1579,7 @@ test('failure: a failed restore keeps restorePending and the next wake retries o
     const site = makeSite({ failGoto: { id: '18280', failOnCall: 1 } });
     const shared = makeShared();
     const sandbox = createSandbox({ site, shared });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     let state = readState(shared);
     assert.equal(state.restorePending, true, 'a failed restore keeps the marker');
     assert.equal(state.phase, 'partial');
@@ -1514,7 +1600,7 @@ test('failure: a failed restore keeps restorePending and the next wake retries o
 test('failure: a lost POST response stays uncertain and is never re-POSTed that cycle', async () => {
     const site = singleClubSite({ failPostForm: true });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     const posts = formPostsOf(sandbox.fetchLog);
     assert.equal(posts.length, 1, 'the POST was dispatched exactly once');
@@ -1535,7 +1621,7 @@ test('failure: an uncertain club is re-inspected read-only after the retry windo
         clubData: { '20001': defaultClub({ levelUnknown: true }) }
     });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assert.equal(formPostsOf(sandbox.fetchLog).length, 1, 'exactly one dispatch in cycle 1');
     let state = readState(sandbox.shared);
     assert.equal(state.clubs['18280'].status, 'uncertain');
@@ -1560,7 +1646,7 @@ test('failure: an uncertain club is re-inspected read-only after the retry windo
 test('request: the POST body carries exactly three coach[] values and the observed coach_set label', async () => {
     const site = singleClubSite();
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     const posts = formPostsOf(sandbox.fetchLog);
     assert.equal(posts.length, 1);
@@ -1580,7 +1666,7 @@ test('request: the POST body carries exactly three coach[] values and the observ
 test('request: verification is a fresh form read after the POST with checked set and future expiry', async () => {
     const site = singleClubSite();
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     const log = sandbox.fetchLog;
     const postIndex = log.findIndex(entry => entry.method === 'POST' && entry.url.includes('action=form'));
@@ -1604,7 +1690,7 @@ test('request: verification is a fresh form read after the POST with checked set
 test('request: verification with a past expiry records uncertain, never verified', async () => {
     const site = singleClubSite({ clubData: { '18280': defaultClub({ extendOnPost: false }) } });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     assert.equal(formPostsOf(sandbox.fetchLog).length, 1, 'the POST itself was sent');
     const state = readState(sandbox.shared);
@@ -1619,7 +1705,7 @@ test('request: verification with a past expiry records uncertain, never verified
 test('request: verification with a different checked set records uncertain', async () => {
     const site = singleClubSite({ clubData: { '18280': defaultClub({ applyPost: false }) } });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
 
     assert.equal(formPostsOf(sandbox.fetchLog).length, 1, 'the POST itself was sent');
     const state = readState(sandbox.shared);
@@ -1634,11 +1720,11 @@ test('request: verification with a different checked set records uncertain', asy
 test('request: the restored home team follows the cycle-start team, never a hardcoded id', async () => {
     const siteA = makeSite();
     const sandboxA = createSandbox({ site: siteA });
-    await runCycle(sandboxA);
+    await runCycle(sandboxA, { pastQuiet: true });
 
     const siteB = makeSite({ home: '21473', clubs: ['21473', '20001'] });
     const sandboxB = createSandbox({ site: siteB });
-    await runCycle(sandboxB);
+    await runCycle(sandboxB, { pastQuiet: true });
 
     const gotosA = gotosOf(sandboxA.fetchLog);
     const gotosB = gotosOf(sandboxB.fetchLog);
@@ -1673,7 +1759,7 @@ test('state: after MAX_RETRIES blocked retries the backoff becomes a week and th
     // even discover — anything.
     const site = makeSite({ clubData: { '20001': defaultClub({ levelUnknown: true }) } });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     let state = readState(sandbox.shared);
     assert.equal(state.phase, 'partial');
     assert.equal(state.retryCount, 1, 'first blocked cycle consumes retry 1 of MAX_RETRIES=2');
@@ -1714,7 +1800,7 @@ test('eligibility: a capacity other than 3 marks the club ineligible with zero P
         }
     });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     const state = readState(sandbox.shared);
@@ -1772,7 +1858,7 @@ test('state: a resumed sweep keeps the seeded homeTeamId and restores it, not th
             captured = readState(shared);
         }
     };
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     assert.ok(captured, 'the sweep issued at least one switch');
@@ -1800,7 +1886,7 @@ test('ranking: wrong-length, bad-PID and missing ТТД rows outside the top fiv
         ]
     });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     const posts = formPostsOf(sandbox.fetchLog);
@@ -1835,7 +1921,7 @@ test('form: a second ПОСЛЕ table can never override the player-form table v
         clubData: { '18280': defaultClub({ extraFormTable: decoy }) }
     });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     const posts = formPostsOf(sandbox.fetchLog);
@@ -1878,7 +1964,7 @@ test('request: goto carries X-Requested-With with todo=0 and the exact gamelist 
         }
     });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     assert.deepEqual(site.contractViolations, [],
@@ -1932,7 +2018,7 @@ test('request: a verified save with an unchanged expiry records extensionProven=
         clubData: { '18280': defaultClub({ expiry: '01/01/2099', extendOnPost: false }) }
     });
     const sandbox = createSandbox({ site });
-    await runCycle(sandbox);
+    await runCycle(sandbox, { pastQuiet: true });
     assertClean(sandbox);
 
     assert.equal(formPostsOf(sandbox.fetchLog).length, 1, 'the POST itself was sent');
