@@ -288,6 +288,7 @@ jobs:
           python3 tests/browser/test_save_dialog_xss_fixtures.py
           python3 tests/browser/test_team4_champ_table_swap.py
           python3 tests/browser/test_beta_tcseg_controls.py
+          python3 tests/browser/test_llm_match_refresh.py
 
       - name: Upload browser failure evidence
         if: failure() && hashFiles('tests/browser/artifacts/**') != ''
