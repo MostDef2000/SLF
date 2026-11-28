@@ -200,9 +200,9 @@
     }
 
     const originalBuild = SnapshotEngine.build.bind(SnapshotEngine);
-    SnapshotEngine.build = function buildWithNormalizedTransitionSource() {
+    SnapshotEngine.build = function buildWithNormalizedTransitionSource(...args) {
         const hint = consumeTransitionSourceHint();
-        return normalizeTransitionSources(originalBuild(), hint);
+        return normalizeTransitionSources(originalBuild(...args), hint);
     };
 
     const originalSendMatchResult = SnapshotEngine.sendMatchResult.bind(SnapshotEngine);
