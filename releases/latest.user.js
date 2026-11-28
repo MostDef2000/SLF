@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SLF Tactics Helper (+VPS Sync + Match Telemetry)
 // @namespace    http://tampermonkey.net/
-// @version      4.4.388
+// @version      4.4.397
 // @description  Modular SLF helper: tactics, manual match telemetry, TM + SLF transfer analyzer
 // @author       You
 // @match        https://slf.fm/
@@ -36,15 +36,15 @@
 
     // BEGIN SLF RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.388',
-        scriptVersion: '4.4.388',
+        version: '4.4.397',
+        scriptVersion: '4.4.397',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.388',
+        scriptVersion: '4.4.397',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF RUNTIME VERSION EXPORT
@@ -4491,10 +4491,13 @@ const DomUtils = {
             return status === 'live' || status === 'halftime' || status === 'unknown';
         },
 
-        readMinuteInfo() {
-            const text = document.body.innerText || '';
-            const m = text.match(/ид[её]т\s+'?(\d{1,3})(?:\+(\d{1,2}))?\s*мин/i);
-            if (!m) {
+        // #483: shared clock semantics for the DOM text path and the
+        // desktop-JSON observation path. `baseMinute` must be a finite integer
+        // >= 1; `stoppageMinute` is optional non-negative integer (0 = none).
+        // Invalid input yields the degenerate "no clock" record (never throws).
+        minuteInfoFromParts(baseMinute, stoppageMinute = 0) {
+            const base = Number(baseMinute);
+            if (!Number.isFinite(base) || !Number.isInteger(base) || base < 1) {
                 return {
                     rawMinute: null,
                     baseMinute: null,
@@ -4504,18 +4507,26 @@ const DomUtils = {
                 };
             }
 
-            const baseMinute = Number(m[1]);
-            const stoppageMinute = m[2] ? Number(m[2]) : 0;
-            const rawMinute = stoppageMinute ? `${baseMinute}+${stoppageMinute}` : String(baseMinute);
-            const effectiveMinute = MatchTimingModel.clampMinute(baseMinute);
+            const stopRaw = Number(stoppageMinute);
+            const stoppage = Number.isFinite(stopRaw) && stopRaw > 0 ? Math.floor(stopRaw) : 0;
+            const rawMinute = stoppage ? `${base}+${stoppage}` : String(base);
+            const effectiveMinute = MatchTimingModel.clampMinute(base);
 
             return {
                 rawMinute,
-                baseMinute,
-                stoppageMinute,
+                baseMinute: base,
+                stoppageMinute: stoppage,
                 effectiveMinute,
-                isStoppage: stoppageMinute > 0 || baseMinute > MatchTimingModel.OFFICIAL_MATCH_MINUTES
+                isStoppage: stoppage > 0 || base > MatchTimingModel.OFFICIAL_MATCH_MINUTES
             };
+        },
+
+        readMinuteInfo() {
+            const text = document.body.innerText || '';
+            const m = text.match(/ид[её]т\s+'?(\d{1,3})(?:\+(\d{1,2}))?\s*мин/i);
+            if (!m) return this.minuteInfoFromParts(null);
+
+            return this.minuteInfoFromParts(Number(m[1]), m[2] ? Number(m[2]) : 0);
         },
 
         readMinute() {
@@ -4610,7 +4621,25 @@ const DomUtils = {
 // 6. Match Stats Parser
 // ============================================================
 
+// #483: classified refresh error shared by the desktop-observation path and
+// its callers (SnapshotEngine / the LLM advisor UI). `kind` is the machine
+// contract; the UI maps it to a user-facing message. Never carry secret data.
+function slfMatchRefreshError(kind, message, extra) {
+    const error = new Error(message || kind || 'match refresh failed');
+    error.kind = kind || 'unavailable';
+    if (extra && typeof extra === 'object') {
+        Object.assign(error, extra);
+    }
+    return error;
+}
+
 const MatchStatsParser = {
+    // #483: same-origin desktop observation endpoint. The raw game.php HTML is
+    // NO-GO (score/.stat-* empty, filled by JS from JSON); this endpoint is the
+    // single fresh observation source used before an LLM advisor request.
+    DESKTOP_ENDPOINT: '/ajax/game4.php',
+    DESKTOP_REFRESH_TIMEOUT_MS: 5000,
+
     readTeamNames() {
         // FM2026 "g3" layout (issue #313) scopes the match teams inside
         // .g3-scoreline.  Prefer those nodes so foreign roster.php links that
@@ -4714,8 +4743,314 @@ const MatchStatsParser = {
 
     readShotsTable() {
         return [];
+    },
+
+    // #483: build the same-origin desktop-observation URL with the full param
+    // set the live page itself uses. `goal_count=NaN` is part of the native
+    // request shape (probe-confirmed); the cache-bust param is fresh per call.
+    buildDesktopUrl(gameId, cacheBust = Date.now()) {
+        const params = new URLSearchParams();
+        params.set('action', 'get_stat_desktop');
+        params.set('game_id', String(gameId == null ? '' : gameId));
+        params.set('comment_last_id', '0');
+        params.set('last_upd', '0');
+        params.set('goal_count', 'NaN');
+        params.set('shot_id', '0');
+        params.set('event', '0');
+        params.set('launch_id', '0');
+        params.set('target_side', '0');
+        params.set('comment_id', '0');
+        if (cacheBust != null) params.set('_slf', String(cacheBust));
+        return `${this.DESKTOP_ENDPOINT}?${params.toString()}`;
+    },
+
+    _stripTags(value) {
+        return String(value == null ? '' : value).replace(/<[^>]*>/g, '');
+    },
+
+    // Strict numeric decoding: preserves 0, accepts numeric strings / numbers
+    // and HTML-wrapped values (def_height/press_height come as HTML), rejects
+    // blank, boolean, non-finite and non-numeric input.
+    _decodeStrict(value, label) {
+        if (value === null || value === undefined) {
+            throw slfMatchRefreshError('invalid_observation', `${label} is missing`);
+        }
+        if (typeof value === 'boolean') {
+            throw slfMatchRefreshError('invalid_observation', `${label} is boolean`);
+        }
+        if (typeof value === 'number') {
+            if (!Number.isFinite(value)) {
+                throw slfMatchRefreshError('invalid_observation', `${label} is not finite`);
+            }
+            return value;
+        }
+        if (typeof value !== 'string') {
+            throw slfMatchRefreshError('invalid_observation', `${label} is not a number`);
+        }
+        const text = this._stripTags(value).trim();
+        if (!text) {
+            throw slfMatchRefreshError('invalid_observation', `${label} is blank`);
+        }
+        if (!/^-?\d+(?:\.\d+)?$/.test(text)) {
+            throw slfMatchRefreshError('invalid_observation', `${label} is not numeric`);
+        }
+        const parsed = Number(text);
+        if (!Number.isFinite(parsed)) {
+            throw slfMatchRefreshError('invalid_observation', `${label} is not finite`);
+        }
+        return parsed;
+    },
+
+    _decodeOptional(value, label) {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'string' && !this._stripTags(value).trim()) return null;
+        return this._decodeStrict(value, label);
+    },
+
+    _tryNumber(value) {
+        try {
+            return this._decodeStrict(value, 'value');
+        } catch (_) {
+            return null;
+        }
+    },
+
+    _minuteInfoFromObservation(value) {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return MatchStateParser.minuteInfoFromParts(value, 0);
+        }
+        if (typeof value === 'string') {
+            const m = value.trim().match(/^(\d{1,3})(?:\s*\+\s*(\d{1,2}))?$/);
+            if (m) return MatchStateParser.minuteInfoFromParts(Number(m[1]), m[2] ? Number(m[2]) : 0);
+        }
+        return null;
+    },
+
+    _firstTeamId(...candidates) {
+        for (const candidate of candidates) {
+            const n = Number(candidate);
+            if (Number.isFinite(n) && Number.isInteger(n) && n > 0) return n;
+        }
+        return null;
+    },
+
+    // Team counters mapped to the existing readFullStats field names. Power is
+    // intentionally absent: it is DOM-static (power2/legacy power) and is
+    // merged back in by SnapshotEngine.build(fresh).
+    _normalizeTeamCounters(team, label) {
+        const req = (value, field) => this._decodeStrict(value, `${label}.${field}`);
+        return {
+            possession: req(team.pos, 'pos'),
+            shots: req(team.shots, 'shots'),
+            onTarget: req(team.ontarget, 'ontarget'),
+            xG: req(team.xG, 'xG'),
+            accuratePasses: req(team['1'], '1') + req(team['2'], '2'),
+            inaccuratePasses: req(team['-1'], '-1') + req(team['-2'], '-2'),
+            actions: req(team.ttx, 'ttx'),
+            badActionsPct: req(team.defective, 'defective'),
+            defVector: req(team.def_height, 'def_height'),
+            pressVector: req(team.press_height, 'press_height'),
+            fouls: req(team['-7'], '-7'),
+            corners: this._decodeOptional(team['14'], `${label}.14`),
+            offsides: this._decodeOptional(team['-10'], `${label}.-10`),
+            woodwork: this._decodeOptional(team['16'], `${label}.16`),
+            individualActions: this._decodeOptional(team.ind3, `${label}.ind3`),
+            // Probe did not confirm a confident support mapping: stay honest.
+            support: null
+        };
+    },
+
+    _eventTextOf(item) {
+        if (typeof item === 'string') return this._stripTags(item);
+        if (typeof item === 'number' && Number.isFinite(item)) return String(item);
+        if (item && typeof item === 'object') {
+            for (const key of ['text', 'comment', 'message', 'title', 'description']) {
+                const value = item[key];
+                if (typeof value === 'string' && value.trim()) return this._stripTags(value);
+            }
+        }
+        return '';
+    },
+
+    _normalizeEventsText(comments, events) {
+        const primary = Array.isArray(comments) && comments.length ? comments
+            : (Array.isArray(events) ? events : []);
+        return primary
+            .map(item => this._eventTextOf(item).replace(/\s+/g, ' ').trim())
+            .filter(Boolean)
+            .slice(0, 30);
+    },
+
+    // #483: validate + normalize one desktop observation. Returns the private
+    // normalized record or throws a classified slfMatchRefreshError. Never uses
+    // the stale top-level `score`; goals come from t[teamId].goals.
+    normalizeDesktopObservation(payload, expectedGameId) {
+        const expected = expectedGameId == null ? '' : String(expectedGameId);
+        if (!expected) {
+            throw slfMatchRefreshError('identity_mismatch', 'missing expected game id');
+        }
+
+        let raw = payload;
+        if (raw && typeof raw === 'object' && !Array.isArray(raw)
+            && raw.data && typeof raw.data === 'object' && !('t' in raw) && !('live' in raw)) {
+            raw = raw.data;
+        }
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+            throw slfMatchRefreshError('non_json', 'observation payload is not an object');
+        }
+
+        const rawStatus = raw.status;
+        const finishFlag = raw.finish === true || raw.finish === 1 || raw.finish === '1' || raw.finish === 'true';
+        const finalStatus = typeof rawStatus === 'string' && /finish|окончен|заверш|final/i.test(rawStatus);
+        if (finishFlag || finalStatus) {
+            throw slfMatchRefreshError('finished', 'match is finished');
+        }
+        if (rawStatus === 0 || rawStatus === '0') {
+            throw slfMatchRefreshError('not_started', 'match has not started');
+        }
+
+        const live = Array.isArray(raw.live) ? raw.live : [];
+        const entry = live.find(item => item && String(item.id) === expected);
+        if (!entry) {
+            throw slfMatchRefreshError('identity_mismatch', 'game id not found in live list');
+        }
+        const homeId = this._firstTeamId(entry.team_1, entry.home, entry.team1);
+        const awayId = this._firstTeamId(entry.team_2, entry.away, entry.team2);
+        if (homeId == null || awayId == null || homeId === awayId) {
+            throw slfMatchRefreshError('invalid_observation', 'live entry has no distinct team ids');
+        }
+
+        const tables = raw.t;
+        if (!tables || typeof tables !== 'object' || Array.isArray(tables)) {
+            throw slfMatchRefreshError('invalid_observation', 'no team stats table');
+        }
+        const homeTable = tables[String(homeId)];
+        const awayTable = tables[String(awayId)];
+        if (!homeTable || typeof homeTable !== 'object' || !awayTable || typeof awayTable !== 'object') {
+            throw slfMatchRefreshError('invalid_observation', 'missing per-team stats');
+        }
+
+        const halftime = raw.halftime === true
+            || (typeof rawStatus === 'string' && /halftime|перерыв|первый\s+тайм\s+заверш/i.test(rawStatus));
+        const pauseSignal = raw.paused === true
+            || raw.stop_update === true
+            || (typeof rawStatus === 'string' && /paus|suspend|приостанов|пауза/i.test(rawStatus));
+        if (pauseSignal && !halftime) {
+            throw slfMatchRefreshError('paused', 'match is paused/suspended');
+        }
+
+        const minuteInfo = this._minuteInfoFromObservation(raw.minute);
+        if (!minuteInfo || minuteInfo.effectiveMinute == null) {
+            throw slfMatchRefreshError(pauseSignal ? 'paused' : 'unavailable', 'match clock is not interpretable');
+        }
+
+        const score = {
+            home: this._decodeStrict(homeTable.goals, 'home.goals'),
+            away: this._decodeStrict(awayTable.goals, 'away.goals')
+        };
+
+        const stats = [
+            { teamId: homeId, stats: this._normalizeTeamCounters(homeTable, 'home') },
+            { teamId: awayId, stats: this._normalizeTeamCounters(awayTable, 'away') }
+        ];
+
+        // xT is only accepted when the shape is confidently {home,away} numbers;
+        // the probe did not confirm an xT field, so anything else stays null.
+        let xT = null;
+        const xt = raw.xt;
+        if (xt && typeof xt === 'object' && !Array.isArray(xt)) {
+            const home = this._tryNumber(xt.home);
+            const away = this._tryNumber(xt.away);
+            if (home != null && away != null) xT = { home, away };
+        }
+
+        return {
+            gameId: expected,
+            status: halftime ? 'halftime' : 'live',
+            minuteInfo,
+            teams: [homeId, awayId],
+            score,
+            stats,
+            xT,
+            // readShotsTable() returns [] today; keep the same compatible shape
+            // instead of inventing a row schema from the unconfirmed shots[].
+            shotsTable: [],
+            eventsText: this._normalizeEventsText(raw.game_comments, raw.events)
+        };
+    },
+
+    // #483: same-origin GET with a hard deadline that covers the body read.
+    // Injectable fetchImpl for tests. Every failure is a classified error:
+    // timeout | network | http_status | non_json | invalid_observation | ...
+    async fetchDesktopObservation(options = {}) {
+        const settings = options && typeof options === 'object' ? options : {};
+        const gameId = settings.gameId == null ? '' : String(settings.gameId);
+        if (!gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'missing game id for refresh');
+        }
+        const fetchImpl = typeof settings.fetchImpl === 'function'
+            ? settings.fetchImpl
+            : (typeof fetch === 'function' ? fetch.bind(typeof globalThis !== 'undefined' ? globalThis : null) : null);
+        if (!fetchImpl) {
+            throw slfMatchRefreshError('network', 'fetch is unavailable');
+        }
+        const timeoutMs = Number.isFinite(settings.timeoutMs) && settings.timeoutMs > 0
+            ? settings.timeoutMs
+            : this.DESKTOP_REFRESH_TIMEOUT_MS;
+        const url = settings.url || this.buildDesktopUrl(gameId, settings.cacheBust != null ? settings.cacheBust : Date.now());
+
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        let timer = null;
+        let timedOut = false;
+        // The deadline wraps the request AND the body read: a single timer
+        // rejects the raced promise and aborts the in-flight fetch.
+        const deadline = new Promise((_, reject) => {
+            timer = setTimeout(() => {
+                timedOut = true;
+                if (controller) { try { controller.abort(); } catch (_) {} }
+                reject(slfMatchRefreshError('timeout', 'match refresh timed out'));
+            }, timeoutMs);
+        });
+
+        const race = promise => Promise.race([promise, deadline]);
+
+        try {
+            const init = {
+                method: 'GET',
+                cache: 'no-store',
+                credentials: 'same-origin',
+                redirect: 'error',
+                headers: { 'Accept': 'application/json' }
+            };
+            if (controller) init.signal = controller.signal;
+
+            const response = await race(Promise.resolve(fetchImpl(url, init)));
+            if (!response || typeof response !== 'object') {
+                throw slfMatchRefreshError('network', 'empty refresh response');
+            }
+            if (response.ok === false) {
+                throw slfMatchRefreshError('http_status', `refresh HTTP ${response.status}`, { status: response.status });
+            }
+            const bodyText = await race(Promise.resolve(response.text()));
+            let payload;
+            try {
+                payload = JSON.parse(String(bodyText == null ? '' : bodyText));
+            } catch (_) {
+                throw slfMatchRefreshError('non_json', 'refresh response is not JSON (login/redirect page?)');
+            }
+            return this.normalizeDesktopObservation(payload, gameId);
+        } catch (error) {
+            if (error && error.kind) throw error;
+            if (timedOut || (error && error.name === 'AbortError')) {
+                throw slfMatchRefreshError('timeout', 'match refresh timed out');
+            }
+            throw slfMatchRefreshError('network', error && error.message ? error.message : 'match refresh failed');
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
     }
 };
+
 
     // ============================================================
 // <<< src/modules/match-reading/match-stats-parser.js
@@ -4962,10 +5297,18 @@ const SnapshotEngine = {
     _pendingMatchResultRequests: new Map(),
     _sentMatchResultKeys: new Set(),
 
-    build() {
-        const ids = MatchStatsParser.getAllTeamIds();
+    // #483: optional `fresh` is a normalized desktop observation produced by
+    // MatchStatsParser.normalizeDesktopObservation. When present, every
+    // match-derived rule input (gameId/status/minute/score/teams/stats/xT/
+    // shotsTable/eventsText) comes from that single fresh observation, while
+    // DOM-only inputs (team names/aliases, same-team power, developer hints,
+    // lineup/formation, current tactic) are still read from the page. With no
+    // argument the original DOM path is unchanged.
+    build(fresh = null) {
+        const observation = fresh && typeof fresh === 'object' && Array.isArray(fresh.teams) ? fresh : null;
+        const ids = observation ? observation.teams.slice() : MatchStatsParser.getAllTeamIds();
         const teamNames = MatchStatsParser.readTeamNames();
-        const minuteInfo = MatchStateParser.readMinuteInfo();
+        const minuteInfo = observation ? observation.minuteInfo : MatchStateParser.readMinuteInfo();
         const minute = minuteInfo.effectiveMinute;
         const generationWindow = MatchStateParser.getGenerationWindow(minute);
         const visibleDeveloperHints = DeveloperHintParser.readHints();
@@ -4991,28 +5334,30 @@ const SnapshotEngine = {
         const generatorExpectedPerformance = typeof GeneratorExpectedPerformanceParser !== 'undefined'
             ? GeneratorExpectedPerformanceParser.parse(developerHints || [])
             : null;
-        const eventsText = MatchStatsParser.readEventsText();
-        const rawStatus = MatchStateParser.getStatus();
+        const eventsText = observation ? observation.eventsText : MatchStatsParser.readEventsText();
+        const rawStatus = observation ? observation.status : MatchStateParser.getStatus();
 
         // Some live pages do not expose the exact status text at kick-off/refresh.
         // If the page already has match data, keep the live parser active instead of waiting on "unknown".
-        const hasLiveEvidence =
+        // A fresh observation always carries an already-classified status.
+        const hasLiveEvidence = !observation && (
             minute != null ||
             ids.length >= 2 ||
             eventsText.length > 1 ||
-            !!MatchStatsParser.readXT();
+            !!MatchStatsParser.readXT()
+        );
 
-        const status = rawStatus === 'unknown' && hasLiveEvidence
-            ? 'live'
-            : rawStatus;
+        const status = observation
+            ? observation.status
+            : (rawStatus === 'unknown' && hasLiveEvidence ? 'live' : rawStatus);
 
         return {
             ts: Date.now(),
 
-            gameId: MatchStateParser.getGameId(),
+            gameId: observation ? observation.gameId : MatchStateParser.getGameId(),
             status,
             rawStatus,
-            statusAssumedLive: rawStatus === 'unknown' && status === 'live',
+            statusAssumedLive: observation ? false : (rawStatus === 'unknown' && status === 'live'),
 
             minute,
             minuteRaw: minuteInfo.rawMinute,
@@ -5029,8 +5374,8 @@ const SnapshotEngine = {
                 model: '36_real_minutes_generation_windows_v1'
             },
 
-            score: MatchStateParser.readScore(),
-            xT: MatchStatsParser.readXT(),
+            score: observation ? observation.score : MatchStateParser.readScore(),
+            xT: observation ? observation.xT : MatchStatsParser.readXT(),
 
             teams: ids,
             teamNames,
@@ -5039,7 +5384,7 @@ const SnapshotEngine = {
             lineupRows: SquadParser.readLineupRows(),
             formation: SquadParser.readFormation(),
 
-            shotsTable: MatchStatsParser.readShotsTable(),
+            shotsTable: observation ? observation.shotsTable : MatchStatsParser.readShotsTable(),
             eventsText,
             developerHints,
             generatorQualitySignal,
@@ -5047,11 +5392,43 @@ const SnapshotEngine = {
             generatorDetailMetrics,
             currentTactic: getCurrentTactic(),
 
-            stats: ids.map(id => ({
-                teamId: id,
-                stats: MatchStatsParser.readFullStats(id)
-            }))
+            stats: observation
+                ? observation.stats.map(entry => ({
+                    teamId: entry.teamId,
+                    // Power is DOM-static per team; override only that field.
+                    stats: Object.assign({}, entry.stats, {
+                        power: MatchStatsParser.readFullStats(entry.teamId).power
+                    })
+                }))
+                : ids.map(id => ({
+                    teamId: id,
+                    stats: MatchStatsParser.readFullStats(id)
+                }))
         };
+    },
+
+    // #483: fresh-observation seam used by the LLM advisor preflight. Captures
+    // the current URL game id synchronously (never a cached snapshot
+    // preference), fetches the same-origin desktop JSON, and re-validates
+    // identity before returning. Any failure throws a classified error.
+    async fetchFreshObservation(options = {}) {
+        const settings = options && typeof options === 'object' ? options : {};
+        const gameId = settings.gameId != null && String(settings.gameId) !== ''
+            ? String(settings.gameId)
+            : String((typeof MatchStateParser?.getGameId === 'function' ? MatchStateParser.getGameId() : '') || '');
+        if (!gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'no current match id');
+        }
+        const observation = await MatchStatsParser.fetchDesktopObservation({
+            gameId,
+            fetchImpl: settings.fetchImpl,
+            timeoutMs: settings.timeoutMs,
+            cacheBust: settings.cacheBust
+        });
+        if (!observation || String(observation.gameId) !== gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'observation identity changed');
+        }
+        return observation;
     },
 
     getScoreKey(score) {
@@ -5970,7 +6347,7 @@ const SnapshotEngine = {
         };
 
         const originalBuild = SnapshotEngine.build.bind(SnapshotEngine);
-        SnapshotEngine.build = function buildWithTacticTelemetry() { return enrich(originalBuild(), 'snapshot_build'); };
+        SnapshotEngine.build = function buildWithTacticTelemetry(...args) { return enrich(originalBuild(...args), 'snapshot_build'); };
         const originalBuildSnapshotRecord = SnapshotEngine.buildSnapshotRecord.bind(SnapshotEngine);
         SnapshotEngine.buildSnapshotRecord = function buildSnapshotRecordWithTacticTelemetry(snapshot) { return originalBuildSnapshotRecord(enrich(snapshot, 'match_snapshot')); };
         const originalSendMatchResult = SnapshotEngine.sendMatchResult.bind(SnapshotEngine);
@@ -12671,8 +13048,12 @@ TacticalKnowledgePack.init();
             parseBtn.onclick = () => {
                 const snapshot = SnapshotEngine.build();
                 void SnapshotEngine.sendMatchResult(snapshot)
-                    .then(() => this.addParserLog('Финальный результат отправлен'))
+                    .then(() => {
+                        this.updateParserStatus('Результат отправлен ✓');
+                        this.addParserLog('Финальный результат отправлен');
+                    })
                     .catch(error => {
+                        this.updateParserStatus(`Ошибка: ${error?.kind || 'unknown'}`);
                         this.addParserLog(`Ошибка отправки результата: ${error?.kind || 'unknown'}`);
                         console.warn('[SLF API] final result send error', error);
                     });
@@ -12721,7 +13102,7 @@ TacticalKnowledgePack.init();
             const statusBox = document.createElement('div');
             statusBox.id = 'slf-parser-status';
             statusBox.textContent = 'ожидание';
-            statusBox.style.cssText = 'color:#9f9;font-size:12px;';
+            statusBox.style.cssText = 'color:#9f9;font-size:12px;white-space:nowrap;flex:0 0 auto;overflow:visible;';
 
             const recBox = document.createElement('div');
 recBox.id = 'slf-parser-recommendation';
@@ -14453,6 +14834,14 @@ if (typeof window !== 'undefined') {
 
     const GENERATOR_VERSION = '5.61';
 
+    // #483: pre-LLM forced match-data refresh. Every advisor entry (button,
+    // chat send, chat retry) fetches one fresh desktop observation, builds the
+    // snapshot from it and reruns the rules BEFORE building the payload.
+    const LLM_REFRESH_TIMEOUT_MS = 5000;
+    const LLM_REFRESH_FAILED_TEXT = 'Не удалось обновить данные матча. Запрос к советнику не отправлен. Повторите попытку.';
+    const LLM_REFRESH_STALE_TACTIC_TEXT = 'Тактика изменилась во время обновления данных. Запрос не отправлен. Повторите попытку.';
+
+
     function getFallbackTargetTeam(snapshot) {
         const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
         if (!teams.length) return null;
@@ -15329,16 +15718,7 @@ if (typeof window !== 'undefined') {
         llmBtn.textContent = '🤖 LLM';
         llmBtn.title = 'Второе мнение от LLM по текущему состоянию матча. Только совет — тактика применяется только по явному клику.';
         llmBtn.style.cssText = 'padding:5px 8px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;cursor:pointer;';
-        llmBtn.onclick = async () => {
-            llmBtn.disabled = true;
-            try {
-                await requestLlmSecondOpinionFresh();
-            } catch (error) {
-                console.error('[SLF] LLM second opinion failed', error);
-            } finally {
-                llmBtn.disabled = false;
-            }
-        };
+        llmBtn.onclick = () => runLlmSecondOpinionButton();
 
         const status = document.getElementById('slf-parser-status');
         panel.insertBefore(llmBtn, status || null);
@@ -15515,15 +15895,193 @@ if (typeof window !== 'undefined') {
     // One chat turn = one advisor request carrying the WHOLE accumulated
     // dialogue. The answer still renders through the unchanged renderAnswer
     // (with the «Применить пресет» button) — nothing is applied automatically.
+    // #483: send/retry/button share one guarded transaction that refreshes the
+    // match data before the payload is built.
+
+    // User-facing text for a preflight (refresh/validation) failure. Advisor
+    // dispatch failures keep their own classification in requestLlmSecondOpinion.
+    function llmRefreshErrorText(error) {
+        const kind = error && error.kind;
+        switch (kind) {
+            case 'not_started':
+                return 'Матч ещё не начался — советник пока недоступен.';
+            case 'finished':
+                return 'Матч завершён — live-советы недоступны.';
+            case 'stale_tactic':
+                return LLM_REFRESH_STALE_TACTIC_TEXT;
+            case 'paused':
+                return 'Матч на паузе или статус недоступен. Обновите страницу и повторите попытку.';
+            default:
+                return LLM_REFRESH_FAILED_TEXT;
+        }
+    }
+
+    function llmRefreshRetryable(error) {
+        const kind = error && error.kind;
+        return kind !== 'not_started' && kind !== 'finished';
+    }
+
+    function currentMatchId() {
+        try {
+            return typeof MatchStateParser !== 'undefined' && typeof MatchStateParser.getGameId === 'function'
+                ? String(MatchStateParser.getGameId() || '')
+                : '';
+        } catch (_) {
+            return '';
+        }
+    }
+
+    function llmControlsSignature(tactic) {
+        try { return JSON.stringify(tactic || null); } catch (_) { return ''; }
+    }
+
+    function currentForeignTargetSignature() {
+        const selector = typeof document !== 'undefined' ? document.getElementById('slf-foreign-match-target') : null;
+        return selector ? String(selector.value || '') : '';
+    }
+
+    function setLlmControlsBusy(busy) {
+        if (typeof document === 'undefined') return;
+        for (const [id, prop] of [
+            ['slf-llm-second-opinion-btn', 'disabled'],
+            ['slf-llm-chat-send', 'disabled'],
+            ['slf-llm-chat-input', 'disabled']
+        ]) {
+            const node = document.getElementById(id);
+            if (node) node[prop] = busy === true;
+        }
+    }
+
+    function mountPreflightFailure(error, chat) {
+        if (typeof LLMSecondOpinion === 'undefined') return;
+        const html = LLMSecondOpinion.renderAnswer({
+            available: false,
+            error: llmRefreshErrorText(error)
+        });
+        LLMSecondOpinion.mountAnswer(chat && llmRefreshRetryable(error) ? llmChatRetryHtml(html) : html);
+    }
+
+    // #483 preflight: ONE fresh observation -> validated snapshot -> rules.
+    // Everything here is synchronous with respect to the guard acquired by the
+    // caller (no stale fallback, no cached snapshot).
+    async function llmAdvisorPreflight(gameId) {
+        const observation = await SnapshotEngine.fetchFreshObservation({ gameId, timeoutMs: LLM_REFRESH_TIMEOUT_MS });
+        if (!observation || String(observation.gameId) !== gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'identity changed after refresh');
+        }
+        // Recheck the URL identity before any build side effects.
+        if (currentMatchId() !== gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'match changed during refresh');
+        }
+
+        const controlsBefore = llmControlsSignature(safeGetCurrentTactic());
+        const targetBefore = currentForeignTargetSignature();
+
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build(observation));
+        if (!snapshot || String(snapshot.gameId || '') !== gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'snapshot identity mismatch');
+        }
+        snapshot.recommendationSource = 'llm_second_opinion';
+        snapshot.generatorVersion = GENERATOR_VERSION;
+
+        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.checkpoint && snapshot.matchOwnership !== 'foreign') {
+            await STATE.tacticalLabRuntime.checkpoint('llm_second_opinion', snapshot);
+        }
+        // Never continue into a different match after the checkpoint await.
+        if (currentMatchId() !== gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'match changed during checkpoint');
+        }
+
+        // Rules run on the fresh snapshot; the payload then reads the live
+        // controls. If controls or the selected foreign side moved across the
+        // checkpoint, rules and payload would describe different tactics/sides.
+        buildManualRecommendationHtml(snapshot);
+        const partial = !snapshot.ruleDecision;
+
+        const controlsAfter = llmControlsSignature(safeGetCurrentTactic());
+        const targetAfter = currentForeignTargetSignature();
+        if (controlsAfter !== controlsBefore || targetAfter !== targetBefore) {
+            throw slfMatchRefreshError('stale_tactic', 'tactics changed during refresh');
+        }
+        return { snapshot, partial };
+    }
+
+    let llmRefreshBusy = false;
+
+    // Shared guarded transaction used by the button, chat send and chat retry.
+    // Guarantees: one advisor POST at most, no cached answer on refresh failure,
+    // no duplicate dialogue turn, guard released in `finally`.
+    async function requestLlmSecondOpinionFresh(options = {}) {
+        const settings = options && typeof options === 'object' ? options : {};
+        const mode = settings.mode === 'send' || settings.mode === 'retry' ? settings.mode : 'button';
+        const chat = mode !== 'button';
+        const dialog = Array.isArray(settings.dialog) ? settings.dialog.slice() : [];
+        if (typeof LLMSecondOpinion === 'undefined' || typeof SnapshotEngine === 'undefined') return null;
+
+        // Single guard for button + send + retry; acquired before any await.
+        if (llmRefreshBusy || llmChatBusy) return null;
+        const gameId = settings.gameId != null && String(settings.gameId) !== ''
+            ? String(settings.gameId)
+            : currentMatchId();
+        if (!gameId) {
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+                available: false,
+                error: 'Диалог доступен только на странице матча'
+            }));
+            return null;
+        }
+
+        llmRefreshBusy = true;
+        llmChatBusy = true;
+        setLlmControlsBusy(true);
+        renderLlmChatWindow(gameId);
+        try {
+            let preflight;
+            try {
+                preflight = await llmAdvisorPreflight(gameId);
+            } catch (error) {
+                console.error('[SLF] LLM fresh-data refresh failed', error);
+                mountPreflightFailure(error, chat);
+                return null;
+            }
+
+            // Separate stage: the advisor's own error classification (inside
+            // requestLlmSecondOpinion) is preserved unchanged.
+            const answer = await requestLlmSecondOpinion(preflight.snapshot, dialog, {
+                partial: preflight.partial,
+                chat
+            });
+            if (chat && answer && answer.available === true) {
+                const summary = typeof answer.reason === 'string' && answer.reason.trim()
+                    ? answer.reason
+                    : `${answer.presetLabel || answer.preset || 'совет'} (уверенность: ${answer.confidence || '?'})`;
+                rememberLlmDialogTurn(gameId, 'assistant', summary, Date.now());
+            }
+            return answer;
+        } finally {
+            llmRefreshBusy = false;
+            llmChatBusy = false;
+            setLlmControlsBusy(false);
+            // No late mount in a different game.
+            if (currentMatchId() === gameId) renderLlmChatWindow(gameId);
+        }
+    }
+
+    async function runLlmSecondOpinionButton() {
+        try {
+            await requestLlmSecondOpinionFresh({ mode: 'button' });
+        } catch (error) {
+            console.error('[SLF] LLM second opinion failed', error);
+        }
+    }
+
     async function sendLlmChatTurn() {
-        if (llmChatBusy) return null;
+        if (llmRefreshBusy || llmChatBusy) return null;
         if (typeof LLMSecondOpinion === 'undefined' || typeof SnapshotEngine === 'undefined') return null;
         const input = document.getElementById('slf-llm-chat-input');
         const text = input && typeof input.value === 'string' ? input.value.trim() : '';
         if (!text) return null; // blank input is ignored
-        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
-        if (!snapshot) return null;
-        const gameId = snapshot.gameId ? String(snapshot.gameId) : '';
+        const gameId = currentMatchId();
         if (!gameId) {
             // Without a match id the dialogue would be shared across matches
             // and sent with gameId:null — refuse honestly, store nothing.
@@ -15533,20 +16091,20 @@ if (typeof window !== 'undefined') {
             }));
             return null;
         }
+        // Record the user turn exactly once, before the refresh; a failed
+        // refresh keeps it so «Повторить» can resend the same dialogue.
         const dialog = rememberLlmDialogTurn(gameId, 'user', text, Date.now());
         if (input) input.value = '';
-        return runLlmChatRequest(gameId, snapshot, dialog);
+        return requestLlmSecondOpinionFresh({ mode: 'send', gameId, dialog });
     }
 
-    // #471: explicit retry of the LAST dialogue — the stored turns go out
-    // as-is, no new user turn is appended (a retry never duplicates the
-    // user's words). Same busy gating and render path as a normal send.
+    // #471/#483: explicit retry of the LAST dialogue — the stored turns go out
+    // as-is, no new user turn is appended (a retry never duplicates the user's
+    // words). Same guard and render path as a normal send.
     async function retryLlmChatTurn() {
-        if (llmChatBusy) return null;
+        if (llmRefreshBusy || llmChatBusy) return null;
         if (typeof LLMSecondOpinion === 'undefined' || typeof SnapshotEngine === 'undefined') return null;
-        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
-        if (!snapshot) return null;
-        const gameId = snapshot.gameId ? String(snapshot.gameId) : '';
+        const gameId = currentMatchId();
         if (!gameId) return null; // no match id -> nothing to resend
         const dialog = llmDialogForGame(gameId).slice();
         if (!dialog.length || dialog[dialog.length - 1].role !== 'user') {
@@ -15554,74 +16112,7 @@ if (typeof window !== 'undefined') {
             // turn must be the unanswered user remark.
             return null;
         }
-        return runLlmChatRequest(gameId, snapshot, dialog);
-    }
-
-    // Request+render part shared by Send and «Повторить»: one busy-gated
-    // advisor request with the given dialogue; an assistant turn is recorded
-    // only on available:true, a failure adds no fake turn.
-    async function runLlmChatRequest(gameId, snapshot, dialog) {
-        llmChatBusy = true;
-        renderLlmChatWindow(gameId);
-        let answer = null;
-        try {
-            answer = await requestLlmSecondOpinionFresh({ snapshot, dialog, chat: true });
-        } catch (error) {
-            console.error('[SLF] LLM chat request failed', error);
-        } finally {
-            llmChatBusy = false;
-        }
-        if (answer && answer.available === true) {
-            // Honest assistant turn: the model's own reason (or a compact
-            // preset/confidence summary). A failed request adds no fake turn.
-            const summary = typeof answer.reason === 'string' && answer.reason.trim()
-                ? answer.reason
-                : `${answer.presetLabel || answer.preset || 'совет'} (уверенность: ${answer.confidence || '?'})`;
-            rememberLlmDialogTurn(gameId, 'assistant', summary, Date.now());
-        }
-        renderLlmChatWindow(gameId);
-        return answer;
-    }
-
-    // Ф2a (#441): self-sufficient entry — the LLM button no longer depends on
-    // a manual hint click. Builds a fresh snapshot, runs the SAME rule ladder
-    // the manual hint runs (RecommendationEngine.make stamps
-    // snapshot.ruleDecision) and feeds it straight into the advisor flow.
-    // Phase 1 (#459): accepts an optional prebuilt snapshot and dialogue so the
-    // chat reuses this exact path instead of duplicating snapshot logic.
-    async function requestLlmSecondOpinionFresh(options = {}) {
-        const settings = options && typeof options === 'object' ? options : {};
-        const dialog = Array.isArray(settings.dialog) ? settings.dialog : [];
-        if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined'
-            || typeof SnapshotEngine === 'undefined') return null;
-        const snapshot = settings.snapshot || normalizeForeignSnapshot(SnapshotEngine.build());
-        if (!snapshot) {
-            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
-                available: false,
-                error: 'Snapshot матча недоступен'
-            }));
-            return null;
-        }
-        snapshot.recommendationSource = 'llm_second_opinion';
-        snapshot.generatorVersion = GENERATOR_VERSION;
-        // Ф2c recovery (#441): the retired manual hint was the only lab
-        // checkpoint on the live path; without it the lab activation never
-        // records lastSeenMinute and the exit loses exposure (toMinute /
-        // durationMinutes null). Record presence from the LLM entry, under the
-        // same guard as the manual path — BEFORE the advisor request, so a
-        // failed LLM call still records that the user was present.
-        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.checkpoint && snapshot.matchOwnership !== 'foreign') {
-            await STATE.tacticalLabRuntime.checkpoint('llm_second_opinion', snapshot);
-        }
-        // Same pipeline the manual hint runs; make() stamps ruleDecision when
-        // the data supports one.
-        buildManualRecommendationHtml(snapshot);
-        // #461: an early match (phase collect) may have no rules decision yet.
-        // The advisor still gets a marked partial payload instead of a refusal;
-        // its answer is shown with the honest preliminary marker and is never
-        // auto-applied.
-        const partial = !snapshot.ruleDecision;
-        return requestLlmSecondOpinion(snapshot, dialog, { partial, chat: settings.chat === true });
+        return requestLlmSecondOpinionFresh({ mode: 'retry', gameId, dialog });
     }
 
     // Ф2a (#441): one-click apply of the suggested preset. Runs ONLY on an
@@ -15825,6 +16316,21 @@ if (typeof window !== 'undefined') {
     };
 
     mount();
+
+    // Test seam: same convention as `window.SLFLLMSecondOpinion`. Exposes the
+    // guarded transaction entry points to the vm/browser harness; it grants no
+    // production behavior — callers still go through the DOM controls.
+    if (typeof window !== 'undefined') {
+        window.SLFStrategyTaskAInternals = {
+            requestLlmSecondOpinionFresh,
+            runLlmSecondOpinionButton,
+            sendLlmChatTurn,
+            retryLlmChatTurn,
+            llmDialogForGame,
+            rememberLlmDialogTurn,
+            llmRefreshErrorText
+        };
+    }
 })();
 
 // ============================================================
@@ -16034,9 +16540,9 @@ if (typeof window !== 'undefined') {
     }
 
     const originalBuild = SnapshotEngine.build.bind(SnapshotEngine);
-    SnapshotEngine.build = function buildWithNormalizedTransitionSource() {
+    SnapshotEngine.build = function buildWithNormalizedTransitionSource(...args) {
         const hint = consumeTransitionSourceHint();
-        return normalizeTransitionSources(originalBuild(), hint);
+        return normalizeTransitionSources(originalBuild(...args), hint);
     };
 
     const originalSendMatchResult = SnapshotEngine.sendMatchResult.bind(SnapshotEngine);
@@ -17096,8 +17602,8 @@ if (typeof window !== 'undefined') {
         }, 0);
     }
 
-    SnapshotEngine.build = function buildWithTacticalPhaseV2() {
-        const snapshot = buildBeforeV2();
+    SnapshotEngine.build = function buildWithTacticalPhaseV2(...args) {
+        const snapshot = buildBeforeV2(...args);
         if (!snapshot || !location.pathname.includes('/game.php')) return snapshot;
         if (!snapshot.myTeam || snapshot.matchOwnership === 'foreign') return snapshot;
         const phaseResult = reconcilePhase(snapshot);
@@ -29267,13 +29773,21 @@ const SLFTeam4FormSavedChoiceNotice = (() => {
         document.head.appendChild(style);
     }
 
-    function parseSavedChoiceState(html) {
-        const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    function readChoiceDocument(doc) {
         const expireBox = doc.querySelector('#player_form #coach_set .coach_expire');
         const expireNode = expireBox?.querySelector('span[data-expire]') || expireBox?.querySelector('span');
         const checked = [...doc.querySelectorAll('#player_form input.coachd:checked')];
         const sourceText = expireNode?.textContent?.replace(/\s+/g, ' ').trim() || expireBox?.textContent?.replace(/\s+/g, ' ').trim() || '';
-        return { savedUntil: sourceText.match(/\b\d{2}[-./]\d{2}[-./]\d{4}\b/)?.[0] || '', checkedCount: checked.length };
+        return {
+            savedUntil: sourceText.match(/\b\d{2}[-./]\d{2}[-./]\d{4}\b/)?.[0] || '',
+            checkedPids: checked.map(input => String(input.value || '').trim()).filter(Boolean)
+        };
+    }
+
+    function parseSavedChoiceState(html) {
+        const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+        const state = readChoiceDocument(doc);
+        return { savedUntil: state.savedUntil, checkedCount: state.checkedPids.length };
     }
 
     function render(state) {
@@ -29300,7 +29814,7 @@ const SLFTeam4FormSavedChoiceNotice = (() => {
         }
     }
 
-    const api = { FORM_URL, FETCH_URL, getMountTarget, parseSavedChoiceState, render, start };
+    const api = { FORM_URL, FETCH_URL, getMountTarget, readChoiceDocument, parseSavedChoiceState, render, start };
     window.SLFTeam4FormSavedChoiceNotice = api;
     return api;
 })();
@@ -29658,6 +30172,1094 @@ SLFTeam4FormSavedChoiceNotice.start();
     start();
 })();
 // <<< src/modules/team-management/team4-form-saved-choice-notice.js
+
+
+// >>> src/modules/team-management/weekly-form-training.js
+// Team Management: weekly background form training (owner decision 2026-11-26)
+// Runs on any top-level https://slf.fm page, once per week, inside one cross-tab
+// navigator.locks election. Reads the starting XI, ranks it (TOP 5 BY FORM, then
+// TOP 3 BY ТТД) and submits the three coach[] picks for every eligible club.
+// HOME TEAM IS DYNAMIC: the active team is captured at cycle start and restored.
+// No page-global save function and no debug export are provided.
+
+const SLFWeeklyFormTraining = (() => {
+    'use strict';
+
+    const LOG_PREFIX = '[SLF Weekly Form Training]';
+    const EXPECTED_USER_ID = '6945';
+    const LOCK_NAME = 'slf:weekly-form-training:v1';
+    const STATE_KEY_PREFIX = 'slf_weekly_form_training_v1:';
+    const ACTIVITY_KEY = 'slf_weekly_form_activity_v1';
+    const ACTIVITY_CHANNEL = 'slf:weekly-form-training:activity';
+    const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+    const RESUME_WINDOW_MS = 24 * 60 * 60 * 1000;
+    const QUIET_MS = 120 * 1000;
+    const RETRY_MS = 15 * 60 * 1000;
+    const MAX_RETRIES = 2;
+    const WAKE_MS = 5 * 60 * 1000;
+    const FORM_URL = '/team4.php?action=form&date=1';
+    const LINEUP_URL = '/team4.php?action=lineup';
+    const TRAIN_TEAM_URL = '/train.php?action=team';
+    const PLAYERSTATS_URL = '/team4.php?action=playerstats';
+    // Live-confirmed gamelist endpoint (GET, no body). Returns JSON
+    // {"list":[[gid, "/game.php?id=<gid>", ...], ...]}.
+    const GAMELIST_URL = '/team4.php?action=playerstats&team_id=&season=0&gamelist&gametype%5B%5D=3';
+    const GAMESTAT_URL = '/team4.php?action=playerstats&team_id=&season=0&gamestat';
+    const STAT_ROW_LENGTH = 68;
+    // Captured contract: row[0] is the PID, row[63] is «ТТД всего».
+    const TTD_MAPPING = Object.freeze({ label: 'ТТД всего', index: 63 });
+
+    let started = false;
+    let wakeTimer = 0;
+    let activityChannel = null;
+    let memoryActivity = 0;
+    let lastRecordedActivity = 0;
+
+    const norm = value => String(value == null ? '' : value).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+
+    function report(code, detail) {
+        try {
+            if (detail === undefined) console.warn(`${LOG_PREFIX} ${code}`);
+            else console.warn(`${LOG_PREFIX} ${code}`, detail);
+        } catch (_) {}
+    }
+
+    function errorCode(error) {
+        return String(error && (error.code || error.name) || 'error');
+    }
+
+    function isTopLevel() {
+        try { return window.top === window.self; } catch (_) { return false; }
+    }
+
+    function isWriterOrigin() {
+        try { return location.origin === 'https://slf.fm'; } catch (_) { return false; }
+    }
+
+    function pageWindow() {
+        try { if (typeof unsafeWindow !== 'undefined' && unsafeWindow) return unsafeWindow; } catch (_) {}
+        return window;
+    }
+
+    function readLoginIdFromDom() {
+        const pw = pageWindow();
+        try { if (pw && pw.foot_login_id != null) return String(pw.foot_login_id); } catch (_) {}
+        try { if (typeof window !== 'undefined' && window && window.foot_login_id != null) return String(window.foot_login_id); } catch (_) {}
+        try {
+            if (typeof document !== 'undefined' && document && document.scripts) {
+                for (const script of document.scripts) {
+                    const match = /(?:^|[^A-Za-z0-9_$])(?:let|const|var)\s+foot_login_id\s*=\s*(\d+)/.exec(script.textContent || '');
+                    if (match) return match[1];
+                }
+            }
+        } catch (_) {}
+        return '';
+    }
+
+    function readLoginIdFromHtml(html) {
+        const match = /(?:^|[^A-Za-z0-9_$])(?:let|const|var)\s+foot_login_id\s*=\s*(\d+)/.exec(String(html || ''));
+        return match ? match[1] : '';
+    }
+
+    function identityOkFromDom() {
+        return readLoginIdFromDom() === EXPECTED_USER_ID;
+    }
+
+    function identityOkFromHtml(html) {
+        return readLoginIdFromHtml(html) === EXPECTED_USER_ID;
+    }
+
+    function isNewDarkDesign(doc) {
+        try {
+            const body = doc && doc.body;
+            if (!(body && body.classList && body.classList.contains('dark-theme'))) return false;
+            return Boolean(doc.querySelector('.fm-topbar, .fm-stage, .content-ui__wrapper'));
+        } catch (_) { return false; }
+    }
+
+    function admissionOk() {
+        if (!isTopLevel() || !isWriterOrigin()) return false;
+        if (typeof document === 'undefined' || document.readyState === 'loading') return false;
+        if (!identityOkFromDom()) return false;
+        return isNewDarkDesign(document);
+    }
+
+    function extractPidFromHref(href) {
+        const match = /[?&]id=(\d+)/.exec(String(href || ''));
+        return match && match[1] !== '0' ? match[1] : '';
+    }
+
+    function parseSwitcher(doc) {
+        const nodes = [...doc.querySelectorAll('div.fmc-tabs-host > div.lt3.fmc-tabs > div[data-team]')];
+        const seen = new Set();
+        const result = [];
+        for (const node of nodes) {
+            const id = String(node.getAttribute('data-team') || '').trim();
+            if (!/^\d+$/.test(id) || id === '0' || seen.has(id)) continue;
+            if (!/setgo\s*\(/.test(String(node.getAttribute('onclick') || ''))) continue;
+            seen.add(id);
+            result.push({ id, active: node.classList.contains('b') });
+        }
+        return result;
+    }
+
+    function readActiveTeam(doc) {
+        const gc = doc.querySelector('#globalcontent');
+        const ids = [...String(gc && gc.className || '').matchAll(/user-custom__team-(\d+)/g)]
+            .map(match => match[1]).filter(id => id !== '0');
+        // Exactly one unique non-zero team marker is required: two different
+        // active-team IDs are ambiguous and must abort, never "last wins".
+        const unique = [...new Set(ids)];
+        if (unique.length !== 1) return '';
+        const classId = unique[0];
+        const nav = doc.querySelector('.fmc-navclub[href*="/roster.php?id="]');
+        const navId = extractPidFromHref(nav && nav.getAttribute('href'));
+        if (!classId || !navId || classId !== navId) return '';
+        return classId;
+    }
+
+    function parseLineupPids(doc) {
+        const pitch = doc.querySelector('.fcpitch');
+        if (!pitch) return { ok: false, reason: 'pitch-missing' };
+        const links = [...pitch.querySelectorAll('a[href*="player.php?action=view&id="]')];
+        const pids = links.map(link => extractPidFromHref(link.getAttribute('href'))).filter(Boolean);
+        if (links.length !== 11 || pids.length !== 11 || new Set(pids).size !== 11) {
+            return { ok: false, reason: 'xi-incomplete' };
+        }
+        return { ok: true, pids };
+    }
+
+    function parseStrictNumber(text) {
+        const cleaned = String(text == null ? '' : text).replace(/\u00a0/g, ' ').replace(/\s+/g, '').replace(/%$/, '');
+        if (!/^[+-]?\d+(?:[.,]\d+)?$/.test(cleaned)) return null;
+        const value = Number(cleaned.replace(',', '.'));
+        return Number.isFinite(value) ? value : null;
+    }
+
+    function parseDateText(text) {
+        const match = /\b(\d{2})[-./](\d{2})[-./](\d{4})\b/.exec(String(text || ''));
+        if (!match) return null;
+        const day = Number(match[1]);
+        const month = Number(match[2]);
+        const year = Number(match[3]);
+        if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+        return { raw: match[0], epoch: Date.UTC(year, month - 1, day), day, month, year };
+    }
+
+    function parseDateHeader(value) {
+        const parsed = Date.parse(String(value || ''));
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function expiryIsFuture(expiry, serverNow) {
+        if (!expiry || !serverNow) return false;
+        const now = new Date(serverNow);
+        const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+        return expiry.epoch > today;
+    }
+
+    function parseEligibility(doc) {
+        const table = doc.querySelector('table.tt-base');
+        if (!table) return { blocked: true, reason: 'tt-base-missing' };
+        const rows = [...table.querySelectorAll('tr')];
+        const currentCell = [...table.querySelectorAll('th,td')].find(cell => cell.classList.contains('is-current'));
+        if (!currentCell) return { blocked: true, reason: 'current-column-missing' };
+        const column = currentCell.cellIndex;
+        if (column < 0) return { blocked: true, reason: 'current-column-missing' };
+        const formRow = rows.find(row => /Тренировки\s+формы\s+игроков/i.test(norm(row.textContent)));
+        if (!formRow) return { blocked: true, reason: 'form-training-row-missing' };
+        const cell = formRow.children[column];
+        if (!cell) return { blocked: true, reason: 'capacity-missing' };
+        const capacity = parseStrictNumber(cell.textContent);
+        if (capacity === null || !Number.isInteger(capacity)) return { blocked: true, reason: 'capacity-unparseable' };
+        return { eligible: capacity === 3, ineligible: capacity !== 3, capacity };
+    }
+
+    function parseFormDocument(doc) {
+        const root = doc.querySelector('#player_form') || doc;
+        const expireBox = root.querySelector('#coach_set .coach_expire') || root.querySelector('.coach_expire');
+        const expiry = parseDateText(expireBox && expireBox.textContent);
+        const submit = root.querySelector('input[name="coach_set"][type="submit"]')
+            || root.querySelector('input[name="coach_set"]')
+            || root.querySelector('button[name="coach_set"]');
+        const submitValue = submit ? String(submit.getAttribute('value') || submit.value || '').trim() : '';
+        const controls = [...root.querySelectorAll('input[name="coach[]"], input.coachd')].filter(element => {
+            const type = String(element.getAttribute('type') || element.type || 'checkbox').toLowerCase();
+            return type === 'checkbox' && !element.disabled;
+        });
+        const usablePids = new Set(controls.map(element => String(element.getAttribute('value') || element.value || '').trim()).filter(Boolean));
+        const checked = [...root.querySelectorAll('input.coachd:checked, input[name="coach[]"]:checked, input.coachd[checked], input[name="coach[]"][checked]')];
+        const checkedPids = [...new Set(checked.map(element => String(element.getAttribute('value') || element.value || '').trim()).filter(Boolean))];
+        const needBase = Boolean(doc.querySelector('div.need_base[data-base="1"]'));
+        const tables = [...root.querySelectorAll('table')];
+        let formTable = null;
+        let headerRow = null;
+        for (const table of tables) {
+            const candidate = [...table.querySelectorAll('tr')]
+                .find(row => [...row.children].some(cell => /ПОСЛЕ/i.test(norm(cell.textContent))));
+            if (candidate) { formTable = table; headerRow = candidate; break; }
+        }
+        let formMap = null;
+        let formReason = '';
+        if (!headerRow) {
+            formReason = 'after-column-missing';
+        } else {
+            const afterIndex = [...headerRow.children].findIndex(cell => /ПОСЛЕ/i.test(norm(cell.textContent)));
+            if (afterIndex < 0) {
+                formReason = 'after-column-missing';
+            } else {
+                formMap = new Map();
+                for (const row of [...formTable.querySelectorAll('tr')]) {
+                    if (row === headerRow) continue;
+                    const link = row.querySelector('a[href*="player.php?action=view&id="]') || row.querySelector('a[href*="player.php"]');
+                    const pid = extractPidFromHref(link && link.getAttribute('href'));
+                    if (!pid) continue;
+                    const value = parseStrictNumber(row.children[afterIndex] && row.children[afterIndex].textContent);
+                    if (value === null) continue;
+                    if (formMap.has(pid)) { formReason = `duplicate-form:${pid}`; break; }
+                    formMap.set(pid, value);
+                }
+            }
+        }
+        return { expiry, expireText: norm(expireBox && expireBox.textContent), submitValue, controls, usablePids, checkedPids, needBase, formMap, formReason };
+    }
+
+    function extractAssignedObject(text, name) {
+        const source = String(text || '');
+        const pattern = new RegExp(`(?:^|[^A-Za-z0-9_$])(?:var|let|const|window\\.)?\\s*${name}\\s*=\\s*`, 'm');
+        const match = pattern.exec(source);
+        if (!match) return { found: false };
+        let index = match.index + match[0].length;
+        while (index < source.length && /\s/.test(source[index])) index++;
+        if (source.startsWith('null', index)) return { found: true, literal: null };
+        if (source[index] !== '{') return { found: false };
+        let depth = 0;
+        let quote = '';
+        let escaped = false;
+        for (let i = index; i < source.length; i++) {
+            const char = source[i];
+            if (quote) {
+                if (escaped) escaped = false;
+                else if (char === '\\') escaped = true;
+                else if (char === quote) quote = '';
+                continue;
+            }
+            if (char === '"' || char === "'" || char === '`') { quote = char; continue; }
+            if (char === '{') depth++;
+            else if (char === '}') {
+                depth--;
+                if (depth === 0) return { found: true, literal: source.slice(index, i + 1) };
+            }
+        }
+        return { found: false };
+    }
+
+    function parseMatchDayFields(literal) {
+        const read = name => {
+            const match = new RegExp(`\\b${name}\\s*:\\s*['"]?(-?\\d+)['"]?`).exec(literal);
+            return match ? Number(match[1]) : undefined;
+        };
+        return { final: read('final'), online: read('online'), unix: read('unix') };
+    }
+
+    function normalizeMatchDay(today, next) {
+        const day = value => {
+            if (value === null || value === undefined) return null;
+            if (typeof value !== 'object') return undefined;
+            const final = Number(value.final);
+            const online = Number(value.online);
+            const unix = Number(value.unix);
+            if (!Number.isFinite(final) || !Number.isFinite(online) || !Number.isFinite(unix)) return undefined;
+            return { final, online, unix };
+        };
+        const todayDay = day(today);
+        const nextDay = day(next);
+        if (todayDay === undefined || nextDay === undefined) return { known: false };
+        return { known: true, today: todayDay, next: nextDay };
+    }
+
+    function readMatchDayFromText(text) {
+        const today = extractAssignedObject(text, 'fm_md_today');
+        const next = extractAssignedObject(text, 'fm_md_next');
+        if (!today.found || !next.found) return { known: false };
+        return normalizeMatchDay(
+            today.literal === null ? null : parseMatchDayFields(today.literal),
+            next.literal === null ? null : parseMatchDayFields(next.literal)
+        );
+    }
+
+    function readMatchDayFromWindow() {
+        const pw = pageWindow();
+        try {
+            if (!('fm_md_today' in pw) || !('fm_md_next' in pw)) return { known: false };
+            return normalizeMatchDay(pw.fm_md_today, pw.fm_md_next);
+        } catch (_) { return { known: false }; }
+    }
+
+    function readMatchDayFromDocument(doc, text) {
+        if (doc === document) {
+            const fromWindow = readMatchDayFromWindow();
+            if (fromWindow.known) return fromWindow;
+        }
+        return readMatchDayFromText(text || (doc && doc.documentElement && doc.documentElement.outerHTML) || '');
+    }
+
+    function matchGuard(matchDay, serverNow) {
+        if (!matchDay || !matchDay.known) return { safe: false, reason: 'matchday-unknown' };
+        const today = matchDay.today;
+        const next = matchDay.next;
+        if (today !== null && today.final !== 1) return { safe: false, reason: 'match-in-progress' };
+        if (next === null) return { safe: true };
+        if (next.online === 1) return { safe: false, reason: 'next-match-online' };
+        const nextMs = next.unix > 1e12 ? next.unix : next.unix * 1000;
+        if (!(nextMs > serverNow)) return { safe: false, reason: 'next-match-due' };
+        return { safe: true };
+    }
+
+    function noteExternalActivity(ts) {
+        const value = Number(ts) || 0;
+        if (value > memoryActivity) memoryActivity = value;
+    }
+
+    function recordActivity(ts) {
+        const value = Number(ts) || Date.now();
+        if (value > memoryActivity) memoryActivity = value;
+        if (value - lastRecordedActivity < 1000) return;
+        lastRecordedActivity = value;
+        try { if (typeof GM_setValue === 'function') GM_setValue(ACTIVITY_KEY, value); } catch (_) {}
+        try { localStorage.setItem(ACTIVITY_KEY, String(value)); } catch (_) {}
+        try { if (activityChannel) activityChannel.postMessage(value); } catch (_) {}
+    }
+
+    function lastActivity() {
+        let gm = 0;
+        let ls = 0;
+        try { if (typeof GM_getValue === 'function') gm = Number(GM_getValue(ACTIVITY_KEY, 0)) || 0; } catch (_) {}
+        try { ls = Number(localStorage.getItem(ACTIVITY_KEY)) || 0; } catch (_) {}
+        return Math.max(gm, ls, memoryActivity);
+    }
+
+    function hasActiveEdit() {
+        try {
+            const element = document.activeElement;
+            if (!element) return false;
+            const tag = String(element.tagName || '').toUpperCase();
+            return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || element.isContentEditable === true;
+        } catch (_) { return true; }
+    }
+
+    function activityGuard(now) {
+        if (hasActiveEdit()) return false;
+        return now - lastActivity() >= QUIET_MS;
+    }
+
+    function installActivityTracking() {
+        const onLocal = event => {
+            if (event && event.isTrusted === false) return;
+            recordActivity(Date.now());
+        };
+        ['pointerdown', 'keydown', 'wheel', 'input', 'submit', 'focusin'].forEach(type => {
+            try { window.addEventListener(type, onLocal, { capture: true, passive: true }); } catch (_) {}
+        });
+        try {
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) recordActivity(Date.now()); });
+        } catch (_) {}
+        try {
+            window.addEventListener('storage', event => {
+                if (event && event.key === ACTIVITY_KEY) noteExternalActivity(Number(event.newValue) || 0);
+            });
+        } catch (_) {}
+        if (typeof BroadcastChannel === 'function') {
+            try {
+                activityChannel = new BroadcastChannel(ACTIVITY_CHANNEL);
+                activityChannel.onmessage = event => noteExternalActivity(Number(event.data) || 0);
+            } catch (_) { activityChannel = null; }
+        }
+    }
+
+    function stateKey(userId) {
+        return `${STATE_KEY_PREFIX}${userId}`;
+    }
+
+    function defaultState(userId) {
+        return { v: 1, userId, startedAt: 0, lastCompletedAt: 0, completedLocalAt: 0, retryAfter: 0, retryCount: 0, restorePending: false, phase: 'idle', homeTeamId: '', clubs: {} };
+    }
+
+    const CLUB_STATUSES = new Set(['verified', 'ineligible', 'blocked', 'uncertain', 'posting']);
+
+    function isValidClubRecord(record) {
+        if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
+        if (typeof record.status !== 'string' || !CLUB_STATUSES.has(record.status)) return false;
+        if (record.reason !== undefined && typeof record.reason !== 'string') return false;
+        if (record.intendedPids !== undefined) {
+            if (!Array.isArray(record.intendedPids)) return false;
+            if (!record.intendedPids.every(pid => typeof pid === 'string' && /^\d+$/.test(pid))) return false;
+        }
+        if (record.attemptAt !== undefined && (!Number.isFinite(Number(record.attemptAt)) || Number(record.attemptAt) < 0)) return false;
+        for (const key of ['priorExpiry', 'observedExpiry']) {
+            if (record[key] !== undefined && typeof record[key] !== 'string') return false;
+        }
+        if (record.extensionProven !== undefined && typeof record.extensionProven !== 'boolean') return false;
+        return true;
+    }
+
+    function isValidState(value, userId) {
+        if (!value || typeof value !== 'object') return false;
+        if (value.v !== 1 || String(value.userId) !== String(userId)) return false;
+        for (const key of ['startedAt', 'lastCompletedAt', 'retryAfter']) {
+            if (!Number.isFinite(Number(value[key])) || Number(value[key]) < 0) return false;
+        }
+        if (value.retryCount !== undefined && (!Number.isFinite(Number(value.retryCount)) || Number(value.retryCount) < 0)) return false;
+        if (value.completedLocalAt !== undefined && (!Number.isFinite(Number(value.completedLocalAt)) || Number(value.completedLocalAt) < 0)) return false;
+        if (typeof value.restorePending !== 'boolean') return false;
+        if (typeof value.phase !== 'string') return false;
+        if (typeof value.homeTeamId !== 'string') return false;
+        if (!value.clubs || typeof value.clubs !== 'object' || Array.isArray(value.clubs)) return false;
+        // Fail closed: a single malformed per-club record makes the whole state
+        // untrustworthy (it could drive an unwanted switch/POST), so reject it.
+        for (const record of Object.values(value.clubs)) {
+            if (!isValidClubRecord(record)) return false;
+        }
+        return true;
+    }
+
+    function readState(userId) {
+        let raw;
+        try { raw = localStorage.getItem(stateKey(userId)); } catch (_) { return { status: 'unavailable' }; }
+        if (!raw) return { status: 'missing' };
+        let parsed;
+        try { parsed = JSON.parse(raw); } catch (_) { return { status: 'malformed' }; }
+        if (!isValidState(parsed, userId)) return { status: 'malformed' };
+        parsed.retryCount = Number(parsed.retryCount) || 0;
+        return { status: 'ok', state: parsed };
+    }
+
+    function persistState(state) {
+        const key = stateKey(state.userId);
+        const serialized = JSON.stringify(state);
+        try {
+            localStorage.setItem(key, serialized);
+            if (localStorage.getItem(key) !== serialized) throw new Error('read-back-mismatch');
+        } catch (_) {
+            const error = new Error('state-persist-failed');
+            error.code = 'state-persist-failed';
+            throw error;
+        }
+    }
+
+    function safePersist(state) {
+        try { persistState(state); return true; } catch (_) { return false; }
+    }
+
+    function isDue(state, now) {
+        if (!state) return true;
+        if (state.lastCompletedAt > now || state.startedAt > now) return false;
+        if (state.retryAfter && now < state.retryAfter) return false;
+        if (!state.lastCompletedAt) return true;
+        return now - state.lastCompletedAt >= WEEK_MS;
+    }
+
+    function isDueCheap(state, now) {
+        if (!state) return true;
+        if (state.lastCompletedAt > now || state.startedAt > now) return false;
+        if (state.retryAfter && now < state.retryAfter) return false;
+        // Advisory precheck only. The weekly cadence is decided by the
+        // authoritative server clock in isDue(state, discovery.serverNow). This
+        // precheck may skip an unnecessary discovery probe, but it compares a
+        // LOCAL completion stamp against the LOCAL clock, so an absolute clock
+        // offset (lag) can never hide a server-due cycle. Without a local anchor
+        // (legacy/seeded state) always probe and let the server decide.
+        const anchor = Number(state.completedLocalAt) || 0;
+        if (!state.lastCompletedAt || !anchor) return true;
+        return now - anchor >= WEEK_MS;
+    }
+
+    function appendCacheBuster(url) {
+        return `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`;
+    }
+
+    async function httpGet(url, options = {}) {
+        const target = options.cacheBust ? appendCacheBuster(url) : url;
+        const init = { credentials: 'include', cache: 'no-store', redirect: 'follow' };
+        if (options.headers) init.headers = options.headers;
+        const response = await fetch(target, init);
+        const text = await response.text();
+        return { ok: response.ok, status: response.status, text, serverNow: parseDateHeader(response.headers.get('date')) };
+    }
+
+    async function httpPostForm(url, body) {
+        const response = await fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            cache: 'no-store',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body
+        });
+        const text = await response.text();
+        return { ok: response.ok, status: response.status, text, serverNow: parseDateHeader(response.headers.get('date')) };
+    }
+
+    async function gotoTeam(teamId) {
+        let response;
+        try {
+            // Live-confirmed switch: jQuery same-origin XHR carries the
+            // X-Requested-With header and a todo flag; GET is a session mutation.
+            response = await httpGet(
+                `/ajax/userset.php?action=goto&idteam=${encodeURIComponent(teamId)}&todo=0`,
+                { cacheBust: true, headers: { 'X-Requested-With': 'XMLHttpRequest' } }
+            );
+        } catch (_) {
+            return { ok: false, reason: 'goto-transport' };
+        }
+        if (!response.ok) return { ok: false, reason: `goto-http-${response.status}`, serverNow: response.serverNow };
+        let json;
+        try { json = JSON.parse(response.text); } catch (_) { return { ok: false, reason: 'goto-json', serverNow: response.serverNow }; }
+        if (!json || typeof json !== 'object') return { ok: false, reason: 'goto-json', serverNow: response.serverNow };
+        return { ok: true, json, serverNow: response.serverNow };
+    }
+
+    function extractGameIds(text) {
+        const source = String(text || '');
+        const ids = new Set();
+        const add = value => {
+            const id = String(value == null ? '' : value).trim();
+            if (/^\d+$/.test(id) && id !== '0') ids.add(id);
+        };
+        for (const match of source.matchAll(/gamechoice(?:\[\]|%5B%5D)["']?\s*(?:value=["']|:\s*["']?)(\d+)/gi)) add(match[1]);
+        for (const match of source.matchAll(/game\.php\?id=(\d+)/gi)) add(match[1]);
+        for (const match of source.matchAll(/data-game(?:-id)?=["'](\d+)["']/gi)) add(match[1]);
+        try {
+            const walk = value => {
+                if (Array.isArray(value)) {
+                    // Gamelist rows are positional: [gid, "/game.php?id=<gid>", ...].
+                    if (value.length && /^\d+$/.test(String(value[0] == null ? '' : value[0]).trim())) add(value[0]);
+                    value.forEach(walk);
+                    return;
+                }
+                if (value && typeof value === 'object') {
+                    for (const key of ['id', 'game_id', 'gameId', 'gid']) if (value[key] != null) add(value[key]);
+                    Object.values(value).forEach(walk);
+                }
+            };
+            walk(JSON.parse(source));
+        } catch (_) {}
+        return [...ids];
+    }
+
+    async function fetchTtd() {
+        let page;
+        try { page = await httpGet(PLAYERSTATS_URL, { cacheBust: true }); } catch (_) { return { ok: false, reason: 'playerstats-transport' }; }
+        let serverNow = page.serverNow;
+        if (!page.ok) return { ok: false, reason: 'playerstats-http', serverNow };
+        let gids = [];
+        try {
+            const list = await httpGet(GAMELIST_URL, { cacheBust: true });
+            serverNow = list.serverNow || serverNow;
+            if (list.ok) gids = extractGameIds(list.text);
+        } catch (_) {}
+        if (!gids.length) gids = extractGameIds(page.text);
+        if (!gids.length) return { ok: false, reason: 'gamelist-empty', serverNow };
+        const body = gids.map(gid => `gamechoice%5B%5D=${encodeURIComponent(gid)}`).join('&');
+        let stat;
+        try { stat = await httpPostForm(GAMESTAT_URL, body); } catch (_) { return { ok: false, reason: 'gamestat-transport', serverNow }; }
+        serverNow = stat.serverNow || serverNow;
+        if (!stat.ok) return { ok: false, reason: 'gamestat-http', serverNow };
+        let json;
+        try { json = JSON.parse(stat.text); } catch (_) { return { ok: false, reason: 'gamestat-json', serverNow }; }
+        if (!json || !Array.isArray(json.stat)) return { ok: false, reason: 'gamestat-schema', serverNow };
+        const rows = [];
+        for (const row of json.stat) {
+            // A structurally invalid row outside the selected five cannot change
+            // the result: skip it instead of aborting the whole fetch. rankCandidates
+            // still requires exactly one valid non-negative integer ТТД per selected PID.
+            if (!Array.isArray(row) || row.length !== STAT_ROW_LENGTH) continue;
+            const pid = String(row[0] == null ? '' : row[0]).trim();
+            if (!/^\d+$/.test(pid) || pid === '0') continue;
+            const raw = row[TTD_MAPPING.index];
+            let ttd = null;
+            if (raw !== null && raw !== undefined && String(raw).trim() !== '') {
+                const value = Number(raw);
+                if (Number.isInteger(value) && value >= 0) ttd = value;
+            }
+            rows.push({ pid, ttd });
+        }
+        return { ok: true, rows, serverNow };
+    }
+
+    function rankCandidates(xiPids, formMap, ttdRows) {
+        const xi = xiPids.map(String);
+        if (xi.length !== 11 || new Set(xi).size !== 11) return { ok: false, reason: 'xi-incomplete' };
+        const valid = xi.filter(pid => {
+            const value = formMap.get(pid);
+            return typeof value === 'number' && Number.isFinite(value);
+        });
+        if (valid.length < 5) return { ok: false, reason: 'valid-starters-lt-5' };
+        // Every starter needs an unambiguous form value before ranking: a
+        // starter without a ПОСЛЕ value could have been inside the top five,
+        // so the club is blocked with zero saves instead of guessing.
+        if (valid.length !== xi.length) return { ok: false, reason: 'xi-form-incomplete' };
+        const five = [...valid].sort((a, b) => {
+            const delta = formMap.get(b) - formMap.get(a);
+            return delta !== 0 ? delta : Number(a) - Number(b);
+        }).slice(0, 5);
+        const byPid = new Map();
+        for (const row of ttdRows) {
+            if (!byPid.has(row.pid)) byPid.set(row.pid, []);
+            byPid.get(row.pid).push(row.ttd);
+        }
+        const ttdMap = new Map();
+        for (const pid of five) {
+            const values = byPid.get(pid) || [];
+            if (values.length !== 1) return { ok: false, reason: 'ttd-missing-or-duplicate' };
+            const value = values[0];
+            if (!Number.isInteger(value) || value < 0) return { ok: false, reason: 'ttd-invalid' };
+            ttdMap.set(pid, value);
+        }
+        const three = [...five].sort((a, b) => {
+            const ttd = ttdMap.get(b) - ttdMap.get(a);
+            if (ttd !== 0) return ttd;
+            const form = formMap.get(b) - formMap.get(a);
+            if (form !== 0) return form;
+            return Number(a) - Number(b);
+        }).slice(0, 3);
+        return { ok: true, five, three };
+    }
+
+    function buildCoachBody(pids, submitValue) {
+        const params = new URLSearchParams();
+        pids.forEach(pid => params.append('coach[]', pid));
+        params.set('coach_set', submitValue);
+        return params.toString();
+    }
+
+    function setClub(state, clubId, status, reason) {
+        const record = state.clubs[clubId] || (state.clubs[clubId] = {});
+        record.status = status;
+        record.reason = reason || '';
+        if (status === 'uncertain' || status === 'posting') record.attemptAt = Date.now();
+        return record;
+    }
+
+    async function discover() {
+        let response;
+        try { response = await httpGet(LINEUP_URL, { cacheBust: true }); } catch (_) { return { ok: false, reason: 'discovery-transport' }; }
+        if (!response.ok) return { ok: false, reason: `discovery-http-${response.status}` };
+        const serverNow = response.serverNow;
+        if (!serverNow) return { ok: false, reason: 'server-clock' };
+        if (!identityOkFromHtml(response.text)) return { ok: false, reason: 'identity' };
+        const doc = new DOMParser().parseFromString(response.text, 'text/html');
+        const home = readActiveTeam(doc);
+        if (!home) return { ok: false, reason: 'active-team' };
+        const clubs = parseSwitcher(doc).map(item => item.id);
+        const matchDay = readMatchDayFromDocument(doc, response.text);
+        return { ok: true, serverNow, home, clubs, matchDay, matchGuard: matchGuard(matchDay, serverNow) };
+    }
+
+    function preflightSwitch(serverNow, lastMatchDay) {
+        if (!identityOkFromDom()) return { ok: false, reason: 'identity' };
+        if (!activityGuard(Date.now())) return { ok: false, reason: 'activity' };
+        if (lastMatchDay) {
+            const guard = matchGuard(lastMatchDay, serverNow);
+            if (!guard.safe) return { ok: false, reason: guard.reason };
+        }
+        return { ok: true, serverNow };
+    }
+
+    async function restoreHome(state, serverNow) {
+        if (!identityOkFromDom()) return { ok: false, serverNow };
+        const home = String(state.homeTeamId || '');
+        if (!/^\d+$/.test(home) || home === '0') return { ok: false, serverNow };
+        const switched = await gotoTeam(home);
+        serverNow = switched.serverNow || serverNow;
+        if (!switched.ok) return { ok: false, serverNow };
+        let response;
+        try { response = await httpGet(LINEUP_URL, { cacheBust: true }); } catch (_) { return { ok: false, serverNow }; }
+        serverNow = response.serverNow || serverNow;
+        if (!response.ok) return { ok: false, serverNow };
+        if (!identityOkFromHtml(response.text)) return { ok: false, serverNow };
+        const doc = new DOMParser().parseFromString(response.text, 'text/html');
+        if (readActiveTeam(doc) !== home) return { ok: false, serverNow };
+        state.restorePending = false;
+        return { ok: true, serverNow };
+    }
+
+    async function attemptRestore(state) {
+        if (!identityOkFromDom()) return { ok: false, reason: 'identity' };
+        const restored = await restoreHome(state, Date.now());
+        if (!restored.ok) {
+            state.retryAfter = (restored.serverNow || Date.now()) + RETRY_MS;
+            safePersist(state);
+            return { ok: false, reason: 'restore' };
+        }
+        if (!safePersist(state)) return { ok: false, reason: 'storage' };
+        return { ok: true };
+    }
+
+    async function inspectClub(clubId, record, serverNow) {
+        const switched = await gotoTeam(clubId);
+        serverNow = switched.serverNow || serverNow;
+        if (!switched.ok) return { stop: true, serverNow };
+        let lineup;
+        try { lineup = await httpGet(LINEUP_URL, { cacheBust: true }); } catch (_) { return { stop: true, serverNow }; }
+        serverNow = lineup.serverNow || serverNow;
+        if (!lineup.ok || !identityOkFromHtml(lineup.text)) return { stop: true, serverNow };
+        const doc = new DOMParser().parseFromString(lineup.text, 'text/html');
+        if (readActiveTeam(doc) !== clubId) return { stop: true, serverNow };
+        const matchDay = readMatchDayFromDocument(doc, lineup.text);
+        if (!matchGuard(matchDay, serverNow).safe) return { stop: true, serverNow, matchDay };
+        let formResponse;
+        try { formResponse = await httpGet(FORM_URL, { cacheBust: true }); } catch (_) { return { stop: true, serverNow, matchDay }; }
+        serverNow = formResponse.serverNow || serverNow;
+        if (!formResponse.ok) return { stop: true, serverNow, matchDay };
+        if (!identityOkFromHtml(formResponse.text)) return { stop: true, serverNow, matchDay };
+        const formDoc = new DOMParser().parseFromString(formResponse.text, 'text/html');
+        if (readActiveTeam(formDoc) !== clubId) return { stop: true, serverNow, matchDay };
+        const form = parseFormDocument(formDoc);
+        const intended = (record.intendedPids || []).map(String);
+        const checkedOk = intended.length === 3 && form.checkedPids.length === 3 && intended.every(pid => form.checkedPids.includes(pid));
+        const expiryOk = expiryIsFuture(form.expiry, serverNow);
+        record.observedExpiry = form.expiry ? form.expiry.raw : (record.observedExpiry || '');
+        if (checkedOk && expiryOk) {
+            record.status = 'verified';
+            record.reason = 'read-only-inspection';
+        } else {
+            record.status = 'uncertain';
+            record.reason = 'inspection-not-proven';
+            record.attemptAt = Date.now();
+        }
+        return { stop: false, serverNow, matchDay };
+    }
+
+    async function processClub(clubId, state, serverNow) {
+        const switched = await gotoTeam(clubId);
+        serverNow = switched.serverNow || serverNow;
+        if (!switched.ok) {
+            setClub(state, clubId, 'blocked', switched.reason);
+            safePersist(state);
+            return { serverNow, stop: true };
+        }
+        let lineup;
+        try { lineup = await httpGet(LINEUP_URL, { cacheBust: true }); } catch (_) { return { serverNow, stop: true }; }
+        serverNow = lineup.serverNow || serverNow;
+        if (!lineup.ok) { safePersist(state); return { serverNow, stop: true }; }
+        if (!identityOkFromHtml(lineup.text)) return { serverNow, stop: true };
+        const lineupDoc = new DOMParser().parseFromString(lineup.text, 'text/html');
+        if (readActiveTeam(lineupDoc) !== clubId) return { serverNow, stop: true };
+        const matchDay = readMatchDayFromDocument(lineupDoc, lineup.text);
+        if (!matchGuard(matchDay, serverNow).safe) return { serverNow, stop: true, matchDay };
+        if (!activityGuard(Date.now())) return { serverNow, stop: true, matchDay };
+
+        const xi = parseLineupPids(lineupDoc);
+        if (!xi.ok) {
+            setClub(state, clubId, 'blocked', xi.reason);
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
+            return { serverNow, matchDay, stop: false };
+        }
+
+        let train;
+        try { train = await httpGet(TRAIN_TEAM_URL, { cacheBust: true }); } catch (_) { train = null; }
+        serverNow = (train && train.serverNow) || serverNow;
+        if (!train || !train.ok) {
+            setClub(state, clubId, 'blocked', 'train-http');
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
+            return { serverNow, matchDay, stop: false };
+        }
+        const eligibility = parseEligibility(new DOMParser().parseFromString(train.text, 'text/html'));
+        if (eligibility.blocked) {
+            setClub(state, clubId, 'blocked', eligibility.reason);
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
+            return { serverNow, matchDay, stop: false };
+        }
+        if (!eligibility.eligible) {
+            setClub(state, clubId, 'ineligible', 'capacity');
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
+            return { serverNow, matchDay, stop: false };
+        }
+
+        let formResponse;
+        try { formResponse = await httpGet(FORM_URL, { cacheBust: true }); } catch (_) { formResponse = null; }
+        serverNow = (formResponse && formResponse.serverNow) || serverNow;
+        if (!formResponse || !formResponse.ok) {
+            setClub(state, clubId, 'blocked', 'form-http');
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
+            return { serverNow, matchDay, stop: false };
+        }
+        const form = parseFormDocument(new DOMParser().parseFromString(formResponse.text, 'text/html'));
+        if (!form.needBase) { setClub(state, clubId, 'blocked', 'need-base-missing'); if (!safePersist(state)) return { serverNow, matchDay, stop: true }; return { serverNow, matchDay, stop: false }; }
+        if (form.controls.length < 3) { setClub(state, clubId, 'blocked', 'coach-controls'); if (!safePersist(state)) return { serverNow, matchDay, stop: true }; return { serverNow, matchDay, stop: false }; }
+        if (!form.submitValue) { setClub(state, clubId, 'blocked', 'submit-label'); if (!safePersist(state)) return { serverNow, matchDay, stop: true }; return { serverNow, matchDay, stop: false }; }
+        if (!form.formMap || form.formReason) { setClub(state, clubId, 'blocked', form.formReason || 'form-map'); if (!safePersist(state)) return { serverNow, matchDay, stop: true }; return { serverNow, matchDay, stop: false }; }
+
+        const ttd = await fetchTtd();
+        serverNow = ttd.serverNow || serverNow;
+        if (!ttd.ok) {
+            setClub(state, clubId, 'blocked', ttd.reason);
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
+            return { serverNow, matchDay, stop: false };
+        }
+        const ranked = rankCandidates(xi.pids, form.formMap, ttd.rows);
+        if (!ranked.ok) {
+            setClub(state, clubId, 'blocked', ranked.reason);
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
+            return { serverNow, matchDay, stop: false };
+        }
+        if (!ranked.three.every(pid => form.usablePids.has(pid))) {
+            setClub(state, clubId, 'blocked', 'winner-checkbox');
+            if (!safePersist(state)) return { serverNow, matchDay, stop: true };
+            return { serverNow, matchDay, stop: false };
+        }
+
+        if (!activityGuard(Date.now())) return { serverNow, stop: true, matchDay };
+        let recheck;
+        try { recheck = await httpGet(FORM_URL, { cacheBust: true }); } catch (_) { return { serverNow, stop: true, matchDay }; }
+        serverNow = recheck.serverNow || serverNow;
+        if (!recheck.ok || !identityOkFromHtml(recheck.text)) return { serverNow, stop: true, matchDay };
+        const recheckDoc = new DOMParser().parseFromString(recheck.text, 'text/html');
+        if (readActiveTeam(recheckDoc) !== clubId) return { serverNow, stop: true, matchDay };
+        const recheckForm = parseFormDocument(recheckDoc);
+        if (!recheckForm.needBase || !recheckForm.submitValue) return { serverNow, stop: true, matchDay };
+        if (!ranked.three.every(pid => recheckForm.usablePids.has(pid))) return { serverNow, stop: true, matchDay };
+        const recheckMatchDay = readMatchDayFromDocument(recheckDoc, recheck.text);
+        if (!matchGuard(recheckMatchDay, serverNow).safe) return { serverNow, stop: true, matchDay: recheckMatchDay };
+        if (!activityGuard(Date.now())) return { serverNow, stop: true, matchDay: recheckMatchDay };
+
+        const record = setClub(state, clubId, 'posting', '');
+        record.intendedPids = ranked.three.slice();
+        record.priorExpiry = recheckForm.expiry ? recheckForm.expiry.raw : '';
+        record.observedExpiry = '';
+        record.extensionProven = false;
+        if (!safePersist(state)) return { serverNow, stop: true, matchDay: recheckMatchDay };
+
+        let posted;
+        try {
+            posted = await httpPostForm(FORM_URL, buildCoachBody(ranked.three, recheckForm.submitValue));
+        } catch (_) {
+            record.status = 'uncertain';
+            record.reason = 'post-transport';
+            record.attemptAt = Date.now();
+            safePersist(state);
+            return { serverNow, stop: true, matchDay: recheckMatchDay };
+        }
+        serverNow = posted.serverNow || serverNow;
+
+        let verification;
+        try { verification = await httpGet(FORM_URL, { cacheBust: true }); } catch (_) { verification = null; }
+        if (!verification || !verification.ok) {
+            record.status = 'uncertain';
+            record.reason = 'verify-fetch';
+            record.attemptAt = Date.now();
+            safePersist(state);
+            return { serverNow, stop: true, matchDay: recheckMatchDay };
+        }
+        serverNow = verification.serverNow || serverNow;
+        if (!identityOkFromHtml(verification.text)) {
+            record.status = 'uncertain';
+            record.reason = 'verify-identity';
+            record.attemptAt = Date.now();
+            safePersist(state);
+            return { serverNow, stop: true, matchDay: recheckMatchDay };
+        }
+        const verifyDoc = new DOMParser().parseFromString(verification.text, 'text/html');
+        const verifyForm = parseFormDocument(verifyDoc);
+        const verifyActive = readActiveTeam(verifyDoc);
+        const checkedOk = verifyForm.checkedPids.length === 3 && ranked.three.every(pid => verifyForm.checkedPids.includes(pid));
+        const expiryOk = expiryIsFuture(verifyForm.expiry, serverNow);
+        record.observedExpiry = verifyForm.expiry ? verifyForm.expiry.raw : '';
+        if (verifyActive !== clubId || !checkedOk || !expiryOk) {
+            record.status = 'uncertain';
+            record.reason = verifyActive !== clubId ? 'verify-team' : (!checkedOk ? 'verify-checked' : 'verify-expiry');
+            record.attemptAt = Date.now();
+            safePersist(state);
+            return { serverNow, stop: true, matchDay: recheckMatchDay };
+        }
+        record.status = 'verified';
+        record.extensionProven = Boolean(recheckForm.expiry && record.observedExpiry && recheckForm.expiry.raw !== record.observedExpiry);
+        record.reason = record.extensionProven ? 'state-verified' : 'state-verified-expiry-unchanged';
+        record.attemptAt = 0;
+        if (!safePersist(state)) return { serverNow, stop: true, matchDay: recheckMatchDay };
+        return { serverNow, stop: false, matchDay: recheckMatchDay };
+    }
+
+    async function runSweep(state, discovery) {
+        const now = discovery.serverNow;
+        const recent = state.startedAt > 0 && now - state.startedAt < RESUME_WINDOW_MS;
+        const resume = recent && (state.phase === 'partial' || state.phase === 'sweeping');
+        if (!resume) {
+            const carry = {};
+            for (const [id, record] of Object.entries(state.clubs || {})) {
+                if (!record || (record.status !== 'uncertain' && record.status !== 'posting')) continue;
+                const at = Number(record.attemptAt || 0);
+                if (at > 0 && now - at < RESUME_WINDOW_MS) carry[id] = record;
+            }
+            state.clubs = carry;
+            state.startedAt = now;
+            state.phase = 'sweeping';
+            state.retryCount = 0;
+            state.completedLocalAt = 0;
+        }
+        if (!resume) state.homeTeamId = discovery.home;
+        state.restorePending = true;
+        state.retryAfter = 0;
+        if (!safePersist(state)) { report('storage', 'restore-marker'); return; }
+
+        let serverNow = now;
+        let lastMatchDay = discovery.matchDay;
+        let aborted = false;
+        try {
+            for (const clubId of discovery.clubs) {
+                if (aborted) break;
+                const record = state.clubs[clubId];
+                if (resume && record && (record.status === 'verified' || record.status === 'ineligible')) continue;
+                if (record && (record.status === 'uncertain' || record.status === 'posting') && Array.isArray(record.intendedPids)) {
+                    const pre = preflightSwitch(serverNow, lastMatchDay);
+                    if (!pre.ok) { aborted = true; break; }
+                    const inspection = await inspectClub(clubId, record, serverNow);
+                    serverNow = inspection.serverNow || serverNow;
+                    if (inspection.matchDay) lastMatchDay = inspection.matchDay;
+                    if (inspection.stop) { aborted = true; break; }
+                    if (!safePersist(state)) { aborted = true; break; }
+                    continue;
+                }
+                const pre = preflightSwitch(serverNow, lastMatchDay);
+                if (!pre.ok) { aborted = true; break; }
+                const result = await processClub(clubId, state, serverNow);
+                serverNow = result.serverNow || serverNow;
+                if (result.matchDay) lastMatchDay = result.matchDay;
+                if (result.stop) { aborted = true; break; }
+            }
+        } finally {
+            let homeOk = false;
+            try {
+                const restored = await restoreHome(state, serverNow);
+                serverNow = restored.serverNow || serverNow;
+                homeOk = restored.ok;
+            } catch (_) { homeOk = false; }
+
+            const statuses = discovery.clubs.map(id => state.clubs[id] && state.clubs[id].status || 'missing');
+            const allTerminal = statuses.length > 0 && statuses.every(status => status === 'verified' || status === 'ineligible');
+            const hasBlocked = statuses.some(status => status === 'blocked' || status === 'missing');
+            // An uncertain/posting club is transient, not a permanent block: it
+            // must be re-inspected read-only inside the 24 h resume window, so it
+            // arms the bounded transient retry instead of a full week.
+            const hasTransient = statuses.some(status => status === 'uncertain' || status === 'posting');
+            if (allTerminal && homeOk) {
+                state.lastCompletedAt = serverNow;
+                state.completedLocalAt = Date.now();
+                state.phase = 'complete';
+                state.retryAfter = 0;
+                state.retryCount = 0;
+                state.restorePending = false;
+            } else {
+                state.phase = 'partial';
+                if (homeOk) {
+                    state.restorePending = false;
+                    if (hasBlocked || hasTransient) {
+                        // Bounded transient retries: after MAX_RETRIES a permanent
+                        // block backs off to a full week instead of churning every
+                        // 15 minutes forever.
+                        state.retryCount = (Number(state.retryCount) || 0) + 1;
+                        state.retryAfter = state.retryCount > MAX_RETRIES ? serverNow + WEEK_MS : serverNow + RETRY_MS;
+                    } else {
+                        state.retryAfter = serverNow + WEEK_MS;
+                    }
+                } else {
+                    // Restore is still pending; the recovery path owns its own
+                    // retry timing (attemptRestore arms retryAfter), so the sweep
+                    // must not arm a separate 15-minute window here.
+                    state.retryAfter = 0;
+                }
+            }
+            if (!safePersist(state)) report('storage', 'final');
+            if (!homeOk) report('restore-failed');
+            if (aborted) report('sweep-aborted');
+        }
+    }
+
+    async function coordinatedRun() {
+        if (!admissionOk()) return;
+        const userId = EXPECTED_USER_ID;
+        const read = readState(userId);
+        if (read.status === 'unavailable') { report('storage-unavailable'); return; }
+        if (read.status === 'malformed') { report('state-malformed'); return; }
+        const state = read.status === 'missing' ? defaultState(userId) : read.state;
+
+        if (state.restorePending) {
+            const restoreNow = Date.now();
+            if (state.retryAfter && restoreNow < state.retryAfter) {
+                report('restore-pending', 'retry-window');
+                return;
+            }
+            if (!activityGuard(restoreNow)) {
+                // Never let the idle guard drop a pending restore: keep the marker
+                // and retry on a later wake.
+                report('restore-pending', 'activity');
+                return;
+            }
+            const recovery = await attemptRestore(state);
+            if (!recovery.ok) { report('restore-pending', recovery.reason); return; }
+        }
+
+        const localNow = Date.now();
+        if (read.status === 'ok' && !isDueCheap(state, localNow)) return;
+
+        const discovery = await discover();
+        if (!discovery.ok) { report('discovery-failed', discovery.reason); return; }
+        if (!isDue(state, discovery.serverNow)) return;
+        if (!discovery.clubs.length) { report('no-clubs'); return; }
+        if (!discovery.matchGuard.safe) { report('match-guard', discovery.matchGuard.reason); return; }
+        if (!activityGuard(Date.now())) { report('activity-guard'); return; }
+        await runSweep(state, discovery);
+    }
+
+    async function runOnce() {
+        try {
+            if (!isTopLevel() || !isWriterOrigin()) return;
+            if (typeof navigator === 'undefined' || !navigator.locks || typeof navigator.locks.request !== 'function') return;
+            await navigator.locks.request(LOCK_NAME, { mode: 'exclusive', ifAvailable: true }, async lock => {
+                if (!lock) return;
+                await coordinatedRun();
+            });
+        } catch (error) {
+            report('coordinator-failed', errorCode(error));
+        }
+    }
+
+    function scheduleRun(delay) {
+        if (wakeTimer) clearTimeout(wakeTimer);
+        wakeTimer = setTimeout(() => {
+            wakeTimer = 0;
+            void runOnce();
+        }, Math.max(0, Number(delay) || 0));
+    }
+
+    function start() {
+        if (started) return;
+        started = true;
+        try {
+            if (!isTopLevel() || !isWriterOrigin()) return;
+            installActivityTracking();
+            const wake = () => scheduleRun(0);
+            // A page load / bfcache page-show is itself recent human activity:
+            // stamp it BEFORE scheduling the wake so the 120 s quiet guard does
+            // not let a sweep fire the instant the owner opens the site.
+            const wakeAfterLoadActivity = () => { recordActivity(Date.now()); wake(); };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', wakeAfterLoadActivity, { once: true });
+            } else {
+                wakeAfterLoadActivity();
+            }
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
+            window.addEventListener('focus', wake);
+            window.addEventListener('pageshow', wakeAfterLoadActivity);
+            setInterval(wake, WAKE_MS);
+        } catch (error) {
+            report('start-failed', errorCode(error));
+        }
+    }
+
+    return { start };
+})();
+// <<< src/modules/team-management/weekly-form-training.js
 
 
 // >>> src/modules/team-management/team4-leadership-upgrade-indicator.js
@@ -30348,6 +31950,15 @@ const App = {
         // поэтому панель на transfers.php не монтировалась.
         TransferMarketAnalyzer.start();
 
+        // Weekly background form training: installs listeners and schedules a
+        // locked coordinator run, then returns immediately. It must not be
+        // called from mountUI() — the body observer would re-run it.
+        try {
+            SLFWeeklyFormTraining.start();
+        } catch (error) {
+            console.warn('[SLF] weekly-form-training failed; continuing startup', error);
+        }
+
         PresetStorage.loadFromServerAndMerge(() => {
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', () => {
@@ -30369,15 +31980,15 @@ App.start();
 
     // BEGIN SLF FINAL RUNTIME VERSION EXPORT
     var SLF_VERSION_INFO = {
-        version: '4.4.388',
-        scriptVersion: '4.4.388',
+        version: '4.4.397',
+        scriptVersion: '4.4.397',
         releaseChannel: 'github-tampermonkey',
         updateURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.meta.js',
         downloadURL: 'https://raw.githubusercontent.com/MostDef2000/SLF/release/releases/latest.user.js'
     };
     var SLF_RUNTIME_TARGET = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     SLF_RUNTIME_TARGET.SLF = Object.assign({}, SLF_RUNTIME_TARGET.SLF || {}, {
-        scriptVersion: '4.4.388',
+        scriptVersion: '4.4.397',
         versionInfo: SLF_VERSION_INFO
     });
     // END SLF FINAL RUNTIME VERSION EXPORT

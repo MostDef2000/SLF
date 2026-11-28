@@ -1,60 +1,46 @@
 {
   "schema": "slf_release_evidence_v1",
-  "scriptVersion": "4.4.366",
+  "scriptVersion": "4.4.397",
   "releaseChannel": "github-tampermonkey",
-  "validationRevision": "ccdee1e62f21f0f6795e635b748b65b726516310",
-  "approvedBaseCommit": "ef8ad9e673e316dd783530bb1228d9a2edbdc713",
-  "approvedCommit": "ccdee1e62f21f0f6795e635b748b65b726516310",
+  "validationRevision": "443f6729ca769458c2860f5bda684cc09b0886df",
+  "approvedBaseCommit": "b30b37b68218c551077e6af78d3a2a6c86a004c6",
+  "approvedCommit": "443f6729ca769458c2860f5bda684cc09b0886df",
   "approvedFiles": [
-    "data/audit/runtime-reachability-review-v1.json",
-    "data/quality/reliability-budget-v1.json",
-    "specs/409-presets-native-templates/plan.md",
-    "specs/409-presets-native-templates/spec.md",
-    "specs/409-presets-native-templates/tasks.md",
-    "src/app/bundle-order.json",
-    "src/app/ui-layer.js",
-    "src/modules/tactics-presets/native-template-api.js",
-    "src/modules/tactics-presets/preset-migration.js",
-    "src/modules/tactics-presets/preset-storage.js",
+    ".github/workflows/quality-integration.yml",
+    "src/modules/manual-match-telemetry/event-tracker.js",
+    "src/modules/manual-match-telemetry/manual-state-integrity.js",
     "tests/browser/test_exact_userscript.py",
-    "tests/browser/test_team4_tactic_header_selector.py",
-    "tests/test-native-template-api.mjs",
-    "tests/test-native-template-mapping.mjs",
-    "tests/test-preset-migration.mjs",
-    "tests/test-preset-native-storage.mjs",
-    "tests/test-preset-storage-sync-status.mjs",
-    "vps/exporter-rag/slf_rag_build.py",
-    "vps/exporter-rag/test_slf_rag_build.py"
+    "tools/test-tactic-telemetry-envelope.mjs"
   ],
   "sourceBranch": "main",
-  "bundleManifestSha256": "161966aa6155140bfda1d319419722225fad1a877b2eb2c18dcfbc7a0cae4d42",
-  "bundleFileCount": 94,
+  "bundleManifestSha256": "0aab1e319779adccc512b9c02b7e6a96b7ef07e52decf56bc84de95f05975085",
+  "bundleFileCount": 96,
   "deterministicRebuildVerified": true,
   "releaseFiles": [
     {
       "path": "releases/latest.user.js",
-      "sha256": "65ef162c5e40b7c27f4f18d7100a0979b0f7eff802a1bab5c4365e5912f84e3b",
-      "bytes": 1511396
+      "sha256": "005c33730cf6d0663bb032de82f6cbff8cf6c30c421abfcaa63c61ecc270a1e2",
+      "bytes": 1730599
     },
     {
       "path": "releases/latest.meta.js",
-      "sha256": "bbfe2868833c0fd6e12700a58a72586ff9e7ee5585043538695a0863a9b2e8a4",
+      "sha256": "05e681629f2c6fe9d7886a4d744365c3a5b0478417380be5feacb31ab19f7bff",
       "bytes": 1389
     },
     {
       "path": "data/version.json",
-      "sha256": "e41c29087e7305d1b46174ffd297922f0e7cb9ea7d4327a63e19aa00ef005b7e",
-      "bytes": 1779
+      "sha256": "7f73d2560a9bbe4a70fcf01fae48fa33dcb771d8b0d76d8f374bfcc59f032a91",
+      "bytes": 1132
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "b8ace35924d86417868f8fc0b8382d98d087f7f19090c8032e202eaa7bfa1300",
-      "bytes": 177366
+      "sha256": "b8a88d86c85dcb574d5df083023fb73ec0698f41c51b46ff775d726627710ec8",
+      "bytes": 200003
     },
     {
       "path": "src/app/bundle-order.json",
-      "sha256": "161966aa6155140bfda1d319419722225fad1a877b2eb2c18dcfbc7a0cae4d42",
-      "bytes": 78862
+      "sha256": "0aab1e319779adccc512b9c02b7e6a96b7ef07e52decf56bc84de95f05975085",
+      "bytes": 81327
     }
   ],
   "buildFiles": [
@@ -102,8 +88,8 @@
     },
     {
       "path": "src/core/api.js",
-      "sha256": "48b81333c8d90dea087dd19bb20ede20d2c96e80eebf6ed438dc5041291eb32e",
-      "bytes": 9900
+      "sha256": "d119f454510b1b3ddb6d3cfcc4531999d0000fc4589719a9283781373368dbac",
+      "bytes": 11733
     },
     {
       "path": "src/modules/tactics-presets/native-template-api.js",
@@ -112,8 +98,8 @@
     },
     {
       "path": "src/modules/tactics-presets/preset-storage.js",
-      "sha256": "2f3bc2189c5a53640c008c7dd5024a476089bd3701696ce596380a9bbe561075",
-      "bytes": 36344
+      "sha256": "1b9a316775409f75af9e18fefad5d0b653f0aeaeb50b4e0b818a2127920ec5c1",
+      "bytes": 37828
     },
     {
       "path": "src/modules/tactics-presets/preset-migration.js",
@@ -122,8 +108,8 @@
     },
     {
       "path": "src/modules/tactics-presets/tactic-control-engine.js",
-      "sha256": "43dac3be8b4d17a61c8fdefce4cfc3f6a2d2a175fb047b691dfd75c95e4858a6",
-      "bytes": 10901
+      "sha256": "2db3b1e05a0de5093df4173b8927044f30a90b13698abe67e7e9839a0e3bd7ad",
+      "bytes": 13453
     },
     {
       "path": "src/modules/tactics-presets/tactic-control-bridge.js",
@@ -132,18 +118,18 @@
     },
     {
       "path": "src/modules/tactics-presets/tactical-lab-v1.js",
-      "sha256": "8929bfbb4a70dcd9e6bb24933e983cb95344e53247a7a6208cf031dab4a82c2f",
-      "bytes": 57626
+      "sha256": "034c5bf973ed5379e9dc2a4412a59b7c85510b8518bbaf87143dddb104a993b0",
+      "bytes": 60262
     },
     {
       "path": "src/modules/match-reading/match-state-parser.js",
-      "sha256": "c7683269533330e01934d91b70e2ad6532a94a5d2438795d1d36a134d48734b7",
-      "bytes": 11469
+      "sha256": "dbe6a1add962351890f11339c6ac4cd4ec644447c6f93ba1f240b6b3b15447af",
+      "bytes": 12118
     },
     {
       "path": "src/modules/match-reading/match-stats-parser.js",
-      "sha256": "623233f3f01f71bd4d276641bfb96c80bfe621874a450257b117601513d7d52a",
-      "bytes": 3918
+      "sha256": "e62f4978bc2a77335a6bf53ac72c6ef06a9d9470c136e2a4e806aafb7973f7d1",
+      "bytes": 18633
     },
     {
       "path": "src/modules/match-reading/squad-parser.js",
@@ -152,13 +138,13 @@
     },
     {
       "path": "src/modules/manual-match-telemetry/snapshot-engine.js",
-      "sha256": "9fc084bd6783d42ec705ccd4318be4ee2bf2f5f83451024359b489e55affa77b",
-      "bytes": 21718
+      "sha256": "205b94dc83f461f0238fd8c04b173709ecf505cffe3d36973a897c8cde8d4a24",
+      "bytes": 25160
     },
     {
       "path": "src/modules/manual-match-telemetry/event-tracker.js",
-      "sha256": "e4907e4938c0a0a4a7d871286629ef8736388e7ffb4e15dddfa69b2e0e82a7f5",
-      "bytes": 34805
+      "sha256": "5e2c62f52833e152b12ea4b4d4c1c5d92ec7db40ff33c2aff7adf6eacd3d21b7",
+      "bytes": 34819
     },
     {
       "path": "src/modules/strategy-data-recommendations/developer-hint-parser.js",
@@ -237,8 +223,8 @@
     },
     {
       "path": "src/modules/strategy-data-recommendations/cah-runtime-context.js",
-      "sha256": "76967bb3a259fe1d5c25bd0adef6c73eab4f37e03dd032b063b2bcf8656fccc7",
-      "bytes": 33804
+      "sha256": "5a058e05e4fa40bf1d98dce756f157b208c48e7596cfb64a105e8734c7555305",
+      "bytes": 34233
     },
     {
       "path": "src/modules/strategy-data-recommendations/cah-decision-core.js",
@@ -257,13 +243,13 @@
     },
     {
       "path": "src/modules/tactics-presets/active-preset-registry.js",
-      "sha256": "9ec8615bbb4f090c4d4bd10cb0422e3c58f74fa42093eddc2e2981fe47c34230",
-      "bytes": 39107
+      "sha256": "5ec6fd70415bd135bdc5ebd25913a62c2714e265c2892e834764eeeac6f400f1",
+      "bytes": 42648
     },
     {
       "path": "src/modules/tactics-presets/tactic-preset-direction-policy.js",
-      "sha256": "66485987f8a2919415888eca91b87537f8670654927398b7274e157f852d2eef",
-      "bytes": 29845
+      "sha256": "641d9025dbed52af154f2ecd55e833d3f91d40c7c97ca282604db4af06930a7b",
+      "bytes": 34420
     },
     {
       "path": "src/modules/strategy-data-recommendations/signal-noise-filter-layer.js",
@@ -287,8 +273,8 @@
     },
     {
       "path": "src/modules/strategy-data-recommendations/dave56-etalon-data.js",
-      "sha256": "e9eee306b6afe5652084ea1ba6cfbe0ade99930638936dc28fac83d40bdbd1af",
-      "bytes": 14371
+      "sha256": "389c4ef65f86e75fef47ca384c98238ab3295473306fae4ade26dfcaa55d0070",
+      "bytes": 27129
     },
     {
       "path": "src/modules/strategy-data-recommendations/dave56-etalon-mapping.js",
@@ -297,38 +283,43 @@
     },
     {
       "path": "src/modules/strategy-data-recommendations/dave56-etalon-layer.js",
-      "sha256": "33712e2b1e05ef901cf02566d2733ce79b1910c6280f532944ea1996fd87313d",
-      "bytes": 18043
+      "sha256": "2b6f92c564d663ad44cde53fc8527775c453faa114be57c7e459f899a711abe7",
+      "bytes": 36216
     },
     {
       "path": "src/modules/strategy-data-recommendations/final-tactic-merge-layer.js",
-      "sha256": "aa7e50c2d0eeab9caaeee8fecdb39d9df17ac43f8811a88e3fa9bbaee46a2595",
-      "bytes": 13853
+      "sha256": "c16f784a79e88b3ed5f10447ea1f9751199ceef8a3750c3a1202f445c2745422",
+      "bytes": 23870
     },
     {
       "path": "src/app/ui-layer.js",
-      "sha256": "ba0e77eeeb29c79c718782639a6a33bfe9faea4b319ab8c51b44f85c039bad43",
-      "bytes": 43035
+      "sha256": "f806f8a440f6e4cb31766a47fd77f4900d28a36faab257ef9126a6e54a5279a9",
+      "bytes": 55553
     },
     {
       "path": "src/app/version-badge.js",
-      "sha256": "4ada6c0b9507aa2a3d10fda831582440f8fe651898037833bac6add56b4272a8",
-      "bytes": 18195
+      "sha256": "5ba0c7a0a1e78a257b9fdddc2d7f7baef23525b248a85f161df6e28af01e081a",
+      "bytes": 18133
+    },
+    {
+      "path": "src/modules/strategy-data-recommendations/llm-second-opinion.js",
+      "sha256": "c2a14709bf6efb5c4f59b43b6a9691f0fee833ca40ebe9e9198e9f9000cd1689",
+      "bytes": 32914
     },
     {
       "path": "src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js",
-      "sha256": "a0ffbdbbd5cd3e2b9ee76e25311228fe58dda42adaf0ffcb2b6c40f17bd55d2a",
-      "bytes": 42665
+      "sha256": "84fe5a3aba000c917168803ac4582dfba9367aea0af5c80ccb8ce515608cef1e",
+      "bytes": 78621
     },
     {
       "path": "src/modules/manual-match-telemetry/manual-state-integrity.js",
-      "sha256": "8cb6da8ae893d2c5889b84fca57d9fd34010f118ed65f87540ee9b1aa136c051",
-      "bytes": 20863
+      "sha256": "cb97f247ff1a2e2619856b657870d57479a26aab47b28a651d171828121639df",
+      "bytes": 20877
     },
     {
       "path": "src/modules/manual-match-telemetry/manual-match-runtime.js",
-      "sha256": "166dc6caab8b2c18eca15f1e1df1c22b29a12870c1a821155a2caf635a4467c7",
-      "bytes": 50435
+      "sha256": "5437f2a58dab897bcdfc926e451ab2c2e4187e5bd3686692c85873f988a89d38",
+      "bytes": 50449
     },
     {
       "path": "src/modules/transfer-analyzer/tm-enrichment-layer.js",
@@ -502,8 +493,8 @@
     },
     {
       "path": "src/modules/team-management/training-reference-guide.js",
-      "sha256": "069470c6d92f0f37435d4e55f39cfd7b6e053353b5c492c4d6454d38c694869a",
-      "bytes": 23926
+      "sha256": "7f347aaba78802f2868ca34397bfcf7689e1ff0aa4e30c3ac5949f828e6fcd58",
+      "bytes": 26338
     },
     {
       "path": "src/modules/team-management/team-loan-limit-helper.js",
@@ -517,13 +508,18 @@
     },
     {
       "path": "src/modules/team-management/team4-championship-table-swap.js",
-      "sha256": "116df8ca481dc35c92f1bc0581f05bee402519cebb84ecc69ea456501132e8ed",
-      "bytes": 11684
+      "sha256": "123f4d0df5f199add5bcf5d98eb866116a6e24e39d8a36f6312db0fdf78a40f8",
+      "bytes": 14338
     },
     {
       "path": "src/modules/team-management/team4-form-saved-choice-notice.js",
-      "sha256": "4c353a94029ee449efd401c0038e2ba950e3226dd4785938ad8f71cfead16453",
-      "bytes": 24438
+      "sha256": "16b74a894c35a6b33877d741c496b782d680b6ddbcf2f988a20b8125c5ccf295",
+      "bytes": 25171
+    },
+    {
+      "path": "src/modules/team-management/weekly-form-training.js",
+      "sha256": "8645828e077fa1a3c29d54c7d0b8fb3c8be913d3564bda54b2463cdaaec53171",
+      "bytes": 54557
     },
     {
       "path": "src/modules/team-management/team4-leadership-upgrade-indicator.js",
@@ -542,15 +538,15 @@
     },
     {
       "path": "src/app/bootstrap.js",
-      "sha256": "ffb84405d6ef15e98e7d877a5edeac2c4b195712e69c8d7c3f353e5d2eab6fd4",
-      "bytes": 7680
+      "sha256": "5c3c16c9b7de29a80877394c6bf322a3cbb42b882ce93dcf3c4122d4b49f0b10",
+      "bytes": 8091
     }
   ],
   "deploymentFiles": [
     {
       "path": "vps/api/server.py",
-      "sha256": "83c7b817f14b8d33d1d0cc62edd64893c80e2c10262ab5fee5128e8209ff0d03",
-      "bytes": 17062
+      "sha256": "574c025244ae68fa16a2dbad4a541d9ec92c06599ba7d9991c2752952c0c7b68",
+      "bytes": 25160
     },
     {
       "path": "vps/api/requirements.txt",
@@ -564,13 +560,13 @@
     },
     {
       "path": "vps/ops/deploy-code.sh",
-      "sha256": "9988bd1c67bb2146fc22a278f6cab7f987bb1b6470b43fa3be4b1bf555540170",
-      "bytes": 10513
+      "sha256": "6e8b4ad0927445f034bcfa4ff53c68bd7d507750aafd6f70ed6a3fbc30e3c81b",
+      "bytes": 10850
     },
     {
       "path": "vps/ops/rollback-code.sh",
-      "sha256": "4b16f367ea76e18bc1aa8584f151cf5c75fac86140c02c8baf26e21413e9bcc7",
-      "bytes": 5581
+      "sha256": "c34aa34c87840fa69129dbb8f02a78b288b6cc3e9592d9c0e0311b3625cff9d4",
+      "bytes": 5816
     },
     {
       "path": "vps/ops/verify_api_deployment.py",
