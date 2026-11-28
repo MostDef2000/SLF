@@ -476,7 +476,7 @@ assert.equal(effectLab.tacticContext.recommendationState, 'lab_override', 'tacti
 
 for (const marker of [
   'function installTacticTelemetryEnvelope',
-  'SnapshotEngine.build = function buildWithTacticTelemetry()',
+  'SnapshotEngine.build = function buildWithTacticTelemetry(...args)',
   'currentTacticFingerprint: currentFingerprint',
   'tacticTelemetry: afterSnapshot.tacticTelemetry || pending.tacticTelemetry || null',
   '// >>> src/modules/manual-match-telemetry/event-tracker.js',
