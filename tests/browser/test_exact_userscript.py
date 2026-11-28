@@ -46,29 +46,50 @@ class FixtureHandler(BaseHTTPRequestHandler):
             if action != "get_stat_desktop":
                 self.send_error(404)
                 return
-            # Default: e2e-owned live fixture state (minute 20, 1-0, 23698/99999).
-            # Stats mirror owned-live-match.html so rule/canon decisions stay stable.
+            # Team ids must match the served fixture: the fresh observation now
+            # reaches SnapshotEngine.build(fresh), so a foreign match must stay
+            # foreign (no my-team id) or the LLM preflight would emit snapshot
+            # telemetry, which assert_foreign_live forbids.
+            if game_id == "e2e-foreign":
+                home_id, away_id = 11111, 22222
+                home_stats = {
+                    "goals": 1, "pos": 50, "shots": 4, "ontarget": 2, "xG": 0.60,
+                    "1": 120, "2": 0, "-1": 18, "-2": 0, "ttx": 160, "defective": 11,
+                    "def_height": 2, "press_height": 2, "-7": 3, "14": 1, "-10": 0,
+                    "16": 0, "ind3": 8,
+                }
+                away_stats = {
+                    "goals": 0, "pos": 50, "shots": 4, "ontarget": 2, "xG": 0.52,
+                    "1": 120, "2": 0, "-1": 19, "-2": 0, "ttx": 160, "defective": 12,
+                    "def_height": 2, "press_height": 2, "-7": 4, "14": 1, "-10": 0,
+                    "16": 0, "ind3": 8,
+                }
+                comments = ["20' Alpha FC атакует", "18' Удар в створ"]
+            else:
+                # e2e-owned default: stats mirror owned-live-match.html so the
+                # rule/canon decisions stay stable.
+                home_id, away_id = 23698, 99999
+                home_stats = {
+                    "goals": 1, "pos": 54, "shots": 7, "ontarget": 4, "xG": 1.10,
+                    "1": 180, "2": 0, "-1": 21, "-2": 0, "ttx": 220, "defective": 10,
+                    "def_height": 2, "press_height": 3, "-7": 3, "14": 2, "-10": 1,
+                    "16": 0, "ind3": 12,
+                }
+                away_stats = {
+                    "goals": 0, "pos": 46, "shots": 4, "ontarget": 2, "xG": 0.55,
+                    "1": 150, "2": 0, "-1": 25, "-2": 0, "ttx": 205, "defective": 13,
+                    "def_height": 2, "press_height": 2, "-7": 4, "14": 1, "-10": 0,
+                    "16": 0, "ind3": 10,
+                }
+                comments = ["20' Луч продолжает атаку", "18' Удар в створ"]
             payload_obj = {
                 "status": 1,
                 "finish": False,
                 "halftime": False,
                 "minute": "20",
-                "live": [{"id": game_id or "e2e-owned", "team_1": 23698, "team_2": 99999}],
-                "t": {
-                    "23698": {
-                        "goals": 1, "pos": 54, "shots": 7, "ontarget": 4, "xG": 1.10,
-                        "1": 180, "2": 0, "-1": 21, "-2": 0, "ttx": 220, "defective": 10,
-                        "def_height": 2, "press_height": 3, "-7": 3, "14": 2, "-10": 1,
-                        "16": 0, "ind3": 12,
-                    },
-                    "99999": {
-                        "goals": 0, "pos": 46, "shots": 4, "ontarget": 2, "xG": 0.55,
-                        "1": 150, "2": 0, "-1": 25, "-2": 0, "ttx": 205, "defective": 13,
-                        "def_height": 2, "press_height": 2, "-7": 4, "14": 1, "-10": 0,
-                        "16": 0, "ind3": 10,
-                    },
-                },
-                "game_comments": ["20' Луч продолжает атаку", "18' Удар в створ"],
+                "live": [{"id": game_id or "e2e-owned", "team_1": home_id, "team_2": away_id}],
+                "t": {str(home_id): home_stats, str(away_id): away_stats},
+                "game_comments": comments,
                 "events": [],
             }
             payload = json.dumps(payload_obj, ensure_ascii=False).encode("utf-8")

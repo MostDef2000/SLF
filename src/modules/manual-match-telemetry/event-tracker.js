@@ -504,7 +504,7 @@
         };
 
         const originalBuild = SnapshotEngine.build.bind(SnapshotEngine);
-        SnapshotEngine.build = function buildWithTacticTelemetry() { return enrich(originalBuild(), 'snapshot_build'); };
+        SnapshotEngine.build = function buildWithTacticTelemetry(...args) { return enrich(originalBuild(...args), 'snapshot_build'); };
         const originalBuildSnapshotRecord = SnapshotEngine.buildSnapshotRecord.bind(SnapshotEngine);
         SnapshotEngine.buildSnapshotRecord = function buildSnapshotRecordWithTacticTelemetry(snapshot) { return originalBuildSnapshotRecord(enrich(snapshot, 'match_snapshot')); };
         const originalSendMatchResult = SnapshotEngine.sendMatchResult.bind(SnapshotEngine);
