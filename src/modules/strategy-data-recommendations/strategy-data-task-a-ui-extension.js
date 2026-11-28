@@ -6,6 +6,14 @@
 
     const GENERATOR_VERSION = '5.61';
 
+    // #483: pre-LLM forced match-data refresh. Every advisor entry (button,
+    // chat send, chat retry) fetches one fresh desktop observation, builds the
+    // snapshot from it and reruns the rules BEFORE building the payload.
+    const LLM_REFRESH_TIMEOUT_MS = 5000;
+    const LLM_REFRESH_FAILED_TEXT = 'Не удалось обновить данные матча. Запрос к советнику не отправлен. Повторите попытку.';
+    const LLM_REFRESH_STALE_TACTIC_TEXT = 'Тактика изменилась во время обновления данных. Запрос не отправлен. Повторите попытку.';
+
+
     function getFallbackTargetTeam(snapshot) {
         const teams = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
         if (!teams.length) return null;
@@ -882,16 +890,7 @@
         llmBtn.textContent = '🤖 LLM';
         llmBtn.title = 'Второе мнение от LLM по текущему состоянию матча. Только совет — тактика применяется только по явному клику.';
         llmBtn.style.cssText = 'padding:5px 8px;background:#254;color:#fff;border:1px solid #4a7;border-radius:3px;cursor:pointer;';
-        llmBtn.onclick = async () => {
-            llmBtn.disabled = true;
-            try {
-                await requestLlmSecondOpinionFresh();
-            } catch (error) {
-                console.error('[SLF] LLM second opinion failed', error);
-            } finally {
-                llmBtn.disabled = false;
-            }
-        };
+        llmBtn.onclick = () => runLlmSecondOpinionButton();
 
         const status = document.getElementById('slf-parser-status');
         panel.insertBefore(llmBtn, status || null);
@@ -1068,15 +1067,193 @@
     // One chat turn = one advisor request carrying the WHOLE accumulated
     // dialogue. The answer still renders through the unchanged renderAnswer
     // (with the «Применить пресет» button) — nothing is applied automatically.
+    // #483: send/retry/button share one guarded transaction that refreshes the
+    // match data before the payload is built.
+
+    // User-facing text for a preflight (refresh/validation) failure. Advisor
+    // dispatch failures keep their own classification in requestLlmSecondOpinion.
+    function llmRefreshErrorText(error) {
+        const kind = error && error.kind;
+        switch (kind) {
+            case 'not_started':
+                return 'Матч ещё не начался — советник пока недоступен.';
+            case 'finished':
+                return 'Матч завершён — live-советы недоступны.';
+            case 'stale_tactic':
+                return LLM_REFRESH_STALE_TACTIC_TEXT;
+            case 'paused':
+                return 'Матч на паузе или статус недоступен. Обновите страницу и повторите попытку.';
+            default:
+                return LLM_REFRESH_FAILED_TEXT;
+        }
+    }
+
+    function llmRefreshRetryable(error) {
+        const kind = error && error.kind;
+        return kind !== 'not_started' && kind !== 'finished';
+    }
+
+    function currentMatchId() {
+        try {
+            return typeof MatchStateParser !== 'undefined' && typeof MatchStateParser.getGameId === 'function'
+                ? String(MatchStateParser.getGameId() || '')
+                : '';
+        } catch (_) {
+            return '';
+        }
+    }
+
+    function llmControlsSignature(tactic) {
+        try { return JSON.stringify(tactic || null); } catch (_) { return ''; }
+    }
+
+    function currentForeignTargetSignature() {
+        const selector = typeof document !== 'undefined' ? document.getElementById('slf-foreign-match-target') : null;
+        return selector ? String(selector.value || '') : '';
+    }
+
+    function setLlmControlsBusy(busy) {
+        if (typeof document === 'undefined') return;
+        for (const [id, prop] of [
+            ['slf-llm-second-opinion-btn', 'disabled'],
+            ['slf-llm-chat-send', 'disabled'],
+            ['slf-llm-chat-input', 'disabled']
+        ]) {
+            const node = document.getElementById(id);
+            if (node) node[prop] = busy === true;
+        }
+    }
+
+    function mountPreflightFailure(error, chat) {
+        if (typeof LLMSecondOpinion === 'undefined') return;
+        const html = LLMSecondOpinion.renderAnswer({
+            available: false,
+            error: llmRefreshErrorText(error)
+        });
+        LLMSecondOpinion.mountAnswer(chat && llmRefreshRetryable(error) ? llmChatRetryHtml(html) : html);
+    }
+
+    // #483 preflight: ONE fresh observation -> validated snapshot -> rules.
+    // Everything here is synchronous with respect to the guard acquired by the
+    // caller (no stale fallback, no cached snapshot).
+    async function llmAdvisorPreflight(gameId) {
+        const observation = await SnapshotEngine.fetchFreshObservation({ gameId, timeoutMs: LLM_REFRESH_TIMEOUT_MS });
+        if (!observation || String(observation.gameId) !== gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'identity changed after refresh');
+        }
+        // Recheck the URL identity before any build side effects.
+        if (currentMatchId() !== gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'match changed during refresh');
+        }
+
+        const controlsBefore = llmControlsSignature(safeGetCurrentTactic());
+        const targetBefore = currentForeignTargetSignature();
+
+        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build(observation));
+        if (!snapshot || String(snapshot.gameId || '') !== gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'snapshot identity mismatch');
+        }
+        snapshot.recommendationSource = 'llm_second_opinion';
+        snapshot.generatorVersion = GENERATOR_VERSION;
+
+        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.checkpoint && snapshot.matchOwnership !== 'foreign') {
+            await STATE.tacticalLabRuntime.checkpoint('llm_second_opinion', snapshot);
+        }
+        // Never continue into a different match after the checkpoint await.
+        if (currentMatchId() !== gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'match changed during checkpoint');
+        }
+
+        // Rules run on the fresh snapshot; the payload then reads the live
+        // controls. If controls or the selected foreign side moved across the
+        // checkpoint, rules and payload would describe different tactics/sides.
+        buildManualRecommendationHtml(snapshot);
+        const partial = !snapshot.ruleDecision;
+
+        const controlsAfter = llmControlsSignature(safeGetCurrentTactic());
+        const targetAfter = currentForeignTargetSignature();
+        if (controlsAfter !== controlsBefore || targetAfter !== targetBefore) {
+            throw slfMatchRefreshError('stale_tactic', 'tactics changed during refresh');
+        }
+        return { snapshot, partial };
+    }
+
+    let llmRefreshBusy = false;
+
+    // Shared guarded transaction used by the button, chat send and chat retry.
+    // Guarantees: one advisor POST at most, no cached answer on refresh failure,
+    // no duplicate dialogue turn, guard released in `finally`.
+    async function requestLlmSecondOpinionFresh(options = {}) {
+        const settings = options && typeof options === 'object' ? options : {};
+        const mode = settings.mode === 'send' || settings.mode === 'retry' ? settings.mode : 'button';
+        const chat = mode !== 'button';
+        const dialog = Array.isArray(settings.dialog) ? settings.dialog.slice() : [];
+        if (typeof LLMSecondOpinion === 'undefined' || typeof SnapshotEngine === 'undefined') return null;
+
+        // Single guard for button + send + retry; acquired before any await.
+        if (llmRefreshBusy || llmChatBusy) return null;
+        const gameId = settings.gameId != null && String(settings.gameId) !== ''
+            ? String(settings.gameId)
+            : currentMatchId();
+        if (!gameId) {
+            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
+                available: false,
+                error: 'Диалог доступен только на странице матча'
+            }));
+            return null;
+        }
+
+        llmRefreshBusy = true;
+        llmChatBusy = true;
+        setLlmControlsBusy(true);
+        renderLlmChatWindow(gameId);
+        try {
+            let preflight;
+            try {
+                preflight = await llmAdvisorPreflight(gameId);
+            } catch (error) {
+                console.error('[SLF] LLM fresh-data refresh failed', error);
+                mountPreflightFailure(error, chat);
+                return null;
+            }
+
+            // Separate stage: the advisor's own error classification (inside
+            // requestLlmSecondOpinion) is preserved unchanged.
+            const answer = await requestLlmSecondOpinion(preflight.snapshot, dialog, {
+                partial: preflight.partial,
+                chat
+            });
+            if (chat && answer && answer.available === true) {
+                const summary = typeof answer.reason === 'string' && answer.reason.trim()
+                    ? answer.reason
+                    : `${answer.presetLabel || answer.preset || 'совет'} (уверенность: ${answer.confidence || '?'})`;
+                rememberLlmDialogTurn(gameId, 'assistant', summary, Date.now());
+            }
+            return answer;
+        } finally {
+            llmRefreshBusy = false;
+            llmChatBusy = false;
+            setLlmControlsBusy(false);
+            // No late mount in a different game.
+            if (currentMatchId() === gameId) renderLlmChatWindow(gameId);
+        }
+    }
+
+    async function runLlmSecondOpinionButton() {
+        try {
+            await requestLlmSecondOpinionFresh({ mode: 'button' });
+        } catch (error) {
+            console.error('[SLF] LLM second opinion failed', error);
+        }
+    }
+
     async function sendLlmChatTurn() {
-        if (llmChatBusy) return null;
+        if (llmRefreshBusy || llmChatBusy) return null;
         if (typeof LLMSecondOpinion === 'undefined' || typeof SnapshotEngine === 'undefined') return null;
         const input = document.getElementById('slf-llm-chat-input');
         const text = input && typeof input.value === 'string' ? input.value.trim() : '';
         if (!text) return null; // blank input is ignored
-        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
-        if (!snapshot) return null;
-        const gameId = snapshot.gameId ? String(snapshot.gameId) : '';
+        const gameId = currentMatchId();
         if (!gameId) {
             // Without a match id the dialogue would be shared across matches
             // and sent with gameId:null — refuse honestly, store nothing.
@@ -1086,20 +1263,20 @@
             }));
             return null;
         }
+        // Record the user turn exactly once, before the refresh; a failed
+        // refresh keeps it so «Повторить» can resend the same dialogue.
         const dialog = rememberLlmDialogTurn(gameId, 'user', text, Date.now());
         if (input) input.value = '';
-        return runLlmChatRequest(gameId, snapshot, dialog);
+        return requestLlmSecondOpinionFresh({ mode: 'send', gameId, dialog });
     }
 
-    // #471: explicit retry of the LAST dialogue — the stored turns go out
-    // as-is, no new user turn is appended (a retry never duplicates the
-    // user's words). Same busy gating and render path as a normal send.
+    // #471/#483: explicit retry of the LAST dialogue — the stored turns go out
+    // as-is, no new user turn is appended (a retry never duplicates the user's
+    // words). Same guard and render path as a normal send.
     async function retryLlmChatTurn() {
-        if (llmChatBusy) return null;
+        if (llmRefreshBusy || llmChatBusy) return null;
         if (typeof LLMSecondOpinion === 'undefined' || typeof SnapshotEngine === 'undefined') return null;
-        const snapshot = normalizeForeignSnapshot(SnapshotEngine.build());
-        if (!snapshot) return null;
-        const gameId = snapshot.gameId ? String(snapshot.gameId) : '';
+        const gameId = currentMatchId();
         if (!gameId) return null; // no match id -> nothing to resend
         const dialog = llmDialogForGame(gameId).slice();
         if (!dialog.length || dialog[dialog.length - 1].role !== 'user') {
@@ -1107,74 +1284,7 @@
             // turn must be the unanswered user remark.
             return null;
         }
-        return runLlmChatRequest(gameId, snapshot, dialog);
-    }
-
-    // Request+render part shared by Send and «Повторить»: one busy-gated
-    // advisor request with the given dialogue; an assistant turn is recorded
-    // only on available:true, a failure adds no fake turn.
-    async function runLlmChatRequest(gameId, snapshot, dialog) {
-        llmChatBusy = true;
-        renderLlmChatWindow(gameId);
-        let answer = null;
-        try {
-            answer = await requestLlmSecondOpinionFresh({ snapshot, dialog, chat: true });
-        } catch (error) {
-            console.error('[SLF] LLM chat request failed', error);
-        } finally {
-            llmChatBusy = false;
-        }
-        if (answer && answer.available === true) {
-            // Honest assistant turn: the model's own reason (or a compact
-            // preset/confidence summary). A failed request adds no fake turn.
-            const summary = typeof answer.reason === 'string' && answer.reason.trim()
-                ? answer.reason
-                : `${answer.presetLabel || answer.preset || 'совет'} (уверенность: ${answer.confidence || '?'})`;
-            rememberLlmDialogTurn(gameId, 'assistant', summary, Date.now());
-        }
-        renderLlmChatWindow(gameId);
-        return answer;
-    }
-
-    // Ф2a (#441): self-sufficient entry — the LLM button no longer depends on
-    // a manual hint click. Builds a fresh snapshot, runs the SAME rule ladder
-    // the manual hint runs (RecommendationEngine.make stamps
-    // snapshot.ruleDecision) and feeds it straight into the advisor flow.
-    // Phase 1 (#459): accepts an optional prebuilt snapshot and dialogue so the
-    // chat reuses this exact path instead of duplicating snapshot logic.
-    async function requestLlmSecondOpinionFresh(options = {}) {
-        const settings = options && typeof options === 'object' ? options : {};
-        const dialog = Array.isArray(settings.dialog) ? settings.dialog : [];
-        if (typeof LLMSecondOpinion === 'undefined' || typeof Api === 'undefined'
-            || typeof SnapshotEngine === 'undefined') return null;
-        const snapshot = settings.snapshot || normalizeForeignSnapshot(SnapshotEngine.build());
-        if (!snapshot) {
-            LLMSecondOpinion.mountAnswer(LLMSecondOpinion.renderAnswer({
-                available: false,
-                error: 'Snapshot матча недоступен'
-            }));
-            return null;
-        }
-        snapshot.recommendationSource = 'llm_second_opinion';
-        snapshot.generatorVersion = GENERATOR_VERSION;
-        // Ф2c recovery (#441): the retired manual hint was the only lab
-        // checkpoint on the live path; without it the lab activation never
-        // records lastSeenMinute and the exit loses exposure (toMinute /
-        // durationMinutes null). Record presence from the LLM entry, under the
-        // same guard as the manual path — BEFORE the advisor request, so a
-        // failed LLM call still records that the user was present.
-        if (typeof STATE !== 'undefined' && STATE.tacticalLabRuntime?.checkpoint && snapshot.matchOwnership !== 'foreign') {
-            await STATE.tacticalLabRuntime.checkpoint('llm_second_opinion', snapshot);
-        }
-        // Same pipeline the manual hint runs; make() stamps ruleDecision when
-        // the data supports one.
-        buildManualRecommendationHtml(snapshot);
-        // #461: an early match (phase collect) may have no rules decision yet.
-        // The advisor still gets a marked partial payload instead of a refusal;
-        // its answer is shown with the honest preliminary marker and is never
-        // auto-applied.
-        const partial = !snapshot.ruleDecision;
-        return requestLlmSecondOpinion(snapshot, dialog, { partial, chat: settings.chat === true });
+        return requestLlmSecondOpinionFresh({ mode: 'retry', gameId, dialog });
     }
 
     // Ф2a (#441): one-click apply of the suggested preset. Runs ONLY on an
@@ -1378,6 +1488,21 @@
     };
 
     mount();
+
+    // Test seam: same convention as `window.SLFLLMSecondOpinion`. Exposes the
+    // guarded transaction entry points to the vm/browser harness; it grants no
+    // production behavior — callers still go through the DOM controls.
+    if (typeof window !== 'undefined') {
+        window.SLFStrategyTaskAInternals = {
+            requestLlmSecondOpinionFresh,
+            runLlmSecondOpinionButton,
+            sendLlmChatTurn,
+            retryLlmChatTurn,
+            llmDialogForGame,
+            rememberLlmDialogTurn,
+            llmRefreshErrorText
+        };
+    }
 })();
 
 // ============================================================

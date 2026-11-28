@@ -37,6 +37,49 @@ class FixtureHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
 
+        # #483: pre-LLM refresh fetches get_stat_desktop JSON (same-origin).
+        # Serve a minimal valid observation for owned-live fixtures so the
+        # existing LLM assertions keep their meaning after the refresh preflight.
+        if parsed.path == "/ajax/game4.php":
+            action = (query.get("action") or [None])[0]
+            game_id = str((query.get("game_id") or [""])[0])
+            if action != "get_stat_desktop":
+                self.send_error(404)
+                return
+            # Default: e2e-owned live fixture state (minute 20, 1-0, 23698/99999).
+            # Stats mirror owned-live-match.html so rule/canon decisions stay stable.
+            payload_obj = {
+                "status": 1,
+                "finish": False,
+                "halftime": False,
+                "minute": "20",
+                "live": [{"id": game_id or "e2e-owned", "team_1": 23698, "team_2": 99999}],
+                "t": {
+                    "23698": {
+                        "goals": 1, "pos": 54, "shots": 7, "ontarget": 4, "xG": 1.10,
+                        "1": 180, "2": 0, "-1": 21, "-2": 0, "ttx": 220, "defective": 10,
+                        "def_height": 2, "press_height": 3, "-7": 3, "14": 2, "-10": 1,
+                        "16": 0, "ind3": 12,
+                    },
+                    "99999": {
+                        "goals": 0, "pos": 46, "shots": 4, "ontarget": 2, "xG": 0.55,
+                        "1": 150, "2": 0, "-1": 25, "-2": 0, "ttx": 205, "defective": 13,
+                        "def_height": 2, "press_height": 2, "-7": 4, "14": 1, "-10": 0,
+                        "16": 0, "ind3": 10,
+                    },
+                },
+                "game_comments": ["20' Луч продолжает атаку", "18' Удар в створ"],
+                "events": [],
+            }
+            payload = json.dumps(payload_obj, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+
         if parsed.path == "/game.php":
             fixture_name = query.get("fixture", ["owned"])[0]
         elif parsed.path == "/team4.php":

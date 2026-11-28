@@ -866,8 +866,8 @@
         }, 0);
     }
 
-    SnapshotEngine.build = function buildWithTacticalPhaseV2() {
-        const snapshot = buildBeforeV2();
+    SnapshotEngine.build = function buildWithTacticalPhaseV2(...args) {
+        const snapshot = buildBeforeV2(...args);
         if (!snapshot || !location.pathname.includes('/game.php')) return snapshot;
         if (!snapshot.myTeam || snapshot.matchOwnership === 'foreign') return snapshot;
         const phaseResult = reconcilePhase(snapshot);

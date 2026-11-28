@@ -583,9 +583,11 @@
       {
         "file": "src/modules/match-reading/match-stats-parser.js",
         "declares": [
+          "slfMatchRefreshError",
           "MatchStatsParser"
         ],
         "public": [
+          "slfMatchRefreshError",
           "MatchStatsParser"
         ],
         "requires": [
@@ -595,6 +597,13 @@
               "CONFIG",
               "aliasMatchesTeamName",
               "toNum"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/match-reading/match-state-parser.js",
+            "symbols": [
+              "MatchStateParser"
             ],
             "phase": "runtime"
           }
@@ -669,6 +678,7 @@
           {
             "file": "src/modules/match-reading/match-stats-parser.js",
             "symbols": [
+              "slfMatchRefreshError",
               "MatchStatsParser"
             ],
             "phase": "runtime"
@@ -1625,6 +1635,13 @@
             "file": "src/modules/match-reading/match-state-parser.js",
             "symbols": [
               "MatchStateParser"
+            ],
+            "phase": "runtime"
+          },
+          {
+            "file": "src/modules/match-reading/match-stats-parser.js",
+            "symbols": [
+              "slfMatchRefreshError"
             ],
             "phase": "runtime"
           },

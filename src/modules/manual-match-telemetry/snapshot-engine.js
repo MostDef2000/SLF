@@ -5,10 +5,18 @@ const SnapshotEngine = {
     _pendingMatchResultRequests: new Map(),
     _sentMatchResultKeys: new Set(),
 
-    build() {
-        const ids = MatchStatsParser.getAllTeamIds();
+    // #483: optional `fresh` is a normalized desktop observation produced by
+    // MatchStatsParser.normalizeDesktopObservation. When present, every
+    // match-derived rule input (gameId/status/minute/score/teams/stats/xT/
+    // shotsTable/eventsText) comes from that single fresh observation, while
+    // DOM-only inputs (team names/aliases, same-team power, developer hints,
+    // lineup/formation, current tactic) are still read from the page. With no
+    // argument the original DOM path is unchanged.
+    build(fresh = null) {
+        const observation = fresh && typeof fresh === 'object' && Array.isArray(fresh.teams) ? fresh : null;
+        const ids = observation ? observation.teams.slice() : MatchStatsParser.getAllTeamIds();
         const teamNames = MatchStatsParser.readTeamNames();
-        const minuteInfo = MatchStateParser.readMinuteInfo();
+        const minuteInfo = observation ? observation.minuteInfo : MatchStateParser.readMinuteInfo();
         const minute = minuteInfo.effectiveMinute;
         const generationWindow = MatchStateParser.getGenerationWindow(minute);
         const visibleDeveloperHints = DeveloperHintParser.readHints();
@@ -34,28 +42,30 @@ const SnapshotEngine = {
         const generatorExpectedPerformance = typeof GeneratorExpectedPerformanceParser !== 'undefined'
             ? GeneratorExpectedPerformanceParser.parse(developerHints || [])
             : null;
-        const eventsText = MatchStatsParser.readEventsText();
-        const rawStatus = MatchStateParser.getStatus();
+        const eventsText = observation ? observation.eventsText : MatchStatsParser.readEventsText();
+        const rawStatus = observation ? observation.status : MatchStateParser.getStatus();
 
         // Some live pages do not expose the exact status text at kick-off/refresh.
         // If the page already has match data, keep the live parser active instead of waiting on "unknown".
-        const hasLiveEvidence =
+        // A fresh observation always carries an already-classified status.
+        const hasLiveEvidence = !observation && (
             minute != null ||
             ids.length >= 2 ||
             eventsText.length > 1 ||
-            !!MatchStatsParser.readXT();
+            !!MatchStatsParser.readXT()
+        );
 
-        const status = rawStatus === 'unknown' && hasLiveEvidence
-            ? 'live'
-            : rawStatus;
+        const status = observation
+            ? observation.status
+            : (rawStatus === 'unknown' && hasLiveEvidence ? 'live' : rawStatus);
 
         return {
             ts: Date.now(),
 
-            gameId: MatchStateParser.getGameId(),
+            gameId: observation ? observation.gameId : MatchStateParser.getGameId(),
             status,
             rawStatus,
-            statusAssumedLive: rawStatus === 'unknown' && status === 'live',
+            statusAssumedLive: observation ? false : (rawStatus === 'unknown' && status === 'live'),
 
             minute,
             minuteRaw: minuteInfo.rawMinute,
@@ -72,8 +82,8 @@ const SnapshotEngine = {
                 model: '36_real_minutes_generation_windows_v1'
             },
 
-            score: MatchStateParser.readScore(),
-            xT: MatchStatsParser.readXT(),
+            score: observation ? observation.score : MatchStateParser.readScore(),
+            xT: observation ? observation.xT : MatchStatsParser.readXT(),
 
             teams: ids,
             teamNames,
@@ -82,7 +92,7 @@ const SnapshotEngine = {
             lineupRows: SquadParser.readLineupRows(),
             formation: SquadParser.readFormation(),
 
-            shotsTable: MatchStatsParser.readShotsTable(),
+            shotsTable: observation ? observation.shotsTable : MatchStatsParser.readShotsTable(),
             eventsText,
             developerHints,
             generatorQualitySignal,
@@ -90,11 +100,43 @@ const SnapshotEngine = {
             generatorDetailMetrics,
             currentTactic: getCurrentTactic(),
 
-            stats: ids.map(id => ({
-                teamId: id,
-                stats: MatchStatsParser.readFullStats(id)
-            }))
+            stats: observation
+                ? observation.stats.map(entry => ({
+                    teamId: entry.teamId,
+                    // Power is DOM-static per team; override only that field.
+                    stats: Object.assign({}, entry.stats, {
+                        power: MatchStatsParser.readFullStats(entry.teamId).power
+                    })
+                }))
+                : ids.map(id => ({
+                    teamId: id,
+                    stats: MatchStatsParser.readFullStats(id)
+                }))
         };
+    },
+
+    // #483: fresh-observation seam used by the LLM advisor preflight. Captures
+    // the current URL game id synchronously (never a cached snapshot
+    // preference), fetches the same-origin desktop JSON, and re-validates
+    // identity before returning. Any failure throws a classified error.
+    async fetchFreshObservation(options = {}) {
+        const settings = options && typeof options === 'object' ? options : {};
+        const gameId = settings.gameId != null && String(settings.gameId) !== ''
+            ? String(settings.gameId)
+            : String((typeof MatchStateParser?.getGameId === 'function' ? MatchStateParser.getGameId() : '') || '');
+        if (!gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'no current match id');
+        }
+        const observation = await MatchStatsParser.fetchDesktopObservation({
+            gameId,
+            fetchImpl: settings.fetchImpl,
+            timeoutMs: settings.timeoutMs,
+            cacheBust: settings.cacheBust
+        });
+        if (!observation || String(observation.gameId) !== gameId) {
+            throw slfMatchRefreshError('identity_mismatch', 'observation identity changed');
+        }
+        return observation;
     },
 
     getScoreKey(score) {

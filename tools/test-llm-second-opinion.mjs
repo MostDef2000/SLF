@@ -562,6 +562,20 @@ function makeUiContext({ foreign = false, advisorRejection = null, decideRule = 
     const snapshot = foreign
         ? { gameId: 'g-foreign', minute: 20, bucket: '16-30', score: { home: 1, away: 0 }, teams: [1, 2] }
         : { gameId: 'g-123', minute: 20, bucket: '16-30', score: { home: 1, away: 0 }, myTeam: 1, teams: [1, 2] };
+    // #483: normalized observation stub for the pre-LLM refresh preflight.
+    // The real path fetches get_stat_desktop JSON; tests that don't care about
+    // refresh semantics get a valid observation matching the fixture snapshot.
+    const freshObservation = {
+        gameId: String(snapshot.gameId),
+        status: 'live',
+        minuteInfo: { rawMinute: String(snapshot.minute), baseMinute: snapshot.minute, stoppageMinute: 0, effectiveMinute: snapshot.minute, isStoppage: false },
+        teams: (snapshot.teams || []).slice(),
+        score: { home: snapshot.score.home, away: snapshot.score.away },
+        stats: (snapshot.teams || []).map(teamId => ({ teamId, stats: { possession: 50, shots: 1, onTarget: 1, xG: 0.1, accuratePasses: 10, inaccuratePasses: 2, actions: 20, badActionsPct: 10, defVector: 0, pressVector: 0, fouls: 0, corners: 0, offsides: 0, woodwork: 0, individualActions: 0, support: null } })),
+        xT: null,
+        shotsTable: [],
+        eventsText: []
+    };
 
     const context = {
         console, Object, Array, Map, Set, Symbol, Date, Error, JSON, Math, String, Number, Promise, Boolean, RegExp,
@@ -572,7 +586,14 @@ function makeUiContext({ foreign = false, advisorRejection = null, decideRule = 
         document: {
             __slfFinalTacticApplyDelegation: false,
             __slfLlmApplyDelegation: false,
-            getElementById(id) { return elements.get(id) || null; },
+            getElementById(id) {
+                if (elements.has(id)) return elements.get(id);
+                // #483: mountAnswer/mountChat look up nodes by id; answers are
+                // appended dynamically to the panel, so search there too.
+                const inPanel = (answerPanel.children || []).find(n => n && n.id === id);
+                if (inPanel && !inPanel.removed) return inPanel;
+                return null;
+            },
             createElement(tag) {
                 const node = makeElement('');
                 node.tagName = String(tag).toUpperCase();
@@ -599,7 +620,33 @@ function makeUiContext({ foreign = false, advisorRejection = null, decideRule = 
                 mountUI: async () => {}
             }
         },
-        SnapshotEngine: { build: () => snapshot },
+        MatchStateParser: {
+            getGameId: () => String(snapshot.gameId || ''),
+            getStatus: () => 'live',
+            isActiveLiveStatus: status => status === 'live' || status === 'halftime' || status === 'unknown'
+        },
+        MatchStatsParser: {},
+        slfMatchRefreshError: (kind, message, extra) => {
+            const error = new Error(message || kind || 'match refresh failed');
+            error.kind = kind || 'unavailable';
+            if (extra && typeof extra === 'object') Object.assign(error, extra);
+            return error;
+        },
+        SnapshotEngine: {
+            build: (fresh) => {
+                // #483: accept optional fresh observation; return the fixture snapshot.
+                // The real build merges fresh match-derived fields; tests assert on
+                // the snapshot object identity and key fields.
+                if (fresh && typeof fresh === 'object') {
+                    snapshot.gameId = String(fresh.gameId || snapshot.gameId);
+                    snapshot.minute = fresh.minuteInfo?.effectiveMinute ?? snapshot.minute;
+                    snapshot.score = fresh.score || snapshot.score;
+                    snapshot.status = fresh.status || snapshot.status;
+                }
+                return snapshot;
+            },
+            fetchFreshObservation: async () => freshObservation
+        },
         // make() stamps snapshot.ruleDecision exactly like the real ladder (the
         // fresh path feeds that decision into the advisor payload). With
         // decideRule:false it stamps nothing — the early-match (phase collect)
@@ -713,7 +760,9 @@ function makeAdjustButton(changes, adviceId = '') {
 // 502/503 body must not collapse every cause into the generic status guess.
 // The rendered answer is inspected via the mountAnswer sink from makeUiContext.
 function mountedErrorText(run) {
-    const node = run.answerPanel.children[run.answerPanel.children.length - 1];
+    const children = (run.answerPanel.children || []).filter(c => c && !c.removed);
+    const answers = children.filter(c => c && c.id === 'slf-llm-second-opinion-answer');
+    const node = answers[answers.length - 1] || children[children.length - 1];
     return node ? String(node.html || '') : '';
 }
 
@@ -852,7 +901,7 @@ function makeAdvisorError(fields) {
 // still renders with the «Применить пресет» button (no auto-apply).
 function lastNodeHtml(run, id) {
     const marker = `id="${id}"`;
-    const nodes = run.answerPanel.children.filter(node => String(node.html || '').includes(marker));
+    const nodes = (run.answerPanel.children || []).filter(node => !node.removed && String(node.html || '').includes(marker));
     const node = nodes[nodes.length - 1];
     return node ? String(node.html || '') : '';
 }

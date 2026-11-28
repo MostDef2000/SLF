@@ -136,10 +136,13 @@
             return status === 'live' || status === 'halftime' || status === 'unknown';
         },
 
-        readMinuteInfo() {
-            const text = document.body.innerText || '';
-            const m = text.match(/ид[её]т\s+'?(\d{1,3})(?:\+(\d{1,2}))?\s*мин/i);
-            if (!m) {
+        // #483: shared clock semantics for the DOM text path and the
+        // desktop-JSON observation path. `baseMinute` must be a finite integer
+        // >= 1; `stoppageMinute` is optional non-negative integer (0 = none).
+        // Invalid input yields the degenerate "no clock" record (never throws).
+        minuteInfoFromParts(baseMinute, stoppageMinute = 0) {
+            const base = Number(baseMinute);
+            if (!Number.isFinite(base) || !Number.isInteger(base) || base < 1) {
                 return {
                     rawMinute: null,
                     baseMinute: null,
@@ -149,18 +152,26 @@
                 };
             }
 
-            const baseMinute = Number(m[1]);
-            const stoppageMinute = m[2] ? Number(m[2]) : 0;
-            const rawMinute = stoppageMinute ? `${baseMinute}+${stoppageMinute}` : String(baseMinute);
-            const effectiveMinute = MatchTimingModel.clampMinute(baseMinute);
+            const stopRaw = Number(stoppageMinute);
+            const stoppage = Number.isFinite(stopRaw) && stopRaw > 0 ? Math.floor(stopRaw) : 0;
+            const rawMinute = stoppage ? `${base}+${stoppage}` : String(base);
+            const effectiveMinute = MatchTimingModel.clampMinute(base);
 
             return {
                 rawMinute,
-                baseMinute,
-                stoppageMinute,
+                baseMinute: base,
+                stoppageMinute: stoppage,
                 effectiveMinute,
-                isStoppage: stoppageMinute > 0 || baseMinute > MatchTimingModel.OFFICIAL_MATCH_MINUTES
+                isStoppage: stoppage > 0 || base > MatchTimingModel.OFFICIAL_MATCH_MINUTES
             };
+        },
+
+        readMinuteInfo() {
+            const text = document.body.innerText || '';
+            const m = text.match(/ид[её]т\s+'?(\d{1,3})(?:\+(\d{1,2}))?\s*мин/i);
+            if (!m) return this.minuteInfoFromParts(null);
+
+            return this.minuteInfoFromParts(Number(m[1]), m[2] ? Number(m[2]) : 0);
         },
 
         readMinute() {

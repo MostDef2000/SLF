@@ -90,3 +90,83 @@ Feature: LLM advisor two-mode advice
     When the server validates the answer
     Then it follows the invalid_answer corrective-retry path and never reaches the client as an applicable change
 ```
+
+## Pre-LLM forced match-data refresh (#483) — acceptance examples
+
+The visible match DOM lags the server (minute, score, signal and stats are filled asynchronously), so an advisor answer built from it can describe an older state. Before every advisor request — «🤖 LLM» button, chat send, chat retry — the client now fetches ONE fresh match observation from the same-origin desktop JSON endpoint (`GET /ajax/game4.php?action=get_stat_desktop&game_id=<id>&...`, `no-store`, `redirect: error`, 5 s deadline covering the body read), validates it fail-closed, normalizes it into the snapshot via `SnapshotEngine.build(fresh)` and reruns the rules. Match-derived fields (game id, status, minute, score, per-team stats, xT, shots table, events) come from the fresh observation; DOM-only fields (team display names/aliases, power2/power, developer hints, lineup/formation, current tactic) still come from the page. The 35 s advisor deadline is unchanged.
+
+```gherkin
+Feature: Pre-LLM forced match-data refresh
+  Rule: The advisor answers only from a fresh match observation fetched immediately before the request.
+
+  Scenario: Stale DOM with a fresh desktop observation
+    Given the visible DOM still shows minute 54 and score 1:0
+    And the desktop observation returns minute 61, score 2:0 and a new signal for the same game id
+    When the user clicks "🤖 LLM" (or sends a chat turn, or clicks "Повторить")
+    Then exactly one advisor POST is made
+    And its payload carries minute 61, score 2:0 and the fresh signal
+    And the visible DOM is unchanged and the page is not reloaded
+    And no tactic control is changed
+
+  Scenario: DOM-only fields are not invented from JSON
+    Given the fresh desktop observation carries no team display names, power2, hints, lineup/formation or current tactic
+    When the payload is built from that observation
+    Then those fields still come from the DOM
+    And a field absent from both sources stays empty instead of being invented
+
+  Rule: A refresh or validation failure fails closed — no advisor answer from stale or cached data.
+
+  Scenario Outline: Refresh failure is retryable and sends nothing
+    Given the pre-LLM refresh fails with <failure>
+    When an advisor entry is triggered
+    Then zero advisor POSTs are made
+    And no cached or partial advisor answer is rendered
+    And no assistant chat turn is added
+    And a retryable message is shown
+    And the request guard is released so a later retry is accepted
+
+    Examples:
+      | failure                                              |
+      | non-JSON body (login or redirect page)               |
+      | timeout, including a body read that exceeds 5 s      |
+      | HTTP error status                                    |
+      | identity mismatch (returned game id differs)         |
+
+  Scenario: Retry after a failed refresh uses the same dialogue
+    Given a chat send failed during the refresh
+    And the user's turn was recorded once
+    When the user clicks "Повторить" with a now-successful refresh
+    Then the same dialogue is sent once
+    And no duplicate user turn is added
+
+  Rule: A match identity change during refresh aborts the request.
+
+  Scenario: Game changes while the observation is in flight
+    Given an advisor entry is triggered on game A
+    And the page moves to game B before the refresh completes
+    Then zero advisor POSTs are made
+    And no answer or chat window is mounted into game B
+
+  Rule: Inactive or ambiguous match states are refused honestly.
+
+  Scenario Outline: Inactive state blocks the request
+    Given the refreshed observation reports <state>
+    When an advisor entry is triggered
+    Then zero advisor POSTs are made
+    And an honest message names the state
+    And a retry control is offered only when <retry offered> is yes
+
+    Examples:
+      | state                | retry offered |
+      | not started          | no            |
+      | finished             | no            |
+      | paused or suspended  | yes           |
+      | ambiguous clock      | yes           |
+
+  Rule: The refresh never mutates the page or the tactic.
+
+  Scenario: No reload, no DOM replacement, no auto-apply
+    Given an advisor entry completes or fails
+    Then the page is not reloaded and the match DOM is not replaced
+    And no tactic is applied without an explicit apply click
+```

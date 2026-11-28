@@ -62,3 +62,20 @@ Issue: #441. Branch: `feat/441-llm-first-button` (Ф2a).
 ## Definition of Done
 
 All Ф2a boxes checked with observed evidence; release + deploy verified; live probe; JOURNAL entry.
+
+## Pre-LLM forced match-data refresh (#483)
+
+Issue: #483. Branch: `feat/441-llm-pre-refresh` (base `4c7f0c986904f259feb400edb8d82b96ed4cfd9c`).
+
+- [x] Explore: all advisor entries (button, chat send, chat retry), the DOM snapshot seam, DOM-only fields, and the desktop JSON endpoint shape (`get_stat_desktop` params incl. `goal_count=NaN`; goal counters in `t[teamId].goals`, stale top-level `score` ignored; live entry identity) with file:line evidence.
+- [x] `src/modules/match-reading/match-stats-parser.js`: `buildDesktopUrl`; `fetchDesktopObservation` (same-origin GET, `no-store`, `redirect:error`, one 5 s `AbortController` deadline covering request and body read, injectable `fetchImpl`); `normalizeDesktopObservation` (strict numeric decode, distinct team ids, goals from `t[teamId].goals`, status classification finished/not_started/paused/halftime, min-minute validation); classified `slfMatchRefreshError`.
+- [x] `src/modules/match-reading/match-state-parser.js`: `minuteInfoFromParts` shared clock semantics; `readMinuteInfo` delegates to it with unchanged DOM behavior.
+- [x] `src/modules/manual-match-telemetry/snapshot-engine.js`: `build(fresh = null)` — fresh observation supplies gameId/status/minute/score/xT/teams/stats/shotsTable/eventsText, DOM-only team names, power, hints, lineup/formation and current tactic stay from the page; the no-arg path is unchanged; `fetchFreshObservation` re-validates identity.
+- [x] `src/modules/manual-match-telemetry/manual-match-runtime.js`: the phase wrapper forwards build arguments.
+- [x] `src/modules/strategy-data-recommendations/strategy-data-task-a-ui-extension.js`: one guarded transaction for button/send/retry (single busy guard, released in `finally`); 5 s preflight before payload; identity rechecks before build, after the checkpoint and after the rules; control/foreign-target drift → `stale_tactic`; honest fail-closed messages with retry only for retryable kinds; user chat turn recorded once (no duplicate on retry); no late mount into another game; test-only seam `window.SLFStrategyTaskAInternals`.
+- [x] VM tests: `node tests/test-llm-match-refresh.mjs` — **14/14 green** (observed 2026-11-28). `tools/test-llm-second-opinion.mjs` updated for the refresh seam and still green.
+- [ ] Browser e2e: authored for the real artifact (stale DOM/fresh POST, refresh failure/retry, game change, inactive states, no reload/DOM replacement/auto-apply); execution pending — precondition-blocked because `tests/browser/**` runs `releases/latest.user.js`, still published from `1ff8489` (#477) until the #483 bundle is rebuilt.
+- [ ] `py_compile` of the touched browser test and full CI (`quality-integration`) on the exact head — pending execution evidence.
+- [ ] Release publish (`src/**`), lane-A deploy and live probe — pending.
+
+**#483 acceptance mapping:** fresh payload ↔ VM UI preflight + SnapshotEngine.build cases; failure/retry ↔ fetch-classification cases + UI failure-with-retry case; game change ↔ identity-mismatch UI case; inactive states ↔ non-retryable UI case; no reload/DOM replacement/auto-apply ↔ refresh is a JSON read only, no apply path added (review + e2e invariant).
